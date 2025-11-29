@@ -1,9 +1,4 @@
 {
-  "version": 2,
-  "buildCommand": "npm run build",
-  "devCommand": "npm run dev",
-  "installCommand": "npm install",
-  "framework": "nextjs",
   "rewrites": [
     {
       "source": "/api/:path*",
@@ -32,26 +27,5 @@
         }
       ]
     }
-  ],
-  "routes": [
-    {
-      "src": "/login",
-      "dest": "/login"
-    },
-    {
-      "src": "/signup",
-      "dest": "/signup"
-    },
-    {
-      "src": "/dashboard",
-      "dest": "/dashboard"
-    },
-    {
-      "src": "/",
-      "dest": "/login"
-    }
-  ],
-  "env": {
-    "NEXT_PUBLIC_API_URL": "@api_url"
-  }
+  ]
 }
