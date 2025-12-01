@@ -13,10 +13,9 @@
     gtag('config', 'G-T7WNCZ3MJG');
   </script>
 
-  <!-- TITLE TAG (Under 60 characters) -->
   <title>ReviseIt - AI WhatsApp Automation Platform | Coming Soon</title>
 
-  <!-- PRIMARY SEO META TAGS -->
+  <!-- SEO Meta Tags -->
   <meta name="description" content="ReviseIt automates WhatsApp conversations, lead follow-ups, and customer support with AI. Smart automation platform for businesses launching soon." />
   <meta name="keywords" content="WhatsApp automation, AI chatbot SaaS, automated customer support, WhatsApp business API, lead nurturing automation, conversational AI, CRM automation, ReviseIt" />
   <meta name="robots" content="index, follow, max-snippet:-1, max-image-preview:large, max-video-preview:-1" />
@@ -24,7 +23,7 @@
   <meta name="theme-color" content="#0d1321" />
   <link rel="canonical" href="https://reviseit.in" />
 
-  <!-- OPEN GRAPH META TAGS -->
+  <!-- Open Graph Meta Tags -->
   <meta property="og:locale" content="en_US" />
   <meta property="og:type" content="website" />
   <meta property="og:title" content="ReviseIt — AI WhatsApp Automation Platform Coming Soon" />
@@ -34,16 +33,14 @@
   <meta property="og:image" content="https://reviseit.in/icon.png" />
   <meta property="og:image:width" content="1200" />
   <meta property="og:image:height" content="630" />
-  <meta property="og:image:alt" content="ReviseIt AI WhatsApp Automation Platform Logo" />
 
-  <!-- TWITTER CARD -->
+  <!-- Twitter Card -->
   <meta name="twitter:card" content="summary_large_image" />
-  <meta name="twitter:title" content="ReviseIt — AI WhatsApp Automation (Launching Soon)" />
-  <meta name="twitter:description" content="Smart AI messaging, automated follow-ups, instant responses — all through WhatsApp. Join the waitlist." />
+  <meta name="twitter:title" content="ReviseIt — AI WhatsApp Automation" />
+  <meta name="twitter:description" content="Smart AI messaging, automated follow-ups, instant responses — all through WhatsApp." />
   <meta name="twitter:image" content="https://reviseit.in/icon.png" />
-  <meta name="twitter:image:alt" content="ReviseIt Logo" />
 
-  <!-- STRUCTURED DATA (JSON-LD SCHEMA) -->
+  <!-- Structured Data -->
   <script type="application/ld+json">
   {
     "@context": "https://schema.org",
@@ -51,35 +48,36 @@
     "name": "ReviseIt",
     "operatingSystem": "Web-based, Cloud",
     "applicationCategory": "BusinessApplication",
-    "description": "AI-powered WhatsApp automation platform helping businesses manage leads, automate follow-ups, and provide instant customer support through intelligent messaging.",
+    "description": "AI-powered WhatsApp automation platform helping businesses manage leads, automate follow-ups, and provide instant customer support.",
     "url": "https://reviseit.in",
     "image": "https://reviseit.in/icon.png",
     "offers": {
       "@type": "Offer",
-      "availability": "https://schema.org/ComingSoon",
-      "price": "0",
-      "priceCurrency": "USD"
-    },
-    "creator": {
-      "@type": "Organization",
-      "name": "ReviseIt",
-      "url": "https://reviseit.in"
-    },
-    "softwareVersion": "1.0 MVP",
-    "releaseNotes": "Initial launch with core WhatsApp automation features"
+      "availability": "https://schema.org/ComingSoon"
+    }
   }
   </script>
 
-  <!-- FAVICON -->
+  <!-- Favicon -->
   <link rel="icon" type="image/png" href="/icon.png" />
   <link rel="apple-touch-icon" href="/icon.png" />
 
-  <!-- PRECONNECT FOR PERFORMANCE -->
-  <link rel="preconnect" href="https://www.googletagmanager.com" />
-  <link rel="dns-prefetch" href="https://www.google-analytics.com" />
-
-  <!-- STYLES -->
   <style>
+    :root {
+      --primary-gradient: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      --secondary-gradient: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+      --dark-bg: #0d1321;
+      --card-bg: rgba(255, 255, 255, 0.06);
+      --border-color: rgba(255, 255, 255, 0.1);
+      --text-primary: #f9fafb;
+      --text-secondary: #cbd5e1;
+      --accent-blue: #60a5fa;
+      --accent-purple: #a78bfa;
+      --spacing-sm: clamp(1rem, 2vw, 1.5rem);
+      --spacing-md: clamp(1.5rem, 3vw, 2.5rem);
+      --spacing-lg: clamp(2rem, 4vw, 4rem);
+    }
+
     * {
       margin: 0;
       padding: 0;
@@ -89,33 +87,35 @@
     body {
       min-height: 100vh;
       background: linear-gradient(135deg, #0d1321 0%, #1a1f35 100%);
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
-      color: #f9fafb;
-      padding: 40px 20px;
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      color: var(--text-primary);
+      padding: var(--spacing-md) var(--spacing-sm);
       overflow-x: hidden;
+      line-height: 1.6;
     }
     
     .container {
-      max-width: 1000px;
+      max-width: 1200px;
       margin: 0 auto;
-      text-align: center;
     }
 
+    /* Hero Section */
     .hero-section {
-      padding: 48px 32px;
-      border-radius: 20px;
-      background: rgba(255, 255, 255, 0.08);
-      backdrop-filter: blur(16px);
-      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
-      border: 1px solid rgba(255, 255, 255, 0.1);
+      padding: var(--spacing-lg) var(--spacing-md);
+      border-radius: 24px;
+      background: var(--card-bg);
+      backdrop-filter: blur(20px);
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.4);
+      border: 1px solid var(--border-color);
       animation: fadeInUp 0.8s ease-out;
-      margin-bottom: 40px;
+      margin-bottom: var(--spacing-lg);
+      text-align: center;
     }
     
     @keyframes fadeInUp {
       from {
         opacity: 0;
-        transform: translateY(30px);
+        transform: translateY(40px);
       }
       to {
         opacity: 1;
@@ -123,216 +123,313 @@
       }
     }
     
-    .emoji {
-      font-size: 3.5rem;
-      margin-bottom: 16px;
-      animation: bounce 2s infinite;
+    .logo-container {
+      margin-bottom: var(--spacing-md);
+    }
+
+    .logo-emoji {
+      font-size: clamp(3rem, 8vw, 5rem);
+      display: inline-block;
+      animation: float 3s ease-in-out infinite;
+      filter: drop-shadow(0 4px 12px rgba(96, 165, 250, 0.3));
     }
     
-    @keyframes bounce {
-      0%, 100% { transform: translateY(0); }
-      50% { transform: translateY(-10px); }
+    @keyframes float {
+      0%, 100% { transform: translateY(0px); }
+      50% { transform: translateY(-15px); }
     }
     
     h1 {
-      font-size: 2.5rem;
-      margin-bottom: 12px;
-      font-weight: 700;
-      background: linear-gradient(135deg, #60a5fa 0%, #a78bfa 100%);
+      font-size: clamp(2.5rem, 6vw, 4rem);
+      margin-bottom: 1rem;
+      font-weight: 800;
+      background: var(--primary-gradient);
       -webkit-background-clip: text;
       -webkit-text-fill-color: transparent;
       background-clip: text;
+      letter-spacing: -0.02em;
     }
 
     h2 {
-      font-size: 1.8rem;
-      margin-bottom: 16px;
-      color: #93c5fd;
+      font-size: clamp(1.75rem, 4vw, 2.5rem);
+      margin-bottom: var(--spacing-sm);
+      color: var(--accent-blue);
+      font-weight: 700;
+      letter-spacing: -0.01em;
     }
 
     h3 {
-      font-size: 1.3rem;
-      margin-bottom: 12px;
-      color: #60a5fa;
+      font-size: clamp(1.25rem, 3vw, 1.6rem);
+      margin-bottom: 1rem;
+      color: var(--accent-blue);
+      font-weight: 600;
     }
     
     .tagline {
-      font-size: 1.1rem;
-      font-weight: 600;
-      color: #93c5fd;
-      margin-bottom: 20px;
+      font-size: clamp(1.1rem, 2.5vw, 1.4rem);
+      font-weight: 500;
+      color: var(--text-secondary);
+      margin-bottom: var(--spacing-md);
+      max-width: 800px;
+      margin-left: auto;
+      margin-right: auto;
     }
     
     p {
-      opacity: 0.9;
-      font-size: 1rem;
-      line-height: 1.6rem;
-      margin-bottom: 16px;
+      color: var(--text-secondary);
+      font-size: clamp(1rem, 2vw, 1.125rem);
+      line-height: 1.7;
+      margin-bottom: 1.5rem;
     }
     
     .status-badge {
-      display: inline-block;
-      padding: 8px 16px;
-      background: rgba(96, 165, 250, 0.2);
-      border: 1px solid #60a5fa;
-      border-radius: 20px;
-      font-size: 0.85rem;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      padding: 0.75rem 1.5rem;
+      background: rgba(96, 165, 250, 0.15);
+      border: 2px solid var(--accent-blue);
+      border-radius: 50px;
+      font-size: clamp(0.9rem, 2vw, 1rem);
       font-weight: 600;
-      color: #93c5fd;
-      margin: 20px 0;
+      color: var(--accent-blue);
+      margin: var(--spacing-sm) 0;
+      box-shadow: 0 4px 20px rgba(96, 165, 250, 0.2);
     }
     
+    /* Features Section */
     .features {
       text-align: left;
-      margin: 24px 0;
-      padding: 20px;
-      background: rgba(255, 255, 255, 0.05);
-      border-radius: 12px;
+      margin: var(--spacing-md) 0;
+      padding: var(--spacing-md);
+      background: rgba(255, 255, 255, 0.04);
+      border-radius: 16px;
+      border: 1px solid var(--border-color);
     }
     
     .features ul {
       list-style: none;
-      padding-left: 0;
+      padding: 0;
+      display: grid;
+      gap: 1rem;
     }
     
     .features li {
-      padding: 8px 0;
-      padding-left: 24px;
+      padding: 1rem;
+      padding-left: 3rem;
       position: relative;
-      font-size: 0.95rem;
+      font-size: clamp(0.95rem, 2vw, 1.1rem);
+      background: rgba(255, 255, 255, 0.03);
+      border-radius: 12px;
+      border-left: 3px solid var(--accent-blue);
+      transition: transform 0.2s, background 0.2s;
+    }
+
+    .features li:hover {
+      transform: translateX(8px);
+      background: rgba(255, 255, 255, 0.06);
     }
     
     .features li:before {
       content: "✓";
       position: absolute;
-      left: 0;
-      color: #60a5fa;
+      left: 1rem;
+      color: var(--accent-blue);
       font-weight: bold;
+      font-size: 1.5rem;
     }
 
-    /* Early Access Benefits Section */
-    .benefits-section {
+    /* Benefits Grid */
+    .benefits-intro {
+      text-align: center;
+      max-width: 800px;
+      margin: 0 auto var(--spacing-md);
+    }
+
+    .benefits-grid {
       display: grid;
       grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-      gap: 20px;
-      margin: 40px 0;
+      gap: var(--spacing-sm);
+      margin: var(--spacing-lg) 0;
     }
 
     .benefit-card {
-      background: rgba(255, 255, 255, 0.08);
+      background: var(--card-bg);
       backdrop-filter: blur(16px);
-      border: 1px solid rgba(255, 255, 255, 0.1);
-      border-radius: 16px;
-      padding: 30px 24px;
+      border: 1px solid var(--border-color);
+      border-radius: 20px;
+      padding: var(--spacing-md);
       text-align: left;
-      transition: transform 0.3s, box-shadow 0.3s;
+      transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+      position: relative;
+      overflow: hidden;
+    }
+
+    .benefit-card::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 4px;
+      background: var(--primary-gradient);
+      transform: scaleX(0);
+      transition: transform 0.3s;
     }
 
     .benefit-card:hover {
-      transform: translateY(-5px);
-      box-shadow: 0 12px 40px rgba(96, 165, 250, 0.2);
-      border-color: rgba(96, 165, 250, 0.3);
+      transform: translateY(-8px);
+      box-shadow: 0 20px 60px rgba(96, 165, 250, 0.25);
+      border-color: rgba(96, 165, 250, 0.4);
+    }
+
+    .benefit-card:hover::before {
+      transform: scaleX(1);
     }
 
     .benefit-icon {
-      font-size: 2.5rem;
-      margin-bottom: 12px;
+      font-size: clamp(2.5rem, 5vw, 3.5rem);
+      margin-bottom: 1rem;
       display: block;
+      filter: drop-shadow(0 2px 8px rgba(96, 165, 250, 0.3));
     }
 
     .benefit-card h3 {
-      margin-bottom: 10px;
-      font-size: 1.2rem;
+      margin-bottom: 0.75rem;
+      font-size: clamp(1.15rem, 2.5vw, 1.35rem);
     }
 
     .benefit-card p {
-      font-size: 0.95rem;
-      opacity: 0.85;
-      line-height: 1.5rem;
+      font-size: clamp(0.95rem, 2vw, 1.05rem);
+      color: var(--text-secondary);
+      line-height: 1.6;
+      margin: 0;
     }
 
-    /* Google Form Section */
+    /* Form Section */
     .form-section {
-      background: rgba(255, 255, 255, 0.08);
-      backdrop-filter: blur(16px);
-      border: 1px solid rgba(255, 255, 255, 0.1);
-      border-radius: 20px;
-      padding: 40px 32px;
-      margin: 40px 0;
-      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+      background: var(--card-bg);
+      backdrop-filter: blur(20px);
+      border: 1px solid var(--border-color);
+      border-radius: 24px;
+      padding: var(--spacing-lg) var(--spacing-md);
+      margin: var(--spacing-lg) 0;
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.4);
+      text-align: center;
     }
 
     .form-container {
-      max-width: 600px;
+      max-width: 700px;
       margin: 0 auto;
     }
 
     .form-wrapper {
       background: white;
-      border-radius: 12px;
+      border-radius: 16px;
       overflow: hidden;
-      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
-      margin-top: 24px;
+      box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
+      margin-top: var(--spacing-md);
     }
 
     iframe {
       border: none;
       width: 100%;
       min-height: 700px;
+      display: block;
     }
 
     .form-note {
-      margin-top: 20px;
-      font-size: 0.9rem;
-      opacity: 0.7;
-      font-style: italic;
+      margin-top: var(--spacing-sm);
+      font-size: clamp(0.85rem, 2vw, 0.95rem);
+      color: var(--text-secondary);
+      line-height: 1.8;
     }
     
-    img {
-      max-width: 240px;
+    /* Fun Element */
+    .fun-section {
+      text-align: center;
+      margin: var(--spacing-lg) 0;
+      padding: var(--spacing-md);
+      background: var(--card-bg);
+      border-radius: 20px;
+      border: 1px solid var(--border-color);
+    }
+
+    .fun-section img {
+      max-width: min(300px, 90%);
+      height: auto;
       border-radius: 16px;
-      margin: 24px auto;
+      margin: var(--spacing-sm) auto;
       display: block;
-      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+      box-shadow: 0 8px 30px rgba(0, 0, 0, 0.4);
     }
     
+    /* Footer */
     .footer {
-      margin-top: 60px;
-      font-size: 0.85rem;
-      opacity: 0.6;
-      border-top: 1px solid rgba(255, 255, 255, 0.1);
-      padding-top: 20px;
+      margin-top: var(--spacing-lg);
+      padding-top: var(--spacing-md);
+      font-size: clamp(0.85rem, 2vw, 0.95rem);
+      color: var(--text-secondary);
+      border-top: 1px solid var(--border-color);
+      text-align: center;
     }
 
-    .countdown {
-      display: inline-block;
-      margin: 20px 0;
-      padding: 20px 30px;
-      background: rgba(167, 139, 250, 0.15);
-      border: 2px solid #a78bfa;
-      border-radius: 12px;
+    .footer a {
+      color: var(--accent-blue);
+      text-decoration: none;
+      transition: color 0.2s;
     }
 
-    .countdown-text {
-      font-size: 0.9rem;
-      color: #c4b5fd;
-      margin-bottom: 8px;
-    }
-
-    .countdown-timer {
-      font-size: 1.5rem;
-      font-weight: 700;
-      color: #a78bfa;
+    .footer a:hover {
+      color: var(--accent-purple);
     }
     
+    /* Mobile Optimizations */
     @media (max-width: 768px) {
-      h1 { font-size: 2rem; }
-      h2 { font-size: 1.5rem; }
-      .emoji { font-size: 2.5rem; }
-      .hero-section { padding: 32px 24px; }
-      .form-section { padding: 32px 20px; }
-      .benefit-card { padding: 24px 20px; }
-      iframe { min-height: 900px; }
+      .benefits-grid {
+        grid-template-columns: 1fr;
+      }
+
+      iframe {
+        min-height: 900px;
+      }
+
+      .features li {
+        padding-left: 2.5rem;
+      }
+
+      .features li:before {
+        left: 0.75rem;
+        font-size: 1.25rem;
+      }
+    }
+
+    @media (max-width: 480px) {
+      body {
+        padding: 1rem 0.75rem;
+      }
+
+      .hero-section,
+      .form-section {
+        padding: 2rem 1.5rem;
+        border-radius: 16px;
+      }
+
+      .benefit-card {
+        padding: 1.5rem;
+      }
+
+      iframe {
+        min-height: 1000px;
+      }
+    }
+
+    /* Accessibility */
+    @media (prefers-reduced-motion: reduce) {
+      * {
+        animation: none !important;
+        transition: none !important;
+      }
     }
   </style>
 </head>
@@ -341,16 +438,21 @@
   <div class="container">
     <!-- Hero Section -->
     <div class="hero-section">
-      <div class="emoji">🤖💬</div>
+      <div class="logo-container">
+        <span class="logo-emoji">🤖💬</span>
+      </div>
       <h1>ReviseIt</h1>
       <p class="tagline">AI-Powered WhatsApp Automation for Modern Businesses</p>
       
-      <div class="status-badge">🚀 Launching Soon — MVP in Development</div>
+      <div class="status-badge">
+        <span>🚀</span>
+        <span>Launching Soon — MVP in Development</span>
+      </div>
       
       <p>We're building a next-generation automation platform that responds instantly, nurtures leads, follows up automatically, and handles customer conversations — all on WhatsApp.</p>
       
       <div class="features">
-        <h3>🎯 What We're Building:</h3>
+        <h3>🎯 What We're Building</h3>
         <ul>
           <li>Instant AI-powered responses 24/7</li>
           <li>Automated lead nurturing & follow-ups</li>
@@ -360,18 +462,15 @@
           <li>Custom workflow automation</li>
         </ul>
       </div>
-
-      <div class="countdown">
-        <div class="countdown-text">⏰ Expected Launch</div>
-        <div class="countdown-timer">Q1 2025</div>
-      </div>
     </div>
 
     <!-- Early Access Benefits -->
-    <h2>🎁 Why Join Early Access?</h2>
-    <p style="max-width: 700px; margin: 0 auto 30px;">Be among the first to experience ReviseIt and unlock exclusive benefits that won't be available after launch.</p>
+    <div class="benefits-intro">
+      <h2>🎁 Why Join Early Access?</h2>
+      <p>Be among the first to experience ReviseIt and unlock exclusive benefits that won't be available after launch.</p>
+    </div>
 
-    <div class="benefits-section">
+    <div class="benefits-grid">
       <div class="benefit-card">
         <span class="benefit-icon">🎯</span>
         <h3>Lifetime Discount</h3>
@@ -416,33 +515,14 @@
       
       <div class="form-container">
         <div class="form-wrapper">
-          <!-- 
-            INSTRUCTIONS TO ADD YOUR GOOGLE FORM:
-            
-            1. Create your Google Form at https://forms.google.com
-            2. Click the "Send" button (top right)
-            3. Click the "<>" (Embed HTML) icon
-            4. Copy the iframe code
-            5. Replace the src URL below with your form's embed URL
-            6. Adjust height if needed (600-900px recommended)
-            
-            Example form fields to include:
-            - Full Name (required)
-            - Email Address (required)
-            - Phone Number (optional)
-            - Company/Business Name
-            - Industry/Use Case
-            - Team Size
-            - How did you hear about us?
-          -->
-          
           <iframe 
-            src="https://docs.google.com/forms/d/e/1FAIpQLSd_zmQaoRNe49RO0t8MyVRlITAGG51aJflZ33GwewSYbRyV9Q/viewform?usp=publish-editor" 
+            src="https://docs.google.com/forms/d/e/1FAIpQLSd_zmQaoRNe49RO0t8MyVRlITAGG51aJflZ33GwewSYbRyV9Q/viewform?embedded=true" 
             width="100%" 
             height="700" 
             frameborder="0" 
             marginheight="0" 
-            marginwidth="0">
+            marginwidth="0"
+            loading="lazy">
             Loading form...
           </iframe>
         </div>
@@ -455,13 +535,15 @@
     </div>
 
     <!-- Fun Element -->
-    <img src="https://media.tenor.com/dvNJC2QIU5gAAAAC/dance-dancing.gif" alt="Animated celebration GIF" loading="lazy" />
-    <p style="font-size: 0.9rem; opacity: 0.7;">Meanwhile... enjoy this little surprise 😄</p>
+    <div class="fun-section">
+      <img src="https://media.tenor.com/dvNJC2QIU5gAAAAC/dance-dancing.gif" alt="Animated celebration GIF" loading="lazy" />
+      <p>Meanwhile... enjoy this little surprise 😄</p>
+    </div>
     
     <!-- Footer -->
     <div class="footer">
       © 2025 ReviseIt — All Rights Reserved<br>
-      <a href="mailto:contact@reviseit.in" style="color: #93c5fd; text-decoration: none;">contact@reviseit.in</a>
+      <a href="mailto:contact@reviseit.in">contact@reviseit.in</a>
     </div>
   </div>
 </body>
