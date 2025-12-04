@@ -1,0 +1,631 @@
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+}
+
+/* MAIN WRAPPER */
+.auth-container.signup-page {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--auth-bg);
+  padding: 16px;
+  height: 100vh; /* Added to prevent scrolling */
+  overflow: hidden; /* Added to prevent scrolling */
+}
+
+/* SPLIT CARD */
+.signup-page .auth-split {
+  display: flex;
+  max-width: 1300px;
+  width: 100%;
+  background: var(--card-bg);
+  border-radius: 24px;
+  overflow: hidden;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.1);
+  /* let height grow based on content so title and sign in are always visible */
+}
+
+/* Left Side - Gradient */
+.signup-page .auth-left {
+  flex: 1;
+  position: relative;
+  background: var(--card-bg);
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: 20px;
+  overflow: hidden;
+}
+
+.signup-page .gradient-overlay {
+  position: absolute;
+  top: 20px;
+  left: 20px;
+  right: 20px;
+  bottom: 20px;
+  background: linear-gradient(
+    135deg,
+    var(--auth-gradient-dark-start) 0%,
+    var(--auth-gradient-dark-mid) 50%,
+    var(--auth-gradient-dark-end) 100%
+  );
+  background-image: url("/gradient-waves.png");
+  background-size: cover;
+  background-position: center;
+  opacity: 0.9;
+  pointer-events: none;
+  border-radius: 12px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15), 0 1px 4px rgba(0, 0, 0, 0.1);
+}
+
+.signup-page .quote-section {
+  position: relative;
+  z-index: 2;
+  padding: 20px 20px 0 20px;
+}
+
+.signup-page .quote-label {
+  color: var(--white-70);
+  font-family: var(--font-primary);
+  font-size: 11px;
+  letter-spacing: 2px;
+  font-weight: 500;
+  text-transform: uppercase;
+}
+
+.signup-page .content-section {
+  position: relative;
+  z-index: 2;
+  margin-bottom: 20px;
+  padding: 0 20px 20px 20px;
+}
+
+.signup-page .main-heading {
+  font-family: var(--font-secondary);
+  font-size: 52px;
+  font-weight: 600;
+  color: var(--card-bg);
+  line-height: 1;
+  margin: 0 0 16px 0;
+  letter-spacing: -2px;
+}
+
+.signup-page .sub-text {
+  font-family: var(--font-primary);
+  font-size: 14px;
+  color: var(--white-80);
+  line-height: 1.5;
+  margin: 0;
+  font-weight: 400;
+}
+
+/* Right Side - Form */
+.signup-page .auth-right {
+  flex: 1;
+  background: var(--card-bg);
+  display: flex;
+  flex-direction: column;
+  padding: 20px 40px; /* reduced padding */
+  position: relative;
+  overflow: visible; /* no inner scroll on desktop */
+}
+
+.signup-page .brand-tag {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-family: var(--font-primary);
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  margin-bottom: 12px;
+  flex-shrink: 0;
+}
+
+.signup-page .brand-tag img {
+  flex-shrink: 0;
+  object-fit: contain;
+}
+
+.signup-page .form-container {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-start; /* move form to top so you see title + sign in */
+  padding-top: 4px;
+  padding-bottom: 16px; /* reduced */
+  max-width: 420px;
+  margin: 0 auto;
+  width: 100%;
+}
+
+.signup-page .form-header {
+  text-align: center;
+  margin-bottom: 16px;
+  flex-shrink: 0;
+}
+
+.signup-page .form-header h2 {
+  font-family: var(--font-secondary);
+  font-size: 30px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 0 0 4px 0;
+  letter-spacing: -1px;
+}
+
+.signup-page .form-header p {
+  font-family: var(--font-primary);
+  font-size: 13px;
+  color: var(--text-muted);
+  margin: 0;
+  font-weight: 400;
+}
+
+.signup-page .auth-form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.signup-page .form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px; /* Increased from 4px for better spacing between labels and inputs */
+}
+
+.signup-page .form-group label {
+  font-family: var(--font-primary);
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-secondary);
+}
+
+.signup-page .form-group input {
+  font-family: var(--font-primary);
+  padding: 9px 13px; /* slightly less */
+  border: 1px solid var(--border-light);
+  border-radius: 8px;
+  font-size: 14px;
+  transition: all 0.3s ease;
+  background: var(--input-bg-light);
+  color: var(--text-secondary);
+}
+
+.signup-page .form-group input:focus {
+  outline: none;
+  border-color: var(--text-secondary);
+  background: var(--card-bg);
+}
+
+.signup-page .form-group input::placeholder {
+  color: var(--text-placeholder);
+}
+
+.signup-page .password-input-wrapper {
+  position: relative;
+}
+
+.signup-page .password-input-wrapper input {
+  width: 100%;
+  padding-right: 40px;
+}
+
+.signup-page .toggle-password {
+  position: absolute;
+  right: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: color 0.2s ease;
+}
+
+.signup-page .toggle-password:hover {
+  color: var(--text-secondary);
+}
+
+.signup-page .form-options {
+  display: flex;
+  justify-content: flex-start;
+  align-items: center;
+  margin-top: 8px;
+}
+
+.signup-page .checkbox-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--font-primary);
+  font-size: 12px;
+  color: var(--text-muted);
+  cursor: pointer;
+  user-select: none;
+  line-height: 1.4;
+}
+
+.signup-page .checkbox-label input[type="checkbox"] {
+  cursor: pointer;
+  width: 15px;
+  height: 15px;
+  flex-shrink: 0;
+}
+
+.signup-page .btn-primary {
+  font-family: var(--font-primary);
+  padding: 10px;
+  background: var(--primary-color);
+  color: var(--card-bg);
+  border: none;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  margin-top: 4px;
+  box-shadow: none;
+}
+
+.signup-page .btn-primary:hover {
+  background: var(--button-hover-bg);
+  transform: translateY(-1px);
+  box-shadow: none;
+}
+
+.signup-page .btn-google {
+  font-family: var(--font-primary);
+  padding: 9px 10px;
+  background: var(--card-bg);
+  color: var(--text-secondary);
+  border: 1px solid var(--border-light);
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  transition: all 0.3s ease;
+  border: 1px solid var(--black);
+}
+
+.signup-page .btn-google:hover {
+  background: var(--input-bg-light);
+  border-color: var(--gray-300);
+  transform: translateY(-1px);
+}
+
+.signup-page .auth-footer {
+  font-family: var(--font-primary);
+  text-align: center;
+  margin-top: 12px;
+  font-size: 13px;
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+.signup-page .auth-footer a {
+  color: var(--text-primary);
+  text-decoration: none;
+  font-weight: 600;
+  transition: opacity 0.2s ease;
+}
+
+.signup-page .auth-footer a:hover {
+  opacity: 0.7;
+}
+
+/* Tablet View */
+@media (max-width: 1024px) {
+  .signup-page .auth-left {
+    min-height: 280px;
+  }
+
+  .signup-page .main-heading {
+    font-size: 44px;
+  }
+
+  .signup-page .auth-right {
+    padding: 24px 32px;
+  }
+}
+
+/* Mobile View - Enhanced Professional Spacing with Scroll Fix */
+@media (max-width: 768px) {
+  /* Prevent horizontal scroll on mobile */
+  html {
+    overflow-x: hidden;
+    max-width: 100vw;
+  }
+
+  body {
+    overflow-x: hidden;
+    max-width: 100vw;
+    position: relative;
+  }
+
+  .auth-container.signup-page {
+    padding: 0;
+    min-height: 100vh;
+    height: 100vh;
+    overflow: hidden; /* Changed from overflow-y: auto to hidden to prevent scrolling */
+    -webkit-overflow-scrolling: touch; /* Removed as overflow is hidden */
+  }
+
+  .signup-page .auth-split {
+    border-radius: 0;
+    height: auto;
+    min-height: 100vh;
+    overflow: visible;
+  }
+
+  /* Hide the gradient side completely */
+  .signup-page .auth-left {
+    display: none;
+  }
+
+  /* Enhanced mobile spacing with proper scroll */
+  .signup-page .auth-right {
+    flex: 1;
+    width: 100%;
+    max-width: 100vw;
+    padding: 32px 28px;
+    justify-content: flex-start;
+    overflow: visible;
+    overflow-x: hidden;
+    height: auto;
+    min-height: 100vh;
+  }
+
+  .signup-page .brand-tag {
+    font-size: 15px;
+    margin-bottom: 24px;
+    margin-top: 8px;
+  }
+
+  .signup-page .form-container {
+    padding-top: 16px;
+    padding-bottom: 32px;
+    justify-content: flex-start;
+    max-width: 100%;
+    overflow: visible;
+  }
+
+  .signup-page .form-header {
+    margin-bottom: 28px;
+  }
+
+  .signup-page .form-header h2 {
+    font-size: 30px;
+    margin-bottom: 8px;
+  }
+
+  .signup-page .form-header p {
+    font-size: 14px;
+    line-height: 1.5;
+  }
+
+  .signup-page .auth-form {
+    gap: 16px;
+    width: 100%;
+  }
+
+  .signup-page .form-group {
+    gap: 10px; /* Increased gap for better spacing on mobile */
+    width: 100%;
+  }
+
+  .signup-page .form-group label {
+    font-size: 13.5px;
+    margin-bottom: 2px;
+  }
+
+  .signup-page .form-group input {
+    padding: 13px 16px;
+    font-size: 15px;
+    border-radius: 10px;
+    min-height: 48px;
+    width: 100%;
+    max-width: 100%;
+  }
+
+  .signup-page .password-input-wrapper {
+    width: 100%;
+  }
+
+  .signup-page .password-input-wrapper input {
+    padding-right: 48px;
+  }
+
+  .signup-page .toggle-password {
+    right: 14px;
+    padding: 6px;
+  }
+
+  .signup-page .checkbox-label {
+    font-size: 12.5px;
+    gap: 8px;
+    padding: 4px 0;
+  }
+
+  .signup-page .checkbox-label input[type="checkbox"] {
+    width: 16px;
+    height: 16px;
+  }
+
+  .signup-page .form-options {
+    margin-top: 12px;
+    margin-bottom: -4px;
+  }
+
+  .signup-page .btn-primary {
+    padding: 14px 16px;
+    font-size: 15px;
+    font-weight: 600;
+    border-radius: 10px;
+    min-height: 48px;
+    margin-top: 8px;
+    width: 100%;
+  }
+
+  .signup-page .btn-google {
+    padding: 13px 16px;
+    font-size: 14px;
+    border-radius: 10px;
+    min-height: 48px;
+    width: 100%;
+  }
+
+  .signup-page .auth-footer {
+    margin-top: 24px;
+    font-size: 13.5px;
+    padding-bottom: 16px;
+  }
+}
+
+/* Small Mobile Devices - Optimized with Scroll Fix */
+@media (max-width: 480px) {
+  html,
+  body {
+    overflow-x: hidden;
+    max-width: 100vw;
+    width: 100%;
+  }
+
+  .signup-page .auth-right {
+    padding: 28px 24px;
+    width: 100%;
+    max-width: 100%;
+  }
+
+  .signup-page .brand-tag {
+    font-size: 14.5px;
+    margin-bottom: 20px;
+  }
+
+  .signup-page .form-container {
+    padding-top: 12px;
+    padding-bottom: 28px;
+    width: 100%;
+  }
+
+  .signup-page .form-header {
+    margin-bottom: 24px;
+  }
+
+  .signup-page .form-header h2 {
+    font-size: 28px;
+    margin-bottom: 6px;
+  }
+
+  .signup-page .form-header p {
+    font-size: 13.5px;
+  }
+
+  .signup-page .auth-form {
+    gap: 14px;
+  }
+
+  .signup-page .form-group input {
+    padding: 12px 15px;
+    font-size: 14.5px;
+    min-height: 46px;
+  }
+
+  .signup-page .btn-primary {
+    padding: 13px 16px;
+    font-size: 14.5px;
+    min-height: 46px;
+  }
+
+  .signup-page .btn-google {
+    padding: 12px 16px;
+    font-size: 13.5px;
+    min-height: 46px;
+  }
+
+  .signup-page .auth-footer {
+    margin-top: 20px;
+    font-size: 13px;
+    padding-bottom: 12px;
+  }
+}
+
+/* Extra Small Devices - Optimized with Scroll Fix */
+@media (max-width: 360px) {
+  .signup-page .auth-right {
+    padding: 24px 20px;
+  }
+
+  .signup-page .brand-tag {
+    font-size: 14px;
+    margin-bottom: 16px;
+  }
+
+  .signup-page .form-container {
+    padding-top: 8px;
+    padding-bottom: 24px;
+  }
+
+  .signup-page .form-header {
+    margin-bottom: 20px;
+  }
+
+  .signup-page .form-header h2 {
+    font-size: 26px;
+    margin-bottom: 6px;
+  }
+
+  .signup-page .form-header p {
+    font-size: 13px;
+  }
+
+  .signup-page .auth-form {
+    gap: 12px;
+  }
+
+  .signup-page .form-group input {
+    padding: 11px 14px;
+    font-size: 14px;
+    min-height: 44px;
+  }
+
+  .signup-page .btn-primary {
+    padding: 12px 16px;
+    font-size: 14px;
+    min-height: 44px;
+  }
+
+  .signup-page .btn-google {
+    padding: 11px 16px;
+    font-size: 13px;
+    min-height: 44px;
+  }
+
+  .signup-page .checkbox-label {
+    font-size: 12px;
+  }
+
+  .signup-page .auth-footer {
+    margin-top: 18px;
+    font-size: 12.5px;
+    padding-bottom: 12px;
+  }
+}
