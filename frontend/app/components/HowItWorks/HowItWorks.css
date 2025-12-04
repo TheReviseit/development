@@ -1,0 +1,744 @@
+/* ============================================
+   How It Works Section
+   ============================================ */
+
+.how-it-works-section {
+  padding: 100px 0;
+  background: #ffffff;
+  position: relative;
+  overflow: hidden;
+}
+
+/* ============================================
+   Background Elements
+   ============================================ */
+
+.hiw-background {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+.hiw-gradient-orb {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(80px);
+  opacity: 0.4;
+  animation: float 8s ease-in-out infinite;
+}
+
+.hiw-orb-1 {
+  width: 500px;
+  height: 500px;
+  background: radial-gradient(
+    circle,
+    rgba(45, 212, 255, 0.3) 0%,
+    transparent 70%
+  );
+  top: -100px;
+  left: -100px;
+}
+
+.hiw-orb-2 {
+  width: 600px;
+  height: 600px;
+  background: radial-gradient(
+    circle,
+    rgba(34, 193, 90, 0.25) 0%,
+    transparent 70%
+  );
+  bottom: -150px;
+  right: -150px;
+  animation-delay: 2s;
+}
+
+@keyframes float {
+  0%,
+  100% {
+    transform: translateY(0) translateX(0);
+  }
+  33% {
+    transform: translateY(-30px) translateX(20px);
+  }
+  66% {
+    transform: translateY(20px) translateX(-20px);
+  }
+}
+
+/* ============================================
+   Container
+   ============================================ */
+
+.hiw-container {
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: 0 32px;
+  position: relative;
+  z-index: 1;
+}
+
+/* ============================================
+   Header
+   ============================================ */
+
+.hiw-header {
+  text-align: center;
+  max-width: 700px;
+  margin: 0 auto 80px;
+}
+
+.hiw-title {
+  font-size: 48px;
+  font-weight: 700;
+  line-height: 1.2;
+  letter-spacing: -0.02em;
+  color: var(--heading-color);
+  margin-bottom: 16px;
+  background: linear-gradient(
+    135deg,
+    var(--heading-color) 0%,
+    var(--text-color) 100%
+  );
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.hiw-subtitle {
+  font-size: 18px;
+  line-height: 1.6;
+  color: var(--text-color);
+}
+
+/* ============================================
+   Timeline Wrapper
+   ============================================ */
+
+.hiw-timeline-wrapper {
+  position: relative;
+  margin-bottom: 80px;
+}
+
+/* ============================================
+   Progress Line
+   ============================================ */
+
+.hiw-progress-line {
+  position: absolute;
+  top: 40px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 70%;
+  height: 4px;
+  background: rgba(226, 232, 240, 0.6);
+  border-radius: 2px;
+  z-index: 0;
+}
+
+.hiw-progress-fill {
+  height: 100%;
+  width: var(--progress, 0%);
+  background: linear-gradient(
+    90deg,
+    var(--auth-gradient-start) 0%,
+    var(--auth-gradient-end) 100%
+  );
+  border-radius: 2px;
+  transition: width 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+  position: relative;
+}
+
+.hiw-progress-fill::after {
+  content: "";
+  position: absolute;
+  right: -6px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 12px;
+  height: 12px;
+  background: linear-gradient(
+    135deg,
+    var(--auth-gradient-start) 0%,
+    var(--auth-gradient-end) 100%
+  );
+  border-radius: 50%;
+  box-shadow: 0 0 0 4px rgba(34, 193, 90, 0.2);
+  animation: pulse 2s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 4px rgba(34, 193, 90, 0.2);
+  }
+  50% {
+    box-shadow: 0 0 0 8px rgba(34, 193, 90, 0.1);
+  }
+}
+
+/* ============================================
+   Steps Grid
+   ============================================ */
+
+.hiw-steps-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 40px;
+  position: relative;
+  z-index: 1;
+}
+
+/* ============================================
+   Individual Step
+   ============================================ */
+
+.hiw-step {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  position: relative;
+  cursor: pointer;
+}
+
+/* ============================================
+   Step Badge (Number Circle)
+   ============================================ */
+
+.hiw-step-badge {
+  width: 80px;
+  height: 80px;
+  border-radius: 50%;
+  background: #000000 !important;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 32px;
+  position: relative;
+  z-index: 2;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.hiw-step:hover .hiw-step-badge {
+  transform: scale(1.1) translateY(-4px);
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.15);
+}
+
+.hiw-step.step-active .hiw-step-badge {
+  transform: scale(1.15);
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);
+}
+
+.hiw-step-number {
+  font-size: 32px;
+  font-weight: 700;
+  color: white;
+  position: relative;
+  z-index: 1;
+}
+
+/* Badge Pulse Animation */
+.hiw-badge-pulse {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  border: 2px solid rgba(255, 255, 255, 0.5);
+  opacity: 0;
+}
+
+.hiw-step.step-active .hiw-badge-pulse {
+  animation: badgePulse 2s ease-out infinite;
+}
+
+@keyframes badgePulse {
+  0% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(1.5);
+  }
+}
+
+/* ============================================
+   Step Card
+   ============================================ */
+
+.hiw-step-card {
+  background: rgba(255, 255, 255, 0.9);
+  border: 1px solid rgba(226, 232, 240, 0.8);
+  border-radius: 24px;
+  padding: 32px;
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.06);
+  transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+  position: relative;
+  width: 100%;
+  overflow: hidden;
+}
+
+.hiw-step:hover .hiw-step-card {
+  transform: translateY(-8px);
+  box-shadow: 0 10px 25px rgba(15, 23, 42, 0.08);
+  border-color: rgba(34, 193, 90, 0.3);
+}
+
+.hiw-step.step-active .hiw-step-card {
+  transform: translateY(-12px);
+  box-shadow: 0 12px 30px rgba(15, 23, 42, 0.1);
+  border-color: rgba(34, 193, 90, 0.5);
+}
+
+.hiw-step-card::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 0px;
+  background: transparent;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+.hiw-step.step-active .hiw-step-card::before {
+  opacity: 0;
+}
+
+/* ============================================
+   Step Icon
+   ============================================ */
+
+.hiw-step-icon-wrapper {
+  width: 72px;
+  height: 72px;
+  border-radius: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 auto 24px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  transition: transform 0.3s ease;
+}
+
+.hiw-step:hover .hiw-step-icon-wrapper {
+  transform: rotate(-5deg) scale(1.05);
+}
+
+.hiw-step.step-active .hiw-step-icon-wrapper {
+  animation: iconBounce 0.6s ease-out;
+}
+
+@keyframes iconBounce {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-10px);
+  }
+}
+
+.hiw-step-icon {
+  width: 36px;
+  height: 36px;
+  color: white;
+}
+
+/* ============================================
+   Step Content
+   ============================================ */
+
+.hiw-step-title {
+  font-size: 22px;
+  font-weight: 600;
+  color: var(--heading-color);
+  margin-bottom: 12px;
+  text-align: center;
+  line-height: 1.3;
+}
+
+.hiw-step-description {
+  font-size: 15px;
+  line-height: 1.6;
+  color: var(--text-color);
+  text-align: center;
+  margin-bottom: 20px;
+}
+
+/* ============================================
+   Step Details (Expandable)
+   ============================================ */
+
+.hiw-step-details {
+  max-height: 0;
+  overflow: hidden;
+  opacity: 0;
+  transition: all 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.hiw-step-details.details-visible {
+  max-height: 300px;
+  opacity: 1;
+  margin-top: 20px;
+}
+
+.hiw-details-header {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--heading-color);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 12px;
+  text-align: left;
+}
+
+.hiw-details-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.hiw-detail-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin-bottom: 10px;
+  font-size: 14px;
+  color: var(--text-gray-700);
+  text-align: left;
+  animation: slideInLeft 0.4s ease-out forwards;
+  opacity: 0;
+}
+
+.details-visible .hiw-detail-item:nth-child(1) {
+  animation-delay: 0.1s;
+}
+.details-visible .hiw-detail-item:nth-child(2) {
+  animation-delay: 0.2s;
+}
+.details-visible .hiw-detail-item:nth-child(3) {
+  animation-delay: 0.3s;
+}
+.details-visible .hiw-detail-item:nth-child(4) {
+  animation-delay: 0.4s;
+}
+
+@keyframes slideInLeft {
+  from {
+    opacity: 0;
+    transform: translateX(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+.hiw-check-icon {
+  width: 16px;
+  height: 16px;
+  color: var(--auth-gradient-start);
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+/* ============================================
+   Arrow Connector
+   ============================================ */
+
+.hiw-arrow-connector {
+  display: none;
+  position: absolute;
+  right: -50px;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 3;
+}
+
+.hiw-arrow {
+  width: 32px;
+  height: 32px;
+  color: var(--auth-gradient-start);
+  animation: arrowSlide 1.5s ease-in-out infinite;
+}
+
+@keyframes arrowSlide {
+  0%,
+  100% {
+    transform: translateX(0);
+    opacity: 0.5;
+  }
+  50% {
+    transform: translateX(8px);
+    opacity: 1;
+  }
+}
+
+/* ============================================
+   Call to Action Section
+   ============================================ */
+
+.hiw-cta-section {
+  margin-top: 60px;
+}
+
+.hiw-cta-card {
+  background: linear-gradient(
+    135deg,
+    rgba(34, 193, 90, 0.05) 0%,
+    rgba(45, 212, 255, 0.05) 100%
+  );
+  border: 1px solid rgba(34, 193, 90, 0.2);
+  border-radius: 24px;
+  padding: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 32px;
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  box-shadow: 0 4px 16px rgba(34, 193, 90, 0.08);
+  position: relative;
+  overflow: hidden;
+}
+
+.hiw-cta-card::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: linear-gradient(
+    135deg,
+    transparent 0%,
+    rgba(45, 212, 255, 0.03) 100%
+  );
+  pointer-events: none;
+}
+
+.hiw-cta-content {
+  flex: 1;
+}
+
+.hiw-cta-title {
+  font-size: 28px;
+  font-weight: 700;
+  color: var(--heading-color);
+  margin-bottom: 8px;
+}
+
+.hiw-cta-text {
+  font-size: 16px;
+  color: var(--text-color);
+  line-height: 1.5;
+}
+
+.hiw-cta-buttons {
+  display: flex;
+  gap: 16px;
+  flex-shrink: 0;
+}
+
+.hiw-cta-btn {
+  white-space: nowrap;
+}
+
+.hiw-btn-icon {
+  width: 20px;
+  height: 20px;
+}
+
+/* ============================================
+   Responsive Design
+   ============================================ */
+
+/* Tablet */
+@media (max-width: 1024px) {
+  .hiw-steps-grid {
+    gap: 32px;
+  }
+
+  .hiw-step-badge {
+    width: 70px;
+    height: 70px;
+  }
+
+  .hiw-step-number {
+    font-size: 28px;
+  }
+
+  .hiw-step-card {
+    padding: 28px;
+  }
+
+  .hiw-progress-line {
+    width: 80%;
+  }
+
+  .hiw-cta-card {
+    padding: 40px;
+  }
+}
+
+/* Mobile */
+@media (max-width: 768px) {
+  .how-it-works-section {
+    padding: 60px 0;
+  }
+
+  .hiw-container {
+    padding: 0 20px;
+  }
+
+  .hiw-title {
+    font-size: 36px;
+  }
+
+  .hiw-subtitle {
+    font-size: 16px;
+  }
+
+  .hiw-header {
+    margin-bottom: 48px;
+  }
+
+  .hiw-timeline-wrapper {
+    margin-bottom: 48px;
+  }
+
+  .hiw-steps-grid {
+    grid-template-columns: 1fr;
+    gap: 48px;
+  }
+
+  .hiw-progress-line {
+    left: 32px;
+    top: 40px;
+    width: 4px;
+    height: calc(100% - 80px);
+    transform: none;
+  }
+
+  .hiw-progress-fill {
+    width: 100% !important;
+    height: var(--progress, 0%);
+    max-height: 100%;
+    transition: height 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  .hiw-progress-fill::after {
+    right: 50%;
+    bottom: -6px;
+    top: auto;
+    transform: translateX(50%);
+  }
+
+  .hiw-step {
+    flex-direction: row;
+    align-items: flex-start;
+    gap: 20px;
+  }
+
+  .hiw-step-badge {
+    width: 64px;
+    height: 64px;
+    margin-bottom: 0;
+    flex-shrink: 0;
+  }
+
+  .hiw-step-number {
+    font-size: 24px;
+  }
+
+  .hiw-step-card {
+    padding: 24px;
+    flex: 1;
+  }
+
+  .hiw-step-icon-wrapper {
+    width: 60px;
+    height: 60px;
+  }
+
+  .hiw-step-icon {
+    width: 30px;
+    height: 30px;
+  }
+
+  .hiw-step-title {
+    font-size: 20px;
+    text-align: left;
+  }
+
+  .hiw-step-description {
+    text-align: left;
+    font-size: 14px;
+  }
+
+  .hiw-arrow-connector {
+    display: none;
+  }
+
+  .hiw-cta-card {
+    flex-direction: column;
+    align-items: flex-start;
+    padding: 32px;
+    gap: 24px;
+  }
+
+  .hiw-cta-title {
+    font-size: 24px;
+  }
+
+  .hiw-cta-text {
+    font-size: 15px;
+  }
+
+  .hiw-cta-buttons {
+    flex-direction: column;
+    width: 100%;
+  }
+
+  .hiw-cta-btn {
+    width: 100%;
+  }
+}
+
+/* Small Mobile */
+@media (max-width: 480px) {
+  .hiw-title {
+    font-size: 28px;
+  }
+
+  .hiw-step-badge {
+    width: 56px;
+    height: 56px;
+  }
+
+  .hiw-step-number {
+    font-size: 20px;
+  }
+
+  .hiw-step-card {
+    padding: 20px;
+  }
+
+  .hiw-cta-card {
+    padding: 24px;
+  }
+}
+
+/* ============================================
+   Desktop Arrow Connectors
+   ============================================ */
+
+@media (min-width: 769px) {
+  .hiw-arrow-connector {
+    display: block;
+  }
+}

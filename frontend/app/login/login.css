@@ -1,0 +1,695 @@
+/* Font imports removed - using Next.js font optimization */
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  min-height: 100vh;
+  height: 100%;
+}
+
+/* FIX: prevent horizontal scroll globally */
+html,
+body {
+  max-width: 100vw;
+  overflow-x: hidden;
+  position: relative;
+}
+
+/* Container */
+.auth-container.login-page {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--auth-bg);
+  padding: 20px;
+  width: 100%;
+}
+
+/* Split wrapper */
+.login-page .auth-split {
+  display: flex;
+  max-width: 1300px;
+  width: 100%;
+  height: 85vh;
+  background: var(--card-bg);
+  border-radius: 24px;
+  overflow: hidden;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.1);
+}
+
+/* Left Side - Gradient */
+.login-page .auth-left {
+  flex: 1;
+  position: relative;
+  background: var(--card-bg);
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: 20px;
+  overflow: hidden;
+}
+
+.login-page .gradient-overlay {
+  position: absolute;
+  top: 20px;
+  left: 20px;
+  right: 20px;
+  bottom: 20px;
+  background: linear-gradient(
+    135deg,
+    var(--auth-gradient-dark-start) 0%,
+    var(--auth-gradient-dark-mid) 50%,
+    var(--auth-gradient-dark-end) 100%
+  );
+  background-image: url("/gradient-waves.png");
+  background-size: cover;
+  background-position: center;
+  opacity: 0.9;
+  pointer-events: none;
+  border-radius: 12px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15), 0 1px 4px rgba(0, 0, 0, 0.1);
+}
+
+.login-page .quote-section {
+  position: relative;
+  z-index: 2;
+  padding: 20px 20px 0 20px;
+}
+
+.login-page .quote-label {
+  color: var(--white-70);
+  font-family: var(--font-primary);
+  font-size: 11px;
+  letter-spacing: 2px;
+  font-weight: 500;
+  text-transform: uppercase;
+}
+
+.login-page .content-section {
+  position: relative;
+  z-index: 2;
+  margin-bottom: 20px;
+  padding: 0 20px 20px 20px;
+}
+
+.login-page .main-heading {
+  font-family: var(--font-secondary);
+  font-size: 58px;
+  font-weight: 600;
+  color: var(--card-bg);
+  line-height: 1;
+  margin: 0 0 18px 0;
+  letter-spacing: -2px;
+}
+
+.login-page .sub-text {
+  font-family: var(--font-primary);
+  font-size: 14px;
+  color: var(--white-80);
+  line-height: 1.5;
+  margin: 0;
+  font-weight: 400;
+}
+
+/* Right Side - Form */
+.login-page .auth-right {
+  flex: 1;
+  background: var(--card-bg);
+  display: flex;
+  flex-direction: column;
+  padding: 20px 50px;
+  position: relative;
+  overflow-y: auto;
+  width: 100%;
+  max-width: 100%;
+}
+
+.login-page .brand-tag {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-family: var(--font-primary);
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  margin-bottom: 15px;
+  flex-shrink: 0;
+}
+
+.login-page .brand-tag img {
+  flex-shrink: 0;
+  object-fit: contain;
+}
+
+.login-page .form-container {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  max-width: 420px;
+  margin: 0 auto;
+  width: 100%;
+}
+
+.login-page .form-header {
+  text-align: center;
+  margin-bottom: 28px;
+  flex-shrink: 0;
+}
+
+.login-page .form-header h2 {
+  font-family: var(--font-secondary);
+  font-size: 38px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 0 0 10px 0;
+  letter-spacing: -1px;
+}
+
+.login-page .form-header p {
+  font-family: var(--font-primary);
+  font-size: 13px;
+  color: var(--text-muted);
+  margin: 0;
+  font-weight: 400;
+}
+
+.login-page .auth-form {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.login-page .form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.login-page .form-group label {
+  font-family: var(--font-primary);
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-secondary);
+}
+
+.login-page .form-group input {
+  font-family: var(--font-primary);
+  padding: 12px 15px;
+  border: 1px solid var(--border-light);
+  border-radius: 8px;
+  font-size: 14px;
+  transition: all 0.3s ease;
+  background: var(--input-bg-light);
+  width: 100%;
+  color: var(--text-secondary);
+}
+
+.login-page .form-group input:focus {
+  outline: none;
+  border-color: var(--text-secondary);
+  background: var(--card-bg);
+}
+
+.login-page .form-group input::placeholder {
+  color: var(--text-placeholder);
+}
+
+.login-page .password-input-wrapper {
+  position: relative;
+}
+
+.login-page .password-input-wrapper input {
+  width: 100%;
+  padding-right: 45px;
+}
+
+.login-page .toggle-password {
+  position: absolute;
+  right: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: color 0.2s ease;
+}
+
+.login-page .toggle-password:hover {
+  color: var(--text-secondary);
+}
+
+.login-page .form-options {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: -4px;
+}
+
+.login-page .checkbox-label {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-family: var(--font-primary);
+  font-size: 13px;
+  color: var(--text-muted);
+  cursor: pointer;
+  user-select: none;
+}
+
+.login-page .checkbox-label input[type="checkbox"] {
+  cursor: pointer;
+  width: 16px;
+  height: 16px;
+}
+
+.login-page .forgot-link {
+  font-family: var(--font-primary);
+  font-size: 13px;
+  color: var(--text-secondary);
+  text-decoration: none;
+  font-weight: 500;
+  transition: opacity 0.2s ease;
+}
+
+.login-page .forgot-link:hover {
+  opacity: 0.7;
+}
+
+.login-page .btn-primary {
+  font-family: var(--font-primary);
+  padding: 13px;
+  background: var(--primary-color);
+  color: var(--white);
+  border: none;
+  border-radius: 8px;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  margin-top: 4px;
+  width: 100%;
+  box-shadow: none;
+}
+
+.login-page .btn-primary:hover {
+  background: var(--button-hover-bg);
+  transform: translateY(-1px);
+  box-shadow: none;
+}
+
+.login-page .btn-google {
+  font-family: var(--font-primary);
+  padding: 12px;
+  background: var(--card-bg);
+  color: var(--text-secondary);
+  border: 1px solid var(--border-light);
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  transition: all 0.3s ease;
+  width: 100%;
+  border: 1px solid var(--black);
+}
+
+.login-page .btn-google:hover {
+  background: var(--input-bg-light);
+  border-color: var(--gray-300);
+  transform: translateY(-1px);
+}
+
+.login-page .auth-footer {
+  font-family: var(--font-primary);
+  text-align: center;
+  margin-top: 20px;
+  font-size: 13px;
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+.login-page .auth-footer a {
+  color: var(--text-primary);
+  text-decoration: none;
+  font-weight: 600;
+  transition: opacity 0.2s ease;
+}
+
+.login-page .auth-footer a:hover {
+  opacity: 0.7;
+}
+
+/* Tablet View */
+@media (max-width: 1024px) {
+  .login-page .auth-left {
+    min-height: 280px;
+  }
+
+  .login-page .main-heading {
+    font-size: 48px;
+  }
+
+  .login-page .auth-right {
+    padding: 30px 40px;
+  }
+}
+
+/* Mobile View - Enhanced Professional Spacing with Scroll Fix */
+@media (max-width: 768px) {
+  /* FIX: prevent horizontal scroll on mobile */
+  html,
+  body {
+    overflow-x: hidden;
+    max-width: 100vw;
+    width: 100%;
+    position: relative;
+  }
+
+  .auth-container.login-page {
+    padding: 0;
+    min-height: 100dvh; /* Use dynamic viewport height for mobile */
+    overflow: hidden; /* FIX: Prevent all scrolling (horizontal and vertical) */
+    width: 100%;
+    max-width: 100vw;
+  }
+
+  .login-page .auth-split {
+    border-radius: 0;
+    height: auto;
+    min-height: 100dvh;
+    overflow: hidden; /* FIX: Prevent overflow scrolling */
+    width: 100%;
+    max-width: 100vw;
+    display: flex;
+    flex-direction: column;
+  }
+
+  /* Hide the gradient side completely */
+  .login-page .auth-left {
+    display: none;
+  }
+
+  /* Enhanced mobile spacing with proper scroll */
+  .login-page .auth-right {
+    flex: 1;
+    width: 100%;
+    max-width: 100vw;
+    padding: 36px 30px;
+    justify-content: flex-start;
+    overflow: hidden; /* FIX: Prevent vertical scrolling */
+    height: auto;
+    min-height: 100dvh;
+  }
+
+  .login-page .brand-tag {
+    font-size: 15px;
+    margin-bottom: 28px;
+    margin-top: 12px;
+  }
+
+  .login-page .form-container {
+    padding-top: 20px;
+    padding-bottom: 36px;
+    justify-content: flex-start;
+    max-width: 100%;
+    width: 100%;
+    overflow: hidden; /* FIX: Prevent overflow */
+  }
+
+  .login-page .form-header {
+    margin-bottom: 32px;
+  }
+
+  .login-page .form-header h2 {
+    font-size: 34px;
+    margin-bottom: 10px;
+  }
+
+  .login-page .form-header p {
+    font-size: 14px;
+    line-height: 1.5;
+  }
+
+  .login-page .auth-form {
+    gap: 20px;
+    width: 100%;
+  }
+
+  .login-page .form-group {
+    gap: 7px;
+    width: 100%;
+  }
+
+  .login-page .form-group label {
+    font-size: 14px;
+    margin-bottom: 2px;
+  }
+
+  .login-page .form-group input {
+    padding: 14px 16px;
+    font-size: 15px;
+    border-radius: 10px;
+    min-height: 50px;
+    width: 100%;
+    max-width: 100%;
+  }
+
+  .login-page .password-input-wrapper {
+    width: 100%;
+  }
+
+  .login-page .password-input-wrapper input {
+    padding-right: 50px;
+  }
+
+  .login-page .toggle-password {
+    right: 14px;
+    padding: 6px;
+    min-width: 36px;
+    min-height: 36px;
+  }
+
+  .login-page .form-options {
+    flex-wrap: wrap;
+    gap: 12px;
+    margin-top: -2px;
+    margin-bottom: 2px;
+  }
+
+  .login-page .checkbox-label {
+    font-size: 13.5px;
+    gap: 8px;
+    padding: 4px 0;
+    min-height: 36px;
+    align-items: center;
+  }
+
+  .login-page .checkbox-label input[type="checkbox"] {
+    width: 18px;
+    height: 18px;
+  }
+
+  .login-page .forgot-link {
+    font-size: 13.5px;
+    padding: 4px 0;
+    min-height: 36px;
+    display: flex;
+    align-items: center;
+  }
+
+  .login-page .btn-primary {
+    padding: 15px 18px;
+    font-size: 15px;
+    font-weight: 600;
+    border-radius: 10px;
+    min-height: 50px;
+    margin-top: 10px;
+    width: 100%;
+  }
+
+  .login-page .btn-google {
+    padding: 14px 18px;
+    font-size: 14.5px;
+    border-radius: 10px;
+    min-height: 50px;
+    width: 100%;
+  }
+
+  .login-page .auth-footer {
+    margin-top: 28px;
+    font-size: 14px;
+    padding-bottom: 20px;
+  }
+}
+
+/* Small Mobile Devices - Optimized */
+@media (max-width: 480px) {
+  html,
+  body {
+    overflow: hidden; /* FIX: Prevent all scrolling */
+    max-width: 100vw;
+    width: 100%;
+    position: relative;
+  }
+
+  .login-page .auth-right {
+    padding: 32px 26px;
+    width: 100%;
+    max-width: 100vw;
+    overflow: hidden; /* FIX: Prevent overflow */
+  }
+
+  .login-page .brand-tag {
+    font-size: 14.5px;
+    margin-bottom: 24px;
+    margin-top: 8px;
+  }
+
+  .login-page .form-container {
+    padding-top: 16px;
+    padding-bottom: 32px;
+    width: 100%;
+  }
+
+  .login-page .form-header {
+    margin-bottom: 28px;
+  }
+
+  .login-page .form-header h2 {
+    font-size: 30px;
+    margin-bottom: 8px;
+  }
+
+  .login-page .form-header p {
+    font-size: 13.5px;
+  }
+
+  .login-page .auth-form {
+    gap: 18px;
+  }
+
+  .login-page .form-group input {
+    padding: 13px 15px;
+    font-size: 15px;
+    min-height: 48px;
+  }
+
+  .login-page .toggle-password {
+    min-width: 34px;
+    min-height: 34px;
+  }
+
+  .login-page .checkbox-label {
+    font-size: 13px;
+    min-height: 34px;
+  }
+
+  .login-page .forgot-link {
+    font-size: 13px;
+    min-height: 34px;
+  }
+
+  .login-page .btn-primary {
+    padding: 14px 16px;
+    font-size: 15px;
+    min-height: 48px;
+  }
+
+  .login-page .btn-google {
+    padding: 13px 16px;
+    font-size: 14px;
+    min-height: 48px;
+  }
+
+  .login-page .auth-footer {
+    margin-top: 24px;
+    font-size: 13.5px;
+    padding-bottom: 16px;
+  }
+}
+
+/* Extra Small Devices - Optimized */
+@media (max-width: 360px) {
+  .login-page .auth-right {
+    padding: 28px 22px;
+    width: 100%;
+    max-width: 100vw;
+    overflow: hidden; /* FIX: Prevent overflow */
+  }
+
+  .login-page .brand-tag {
+    font-size: 14px;
+    margin-bottom: 20px;
+  }
+
+  .login-page .form-container {
+    padding-top: 12px;
+    padding-bottom: 28px;
+  }
+
+  .login-page .form-header {
+    margin-bottom: 24px;
+  }
+
+  .login-page .form-header h2 {
+    font-size: 28px;
+    margin-bottom: 6px;
+  }
+
+  .login-page .form-header p {
+    font-size: 13px;
+  }
+
+  .login-page .auth-form {
+    gap: 16px;
+  }
+
+  .login-page .form-group input {
+    padding: 12px 14px;
+    font-size: 14.5px;
+    min-height: 46px;
+  }
+
+  .login-page .btn-primary {
+    padding: 13px 16px;
+    font-size: 14.5px;
+    min-height: 46px;
+  }
+
+  .login-page .btn-google {
+    padding: 12px 16px;
+    font-size: 13.5px;
+    min-height: 46px;
+  }
+
+  .login-page .checkbox-label {
+    font-size: 12.5px;
+  }
+
+  .login-page .forgot-link {
+    font-size: 12.5px;
+  }
+
+  .login-page .auth-footer {
+    margin-top: 20px;
+    font-size: 13px;
+    padding-bottom: 12px;
+  }
+}

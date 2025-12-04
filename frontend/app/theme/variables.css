@@ -1,0 +1,79 @@
+:root {
+  /* Core Theme Colors */
+  --primary-color: #000000;
+  --secondary-color: #2dd4ff;
+  --text-color: #4b5563;
+  --heading-color: #111111;
+  --text-primary: #1a1a1a;
+  --text-secondary: #333333;
+  --text-muted: #666666;
+  --text-placeholder: #999999;
+  --text-gray-900: #111827;
+  --text-gray-800: #1f2937;
+  --text-gray-700: #374151;
+  --text-gray-400: #9ca3af;
+  --background-color: #f5f7fa;
+  --auth-bg: #f5f5f5;
+  --header-bg: rgba(255, 255, 255, 0.98);
+
+  /* UI Element Colors */
+  --input-bg: #ffffff;
+  --border-color: rgba(148, 163, 184, 0.6);
+  --button-bg: #000000;
+  --button-hover-bg: #1a9e4a;
+  --google-btn-bg: #ffffff;
+  --google-btn-border: #e2e8f0;
+  --card-bg: #ffffff;
+  --input-bg-light: #f9f9f9;
+  --border-light: #d1d5db;
+  --header-border: #e5e7eb;
+  --gray-300: #d1d5db;
+  --gray-200: #e5e7eb;
+  --gray-100: #f3f4f6;
+  --gray-50: #f9fafb;
+  --green-50: #f0fdf4;
+  --blue-500: #3b82f6;
+  --green-400: #4ade80;
+  --green-600: #32cd32;
+
+  /* Auth & Gradients */
+  --auth-gradient-start: #22c15a;
+  --auth-gradient-mid: #28cadd;
+  --auth-gradient-end: #2dd4ff;
+  --auth-gradient-dark-start: #1a0033;
+  --auth-gradient-dark-mid: #2d0052;
+  --auth-gradient-dark-end: #0a0015;
+  --hero-green-start: #10b981;
+  --hero-green-end: #059669;
+  --header-primary: #4bbc50;
+  --header-primary-hover: #3da844;
+
+  /* Glassmorphism */
+  --glass-fill: rgba(255, 255, 255, 0.85);
+  --glass-border: rgba(255, 255, 255, 0.6);
+  --glass-border-light: rgba(255, 255, 255, 0.3);
+  --white-70: rgba(255, 255, 255, 0.7);
+  --white-80: rgba(255, 255, 255, 0.8);
+  --black: #000000;
+  --white: #ffffff;
+
+  /* Typography */
+  --font-primary: var(--font-jakarta), -apple-system, BlinkMacSystemFont,
+    "SF Pro", system-ui, sans-serif;
+  --font-secondary: var(--font-outfit), sans-serif;
+
+  /* Spacing Scale (8px base) */
+  --spacing-1: 8px;
+  --spacing-2: 16px;
+  --spacing-3: 24px;
+  --spacing-4: 32px;
+  --spacing-5: 40px;
+  --spacing-6: 48px;
+  --spacing-8: 64px;
+  --spacing-10: 80px;
+
+  /* Shadows */
+  --shadow-card: 0 18px 45px rgba(15, 23, 42, 0.12);
+  --shadow-button: 0 12px 30px rgba(34, 193, 90, 0.25);
+  --shadow-soft: 0 8px 20px rgba(15, 23, 42, 0.08);
+}
