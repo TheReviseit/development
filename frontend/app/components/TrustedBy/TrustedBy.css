@@ -1,0 +1,242 @@
+/* ============================================
+   TrustedBy Section Styles
+   ============================================ */
+
+.trusted-by-section {
+  padding: 60px 0;
+  background: linear-gradient(
+    180deg,
+    rgba(248, 250, 252, 0.5) 0%,
+    rgba(255, 255, 255, 1) 50%,
+    rgba(248, 250, 252, 0.5) 100%
+  );
+  border-top: 1px solid rgba(226, 232, 240, 0.6);
+  border-bottom: 1px solid rgba(226, 232, 240, 0.6);
+  position: relative;
+  overflow: hidden;
+}
+
+.trusted-by-label {
+  color: #6b7280;
+  margin-bottom: 40px;
+  font-size: 13px;
+  letter-spacing: 0.08em;
+}
+
+/* Scrolling Container */
+.trusted-by-scroll-wrapper {
+  position: relative;
+  width: 100%;
+  overflow: hidden;
+  mask-image: linear-gradient(
+    to right,
+    transparent 0%,
+    black 10%,
+    black 90%,
+    transparent 100%
+  );
+  -webkit-mask-image: linear-gradient(
+    to right,
+    transparent 0%,
+    black 10%,
+    black 90%,
+    transparent 100%
+  );
+}
+
+.trusted-by-scroll-container {
+  display: flex;
+  gap: 0;
+  width: max-content;
+  animation: scroll-right-to-left 40s linear infinite;
+}
+
+.trusted-by-scroll-container:hover {
+  animation-play-state: paused;
+}
+
+.trusted-by-scroll-track {
+  display: flex;
+  gap: 32px;
+  align-items: center;
+  padding: 0 16px;
+}
+
+/* Company Logo Items */
+.trusted-by-item {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+}
+
+.trusted-by-logo {
+  background: rgba(255, 255, 255, 0.8);
+  border: 1.5px solid rgba(226, 232, 240, 0.6);
+  border-radius: 16px;
+  padding: 16px 32px;
+  min-width: 160px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+  position: relative;
+  overflow: hidden;
+}
+
+.trusted-by-logo::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(34, 193, 90, 0.08),
+    transparent
+  );
+  transition: left 0.5s ease;
+}
+
+.trusted-by-logo:hover::before {
+  left: 100%;
+}
+
+.trusted-by-logo:hover {
+  border-color: rgba(34, 193, 90, 0.4);
+  background: rgba(255, 255, 255, 0.95);
+  box-shadow: 0 8px 24px rgba(34, 193, 90, 0.12);
+  transform: translateY(-4px) scale(1.05);
+}
+
+.trusted-by-logo span {
+  font-size: 16px;
+  font-weight: 600;
+  color: #1f2937;
+  letter-spacing: -0.01em;
+  position: relative;
+  z-index: 1;
+  background: linear-gradient(135deg, #1f2937 0%, #374151 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.trusted-by-logo:hover span {
+  background: linear-gradient(135deg, #22c15a 0%, #2dd4ff 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* Fade Overlays (Additional to mask) */
+.trusted-by-fade {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 120px;
+  pointer-events: none;
+  z-index: 2;
+}
+
+.trusted-by-fade-left {
+  left: 0;
+  background: linear-gradient(
+    to right,
+    rgba(255, 255, 255, 1) 0%,
+    transparent 100%
+  );
+}
+
+.trusted-by-fade-right {
+  right: 0;
+  background: linear-gradient(
+    to left,
+    rgba(255, 255, 255, 1) 0%,
+    transparent 100%
+  );
+}
+
+/* Scroll Animation (Right to Left) */
+@keyframes scroll-right-to-left {
+  0% {
+    transform: translateX(0);
+  }
+  100% {
+    transform: translateX(-50%);
+  }
+}
+
+/* Responsive Adjustments */
+@media (max-width: 1024px) {
+  .trusted-by-scroll-track {
+    gap: 24px;
+  }
+
+  .trusted-by-logo {
+    min-width: 140px;
+    padding: 14px 28px;
+  }
+
+  .trusted-by-logo span {
+    font-size: 15px;
+  }
+}
+
+@media (max-width: 768px) {
+  .trusted-by-section {
+    padding: 48px 0;
+  }
+
+  .trusted-by-label {
+    margin-bottom: 32px;
+    font-size: 12px;
+  }
+
+  .trusted-by-scroll-track {
+    gap: 20px;
+  }
+
+  .trusted-by-logo {
+    min-width: 120px;
+    padding: 12px 24px;
+    border-radius: 12px;
+  }
+
+  .trusted-by-logo span {
+    font-size: 14px;
+  }
+
+  .trusted-by-scroll-container {
+    animation-duration: 30s;
+  }
+
+  .trusted-by-fade {
+    width: 80px;
+  }
+}
+
+@media (max-width: 480px) {
+  .trusted-by-logo {
+    min-width: 100px;
+    padding: 10px 20px;
+  }
+
+  .trusted-by-logo span {
+    font-size: 13px;
+  }
+
+  .trusted-by-scroll-track {
+    gap: 16px;
+  }
+
+  .trusted-by-fade {
+    width: 60px;
+  }
+}
