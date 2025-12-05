@@ -12,17 +12,18 @@ export default function Header() {
       <nav className="header-nav">
         <div className="header-content">
           {/* Logo */}
-          <div className="header-logo">
+          <a href="/" className="header-logo">
             <Image
               src="/logo.png"
               alt="ReviseIt Logo"
               width={48}
               height={48}
               className="header-logo-img"
+              priority
               unoptimized
             />
             <span className="header-logo-text">ReviseIt</span>
-          </div>
+          </a>
 
           {/* Desktop Navigation */}
           <div className="nav-desktop">
