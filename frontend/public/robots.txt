@@ -1,0 +1,24 @@
+# https://www.robotstxt.org/robotstxt.html
+# ReviseIt - WhatsApp Automation Platform
+
+User-agent: *
+Allow: /
+
+# Disallow authentication pages
+Disallow: /login
+Disallow: /signup
+Disallow: /forgot-password
+Disallow: /reset-password
+
+# Disallow API routes (if any)
+Disallow: /api/
+
+# Allow search engine crawlers
+User-agent: Googlebot
+Allow: /
+
+User-agent: Bingbot
+Allow: /
+
+# Sitemap location
+Sitemap: https://www.reviseit.in/sitemap.xml
