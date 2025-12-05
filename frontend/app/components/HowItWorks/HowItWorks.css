@@ -1,68 +1,79 @@
 /* ============================================
-   How It Works Section
+   Modern 3D How It Works Section
    ============================================ */
 
-.how-it-works-section {
-  padding: 100px 0;
-  background: #ffffff;
+.hiw-section {
   position: relative;
+  padding: 120px 0;
+  background: linear-gradient(180deg, #0a0b0d 0%, #1a1b1f 100%);
   overflow: hidden;
 }
 
 /* ============================================
-   Background Elements
+   Animated Background
    ============================================ */
 
-.hiw-background {
+.hiw-bg-wrapper {
   position: absolute;
   inset: 0;
-  pointer-events: none;
   overflow: hidden;
+  pointer-events: none;
 }
 
-.hiw-gradient-orb {
+/* Animated Grid Lines */
+.hiw-grid-lines {
   position: absolute;
+  inset: 0;
+  background-image: linear-gradient(
+      rgba(99, 102, 241, 0.03) 1px,
+      transparent 1px
+    ),
+    linear-gradient(90deg, rgba(99, 102, 241, 0.03) 1px, transparent 1px);
+  background-size: 50px 50px;
+  animation: gridMove 20s linear infinite;
+}
+
+@keyframes gridMove {
+  0% {
+    transform: translate(0, 0);
+  }
+  100% {
+    transform: translate(50px, 50px);
+  }
+}
+
+/* Floating Particles */
+.hiw-floating-shapes {
+  position: absolute;
+  inset: 0;
+}
+
+.hiw-particle {
+  position: absolute;
+  width: 4px;
+  height: 4px;
+  background: linear-gradient(135deg, #667eea, #764ba2);
   border-radius: 50%;
-  filter: blur(80px);
-  opacity: 0.4;
-  animation: float 8s ease-in-out infinite;
+  opacity: 0.6;
+  animation: floatParticle 15s ease-in-out infinite;
+  box-shadow: 0 0 10px rgba(102, 126, 234, 0.5);
 }
 
-.hiw-orb-1 {
-  width: 500px;
-  height: 500px;
-  background: radial-gradient(
-    circle,
-    rgba(45, 212, 255, 0.3) 0%,
-    transparent 70%
-  );
-  top: -100px;
-  left: -100px;
-}
-
-.hiw-orb-2 {
-  width: 600px;
-  height: 600px;
-  background: radial-gradient(
-    circle,
-    rgba(34, 193, 90, 0.25) 0%,
-    transparent 70%
-  );
-  bottom: -150px;
-  right: -150px;
-  animation-delay: 2s;
-}
-
-@keyframes float {
+@keyframes floatParticle {
   0%,
   100% {
-    transform: translateY(0) translateX(0);
+    transform: translate(0, 0) scale(1);
+    opacity: 0;
   }
-  33% {
-    transform: translateY(-30px) translateX(20px);
+  25% {
+    opacity: 0.6;
   }
-  66% {
-    transform: translateY(20px) translateX(-20px);
+  50% {
+    transform: translate(100px, -100px) scale(1.2);
+    opacity: 0.8;
+  }
+  75% {
+    opacity: 0.4;
   }
 }
 
@@ -71,9 +82,9 @@
    ============================================ */
 
 .hiw-container {
-  max-width: 1280px;
+  max-width: 1400px;
   margin: 0 auto;
-  padding: 0 32px;
+  padding: 0 40px;
   position: relative;
   z-index: 1;
 }
@@ -84,353 +95,393 @@
 
 .hiw-header {
   text-align: center;
-  max-width: 700px;
-  margin: 0 auto 80px;
-}
-
-.hiw-title {
-  font-size: 48px;
-  font-weight: 700;
-  line-height: 1.2;
-  letter-spacing: -0.02em;
-  color: var(--heading-color);
-  margin-bottom: 16px;
-  background: linear-gradient(
-    135deg,
-    var(--heading-color) 0%,
-    var(--text-color) 100%
-  );
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
-}
-
-.hiw-subtitle {
-  font-size: 18px;
-  line-height: 1.6;
-  color: var(--text-color);
-}
-
-/* ============================================
-   Timeline Wrapper
-   ============================================ */
-
-.hiw-timeline-wrapper {
-  position: relative;
   margin-bottom: 80px;
 }
 
-/* ============================================
-   Progress Line
-   ============================================ */
-
-.hiw-progress-line {
-  position: absolute;
-  top: 40px;
-  left: 50%;
-  transform: translateX(-50%);
-  width: 70%;
-  height: 4px;
-  background: rgba(226, 232, 240, 0.6);
-  border-radius: 2px;
-  z-index: 0;
+.hiw-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 20px;
+  background: rgba(102, 126, 234, 0.1);
+  border: 1px solid rgba(102, 126, 234, 0.3);
+  border-radius: 50px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #a5b4fc;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  margin-bottom: 24px;
+  backdrop-filter: blur(10px);
 }
 
-.hiw-progress-fill {
-  height: 100%;
-  width: var(--progress, 0%);
-  background: linear-gradient(
-    90deg,
-    var(--auth-gradient-start) 0%,
-    var(--auth-gradient-end) 100%
-  );
-  border-radius: 2px;
-  transition: width 0.6s cubic-bezier(0.4, 0, 0.2, 1);
-  position: relative;
-}
-
-.hiw-progress-fill::after {
-  content: "";
-  position: absolute;
-  right: -6px;
-  top: 50%;
-  transform: translateY(-50%);
-  width: 12px;
-  height: 12px;
-  background: linear-gradient(
-    135deg,
-    var(--auth-gradient-start) 0%,
-    var(--auth-gradient-end) 100%
-  );
+.hiw-badge-dot {
+  width: 8px;
+  height: 8px;
+  background: linear-gradient(135deg, #667eea, #764ba2);
   border-radius: 50%;
-  box-shadow: 0 0 0 4px rgba(34, 193, 90, 0.2);
-  animation: pulse 2s ease-in-out infinite;
+  animation: pulseDot 2s ease-in-out infinite;
 }
 
-@keyframes pulse {
+@keyframes pulseDot {
   0%,
   100% {
-    box-shadow: 0 0 0 4px rgba(34, 193, 90, 0.2);
+    transform: scale(1);
+    opacity: 1;
   }
   50% {
-    box-shadow: 0 0 0 8px rgba(34, 193, 90, 0.1);
+    transform: scale(1.3);
+    opacity: 0.7;
+  }
+}
+
+.hiw-main-title {
+  font-size: 56px;
+  font-weight: 800;
+  line-height: 1.2;
+  color: #ffffff;
+  margin-bottom: 20px;
+  letter-spacing: -0.02em;
+}
+
+.hiw-title-gradient {
+  display: block;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 50%, #f093fb 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  animation: gradientShift 5s ease-in-out infinite;
+  background-size: 200% 200%;
+}
+
+@keyframes gradientShift {
+  0%,
+  100% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+}
+
+.hiw-main-subtitle {
+  font-size: 20px;
+  line-height: 1.6;
+  color: #9ca3af;
+  max-width: 600px;
+  margin: 0 auto;
+}
+
+/* ============================================
+   3D Cards Wrapper
+   ============================================ */
+
+.hiw-cards-wrapper {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 60px;
+  margin-bottom: 100px;
+  perspective: 1500px;
+}
+
+/* ============================================
+   Card Container
+   ============================================ */
+
+.hiw-card-container {
+  position: relative;
+  animation: cardEntrance 0.8s ease-out forwards;
+  opacity: 0;
+  transform: translateY(50px);
+}
+
+@keyframes cardEntrance {
+  to {
+    opacity: 1;
+    transform: translateY(0);
   }
 }
 
 /* ============================================
-   Steps Grid
+   3D Card with Flip Effect
    ============================================ */
 
-.hiw-steps-grid {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 40px;
+.hiw-card {
   position: relative;
-  z-index: 1;
+  width: 100%;
+  height: 520px;
+  transition: transform 0.8s cubic-bezier(0.4, 0, 0.2, 1);
+  transform-style: preserve-3d;
+  cursor: pointer;
+}
+
+.hiw-card.is-flipped {
+  transform: rotateY(180deg);
+}
+
+.hiw-card-face {
+  position: absolute;
+  width: 100%;
+  height: 100%;
+  backface-visibility: hidden;
+  border-radius: 24px;
+  overflow: visible;
 }
 
 /* ============================================
-   Individual Step
+   Card Front
    ============================================ */
 
-.hiw-step {
+.hiw-card-front {
+  background: linear-gradient(
+    135deg,
+    rgba(30, 30, 35, 0.9) 0%,
+    rgba(20, 20, 25, 0.95) 100%
+  );
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  padding: 40px 32px;
   display: flex;
   flex-direction: column;
   align-items: center;
   position: relative;
-  cursor: pointer;
+  backdrop-filter: blur(20px);
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.4), 0 0 1px rgba(255, 255, 255, 0.1);
+  transform: translateZ(0);
+  transition: all 0.5s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-/* ============================================
-   Step Badge (Number Circle)
-   ============================================ */
+.hiw-card-container:hover .hiw-card-front {
+  transform: translateZ(20px) translateY(-10px);
+  box-shadow: 0 30px 80px rgba(0, 0, 0, 0.5), 0 0 1px rgba(255, 255, 255, 0.2);
+}
 
-.hiw-step-badge {
-  width: 80px;
-  height: 80px;
-  border-radius: 50%;
-  background: #000000 !important;
+/* Glowing Number Badge */
+.hiw-glow-number {
+  position: absolute;
+  top: -20px;
+  right: 30px;
+  width: 50px;
+  height: 50px;
+  border-radius: 12px;
   display: flex;
   align-items: center;
   justify-content: center;
-  margin-bottom: 32px;
-  position: relative;
-  z-index: 2;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
-  transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
-}
-
-.hiw-step:hover .hiw-step-badge {
-  transform: scale(1.1) translateY(-4px);
-  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.15);
-}
-
-.hiw-step.step-active .hiw-step-badge {
-  transform: scale(1.15);
-  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);
-}
-
-.hiw-step-number {
-  font-size: 32px;
+  font-size: 24px;
   font-weight: 700;
-  color: white;
+  color: #ffffff;
+  box-shadow: 0 10px 40px rgba(102, 126, 234, 0.6);
+  animation: glowPulse 3s ease-in-out infinite;
+}
+
+@keyframes glowPulse {
+  0%,
+  100% {
+    box-shadow: 0 10px 40px rgba(102, 126, 234, 0.6);
+  }
+  50% {
+    box-shadow: 0 10px 60px rgba(102, 126, 234, 0.8);
+  }
+}
+
+/* 3D Icon Container */
+.hiw-icon-3d {
+  width: 120px;
+  height: 120px;
+  border-radius: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 30px 0;
+  position: relative;
+  transition: transform 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+  transform-style: preserve-3d;
+}
+
+.hiw-card-container:hover .hiw-icon-3d {
+  transform: rotateY(15deg) rotateX(-10deg) scale(1.1);
+}
+
+.hiw-card-container.is-active .hiw-icon-3d {
+  animation: iconFloat 3s ease-in-out infinite;
+}
+
+@keyframes iconFloat {
+  0%,
+  100% {
+    transform: translateY(0) rotateY(0deg);
+  }
+  50% {
+    transform: translateY(-15px) rotateY(10deg);
+  }
+}
+
+.hiw-icon-inner {
+  width: 60px;
+  height: 60px;
+  color: #ffffff;
   position: relative;
   z-index: 1;
 }
 
-/* Badge Pulse Animation */
-.hiw-badge-pulse {
-  position: absolute;
-  inset: 0;
-  border-radius: 50%;
-  border: 2px solid rgba(255, 255, 255, 0.5);
-  opacity: 0;
-}
-
-.hiw-step.step-active .hiw-badge-pulse {
-  animation: badgePulse 2s ease-out infinite;
-}
-
-@keyframes badgePulse {
-  0% {
-    opacity: 1;
-    transform: scale(1);
-  }
-  100% {
-    opacity: 0;
-    transform: scale(1.5);
-  }
-}
-
-/* ============================================
-   Step Card
-   ============================================ */
-
-.hiw-step-card {
-  background: rgba(255, 255, 255, 0.9);
-  border: 1px solid rgba(226, 232, 240, 0.8);
-  border-radius: 24px;
-  padding: 32px;
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
-  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.06);
-  transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
-  position: relative;
+.hiw-icon-inner svg {
   width: 100%;
-  overflow: hidden;
+  height: 100%;
+  filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.3));
 }
 
-.hiw-step:hover .hiw-step-card {
-  transform: translateY(-8px);
-  box-shadow: 0 10px 25px rgba(15, 23, 42, 0.08);
-  border-color: rgba(34, 193, 90, 0.3);
+/* Card Content */
+.hiw-card-content {
+  text-align: center;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
 }
 
-.hiw-step.step-active .hiw-step-card {
-  transform: translateY(-12px);
-  box-shadow: 0 12px 30px rgba(15, 23, 42, 0.1);
-  border-color: rgba(34, 193, 90, 0.5);
+.hiw-card-title {
+  font-size: 28px;
+  font-weight: 700;
+  color: #ffffff;
+  margin-bottom: 16px;
+  line-height: 1.3;
 }
 
-.hiw-step-card::before {
-  content: "";
+.hiw-card-desc {
+  font-size: 16px;
+  line-height: 1.7;
+  color: #9ca3af;
+  margin: 0;
+}
+
+/* Animated Border */
+.hiw-card-border {
   position: absolute;
-  top: 0;
+  bottom: 0;
   left: 0;
   right: 0;
-  height: 0px;
-  background: transparent;
+  height: 4px;
+  border-radius: 0 0 24px 24px;
   opacity: 0;
   transition: opacity 0.3s ease;
 }
 
-.hiw-step.step-active .hiw-step-card::before {
-  opacity: 0;
+.hiw-card-container:hover .hiw-card-border,
+.hiw-card-container.is-active .hiw-card-border {
+  opacity: 1;
+  animation: borderGlow 2s ease-in-out infinite;
 }
 
-/* ============================================
-   Step Icon
-   ============================================ */
+@keyframes borderGlow {
+  0%,
+  100% {
+    opacity: 0.6;
+  }
+  50% {
+    opacity: 1;
+  }
+}
 
-.hiw-step-icon-wrapper {
-  width: 72px;
-  height: 72px;
-  border-radius: 16px;
+/* Click Hint */
+.hiw-click-hint {
   display: flex;
   align-items: center;
-  justify-content: center;
-  margin: 0 auto 24px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
-  transition: transform 0.3s ease;
+  gap: 6px;
+  margin-top: 20px;
+  font-size: 13px;
+  color: #6b7280;
+  opacity: 0.7;
+  transition: all 0.3s ease;
 }
 
-.hiw-step:hover .hiw-step-icon-wrapper {
-  transform: rotate(-5deg) scale(1.05);
+.hiw-card-container:hover .hiw-click-hint {
+  color: #a5b4fc;
+  opacity: 1;
 }
 
-.hiw-step.step-active .hiw-step-icon-wrapper {
-  animation: iconBounce 0.6s ease-out;
+.hiw-click-hint svg {
+  animation: bounce 2s ease-in-out infinite;
 }
 
-@keyframes iconBounce {
+@keyframes bounce {
   0%,
   100% {
     transform: translateY(0);
   }
   50% {
-    transform: translateY(-10px);
+    transform: translateY(4px);
   }
 }
 
-.hiw-step-icon {
-  width: 36px;
-  height: 36px;
-  color: white;
-}
-
 /* ============================================
-   Step Content
+   Card Back
    ============================================ */
 
-.hiw-step-title {
+.hiw-card-back {
+  transform: rotateY(180deg);
+  padding: 40px 32px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  backdrop-filter: blur(20px);
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.4);
+}
+
+.hiw-back-header {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 30px;
+  padding-bottom: 20px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.hiw-back-icon {
+  width: 48px;
+  height: 48px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.hiw-back-icon svg {
+  width: 24px;
+  height: 24px;
+  color: #ffffff;
+}
+
+.hiw-back-header h4 {
   font-size: 22px;
-  font-weight: 600;
-  color: var(--heading-color);
-  margin-bottom: 12px;
-  text-align: center;
-  line-height: 1.3;
-}
-
-.hiw-step-description {
-  font-size: 15px;
-  line-height: 1.6;
-  color: var(--text-color);
-  text-align: center;
-  margin-bottom: 20px;
-}
-
-/* ============================================
-   Step Details (Expandable)
-   ============================================ */
-
-.hiw-step-details {
-  max-height: 0;
-  overflow: hidden;
-  opacity: 0;
-  transition: all 0.5s cubic-bezier(0.4, 0, 0.2, 1);
-}
-
-.hiw-step-details.details-visible {
-  max-height: 300px;
-  opacity: 1;
-  margin-top: 20px;
-}
-
-.hiw-details-header {
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--heading-color);
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  margin-bottom: 12px;
-  text-align: left;
-}
-
-.hiw-details-list {
-  list-style: none;
-  padding: 0;
+  font-weight: 700;
+  color: #ffffff;
   margin: 0;
 }
 
-.hiw-detail-item {
+/* Features List */
+.hiw-features-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  flex: 1;
+}
+
+.hiw-features-list li {
   display: flex;
   align-items: flex-start;
-  gap: 10px;
-  margin-bottom: 10px;
-  font-size: 14px;
-  color: var(--text-gray-700);
-  text-align: left;
-  animation: slideInLeft 0.4s ease-out forwards;
+  gap: 14px;
+  margin-bottom: 18px;
+  font-size: 15px;
+  color: #e5e7eb;
+  line-height: 1.6;
   opacity: 0;
+  animation: slideInRight 0.5s ease-out forwards;
 }
 
-.details-visible .hiw-detail-item:nth-child(1) {
-  animation-delay: 0.1s;
-}
-.details-visible .hiw-detail-item:nth-child(2) {
-  animation-delay: 0.2s;
-}
-.details-visible .hiw-detail-item:nth-child(3) {
-  animation-delay: 0.3s;
-}
-.details-visible .hiw-detail-item:nth-child(4) {
-  animation-delay: 0.4s;
-}
-
-@keyframes slideInLeft {
+@keyframes slideInRight {
   from {
     opacity: 0;
-    transform: translateX(-10px);
+    transform: translateX(-20px);
   }
   to {
     opacity: 1;
@@ -438,307 +489,358 @@
   }
 }
 
-.hiw-check-icon {
-  width: 16px;
-  height: 16px;
-  color: var(--auth-gradient-start);
+.hiw-feature-check {
+  width: 24px;
+  height: 24px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   flex-shrink: 0;
-  margin-top: 2px;
+  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+}
+
+.hiw-feature-check svg {
+  width: 14px;
+  height: 14px;
+  color: #ffffff;
+}
+
+/* Flip Back Hint */
+.hiw-flip-back {
+  margin-top: auto;
+  padding-top: 20px;
+  text-align: center;
+  font-size: 13px;
+  color: #6b7280;
+  opacity: 0.7;
 }
 
 /* ============================================
-   Arrow Connector
+   Connector Lines
    ============================================ */
 
-.hiw-arrow-connector {
-  display: none;
+.hiw-connector {
   position: absolute;
-  right: -50px;
+  right: -60px;
   top: 50%;
   transform: translateY(-50%);
-  z-index: 3;
+  width: 60px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10;
 }
 
-.hiw-arrow {
-  width: 32px;
-  height: 32px;
-  color: var(--auth-gradient-start);
-  animation: arrowSlide 1.5s ease-in-out infinite;
+.hiw-connector-line {
+  width: 100%;
+  height: 2px;
+  background: linear-gradient(
+    90deg,
+    rgba(102, 126, 234, 0.3) 0%,
+    rgba(118, 75, 162, 0.3) 100%
+  );
+  position: relative;
 }
 
-@keyframes arrowSlide {
+.hiw-connector-line::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0;
+  height: 100%;
+  width: 0%;
+  background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
+  animation: lineGrow 2s ease-in-out infinite;
+}
+
+@keyframes lineGrow {
+  0%,
+  100% {
+    width: 0%;
+  }
+  50% {
+    width: 100%;
+  }
+}
+
+.hiw-connector-arrow {
+  position: absolute;
+  right: -5px;
+  font-size: 20px;
+  color: #667eea;
+  animation: arrowMove 2s ease-in-out infinite;
+}
+
+@keyframes arrowMove {
   0%,
   100% {
     transform: translateX(0);
     opacity: 0.5;
   }
   50% {
-    transform: translateX(8px);
+    transform: translateX(5px);
     opacity: 1;
   }
 }
 
 /* ============================================
-   Call to Action Section
+   CTA Section
    ============================================ */
 
-.hiw-cta-section {
-  margin-top: 60px;
+.hiw-cta {
+  margin-top: 80px;
 }
 
-.hiw-cta-card {
+.hiw-cta-inner {
   background: linear-gradient(
     135deg,
-    rgba(34, 193, 90, 0.05) 0%,
-    rgba(45, 212, 255, 0.05) 100%
+    rgba(102, 126, 234, 0.15) 0%,
+    rgba(118, 75, 162, 0.15) 100%
   );
-  border: 1px solid rgba(34, 193, 90, 0.2);
-  border-radius: 24px;
-  padding: 48px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 32px;
+  border: 1px solid rgba(102, 126, 234, 0.3);
+  border-radius: 32px;
+  padding: 60px 50px;
+  text-align: center;
+  position: relative;
+  overflow: hidden;
   backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
-  box-shadow: 0 4px 16px rgba(34, 193, 90, 0.08);
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+}
+
+.hiw-cta-inner::before {
+  content: "";
+  position: absolute;
+  top: -50%;
+  left: -50%;
+  width: 200%;
+  height: 200%;
+  background: radial-gradient(
+    circle,
+    rgba(102, 126, 234, 0.1) 0%,
+    transparent 70%
+  );
+  animation: ctaRotate 10s linear infinite;
+  pointer-events: none;
+}
+
+@keyframes ctaRotate {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.hiw-cta-inner h3 {
+  font-size: 36px;
+  font-weight: 700;
+  color: #ffffff;
+  margin-bottom: 16px;
+  position: relative;
+  z-index: 1;
+}
+
+.hiw-cta-inner p {
+  font-size: 18px;
+  color: #9ca3af;
+  margin-bottom: 36px;
+  position: relative;
+  z-index: 1;
+}
+
+.hiw-cta-actions {
+  display: flex;
+  gap: 20px;
+  justify-content: center;
+  align-items: center;
+  position: relative;
+  z-index: 1;
+}
+
+.hiw-cta-primary {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 16px 36px;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: #ffffff;
+  font-size: 16px;
+  font-weight: 600;
+  border-radius: 12px;
+  text-decoration: none;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 0 10px 30px rgba(102, 126, 234, 0.4);
   position: relative;
   overflow: hidden;
 }
 
-.hiw-cta-card::before {
+.hiw-cta-primary::before {
   content: "";
   position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: linear-gradient(
-    135deg,
-    transparent 0%,
-    rgba(45, 212, 255, 0.03) 100%
-  );
-  pointer-events: none;
+  inset: 0;
+  background: linear-gradient(135deg, #764ba2 0%, #f093fb 100%);
+  opacity: 0;
+  transition: opacity 0.3s ease;
 }
 
-.hiw-cta-content {
-  flex: 1;
+.hiw-cta-primary:hover::before {
+  opacity: 1;
 }
 
-.hiw-cta-title {
-  font-size: 28px;
-  font-weight: 700;
-  color: var(--heading-color);
-  margin-bottom: 8px;
+.hiw-cta-primary span,
+.hiw-cta-primary svg {
+  position: relative;
+  z-index: 1;
 }
 
-.hiw-cta-text {
+.hiw-cta-primary:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 15px 40px rgba(102, 126, 234, 0.6);
+}
+
+.hiw-cta-primary svg {
+  transition: transform 0.3s ease;
+}
+
+.hiw-cta-primary:hover svg {
+  transform: translateX(4px);
+}
+
+.hiw-cta-secondary {
+  display: inline-flex;
+  align-items: center;
+  padding: 16px 36px;
+  background: transparent;
+  color: #a5b4fc;
   font-size: 16px;
-  color: var(--text-color);
-  line-height: 1.5;
+  font-weight: 600;
+  border: 1px solid rgba(165, 180, 252, 0.3);
+  border-radius: 12px;
+  text-decoration: none;
+  transition: all 0.3s ease;
 }
 
-.hiw-cta-buttons {
-  display: flex;
-  gap: 16px;
-  flex-shrink: 0;
-}
-
-.hiw-cta-btn {
-  white-space: nowrap;
-}
-
-.hiw-btn-icon {
-  width: 20px;
-  height: 20px;
+.hiw-cta-secondary:hover {
+  background: rgba(102, 126, 234, 0.1);
+  border-color: rgba(165, 180, 252, 0.5);
+  color: #ffffff;
 }
 
 /* ============================================
    Responsive Design
    ============================================ */
 
-/* Tablet */
-@media (max-width: 1024px) {
-  .hiw-steps-grid {
-    gap: 32px;
+@media (max-width: 1200px) {
+  .hiw-cards-wrapper {
+    gap: 40px;
   }
 
-  .hiw-step-badge {
-    width: 70px;
-    height: 70px;
-  }
-
-  .hiw-step-number {
-    font-size: 28px;
-  }
-
-  .hiw-step-card {
-    padding: 28px;
-  }
-
-  .hiw-progress-line {
-    width: 80%;
-  }
-
-  .hiw-cta-card {
-    padding: 40px;
+  .hiw-connector {
+    right: -40px;
+    width: 40px;
   }
 }
 
-/* Mobile */
-@media (max-width: 768px) {
-  .how-it-works-section {
-    padding: 60px 0;
+@media (max-width: 992px) {
+  .hiw-main-title {
+    font-size: 44px;
   }
 
-  .hiw-container {
-    padding: 0 20px;
-  }
-
-  .hiw-title {
-    font-size: 36px;
-  }
-
-  .hiw-subtitle {
-    font-size: 16px;
-  }
-
-  .hiw-header {
-    margin-bottom: 48px;
-  }
-
-  .hiw-timeline-wrapper {
-    margin-bottom: 48px;
-  }
-
-  .hiw-steps-grid {
+  .hiw-cards-wrapper {
     grid-template-columns: 1fr;
-    gap: 48px;
+    gap: 80px;
+    max-width: 500px;
+    margin: 0 auto 80px;
   }
 
-  .hiw-progress-line {
-    left: 32px;
-    top: 40px;
-    width: 4px;
-    height: calc(100% - 80px);
-    transform: none;
-  }
-
-  .hiw-progress-fill {
-    width: 100% !important;
-    height: var(--progress, 0%);
-    max-height: 100%;
-    transition: height 0.6s cubic-bezier(0.4, 0, 0.2, 1);
-  }
-
-  .hiw-progress-fill::after {
-    right: 50%;
-    bottom: -6px;
-    top: auto;
-    transform: translateX(50%);
-  }
-
-  .hiw-step {
-    flex-direction: row;
-    align-items: flex-start;
-    gap: 20px;
-  }
-
-  .hiw-step-badge {
-    width: 64px;
-    height: 64px;
-    margin-bottom: 0;
-    flex-shrink: 0;
-  }
-
-  .hiw-step-number {
-    font-size: 24px;
-  }
-
-  .hiw-step-card {
-    padding: 24px;
-    flex: 1;
-  }
-
-  .hiw-step-icon-wrapper {
-    width: 60px;
-    height: 60px;
-  }
-
-  .hiw-step-icon {
-    width: 30px;
-    height: 30px;
-  }
-
-  .hiw-step-title {
-    font-size: 20px;
-    text-align: left;
-  }
-
-  .hiw-step-description {
-    text-align: left;
-    font-size: 14px;
-  }
-
-  .hiw-arrow-connector {
+  .hiw-connector {
     display: none;
   }
 
-  .hiw-cta-card {
-    flex-direction: column;
-    align-items: flex-start;
-    padding: 32px;
-    gap: 24px;
+  .hiw-card {
+    height: 500px;
+  }
+}
+
+@media (max-width: 768px) {
+  .hiw-section {
+    padding: 80px 0;
   }
 
-  .hiw-cta-title {
+  .hiw-container {
+    padding: 0 24px;
+  }
+
+  .hiw-main-title {
+    font-size: 36px;
+  }
+
+  .hiw-main-subtitle {
+    font-size: 17px;
+  }
+
+  .hiw-header {
+    margin-bottom: 60px;
+  }
+
+  .hiw-card {
+    height: 480px;
+  }
+
+  .hiw-icon-3d {
+    width: 100px;
+    height: 100px;
+  }
+
+  .hiw-icon-inner {
+    width: 50px;
+    height: 50px;
+  }
+
+  .hiw-card-title {
     font-size: 24px;
   }
 
-  .hiw-cta-text {
-    font-size: 15px;
+  .hiw-cta-inner {
+    padding: 40px 30px;
   }
 
-  .hiw-cta-buttons {
+  .hiw-cta-inner h3 {
+    font-size: 28px;
+  }
+
+  .hiw-cta-actions {
     flex-direction: column;
     width: 100%;
   }
 
-  .hiw-cta-btn {
+  .hiw-cta-primary,
+  .hiw-cta-secondary {
     width: 100%;
+    justify-content: center;
   }
 }
 
-/* Small Mobile */
 @media (max-width: 480px) {
-  .hiw-title {
+  .hiw-main-title {
     font-size: 28px;
   }
 
-  .hiw-step-badge {
-    width: 56px;
-    height: 56px;
+  .hiw-card {
+    height: 450px;
   }
 
-  .hiw-step-number {
-    font-size: 20px;
+  .hiw-card-front {
+    padding: 30px 24px;
   }
 
-  .hiw-step-card {
-    padding: 20px;
+  .hiw-cta-inner h3 {
+    font-size: 24px;
   }
 
-  .hiw-cta-card {
-    padding: 24px;
-  }
-}
-
-/* ============================================
-   Desktop Arrow Connectors
-   ============================================ */
-
-@media (min-width: 769px) {
-  .hiw-arrow-connector {
-    display: block;
+  .hiw-cta-inner p {
+    font-size: 16px;
   }
 }
