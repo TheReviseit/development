@@ -102,7 +102,6 @@ export const metadata: Metadata = {
   // Icons and Manifest
   icons: {
     icon: [
-      { url: "/logo.png", sizes: "48x48", type: "image/png" },
       { url: "/favicon.ico", sizes: "32x32" },
       { url: "/favicon.ico", sizes: "16x16" },
       { url: "/icon-192.png", sizes: "192x192", type: "image/png" },
@@ -111,7 +110,7 @@ export const metadata: Metadata = {
     apple: [
       { url: "/apple-touch-icon.png", sizes: "180x180", type: "image/png" },
     ],
-    shortcut: [{ url: "/logo.png", type: "image/png" }],
+    shortcut: [{ url: "/favicon.ico" }],
   },
 
   // Verification (add when available)
