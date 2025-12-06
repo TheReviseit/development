@@ -1,10 +1,19 @@
 "use client";
 
 import React, { useEffect, useRef, useState } from "react";
+import { gsap } from "gsap";
+import { ScrollTrigger } from "gsap/ScrollTrigger";
 import "./WhatsAppFeatures.css";
+
+// Register ScrollTrigger plugin
+if (typeof window !== "undefined") {
+  gsap.registerPlugin(ScrollTrigger);
+}
 
 const WhatsAppFeatures = () => {
   const sectionRef = useRef<HTMLElement>(null);
+  const titleRef = useRef<HTMLHeadingElement>(null);
+  const subtitleRef = useRef<HTMLParagraphElement>(null);
   const [isVisible, setIsVisible] = useState(false);
 
   const features = [
@@ -53,6 +62,42 @@ const WhatsAppFeatures = () => {
   ];
 
   useEffect(() => {
+    // GSAP ScrollTrigger for title reveal
+    if (titleRef.current && subtitleRef.current) {
+      gsap.fromTo(
+        titleRef.current,
+        { opacity: 0, y: 30 },
+        {
+          opacity: 1,
+          y: 0,
+          duration: 0.8,
+          ease: "power3.out",
+          scrollTrigger: {
+            trigger: titleRef.current,
+            start: "top 80%",
+            toggleActions: "play none none none",
+          },
+        }
+      );
+
+      gsap.fromTo(
+        subtitleRef.current,
+        { opacity: 0, y: 20 },
+        {
+          opacity: 1,
+          y: 0,
+          duration: 0.8,
+          delay: 0.2,
+          ease: "power3.out",
+          scrollTrigger: {
+            trigger: subtitleRef.current,
+            start: "top 80%",
+            toggleActions: "play none none none",
+          },
+        }
+      );
+    }
+
     const observer = new IntersectionObserver(
       (entries) => {
         entries.forEach((entry) => {
@@ -62,8 +107,8 @@ const WhatsAppFeatures = () => {
         });
       },
       {
-        threshold: 0.1, // Trigger when 10% of the section is visible
-        rootMargin: "0px 0px -100px 0px", // Start animation slightly before section is fully visible
+        threshold: 0.1,
+        rootMargin: "0px 0px -100px 0px",
       }
     );
 
@@ -193,10 +238,10 @@ const WhatsAppFeatures = () => {
       <div className="container">
         {/* Section Header */}
         <div className="features-header">
-          <h2 className="features-title">
+          <h2 className="features-title" ref={titleRef}>
             Everything you need for WhatsApp at scale
           </h2>
-          <p className="features-subtitle">
+          <p className="features-subtitle" ref={subtitleRef}>
             Powerful automation features designed to help business owners save
             time, increase conversions, and provide exceptional customer
             experiences through WhatsApp.

@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
+import { gsap } from "gsap";
 import FeatureCarousel from "./FeatureCarousel";
 import "./HeroSection.css";
 
@@ -14,15 +15,88 @@ const dynamicTexts = [
 
 export default function HeroSection() {
   const [currentTextIndex, setCurrentTextIndex] = useState(0);
-  const [isAnimating, setIsAnimating] = useState(false);
+  const heroLeftRef = useRef<HTMLDivElement>(null);
+  const heroRightRef = useRef<HTMLDivElement>(null);
+  const ctaRef = useRef<HTMLDivElement>(null);
+  const dynamicTextRef = useRef<HTMLSpanElement>(null);
 
+  // Initial entrance animations
+  useEffect(() => {
+    const ctx = gsap.context(() => {
+      // Animate text from left
+      gsap.fromTo(
+        heroLeftRef.current?.querySelectorAll(
+          ".hero-title > span, .hero-description"
+        ) || [],
+        { opacity: 0, x: -60 },
+        {
+          opacity: 1,
+          x: 0,
+          duration: 0.8,
+          stagger: 0.15,
+          ease: "power3.out",
+        }
+      );
+
+      // Animate buttons from bottom
+      gsap.fromTo(
+        ctaRef.current?.querySelectorAll(".hero-cta-button") || [],
+        { opacity: 0, y: 40 },
+        {
+          opacity: 1,
+          y: 0,
+          duration: 0.8,
+          delay: 0.6,
+          stagger: 0.15,
+          ease: "power3.out",
+        }
+      );
+
+      // Animate carousel from right
+      gsap.fromTo(
+        heroRightRef.current,
+        { opacity: 0, x: 60 },
+        {
+          opacity: 1,
+          x: 0,
+          duration: 0.8,
+          delay: 0.3,
+          ease: "power3.out",
+        }
+      );
+    });
+
+    return () => ctx.revert();
+  }, []);
+
+  // Smooth dynamic text rotation with GSAP
   useEffect(() => {
     const interval = setInterval(() => {
-      setIsAnimating(true);
-      setTimeout(() => {
-        setCurrentTextIndex((prev) => (prev + 1) % dynamicTexts.length);
-        setIsAnimating(false);
-      }, 300);
+      if (dynamicTextRef.current) {
+        // Fade out
+        gsap.to(dynamicTextRef.current, {
+          opacity: 0,
+          y: -10,
+          duration: 0.3,
+          ease: "power2.in",
+          onComplete: () => {
+            // Change text
+            setCurrentTextIndex((prev) => (prev + 1) % dynamicTexts.length);
+
+            // Fade in
+            gsap.fromTo(
+              dynamicTextRef.current,
+              { opacity: 0, y: 10 },
+              {
+                opacity: 1,
+                y: 0,
+                duration: 0.3,
+                ease: "power2.out",
+              }
+            );
+          },
+        });
+      }
     }, 3000);
 
     return () => clearInterval(interval);
@@ -36,7 +110,7 @@ export default function HeroSection() {
       <div className="hero-container">
         <div className="hero-content-wrapper">
           {/* Left Content */}
-          <div className="hero-left-content">
+          <div className="hero-left-content" ref={heroLeftRef}>
             <h1 className="hero-title">
               <span className="hero-title-regular">Let's</span>
               <span className="hero-title-bold hero-title-mobile">
@@ -46,9 +120,8 @@ export default function HeroSection() {
                 Automate WhatsApp
               </span>
               <span
-                className={`hero-title-dynamic dynamic-text ${
-                  isAnimating ? "animating" : ""
-                }`}
+                ref={dynamicTextRef}
+                className="hero-title-dynamic dynamic-text"
               >
                 &#10075;{dynamicTexts[currentTextIndex]}&#10076;
               </span>
@@ -59,7 +132,7 @@ export default function HeroSection() {
               scale your customer conversations.
             </p>
 
-            <div className="hero-cta-container">
+            <div className="hero-cta-container" ref={ctaRef}>
               <a href="/signup" className="btn-header-primary hero-cta-button">
                 Start Free Trial
                 <svg
@@ -102,7 +175,7 @@ export default function HeroSection() {
           </div>
 
           {/* Right Content - Feature Carousel */}
-          <div className="hero-right-content">
+          <div className="hero-right-content" ref={heroRightRef}>
             <FeatureCarousel />
           </div>
         </div>

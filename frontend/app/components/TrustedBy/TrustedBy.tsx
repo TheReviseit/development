@@ -1,7 +1,18 @@
-import React from "react";
+"use client";
+
+import React, { useEffect, useRef } from "react";
+import { gsap } from "gsap";
+import { ScrollTrigger } from "gsap/ScrollTrigger";
 import "./TrustedBy.css";
 
+// Register ScrollTrigger plugin
+if (typeof window !== "undefined") {
+  gsap.registerPlugin(ScrollTrigger);
+}
+
 const TrustedBy = () => {
+  const sectionRef = useRef<HTMLElement>(null);
+
   // Professional company logos/names
   const companies = [
     "Carrd",
@@ -18,8 +29,28 @@ const TrustedBy = () => {
     "EmerTech Innovations",
   ];
 
+  useEffect(() => {
+    if (sectionRef.current) {
+      gsap.fromTo(
+        sectionRef.current,
+        { opacity: 0, y: 20 },
+        {
+          opacity: 1,
+          y: 0,
+          duration: 0.8,
+          ease: "power3.out",
+          scrollTrigger: {
+            trigger: sectionRef.current,
+            start: "top 80%",
+            toggleActions: "play none none none",
+          },
+        }
+      );
+    }
+  }, []);
+
   return (
-    <section className="trusted-by-section">
+    <section className="trusted-by-section" ref={sectionRef}>
       <div className="container">
         <p className="label text-center trusted-by-label">
           Trusted by businesses worldwide

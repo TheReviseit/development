@@ -191,15 +191,4 @@
 /* Dynamic Text Animation */
 .dynamic-text {
   display: inline-block;
-  transition: all 0.3s ease-in-out;
-}
-
-.dynamic-text.animating {
-  opacity: 0;
-  transform: translateY(8px);
-}
-
-.dynamic-text:not(.animating) {
-  opacity: 1;
-  transform: translateY(0);
 }
