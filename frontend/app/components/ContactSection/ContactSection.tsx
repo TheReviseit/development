@@ -149,15 +149,17 @@ export default function ContactSection() {
                       borderRadius: "8px",
                       backgroundColor:
                         submitStatus.type === "success"
-                          ? "rgba(34, 197, 94, 0.1)"
+                          ? "rgba(0, 0, 0, 1)"
                           : "rgba(239, 68, 68, 0.1)",
                       border: `1px solid ${
                         submitStatus.type === "success"
-                          ? "rgba(34, 197, 94, 0.3)"
+                          ? "rgba(39, 219, 105, 0.3)"
                           : "rgba(239, 68, 68, 0.3)"
                       }`,
                       color:
-                        submitStatus.type === "success" ? "#22c55e" : "#ef4444",
+                        submitStatus.type === "success"
+                          ? "#ffffffff"
+                          : "#ef4444",
                     }}
                   >
                     {submitStatus.message}
