@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import "./ContactSection.css";
@@ -121,6 +121,17 @@ export default function ContactSection() {
       setIsSubmitting(false);
     }
   };
+
+  // Auto-dismiss status message after 5 seconds
+  useEffect(() => {
+    if (submitStatus.type) {
+      const timer = setTimeout(() => {
+        setSubmitStatus({ type: null, message: "" });
+      }, 5000);
+
+      return () => clearTimeout(timer);
+    }
+  }, [submitStatus.type]);
 
   return (
     <section id="contact" className="contact-section">
