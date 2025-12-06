@@ -1,0 +1,157 @@
+.footer {
+  background-color: #111111;
+  color: white;
+  padding: 64px 0;
+  font-family: inherit;
+}
+
+.container {
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: 0 32px;
+  display: flex;
+  flex-direction: column;
+  gap: 48px;
+}
+
+@media (min-width: 1024px) {
+  .container {
+    flex-direction: row;
+    justify-content: space-between;
+    align-items: flex-start;
+  }
+}
+
+/* Left Section: Brand & Legal */
+.leftSection {
+  display: flex;
+  flex-direction: column;
+  gap: 32px;
+  max-width: 300px;
+}
+
+.brand {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.logoContainer {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.logo {
+  width: 40px;
+  height: 40px;
+  object-fit: contain;
+  background-color: white;
+  border-radius: 50%;
+  padding: 4px;
+}
+
+.brandName {
+  font-size: 24px;
+  font-weight: 600;
+  color: white;
+}
+
+.legal {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font-size: 14px;
+  color: #9ca3af; /* gray-400 */
+}
+
+.copyright {
+  margin: 0;
+}
+
+.legalLinks {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.legalLink {
+  color: #9ca3af;
+  text-decoration: none;
+  transition: color 0.3s ease;
+}
+
+.legalLink:hover {
+  color: #22c15a;
+}
+
+/* Right Section: Navigation Links */
+.rightSection {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 32px;
+  width: 100%;
+}
+
+@media (min-width: 768px) {
+  .rightSection {
+    grid-template-columns: repeat(4, 1fr);
+    width: auto;
+    flex-grow: 1;
+    justify-content: flex-end;
+    margin-left: auto;
+    max-width: 800px;
+  }
+}
+
+.column {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.columnTitle {
+  font-size: 16px;
+  font-weight: 600;
+  margin: 0;
+  color: white;
+}
+
+.linkList {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.link {
+  font-size: 14px;
+  color: #9ca3af;
+  text-decoration: none;
+  transition: color 0.3s ease;
+}
+
+.link:hover {
+  color: #22c15a;
+}
+
+.socialLinks {
+  display: flex;
+  gap: 16px;
+  margin-top: 24px;
+}
+
+/* Responsive adjustments */
+@media (max-width: 1023px) {
+  .leftSection {
+    max-width: 100%;
+    border-bottom: 1px solid #1f2937;
+    padding-bottom: 32px;
+  }
+
+  .rightSection {
+    margin-left: 0;
+  }
+}
