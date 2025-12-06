@@ -6,6 +6,7 @@ import HeroSection from "./components/HeroSection";
 import TrustedBy from "./components/TrustedBy";
 import WhatsAppFeatures from "./components/WhatsAppFeatures/WhatsAppFeatures";
 import Testimonials from "./components/Testimonials";
+import ContactSection from "./components/ContactSection/ContactSection";
 
 export default function Home() {
   return (
@@ -203,7 +204,12 @@ export default function Home() {
       <Testimonials />
 
       {/* ============================================
-          7. Footer
+          7. Contact Section
+          ============================================ */}
+      <ContactSection />
+
+      {/* ============================================
+          8. Footer
           ============================================ */}
       <footer id="footer" className="bg-[#111111] text-white py-16">
         <div className="container">
