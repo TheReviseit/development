@@ -129,7 +129,7 @@ export default function ContactSection() {
         <div className="contact-header">
           <h2 className="contact-main-title">Get in Touch</h2>
           <p className="contact-main-subtitle">
-            Have questions? We'd love to hear from you. Send us a message and
+            Have a questions? We'd love to hear from you. Send us a message and
             we'll respond as soon as possible.
           </p>
         </div>
