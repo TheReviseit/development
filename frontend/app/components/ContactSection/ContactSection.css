@@ -42,13 +42,17 @@
 .contact-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 48px;
+  gap: 48px 24px;
   align-items: start;
+  grid-template-areas:
+    "form info"
+    "social info";
 }
 
 /* Form Container */
 .contact-form-container {
   position: relative;
+  grid-area: form;
 }
 
 .contact-form-card {
@@ -215,6 +219,7 @@
   display: flex;
   flex-direction: column;
   gap: 24px;
+  grid-area: info;
 }
 
 .contact-info-card {
@@ -329,6 +334,7 @@
     rgba(34, 193, 90, 0.05) 0%,
     rgba(45, 212, 255, 0.05) 100%
   );
+  grid-area: social;
 }
 
 .contact-social-title {
@@ -404,6 +410,13 @@
   .contact-grid {
     grid-template-columns: 1fr;
     gap: 32px;
+    grid-template-areas: none;
+  }
+
+  .contact-form-container,
+  .contact-info-container,
+  .contact-social-card {
+    grid-area: auto;
   }
 
   .contact-form-card {

@@ -1,7 +1,14 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
+import { gsap } from "gsap";
+import { ScrollTrigger } from "gsap/ScrollTrigger";
 import "./Testimonials.css";
+
+// Register ScrollTrigger plugin
+if (typeof window !== "undefined") {
+  gsap.registerPlugin(ScrollTrigger);
+}
 
 interface Testimonial {
   id: number;
@@ -42,6 +49,48 @@ export default function Testimonials() {
   const [isTyping, setIsTyping] = useState(false);
   const [showAuthor, setShowAuthor] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
+
+  const headerRef = useRef<HTMLDivElement>(null);
+  const titleRef = useRef<HTMLHeadingElement>(null);
+  const subtitleRef = useRef<HTMLParagraphElement>(null);
+
+  // Scroll animations for header
+  useEffect(() => {
+    if (titleRef.current && subtitleRef.current) {
+      gsap.fromTo(
+        titleRef.current,
+        { opacity: 0, y: 30 },
+        {
+          opacity: 1,
+          y: 0,
+          duration: 0.8,
+          ease: "power3.out",
+          scrollTrigger: {
+            trigger: titleRef.current,
+            start: "top 85%",
+            toggleActions: "play none none none",
+          },
+        }
+      );
+
+      gsap.fromTo(
+        subtitleRef.current,
+        { opacity: 0, y: 20 },
+        {
+          opacity: 1,
+          y: 0,
+          duration: 0.8,
+          delay: 0.2,
+          ease: "power3.out",
+          scrollTrigger: {
+            trigger: subtitleRef.current,
+            start: "top 85%",
+            toggleActions: "play none none none",
+          },
+        }
+      );
+    }
+  }, []);
 
   // Detect mobile screen size
   useEffect(() => {
@@ -138,16 +187,16 @@ export default function Testimonials() {
 
       <div className="testimonial-container">
         {/* Header */}
-        <div className="testimonial-header">
+        <div className="testimonial-header" ref={headerRef}>
           {/* <span className="testimonial-badge">
             <span className="testimonial-badge-dot"></span>
             Testimonials
           </span> */}
-          <h2 className="testimonial-main-title">
+          <h2 className="testimonial-main-title" ref={titleRef}>
             What Our{" "}
             <span className="testimonial-title-gradient">Core Clients</span> Say
           </h2>
-          <p className="testimonial-main-subtitle">
+          <p className="testimonial-main-subtitle" ref={subtitleRef}>
             Trusted by thousands of businesses worldwide to deliver exceptional
             customer experiences
           </p>
