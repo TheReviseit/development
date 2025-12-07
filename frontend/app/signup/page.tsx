@@ -52,8 +52,31 @@ export default function SignupPage() {
       await updateProfile(userCredential.user, {
         displayName: formData.name,
       });
+
+      // Create user record in Supabase
+      try {
+        const response = await fetch("/api/auth/create-user", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            firebase_uid: userCredential.user.uid,
+            full_name: formData.name,
+            email: formData.email,
+          }),
+        });
+
+        if (!response.ok) {
+          console.error("Failed to create Supabase user record");
+        }
+      } catch (supabaseError) {
+        console.error("Supabase user creation error:", supabaseError);
+        // Continue anyway - user can still use the app
+      }
+
       console.log("User signed up:", userCredential.user);
-      router.push("/dashboard"); // Redirect to dashboard
+      router.push("/onboarding"); // Redirect to onboarding instead of dashboard
     } catch (err: any) {
       console.error("Signup error:", err);
       setError(err.message || "Failed to sign up");
@@ -66,8 +89,26 @@ export default function SignupPage() {
     setError("");
     try {
       const provider = new GoogleAuthProvider();
-      await signInWithPopup(auth, provider);
-      router.push("/dashboard");
+      const result = await signInWithPopup(auth, provider);
+
+      // Create user record in Supabase
+      try {
+        await fetch("/api/auth/create-user", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            firebase_uid: result.user.uid,
+            full_name: result.user.displayName || "",
+            email: result.user.email || "",
+          }),
+        });
+      } catch (supabaseError) {
+        console.error("Supabase user creation error:", supabaseError);
+      }
+
+      router.push("/onboarding");
     } catch (err: any) {
       console.error("Google sign in error:", err);
       setError(err.message || "Failed to sign in with Google");

@@ -22,10 +22,29 @@ export default function Dashboard() {
   };
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
+    const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
       if (currentUser) {
-        setUser(currentUser);
-        setLoading(false);
+        // Check onboarding status
+        try {
+          const response = await fetch("/api/onboarding/check", {
+            headers: {
+              "firebase-uid": currentUser.uid,
+            },
+          });
+          const data = await response.json();
+
+          if (!data.onboardingCompleted) {
+            router.push("/onboarding");
+            return;
+          }
+
+          setUser(currentUser);
+          setLoading(false);
+        } catch (error) {
+          console.error("Error checking onboarding:", error);
+          setUser(currentUser);
+          setLoading(false);
+        }
       } else {
         router.push("/login");
       }
