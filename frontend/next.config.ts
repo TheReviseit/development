@@ -60,7 +60,7 @@ const nextConfig: NextConfig = {
   // Compression
   compress: true,
 
-  // Empty turbopack config to silence warning
+  // Empty turbopack config (Next.js 16 uses Turbopack by default)
   turbopack: {},
 };
 

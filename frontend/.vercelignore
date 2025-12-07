@@ -1,0 +1,25 @@
+# Scripts and utilities
+scripts/
+verify-email-system.js
+
+# Documentation
+docs/
+
+# Config files
+eslint.config.mjs
+.eslintrc*
+
+# Credentials
+credentials/
+
+# Firebase
+firebase.json
+firestore.indexes.json
+firestore.rules
+.firebaserc
+
+# Other
+*.sql
+*.md
+!README.md
+

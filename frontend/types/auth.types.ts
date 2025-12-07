@@ -59,6 +59,6 @@ export interface AuthContextType {
   firebaseUser: any | null;
   loading: boolean;
   error: AuthError | null;
-  syncUser: (idToken: string) => Promise<void>;
+  syncUser: (idToken: string) => Promise<SupabaseUser>;
   signOut: () => Promise<void>;
 }
