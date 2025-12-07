@@ -206,3 +206,55 @@ export async function createOrUpdateWhatsAppConnection(
 export async function markOnboardingComplete(firebaseUID: string) {
   return updateUser(firebaseUID, { onboarding_completed: true });
 }
+
+// Email-related queries
+
+// Get all active users (users who have logged in)
+export async function getAllActiveUsers() {
+  const { data, error } = await supabaseAdmin
+    .from("users")
+    .select("id, firebase_uid, full_name, email, role, created_at")
+    .order("created_at", { ascending: false });
+
+  if (error) {
+    console.error("Error fetching active users:", error);
+    return [];
+  }
+  return data as Array<
+    Pick<
+      User,
+      "id" | "firebase_uid" | "full_name" | "email" | "role" | "created_at"
+    >
+  >;
+}
+
+// Get users by filter criteria
+export async function getUsersByFilter(filters: {
+  role?: string;
+  onboardingCompleted?: boolean;
+}) {
+  let query = supabaseAdmin
+    .from("users")
+    .select("id, firebase_uid, full_name, email, role, created_at");
+
+  if (filters.role) {
+    query = query.eq("role", filters.role);
+  }
+
+  if (filters.onboardingCompleted !== undefined) {
+    query = query.eq("onboarding_completed", filters.onboardingCompleted);
+  }
+
+  const { data, error } = await query.order("created_at", { ascending: false });
+
+  if (error) {
+    console.error("Error fetching filtered users:", error);
+    return [];
+  }
+  return data as Array<
+    Pick<
+      User,
+      "id" | "firebase_uid" | "full_name" | "email" | "role" | "created_at"
+    >
+  >;
+}

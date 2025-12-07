@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { verifyIdToken } from "@/lib/firebase-admin";
 import { createClient } from "@supabase/supabase-js";
+import { sendEmail } from "@/lib/email/resend";
+import { generateEmailHtml } from "@/lib/email/email-templates";
 import type {
   SyncUserRequest,
   SyncUserResponse,
@@ -158,6 +160,47 @@ export async function POST(request: NextRequest) {
           },
           { status: 500 }
         );
+      }
+
+      console.log(`🎉 New user created: ${email} (${fullName})`);
+
+      // Send welcome email to new user
+      try {
+        console.log(`📧 Attempting to send welcome email to ${email}...`);
+
+        const welcomeHtml = generateEmailHtml("welcome", {
+          userName: fullName,
+          userEmail: email,
+        });
+
+        if (welcomeHtml) {
+          console.log("✅ Welcome email HTML generated successfully");
+
+          // Send welcome email asynchronously (don't wait for it)
+          sendEmail({
+            to: email,
+            subject: "Welcome to ReviseIt! 🎉",
+            html: welcomeHtml,
+          })
+            .then((result) => {
+              if (result.success) {
+                console.log(`✅ Welcome email sent successfully to ${email}`);
+              } else {
+                console.error(
+                  `❌ Failed to send welcome email to ${email}:`,
+                  result.error
+                );
+              }
+            })
+            .catch((err) => {
+              console.error("❌ Error sending welcome email:", err);
+            });
+        } else {
+          console.error("❌ Failed to generate welcome email HTML");
+        }
+      } catch (emailError) {
+        // Don't fail signup if email fails - just log it
+        console.error("❌ Failed to send welcome email:", emailError);
       }
 
       return NextResponse.json<SyncUserResponse>({
