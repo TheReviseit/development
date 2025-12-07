@@ -49,7 +49,7 @@ const baseEmailHtml = (content: string) => `
     .footer {
       margin-top: 40px;
       padding-top: 20px;
-      border-top: 1px solid #e5e5e5;
+      border-top: 1px solid #e5e5e4;
       text-align: center;
       font-size: 14px;
       color: #666;
