@@ -185,7 +185,7 @@ export default function Dashboard() {
           <div className={styles.actionsGrid}>
             <button className={styles.actionCard}>
               <div className={styles.actionIcon}>📢</div>
-              <h3 className={styles.actionTitle}>Create Campaign</h3>
+              <h3 className={styles.actionTitle}>Create Campaigndf</h3>
               <p className={styles.actionDescription}>
                 Send broadcast messages
               </p>
