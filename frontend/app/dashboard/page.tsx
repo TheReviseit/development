@@ -149,7 +149,7 @@ export default function Dashboard() {
             <div className={styles.statIcon}>🤖</div>
             <div className={styles.statContent}>
               <p className={styles.statLabel}>AI Responses</p>
-              <h3 className={styles.statValue}>1,892</h3>
+              <h3 className={styles.statValue}>1,999</h3>
               <p className={styles.statChange}>
                 <span className={styles.positive}>+18.2%</span> from last month
               </p>
