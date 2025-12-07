@@ -7,6 +7,34 @@ import "./header.css";
 export default function Header() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
+  // Smooth scroll with offset for fixed header
+  const handleNavClick = (
+    e: React.MouseEvent<HTMLAnchorElement>,
+    targetId: string
+  ) => {
+    e.preventDefault();
+
+    if (targetId === "top") {
+      window.scrollTo({ top: 0, behavior: "smooth" });
+      setMobileMenuOpen(false);
+      return;
+    }
+
+    const element = document.getElementById(targetId);
+    if (element) {
+      const headerOffset = 80; // Height of fixed header
+      const elementPosition = element.getBoundingClientRect().top;
+      const offsetPosition =
+        elementPosition + window.pageYOffset - headerOffset;
+
+      window.scrollTo({
+        top: offsetPosition,
+        behavior: "smooth",
+      });
+      setMobileMenuOpen(false);
+    }
+  };
+
   return (
     <header className="header">
       <nav className="header-nav">
@@ -27,7 +55,11 @@ export default function Header() {
 
           {/* Desktop Navigation */}
           <div className="nav-desktop">
-            <a href="#home" className="nav-link">
+            <a
+              href="#"
+              onClick={(e) => handleNavClick(e, "top")}
+              className="nav-link"
+            >
               <svg
                 width="18"
                 height="18"
@@ -45,7 +77,11 @@ export default function Header() {
               </svg>
               <span>Home</span>
             </a>
-            <a href="#features" className="nav-link">
+            <a
+              href="#whatsapp-features"
+              onClick={(e) => handleNavClick(e, "whatsapp-features")}
+              className="nav-link"
+            >
               <svg
                 width="18"
                 height="18"
@@ -63,7 +99,11 @@ export default function Header() {
               </svg>
               <span>Features</span>
             </a>
-            <a href="#pricing" className="nav-link">
+            <a
+              href="#pricing"
+              onClick={(e) => handleNavClick(e, "pricing")}
+              className="nav-link"
+            >
               <svg
                 width="18"
                 height="18"
@@ -81,7 +121,11 @@ export default function Header() {
               </svg>
               <span>Pricing</span>
             </a>
-            <a href="#testimonials" className="nav-link">
+            <a
+              href="#customer-reviews"
+              onClick={(e) => handleNavClick(e, "customer-reviews")}
+              className="nav-link"
+            >
               <svg
                 width="18"
                 height="18"
@@ -99,7 +143,11 @@ export default function Header() {
               </svg>
               <span>Use Cases</span>
             </a>
-            <a href="#footer" className="nav-link">
+            <a
+              href="#contact"
+              onClick={(e) => handleNavClick(e, "contact")}
+              className="nav-link"
+            >
               <svg
                 width="18"
                 height="18"
@@ -165,7 +213,11 @@ export default function Header() {
       {mobileMenuOpen && (
         <div className="mobile-menu">
           <div className="mobile-menu-content">
-            <a href="#home" className="mobile-nav-link">
+            <a
+              href="#"
+              onClick={(e) => handleNavClick(e, "top")}
+              className="mobile-nav-link"
+            >
               <svg
                 width="20"
                 height="20"
@@ -183,7 +235,11 @@ export default function Header() {
               </svg>
               <span>Home</span>
             </a>
-            <a href="#features" className="mobile-nav-link">
+            <a
+              href="#whatsapp-features"
+              onClick={(e) => handleNavClick(e, "whatsapp-features")}
+              className="mobile-nav-link"
+            >
               <svg
                 width="20"
                 height="20"
@@ -201,7 +257,11 @@ export default function Header() {
               </svg>
               <span>Features</span>
             </a>
-            <a href="#pricing" className="mobile-nav-link">
+            <a
+              href="#pricing"
+              onClick={(e) => handleNavClick(e, "pricing")}
+              className="mobile-nav-link"
+            >
               <svg
                 width="20"
                 height="20"
@@ -219,7 +279,11 @@ export default function Header() {
               </svg>
               <span>Pricing</span>
             </a>
-            <a href="#testimonials" className="mobile-nav-link">
+            <a
+              href="#customer-reviews"
+              onClick={(e) => handleNavClick(e, "customer-reviews")}
+              className="mobile-nav-link"
+            >
               <svg
                 width="20"
                 height="20"
@@ -237,7 +301,11 @@ export default function Header() {
               </svg>
               <span>Use Cases</span>
             </a>
-            <a href="#footer" className="mobile-nav-link">
+            <a
+              href="#contact"
+              onClick={(e) => handleNavClick(e, "contact")}
+              className="mobile-nav-link"
+            >
               <svg
                 width="20"
                 height="20"
