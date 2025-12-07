@@ -6,9 +6,11 @@ import { useRouter } from "next/navigation";
 import {
   signInWithEmailAndPassword,
   GoogleAuthProvider,
-  signInWithPopup,
+  signInWithRedirect,
+  getRedirectResult,
 } from "firebase/auth";
 import { auth } from "@/src/firebase/firebase";
+import { useEffect } from "react";
 import "./login.css";
 
 export default function LoginPage() {
@@ -19,7 +21,57 @@ export default function LoginPage() {
   });
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [googleLoading, setGoogleLoading] = useState(false);
   const router = useRouter();
+
+  // Handle Google Sign-In redirect result
+  useEffect(() => {
+    const handleRedirectResult = async () => {
+      try {
+        const result = await getRedirectResult(auth);
+        if (result) {
+          setGoogleLoading(true);
+
+          // Create user record in Supabase if it doesn't exist
+          try {
+            await fetch("/api/auth/create-user", {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify({
+                firebase_uid: result.user.uid,
+                full_name: result.user.displayName || "",
+                email: result.user.email || "",
+              }),
+            });
+          } catch (supabaseError) {
+            console.error("Supabase user creation error:", supabaseError);
+          }
+
+          // Check onboarding status
+          const response = await fetch("/api/onboarding/check", {
+            headers: {
+              "firebase-uid": result.user.uid,
+            },
+          });
+          const data = await response.json();
+
+          if (data.onboardingCompleted) {
+            router.push("/dashboard");
+          } else {
+            router.push("/onboarding");
+          }
+        }
+      } catch (err: any) {
+        console.error("Google sign in redirect error:", err);
+        setError(err.message || "Failed to sign in with Google");
+        setGoogleLoading(false);
+      }
+    };
+
+    handleRedirectResult();
+  }, [router]);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setFormData({
@@ -63,26 +115,17 @@ export default function LoginPage() {
 
   const handleGoogleSignIn = async () => {
     setError("");
+    setGoogleLoading(true);
     try {
       const provider = new GoogleAuthProvider();
-      const result = await signInWithPopup(auth, provider);
-
-      // Check onboarding status
-      const response = await fetch("/api/onboarding/check", {
-        headers: {
-          "firebase-uid": result.user.uid,
-        },
-      });
-      const data = await response.json();
-
-      if (data.onboardingCompleted) {
-        router.push("/dashboard");
-      } else {
-        router.push("/onboarding");
-      }
+      // Use redirect instead of popup to avoid COOP warnings
+      await signInWithRedirect(auth, provider);
+      // User will be redirected to Google, then back to this page
+      // The useEffect hook will handle the result
     } catch (err: any) {
       console.error("Google sign in error:", err);
       setError(err.message || "Failed to sign in with Google");
+      setGoogleLoading(false);
     }
   };
 
@@ -205,6 +248,7 @@ export default function LoginPage() {
                 type="button"
                 className="btn-google"
                 onClick={handleGoogleSignIn}
+                disabled={googleLoading}
               >
                 <svg width="20" height="20" viewBox="0 0 24 24">
                   <path
@@ -224,7 +268,7 @@ export default function LoginPage() {
                     d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"
                   />
                 </svg>
-                Sign In with Google
+                {googleLoading ? "Signing In..." : "Sign In with Google"}
               </button>
             </form>
 

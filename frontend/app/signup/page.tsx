@@ -6,10 +6,12 @@ import { useRouter } from "next/navigation";
 import {
   createUserWithEmailAndPassword,
   GoogleAuthProvider,
-  signInWithPopup,
+  signInWithRedirect,
+  getRedirectResult,
   updateProfile,
 } from "firebase/auth";
 import { auth } from "@/src/firebase/firebase";
+import { useEffect } from "react";
 import "./signup.css";
 
 export default function SignupPage() {
@@ -23,7 +25,45 @@ export default function SignupPage() {
   });
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [googleLoading, setGoogleLoading] = useState(false);
   const router = useRouter();
+
+  // Handle Google Sign-In redirect result
+  useEffect(() => {
+    const handleRedirectResult = async () => {
+      try {
+        const result = await getRedirectResult(auth);
+        if (result) {
+          setGoogleLoading(true);
+
+          // Create user record in Supabase
+          try {
+            await fetch("/api/auth/create-user", {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify({
+                firebase_uid: result.user.uid,
+                full_name: result.user.displayName || "",
+                email: result.user.email || "",
+              }),
+            });
+          } catch (supabaseError) {
+            console.error("Supabase user creation error:", supabaseError);
+          }
+
+          router.push("/onboarding");
+        }
+      } catch (err: any) {
+        console.error("Google sign up redirect error:", err);
+        setError(err.message || "Failed to sign up with Google");
+        setGoogleLoading(false);
+      }
+    };
+
+    handleRedirectResult();
+  }, [router]);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setFormData({
@@ -87,31 +127,17 @@ export default function SignupPage() {
 
   const handleGoogleSignIn = async () => {
     setError("");
+    setGoogleLoading(true);
     try {
       const provider = new GoogleAuthProvider();
-      const result = await signInWithPopup(auth, provider);
-
-      // Create user record in Supabase
-      try {
-        await fetch("/api/auth/create-user", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            firebase_uid: result.user.uid,
-            full_name: result.user.displayName || "",
-            email: result.user.email || "",
-          }),
-        });
-      } catch (supabaseError) {
-        console.error("Supabase user creation error:", supabaseError);
-      }
-
-      router.push("/onboarding");
+      // Use redirect instead of popup to avoid COOP warnings
+      await signInWithRedirect(auth, provider);
+      // User will be redirected to Google, then back to this page
+      // The useEffect hook will handle the result
     } catch (err: any) {
-      console.error("Google sign in error:", err);
-      setError(err.message || "Failed to sign in with Google");
+      console.error("Google sign up error:", err);
+      setError(err.message || "Failed to sign up with Google");
+      setGoogleLoading(false);
     }
   };
 
@@ -289,6 +315,7 @@ export default function SignupPage() {
                 type="button"
                 className="btn-google"
                 onClick={handleGoogleSignIn}
+                disabled={googleLoading}
               >
                 <svg width="20" height="20" viewBox="0 0 24 24">
                   <path
@@ -308,7 +335,7 @@ export default function SignupPage() {
                     d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"
                   />
                 </svg>
-                Sign Up with Google
+                {googleLoading ? "Signing Up..." : "Sign Up with Google"}
               </button>
             </form>
 

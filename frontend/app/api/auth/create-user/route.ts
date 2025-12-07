@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createUser, getUserByFirebaseUID } from "@/lib/supabase/queries";
+import { sendWelcomeEmail } from "@/lib/email/automated-emails";
 
 export async function POST(request: NextRequest) {
   try {
@@ -26,6 +27,23 @@ export async function POST(request: NextRequest) {
       email,
     });
 
+    // Send welcome email automatically to new users
+    // This runs in the background and doesn't block user creation
+    sendWelcomeEmail(email, full_name || "there")
+      .then((result) => {
+        if (result.success) {
+          console.log(`✅ Welcome email sent to ${email}`);
+        } else {
+          console.error(
+            `❌ Failed to send welcome email to ${email}:`,
+            result.error
+          );
+        }
+      })
+      .catch((error) => {
+        console.error(`❌ Error sending welcome email to ${email}:`, error);
+      });
+
     return NextResponse.json({ user, created: true });
   } catch (error: any) {
     console.error("Error creating user:", error);
@@ -37,9 +55,9 @@ export async function POST(request: NextRequest) {
       hint: error.hint,
     });
     return NextResponse.json(
-      { 
+      {
         error: "Internal server error",
-        message: error.message || "Unknown error"
+        message: error.message || "Unknown error",
       },
       { status: 500 }
     );
