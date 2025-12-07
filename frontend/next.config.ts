@@ -59,6 +59,9 @@ const nextConfig: NextConfig = {
 
   // Compression
   compress: true,
+
+  // Empty turbopack config to silence warning
+  turbopack: {},
 };
 
 export default nextConfig;

@@ -34,8 +34,25 @@ export default function LoginPage() {
     setLoading(true);
 
     try {
-      await signInWithEmailAndPassword(auth, formData.email, formData.password);
-      router.push("/dashboard"); // Redirect to dashboard
+      const result = await signInWithEmailAndPassword(
+        auth,
+        formData.email,
+        formData.password
+      );
+
+      // Check onboarding status
+      const response = await fetch("/api/onboarding/check", {
+        headers: {
+          "firebase-uid": result.user.uid,
+        },
+      });
+      const data = await response.json();
+
+      if (data.onboardingCompleted) {
+        router.push("/dashboard");
+      } else {
+        router.push("/onboarding");
+      }
     } catch (err: any) {
       console.error("Login error:", err);
       setError(err.message || "Failed to login");
@@ -48,8 +65,21 @@ export default function LoginPage() {
     setError("");
     try {
       const provider = new GoogleAuthProvider();
-      await signInWithPopup(auth, provider);
-      router.push("/dashboard");
+      const result = await signInWithPopup(auth, provider);
+
+      // Check onboarding status
+      const response = await fetch("/api/onboarding/check", {
+        headers: {
+          "firebase-uid": result.user.uid,
+        },
+      });
+      const data = await response.json();
+
+      if (data.onboardingCompleted) {
+        router.push("/dashboard");
+      } else {
+        router.push("/onboarding");
+      }
     } catch (err: any) {
       console.error("Google sign in error:", err);
       setError(err.message || "Failed to sign in with Google");
