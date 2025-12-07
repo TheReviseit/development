@@ -9,7 +9,14 @@ docs/
 eslint.config.mjs
 .eslintrc*
 
+# Credentials
+#credentials/
 
+# Firebase
+firebase.json
+firestore.indexes.json
+firestore.rules
+.firebaserc
 
 # Other
 *.sql
