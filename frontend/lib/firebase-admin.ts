@@ -7,12 +7,19 @@ import { getApps } from "firebase-admin/app";
  */
 if (!getApps().length) {
   try {
-    // Path to service account key file
-    const serviceAccountPath =
-      process.env.FIREBASE_ADMIN_SERVICE_ACCOUNT_PATH ||
-      "./credentials/reviseit-def4c-firebase-adminsdk-fbsvc-02f67295ed.json";
-
-    const serviceAccount = require(`../${serviceAccountPath}`);
+    // Get service account from environment variable (base64 encoded JSON)
+    const serviceAccountBase64 = process.env.FIREBASE_SERVICE_ACCOUNT_KEY;
+    
+    let serviceAccount;
+    if (serviceAccountBase64) {
+      // Decode from base64 (for Vercel/production)
+      const serviceAccountJson = Buffer.from(serviceAccountBase64, 'base64').toString('utf-8');
+      serviceAccount = JSON.parse(serviceAccountJson);
+    } else {
+      // Fallback to reading from file (for local development)
+      // Use static import to avoid Turbopack scanning issues
+      serviceAccount = require("../credentials/reviseit-def4c-firebase-adminsdk-fbsvc-02f67295ed.json");
+    }
 
     admin.initializeApp({
       credential: admin.credential.cert(serviceAccount),
