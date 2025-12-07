@@ -5,6 +5,7 @@ import Header from "./components/Header/Header";
 import HeroSection from "./components/HeroSection";
 import TrustedBy from "./components/TrustedBy";
 import WhatsAppFeatures from "./components/WhatsAppFeatures/WhatsAppFeatures";
+import PricingCards from "./components/PricingCards/PricingCards";
 import Testimonials from "./components/Testimonials";
 import ContactSection from "./components/ContactSection/ContactSection";
 import Footer from "./components/Footer/Footer";
@@ -33,7 +34,12 @@ export default function Home() {
       <WhatsAppFeatures />
 
       {/* ============================================
-          5. OLD Features Grid Section (HIDDEN)
+          5. Pricing Cards Section
+          ============================================ */}
+      <PricingCards />
+
+      {/* ============================================
+          6. OLD Features Grid Section (HIDDEN)
           ============================================ */}
       <section
         id="features-old"
