@@ -6,11 +6,9 @@ import { useRouter } from "next/navigation";
 import {
   signInWithEmailAndPassword,
   GoogleAuthProvider,
-  signInWithRedirect,
-  getRedirectResult,
+  signInWithPopup,
 } from "firebase/auth";
 import { auth } from "@/src/firebase/firebase";
-import { useEffect } from "react";
 import "./login.css";
 
 export default function LoginPage() {
@@ -23,55 +21,6 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
   const router = useRouter();
-
-  // Handle Google Sign-In redirect result
-  useEffect(() => {
-    const handleRedirectResult = async () => {
-      try {
-        const result = await getRedirectResult(auth);
-        if (result) {
-          setGoogleLoading(true);
-
-          // Create user record in Supabase if it doesn't exist
-          try {
-            await fetch("/api/auth/create-user", {
-              method: "POST",
-              headers: {
-                "Content-Type": "application/json",
-              },
-              body: JSON.stringify({
-                firebase_uid: result.user.uid,
-                full_name: result.user.displayName || "",
-                email: result.user.email || "",
-              }),
-            });
-          } catch (supabaseError) {
-            console.error("Supabase user creation error:", supabaseError);
-          }
-
-          // Check onboarding status
-          const response = await fetch("/api/onboarding/check", {
-            headers: {
-              "firebase-uid": result.user.uid,
-            },
-          });
-          const data = await response.json();
-
-          if (data.onboardingCompleted) {
-            router.push("/dashboard");
-          } else {
-            router.push("/onboarding");
-          }
-        }
-      } catch (err: any) {
-        console.error("Google sign in redirect error:", err);
-        setError(err.message || "Failed to sign in with Google");
-        setGoogleLoading(false);
-      }
-    };
-
-    handleRedirectResult();
-  }, [router]);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setFormData({
@@ -118,13 +67,49 @@ export default function LoginPage() {
     setGoogleLoading(true);
     try {
       const provider = new GoogleAuthProvider();
-      // Use redirect instead of popup to avoid COOP warnings
-      await signInWithRedirect(auth, provider);
-      // User will be redirected to Google, then back to this page
-      // The useEffect hook will handle the result
+      // Use popup for better user experience
+      const result = await signInWithPopup(auth, provider);
+
+      // Create user record in Supabase if it doesn't exist
+      try {
+        await fetch("/api/auth/create-user", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            firebase_uid: result.user.uid,
+            full_name: result.user.displayName || "",
+            email: result.user.email || "",
+          }),
+        });
+      } catch (supabaseError) {
+        console.error("Supabase user creation error:", supabaseError);
+        // Continue anyway - user can still use the app
+      }
+
+      // Check onboarding status and redirect accordingly
+      const response = await fetch("/api/onboarding/check", {
+        headers: {
+          "firebase-uid": result.user.uid,
+        },
+      });
+      const data = await response.json();
+
+      if (data.onboardingCompleted) {
+        router.push("/dashboard");
+      } else {
+        router.push("/onboarding");
+      }
     } catch (err: any) {
       console.error("Google sign in error:", err);
-      setError(err.message || "Failed to sign in with Google");
+      if (err.code === "auth/popup-closed-by-user") {
+        setError("Sign-in cancelled. Please try again.");
+      } else if (err.code === "auth/popup-blocked") {
+        setError("Popup was blocked. Please allow popups for this site.");
+      } else {
+        setError(err.message || "Failed to sign in with Google");
+      }
       setGoogleLoading(false);
     }
   };
