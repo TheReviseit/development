@@ -41,7 +41,7 @@ const baseEmailHtml = (content: string) => `
       display: inline-block;
       padding: 12px 24px;
       background-color: #000000;
-      color: #ffffff;
+      color: #fff;
       text-decoration: none;
       border-radius: 6px;
       margin: 20px 0;
