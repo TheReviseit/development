@@ -1,45 +1,41 @@
 import { NextRequest, NextResponse } from "next/server";
 import { sendEmail } from "@/lib/email/resend";
 import { generateEmailHtml } from "@/lib/email/email-templates";
-import { getUserByFirebaseUID } from "@/lib/supabase/queries";
+import { verifyAdminRequest } from "@/lib/auth/verify-request";
+import { sendEmailSchema } from "@/lib/validation/schemas";
 
 /**
  * POST /api/email/send-email
  *
  * Send email to one or more recipients
  * Requires admin authentication
+ *
+ * SECURITY: Uses session cookie verification instead of trusting client headers
  */
 export async function POST(request: NextRequest) {
   try {
-    // Get Firebase UID from headers (set by authentication middleware or client)
-    const firebaseUID = request.headers.get("firebase-uid");
-
-    if (!firebaseUID) {
-      return NextResponse.json(
-        { success: false, error: "Unauthorized" },
-        { status: 401 }
-      );
-    }
-
-    // Check if user is admin
-    const user = await getUserByFirebaseUID(firebaseUID);
-    if (!user || user.role !== "admin") {
-      return NextResponse.json(
-        { success: false, error: "Forbidden: Admin access required" },
-        { status: 403 }
-      );
-    }
+    // ✅ SECURE: Verify admin access via session cookie
+    const adminUser = await verifyAdminRequest(request);
 
     // Parse request body
     const body = await request.json();
-    const { to, subject, html, templateName, templateData } = body;
 
-    if (!to || !subject) {
+    // ✅ SECURE: Validate input with Zod
+    const validationResult = sendEmailSchema.safeParse(body);
+
+    if (!validationResult.success) {
       return NextResponse.json(
-        { success: false, error: "Missing required fields: to, subject" },
+        {
+          success: false,
+          error: "Validation failed",
+          details: validationResult.error.flatten(),
+        },
         { status: 400 }
       );
     }
+
+    const { to, subject, html, templateName, templateData } =
+      validationResult.data;
 
     // Generate HTML from template if provided
     let emailHtml = html;
@@ -79,9 +75,30 @@ export async function POST(request: NextRequest) {
       );
     }
   } catch (error: any) {
-    console.error("Send email API error:", error);
+    // Handle authentication/authorization errors
+    if (error.message.includes("Unauthorized")) {
+      return NextResponse.json(
+        { success: false, error: "Unauthorized" },
+        { status: 401 }
+      );
+    }
+    if (error.message.includes("Forbidden")) {
+      return NextResponse.json(
+        { success: false, error: "Admin access required" },
+        { status: 403 }
+      );
+    }
+
+    // Generic error handling
+    console.error("Send email API error:", error.message);
     return NextResponse.json(
-      { success: false, error: error.message || "Internal server error" },
+      {
+        success: false,
+        error:
+          process.env.NODE_ENV === "production"
+            ? "Internal server error"
+            : error.message,
+      },
       { status: 500 }
     );
   }

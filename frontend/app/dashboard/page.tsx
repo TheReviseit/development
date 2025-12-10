@@ -25,12 +25,18 @@ export default function Dashboard() {
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
       if (currentUser) {
         // Check onboarding status
+        // Check onboarding status
         try {
-          const response = await fetch("/api/onboarding/check", {
-            headers: {
-              "firebase-uid": currentUser.uid,
-            },
-          });
+          const response = await fetch("/api/onboarding/check");
+
+          if (response.status === 401) {
+            // Session expired or missing - rely on middleware/redirect
+            // But if we are here, we might need to refresh session?
+            // For now, let's just handle the data
+            router.push("/login");
+            return;
+          }
+
           const data = await response.json();
 
           if (!data.onboardingCompleted) {

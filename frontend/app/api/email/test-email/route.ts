@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
+import { cookies } from "next/headers";
+import { adminAuth } from "@/lib/firebase-admin";
 import { sendEmail } from "@/lib/email/resend";
 import { getUserByFirebaseUID } from "@/lib/supabase/queries";
 
@@ -10,15 +12,21 @@ import { getUserByFirebaseUID } from "@/lib/supabase/queries";
  */
 export async function POST(request: NextRequest) {
   try {
-    // Get Firebase UID from headers
-    const firebaseUID = request.headers.get("firebase-uid");
+    const cookieStore = await cookies();
+    const sessionCookie = cookieStore.get("session")?.value;
 
-    if (!firebaseUID) {
+    if (!sessionCookie) {
       return NextResponse.json(
         { success: false, error: "Unauthorized" },
         { status: 401 }
       );
     }
+
+    const decodedClaims = await adminAuth.verifySessionCookie(
+      sessionCookie,
+      true
+    );
+    const firebaseUID = decodedClaims.uid;
 
     // Check if user is admin
     const user = await getUserByFirebaseUID(firebaseUID);

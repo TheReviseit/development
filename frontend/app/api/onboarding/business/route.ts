@@ -1,18 +1,41 @@
 import { NextRequest, NextResponse } from "next/server";
+import { cookies } from "next/headers";
+import { adminAuth } from "@/lib/firebase-admin";
 import {
   getUserByFirebaseUID,
   createUser,
   createOrUpdateBusiness,
   getBusinessByUserId,
 } from "@/lib/supabase/queries";
+import { businessOnboardingSchema } from "@/lib/validation/schemas";
 
 export async function POST(request: NextRequest) {
   try {
-    const firebaseUID = request.headers.get("firebase-uid");
+    const cookieStore = await cookies();
+    const sessionCookie = cookieStore.get("session")?.value;
+
+    if (!sessionCookie) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    const decodedClaims = await adminAuth.verifySessionCookie(
+      sessionCookie,
+      true
+    );
+    const firebaseUID = decodedClaims.uid;
     const body = await request.json();
 
-    if (!firebaseUID) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    // ✅ SECURE: Validate input with Zod
+    const validationResult = businessOnboardingSchema.safeParse(body);
+
+    if (!validationResult.success) {
+      return NextResponse.json(
+        {
+          error: "Validation failed",
+          details: validationResult.error.flatten(),
+        },
+        { status: 400 }
+      );
     }
 
     // Get or create user
@@ -26,14 +49,15 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Create or update business
+    // Create or update business with validated data
+    const validated = validationResult.data;
     const business = await createOrUpdateBusiness(user.id, {
-      business_name: body.businessName,
-      category: body.category,
-      website: body.website || "",
-      address: body.address || "",
-      logo_url: body.logoUrl || "",
-      description: body.description || "",
+      business_name: validated.businessName,
+      category: validated.category,
+      website: validated.website || "",
+      address: validated.address || "",
+      logo_url: validated.logoUrl || "",
+      description: validated.description || "",
       timezone: "UTC", // Will be set in step 3
       language: "English",
     });
@@ -59,11 +83,18 @@ export async function POST(request: NextRequest) {
 
 export async function GET(request: NextRequest) {
   try {
-    const firebaseUID = request.headers.get("firebase-uid");
+    const cookieStore = await cookies();
+    const sessionCookie = cookieStore.get("session")?.value;
 
-    if (!firebaseUID) {
+    if (!sessionCookie) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
+
+    const decodedClaims = await adminAuth.verifySessionCookie(
+      sessionCookie,
+      true
+    );
+    const firebaseUID = decodedClaims.uid;
 
     const user = await getUserByFirebaseUID(firebaseUID);
 
