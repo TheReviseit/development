@@ -156,7 +156,7 @@ const websiteSchema = {
   "@context": "https://schema.org",
   "@type": "WebSite",
   name: "ReviseIt",
-  url: "https://reviseit.com",
+  url: "https://reviseit.in",
   potentialAction: {
     "@type": "SearchAction",
     target: {
