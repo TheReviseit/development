@@ -1,18 +1,26 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createUser, getUserByFirebaseUID } from "@/lib/supabase/queries";
 import { sendWelcomeEmail } from "@/lib/email/automated-emails";
+import { createUserSchema } from "@/lib/validation/schemas";
 
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { firebase_uid, full_name, email } = body;
 
-    if (!firebase_uid || !email) {
+    // ✅ SECURE: Validate input with Zod
+    const validationResult = createUserSchema.safeParse(body);
+
+    if (!validationResult.success) {
       return NextResponse.json(
-        { error: "Missing required fields" },
+        {
+          error: "Validation failed",
+          details: validationResult.error.flatten(),
+        },
         { status: 400 }
       );
     }
+
+    const { firebase_uid, email, full_name } = validationResult.data;
 
     // Check if user already exists
     const existingUser = await getUserByFirebaseUID(firebase_uid);
@@ -51,13 +59,14 @@ export async function POST(request: NextRequest) {
     console.error("Error details:", {
       message: error.message,
       code: error.code,
-      details: error.details,
-      hint: error.hint,
     });
     return NextResponse.json(
       {
         error: "Internal server error",
-        message: error.message || "Unknown error",
+        message:
+          process.env.NODE_ENV === "production"
+            ? undefined
+            : error.message || "Unknown error",
       },
       { status: 500 }
     );

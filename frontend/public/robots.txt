@@ -4,14 +4,23 @@
 User-agent: *
 Allow: /
 
-# Disallow authentication pages
-Disallow: /login
-Disallow: /signup
+# Disallow sensitive routes
+Disallow: /api/
+Disallow: /admin/
+Disallow: /dashboard/
+Disallow: /settings/
+Disallow: /onboarding/
 Disallow: /forgot-password
 Disallow: /reset-password
 
-# Disallow API routes (if any)
-Disallow: /api/
+# Allow public pages
+Allow: /
+Allow: /login
+Allow: /signup
+Allow: /pricing
+
+# Crawl delay
+Crawl-delay: 1
 
 # Allow search engine crawlers
 User-agent: Googlebot
@@ -20,5 +29,5 @@ Allow: /
 User-agent: Bingbot
 Allow: /
 
-# Sitemap location
+# Sitemap
 Sitemap: https://www.reviseit.in/sitemap.xml

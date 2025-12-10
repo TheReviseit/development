@@ -58,11 +58,7 @@ export default function OnboardingPage() {
       if (currentUser) {
         setUser(currentUser);
         // Check if user already completed onboarding
-        const response = await fetch("/api/onboarding/check", {
-          headers: {
-            "firebase-uid": currentUser.uid,
-          },
-        });
+        const response = await fetch("/api/onboarding/check");
         const data = await response.json();
         if (data.onboardingCompleted) {
           router.push("/dashboard");
@@ -145,7 +141,6 @@ export default function OnboardingPage() {
             method: "POST",
             headers: {
               "Content-Type": "application/json",
-              "firebase-uid": user.uid,
             },
             body: JSON.stringify(businessData),
           });
@@ -155,7 +150,6 @@ export default function OnboardingPage() {
             method: "POST",
             headers: {
               "Content-Type": "application/json",
-              "firebase-uid": user.uid,
             },
             body: JSON.stringify(whatsappData),
           });
@@ -165,7 +159,6 @@ export default function OnboardingPage() {
             method: "POST",
             headers: {
               "Content-Type": "application/json",
-              "firebase-uid": user.uid,
             },
             body: JSON.stringify({
               ...whatsappData,
@@ -205,7 +198,6 @@ export default function OnboardingPage() {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "firebase-uid": user.uid,
         },
       });
 

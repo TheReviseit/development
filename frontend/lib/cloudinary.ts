@@ -2,11 +2,30 @@
 
 import { v2 as cloudinary } from "cloudinary";
 
+// ⚠️ IMPORTANT: Ensure these environment variables are set
+// Never use hardcoded values for secrets
+if (!process.env.CLOUDINARY_API_SECRET) {
+  throw new Error(
+    "CLOUDINARY_API_SECRET is required. Please set it in your .env file."
+  );
+}
+
+if (!process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME) {
+  throw new Error(
+    "NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME is required. Please set it in your .env file."
+  );
+}
+
+if (!process.env.NEXT_PUBLIC_CLOUDINARY_API_KEY) {
+  throw new Error(
+    "NEXT_PUBLIC_CLOUDINARY_API_KEY is required. Please set it in your .env file."
+  );
+}
+
 cloudinary.config({
-  cloud_name: process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME || "dd2o44hzs",
-  api_key: process.env.NEXT_PUBLIC_CLOUDINARY_API_KEY || "962159667733394",
-  api_secret:
-    process.env.CLOUDINARY_API_SECRET || "yGhhTwYvx4HZ2LH57bpxEYMZEeM",
+  cloud_name: process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME,
+  api_key: process.env.NEXT_PUBLIC_CLOUDINARY_API_KEY,
+  api_secret: process.env.CLOUDINARY_API_SECRET,
 });
 
 export async function getSignature() {
@@ -17,7 +36,7 @@ export async function getSignature() {
       timestamp,
       folder: "reviseit/profile-pictures",
     },
-    process.env.CLOUDINARY_API_SECRET || "yGhhTwYvx4HZ2LH57bpxEYMZEeM"
+    process.env.CLOUDINARY_API_SECRET!
   );
 
   return { timestamp, signature };

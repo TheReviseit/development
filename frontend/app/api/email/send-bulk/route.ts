@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
+import { cookies } from "next/headers";
+import { adminAuth } from "@/lib/firebase-admin";
 import { sendBatchEmails } from "@/lib/email/resend";
 import { generateEmailHtml } from "@/lib/email/email-templates";
 import {
@@ -6,28 +8,44 @@ import {
   getAllActiveUsers,
   getUsersByFilter,
 } from "@/lib/supabase/queries";
-import type { BulkEmailRequest, BulkEmailResponse } from "@/lib/email/types";
+import { z } from "zod";
 
-/**
- * POST /api/email/send-bulk
- *
- * Send bulk emails to multiple users
- * Requires admin authentication
- */
+// Input Validation Schema
+const bulkEmailSchema = z.object({
+  subject: z.string().min(1, "Subject is required"),
+  message: z.string().min(1, "Message is required"),
+  templateName: z.string().default("custom"),
+  filters: z
+    .object({
+      role: z.string().optional(),
+      onboardingCompleted: z.boolean().optional(),
+    })
+    .optional(),
+  testMode: z.boolean().default(false),
+});
+
 export async function POST(request: NextRequest) {
   try {
-    // Get Firebase UID from headers
-    const firebaseUID = request.headers.get("firebase-uid");
+    const cookieStore = await cookies();
+    const sessionCookie = cookieStore.get("session")?.value;
 
-    if (!firebaseUID) {
+    if (!sessionCookie) {
       return NextResponse.json(
         { success: false, error: "Unauthorized" },
         { status: 401 }
       );
     }
 
+    // Verify Session Cookie
+    const decodedClaims = await adminAuth.verifySessionCookie(
+      sessionCookie,
+      true
+    );
+    const firebaseUID = decodedClaims.uid;
+
     // Check if user is admin
     const adminUser = await getUserByFirebaseUID(firebaseUID);
+    // Strict admin check - relying on database role, not just claims if claims aren't custom set
     if (!adminUser || adminUser.role !== "admin") {
       return NextResponse.json(
         { success: false, error: "Forbidden: Admin access required" },
@@ -35,22 +53,23 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Parse request body
-    const body: BulkEmailRequest = await request.json();
-    const {
-      subject,
-      message,
-      templateName = "custom",
-      filters,
-      testMode = false,
-    } = body;
+    // Parse and Validate Body
+    const json = await request.json();
+    const validationResult = bulkEmailSchema.safeParse(json);
 
-    if (!subject || !message) {
+    if (!validationResult.success) {
       return NextResponse.json(
-        { success: false, error: "Missing required fields: subject, message" },
+        {
+          success: false,
+          error: "Validation failed",
+          details: validationResult.error.flatten(),
+        },
         { status: 400 }
       );
     }
+
+    const { subject, message, templateName, filters, testMode } =
+      validationResult.data;
 
     // Get recipients based on filters
     let recipients;
@@ -68,7 +87,7 @@ export async function POST(request: NextRequest) {
       recipients = [adminUser];
     }
 
-    if (recipients.length === 0) {
+    if (!recipients || recipients.length === 0) {
       return NextResponse.json(
         { success: false, error: "No recipients found matching criteria" },
         { status: 400 }
@@ -91,7 +110,7 @@ export async function POST(request: NextRequest) {
     });
 
     // Send batch emails
-    const result = await sendBatchEmails(emails, 100); // 100ms delay between emails
+    const result = await sendBatchEmails(emails, 100);
 
     const successCount = result.results.filter((r) => r.success).length;
     const failedCount = result.results.filter((r) => !r.success).length;
@@ -102,14 +121,12 @@ export async function POST(request: NextRequest) {
         error: r.error || "Unknown error",
       }));
 
-    const response: BulkEmailResponse = {
+    return NextResponse.json({
       success: result.success,
       sentCount: successCount,
       failedCount,
       errors: errors.length > 0 ? errors : undefined,
-    };
-
-    return NextResponse.json(response);
+    });
   } catch (error: any) {
     console.error("Bulk email API error:", error);
     return NextResponse.json(

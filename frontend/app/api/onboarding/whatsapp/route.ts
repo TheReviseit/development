@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
+import { cookies } from "next/headers";
+import { adminAuth } from "@/lib/firebase-admin";
 import {
   getUserByFirebaseUID,
   getBusinessByUserId,
@@ -9,12 +11,19 @@ import { encryptToken } from "@/lib/encryption/crypto";
 
 export async function POST(request: NextRequest) {
   try {
-    const firebaseUID = request.headers.get("firebase-uid");
-    const body = await request.json();
+    const cookieStore = await cookies();
+    const sessionCookie = cookieStore.get("session")?.value;
 
-    if (!firebaseUID) {
+    if (!sessionCookie) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
+
+    const decodedClaims = await adminAuth.verifySessionCookie(
+      sessionCookie,
+      true
+    );
+    const firebaseUID = decodedClaims.uid;
+    const body = await request.json();
 
     // Get user and business
     const user = await getUserByFirebaseUID(firebaseUID);
@@ -79,11 +88,18 @@ export async function POST(request: NextRequest) {
 
 export async function GET(request: NextRequest) {
   try {
-    const firebaseUID = request.headers.get("firebase-uid");
+    const cookieStore = await cookies();
+    const sessionCookie = cookieStore.get("session")?.value;
 
-    if (!firebaseUID) {
+    if (!sessionCookie) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
+
+    const decodedClaims = await adminAuth.verifySessionCookie(
+      sessionCookie,
+      true
+    );
+    const firebaseUID = decodedClaims.uid;
 
     const user = await getUserByFirebaseUID(firebaseUID);
 

@@ -41,12 +41,19 @@ export default function LoginPage() {
         formData.password
       );
 
-      // Check onboarding status
-      const response = await fetch("/api/onboarding/check", {
-        headers: {
-          "firebase-uid": result.user.uid,
-        },
-      });
+      const createSession = async (user: any) => {
+        const idToken = await user.getIdToken();
+        await fetch("/api/auth/login", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ idToken }),
+        });
+      };
+
+      await createSession(result.user);
+
+      // Check onboarding status - relies on session cookie now
+      const response = await fetch("/api/onboarding/check");
       const data = await response.json();
 
       if (data.onboardingCompleted) {
@@ -70,6 +77,14 @@ export default function LoginPage() {
       // Use popup for better user experience
       const result = await signInWithPopup(auth, provider);
 
+      // Create Session Cookie
+      const idToken = await result.user.getIdToken();
+      await fetch("/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ idToken }),
+      });
+
       // Create user record in Supabase if it doesn't exist
       try {
         await fetch("/api/auth/create-user", {
@@ -88,12 +103,8 @@ export default function LoginPage() {
         // Continue anyway - user can still use the app
       }
 
-      // Check onboarding status and redirect accordingly
-      const response = await fetch("/api/onboarding/check", {
-        headers: {
-          "firebase-uid": result.user.uid,
-        },
-      });
+      // Check onboarding status
+      const response = await fetch("/api/onboarding/check");
       const data = await response.json();
 
       if (data.onboardingCompleted) {

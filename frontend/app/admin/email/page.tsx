@@ -43,7 +43,6 @@ export default function AdminEmailPage() {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "firebase-uid": firebaseUID || "",
         },
         body: JSON.stringify(data),
       });
@@ -82,7 +81,6 @@ export default function AdminEmailPage() {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "firebase-uid": firebaseUID || "",
         },
       });
 
