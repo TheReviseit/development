@@ -31,7 +31,7 @@ const baseEmailHtml = (content: string) => `
     .logo {
       font-size: 32px;
       font-weight: bold;
-      color: #22c15a;
+      color: #27AE60;
       margin-bottom: 10px;
     }
     .content {
