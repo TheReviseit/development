@@ -40,11 +40,21 @@ const baseEmailHtml = (content: string) => `
     .button {
       display: inline-block;
       padding: 12px 24px;
-      background-color: #000000;
-      color: #fff;
-      text-decoration: none;
+      background-color: #000000 !important;
+      color: #ffffff !important;
+      text-decoration: none !important;
       border-radius: 6px;
       margin: 20px 0;
+    }
+    /* Override email client defaults for links */
+    a.button {
+      color: #ffffff !important;
+    }
+    a.button:visited {
+      color: #ffffff !important;
+    }
+    a.button:hover {
+      color: #ffffff !important;
     }
     .footer {
       margin-top: 40px;
@@ -83,7 +93,7 @@ export const welcomeTemplate: EmailTemplate = {
       <h1>Welcome to ReviseIt, ${userName}! 🎉</h1>
       <p>We're thrilled to have you on board. ReviseIt is here to help you achieve your goals.</p>
       <p>To get started, simply log in to your dashboard and explore our features.</p>
-      <a href="https://reviseit.in/dashboard" class="button">Go to Dashboard</a>
+      <a href="https://reviseit.in/dashboard" class="button" style="display: inline-block; padding: 12px 24px; background-color: #000000; color: #ffffff !important; text-decoration: none; border-radius: 6px; margin: 20px 0;">Go to Dashboard</a>
       <p>If you have any questions, feel free to reach out to us at contact@reviseit.in</p>
     `;
     return baseEmailHtml(content);
