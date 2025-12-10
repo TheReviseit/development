@@ -122,8 +122,8 @@ export default function Header() {
               <span>Pricing</span>
             </a>
             <a
-              href="#customer-reviews"
-              onClick={(e) => handleNavClick(e, "customer-reviews")}
+              href="#testimonials"
+              onClick={(e) => handleNavClick(e, "testimonials")}
               className="nav-link"
             >
               <svg
@@ -141,7 +141,7 @@ export default function Header() {
                   d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"
                 />
               </svg>
-              <span>Use Cases</span>
+              <span>Testimonials</span>
             </a>
             <a
               href="#contact"
@@ -280,8 +280,8 @@ export default function Header() {
               <span>Pricing</span>
             </a>
             <a
-              href="#customer-reviews"
-              onClick={(e) => handleNavClick(e, "customer-reviews")}
+              href="#testimonials"
+              onClick={(e) => handleNavClick(e, "testimonials")}
               className="mobile-nav-link"
             >
               <svg
@@ -299,7 +299,7 @@ export default function Header() {
                   d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"
                 />
               </svg>
-              <span>Use Cases</span>
+              <span>Testimonials</span>
             </a>
             <a
               href="#contact"

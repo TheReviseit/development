@@ -178,7 +178,7 @@ export default function Testimonials() {
   }, [isTyping, typedText]);
 
   return (
-    <section className="testimonial-section">
+    <section id="testimonials" className="testimonial-section">
       <div className="testimonial-bg-wrapper">
         <div className="testimonial-gradient-orb testimonial-gradient-orb-1"></div>
         <div className="testimonial-gradient-orb testimonial-gradient-orb-2"></div>
