@@ -54,6 +54,26 @@ export default function SignupPage() {
         displayName: formData.name,
       });
 
+      // Get ID token for session creation
+      const idToken = await userCredential.user.getIdToken();
+
+      // Create session cookie
+      try {
+        const loginResponse = await fetch("/api/auth/login", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ idToken }),
+        });
+
+        if (!loginResponse.ok) {
+          console.error("Failed to create session");
+        }
+      } catch (sessionError) {
+        console.error("Session creation error:", sessionError);
+      }
+
       // Create user record in Supabase
       try {
         const response = await fetch("/api/auth/create-user", {
@@ -93,6 +113,26 @@ export default function SignupPage() {
       const provider = new GoogleAuthProvider();
       // Use popup for better user experience
       const result = await signInWithPopup(auth, provider);
+
+      // Get ID token for session creation
+      const idToken = await result.user.getIdToken();
+
+      // Create session cookie
+      try {
+        const loginResponse = await fetch("/api/auth/login", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ idToken }),
+        });
+
+        if (!loginResponse.ok) {
+          console.error("Failed to create session");
+        }
+      } catch (sessionError) {
+        console.error("Session creation error:", sessionError);
+      }
 
       // Create user record in Supabase
       try {
