@@ -12,6 +12,7 @@ import Link from "next/link";
 import { auth } from "@/src/firebase/firebase";
 import { onAuthStateChanged } from "firebase/auth";
 import Toast from "../components/Toast/Toast";
+import ButtonSpinner from "../components/ui/ButtonSpinner";
 import "../login/login.css";
 
 export default function VerifyEmailPage() {
@@ -265,7 +266,7 @@ export default function VerifyEmailPage() {
               </div>
 
               <button type="submit" className="btn-primary" disabled={loading}>
-                {loading ? "Verifying..." : "Verify Email"}
+                {loading ? <ButtonSpinner size={20} /> : "Verify Email"}
               </button>
 
               <div className="auth-divider">
@@ -279,11 +280,13 @@ export default function VerifyEmailPage() {
                 disabled={resendLoading || resendCooldown > 0}
                 style={{ marginBottom: "16px" }}
               >
-                {resendLoading
-                  ? "Sending..."
-                  : resendCooldown > 0
-                  ? `Resend in ${resendCooldown}s`
-                  : "Resend Code"}
+                {resendLoading ? (
+                  <ButtonSpinner size={20} />
+                ) : resendCooldown > 0 ? (
+                  `Resend in ${resendCooldown}s`
+                ) : (
+                  "Resend Code"
+                )}
               </button>
             </form>
 

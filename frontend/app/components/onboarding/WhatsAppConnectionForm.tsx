@@ -21,10 +21,10 @@ export default function WhatsAppConnectionForm({
 
   return (
     <div className="form-section">
-      <div className="form-header">
+      {/* <div className="form-header">
         <h2>WhatsApp Connection</h2>
         <p>Connect your WhatsApp Business account</p>
-      </div>
+      </div> */}
 
       <div className="form-grid">
         <div className="form-group full-width">

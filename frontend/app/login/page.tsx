@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useState, useCallback, memo } from "react";
 import { useRouter } from "next/navigation";
 import dynamic from "next/dynamic";
+import ButtonSpinner from "../components/ui/ButtonSpinner";
 import { handleFirebaseError } from "../utils/firebaseErrors";
 import {
   signInWithEmailAndPassword,
@@ -301,7 +302,7 @@ export default function LoginPage() {
                 className={styles.btnPrimary}
                 disabled={loading}
               >
-                {loading ? "Signing In..." : "Sign In"}
+                {loading ? <ButtonSpinner size={20} /> : "Sign In"}
               </button>
 
               <button
@@ -310,8 +311,14 @@ export default function LoginPage() {
                 onClick={handleGoogleSignIn}
                 disabled={googleLoading}
               >
-                <GoogleIcon />
-                {googleLoading ? "Signing In..." : "Sign In with Google"}
+                {googleLoading ? (
+                  <ButtonSpinner size={20} />
+                ) : (
+                  <>
+                    <GoogleIcon />
+                    <span>Sign In with Google</span>
+                  </>
+                )}
               </button>
             </form>
 
