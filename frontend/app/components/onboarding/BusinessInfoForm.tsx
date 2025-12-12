@@ -54,10 +54,10 @@ export default function BusinessInfoForm({
 
   return (
     <div className="form-section">
-      <div className="form-header">
+      {/* <div className="form-header">
         <h2>Business Information</h2>
         <p>Tell us about your business</p>
-      </div>
+      </div> */}
 
       <div className="form-grid">
         <div className="form-group full-width">

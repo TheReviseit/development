@@ -180,7 +180,6 @@ export const welcomeAfterVerificationTemplate: EmailTemplate = {
     const content = `
       <h1>Welcome to ReviseIt, ${userName}! 🎉</h1>
       <p>Your email has been verified successfully!</p>
-      // <p>Here's what you can do next:</p>
       <ul style="line-height: 2;">
         <li>Complete your business profile</li>
         <li>Set up WhatsApp integration</li>
