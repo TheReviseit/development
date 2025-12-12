@@ -4,16 +4,78 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { onAuthStateChanged, User } from "firebase/auth";
 import { auth } from "@/src/firebase/firebase";
-import StepIndicator from "../components/onboarding/StepIndicator";
 import BusinessInfoForm from "../components/onboarding/BusinessInfoForm";
 import WhatsAppConnectionForm from "../components/onboarding/WhatsAppConnectionForm";
 import MessagingSettingsForm from "../components/onboarding/MessagingSettingsForm";
 import VerificationForm from "../components/onboarding/VerificationForm";
-import { v2 as cloudinary } from "cloudinary";
+import SpaceshipLoader from "../components/loading/SpaceshipLoader";
 import "./onboarding.css";
 
-const STEP_TITLES = [
-  "Business Info",
+const STEPS = [
+  {
+    id: 1,
+    title: "Add organization details",
+    subtitle: "Start your company data in Deep to",
+    icon: (
+      <svg
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2"
+      >
+        <path d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+      </svg>
+    ),
+  },
+  {
+    id: 2,
+    title: "Provide your tax details",
+    subtitle: "Tax information",
+    icon: (
+      <svg
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2"
+      >
+        <path d="M12 2v20M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6" />
+      </svg>
+    ),
+  },
+  {
+    id: 3,
+    title: "Configure your pay schedule",
+    subtitle: "Payment settings",
+    icon: (
+      <svg
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2"
+      >
+        <path d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+      </svg>
+    ),
+  },
+  {
+    id: 4,
+    title: "Setup wallet details",
+    subtitle: "Wallet configuration",
+    icon: (
+      <svg
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2"
+      >
+        <path d="M21 12a2.25 2.25 0 00-2.25-2.25H15a3 3 0 11-6 0H5.25A2.25 2.25 0 003 12m18 0v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6m18 0V9M3 12V9m18 0a2 2 0 00-2-2H5a2 2 0 00-2 2m18 0l-3.879-4.879A2 2 0 0015.707 3H8.293a2 2 0 00-1.414.586L3 9" />
+      </svg>
+    ),
+  },
+];
+
+const FORM_TITLES = [
+  "Business Information",
   "WhatsApp Connection",
   "Messaging Settings",
   "Verification",
@@ -212,80 +274,150 @@ export default function OnboardingPage() {
   };
 
   if (loading) {
-    return (
-      <div className="loading-container">
-        <div className="spinner"></div>
-        <p>Loading...</p>
-      </div>
-    );
+    return <SpaceshipLoader text="Loading" />;
   }
+
+  const progressPercentage = (currentStep / 4) * 100;
 
   return (
     <div className="onboarding-container">
-      <div className="onboarding-wrapper">
-        <div className="onboarding-header">
-          <div className="brand-tag">
-            <img src="/logo.png" alt="Revise It Logo" width="24" height="24" />
-            <span>Revise It</span>
-          </div>
-          <h1>Welcome! Let's set up your WhatsApp automation</h1>
+      {/* Left Sidebar */}
+      <div className="onboarding-sidebar">
+        <div className="sidebar-brand">
+          <img src="/logo.png" alt="Revise It Logo" />
+          <span>Revise It</span>
         </div>
 
-        <StepIndicator
-          currentStep={currentStep}
-          totalSteps={4}
-          stepTitles={STEP_TITLES}
-        />
+        <div className="sidebar-header">
+          <h1>Get started</h1>
+          <p className="sidebar-progress-text">
+            Complete all the following steps {currentStep}/4
+          </p>
+        </div>
 
-        <div className="form-container">
-          {currentStep === 1 && (
-            <BusinessInfoForm
-              data={businessData}
-              onChange={handleBusinessDataChange}
-              onLogoUpload={handleLogoUpload}
-            />
-          )}
-
-          {currentStep === 2 && (
-            <WhatsAppConnectionForm
-              data={whatsappData}
-              onChange={handleWhatsAppDataChange}
-            />
-          )}
-
-          {currentStep === 3 && (
-            <MessagingSettingsForm
-              data={messagingData}
-              onChange={handleMessagingDataChange}
-            />
-          )}
-
-          {currentStep === 4 && (
-            <VerificationForm
-              onComplete={handleComplete}
-              isCompleting={isCompleting}
-            />
-          )}
-
-          {currentStep < 4 && (
-            <div className="form-actions">
-              <button
-                type="button"
-                className="btn-secondary"
-                onClick={handleBack}
-                disabled={currentStep === 1}
-              >
-                Back
-              </button>
-              <button
-                type="button"
-                className="btn-primary"
-                onClick={handleNext}
-              >
-                Next
-              </button>
+        <div className="sidebar-steps">
+          {STEPS.map((step) => (
+            <div
+              key={step.id}
+              className={`sidebar-step ${
+                currentStep === step.id
+                  ? "active"
+                  : currentStep > step.id
+                  ? "completed"
+                  : ""
+              }`}
+            >
+              <div className="step-icon-wrapper">
+                {step.icon}
+                {currentStep > step.id && (
+                  <div className="step-check">
+                    <svg
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="3"
+                    >
+                      <path d="M5 13l4 4L19 7" />
+                    </svg>
+                  </div>
+                )}
+              </div>
+              <div className="step-info">
+                <h3 className="step-title">{step.title}</h3>
+                <p className="step-subtitle">{step.subtitle}</p>
+              </div>
             </div>
-          )}
+          ))}
+        </div>
+      </div>
+
+      {/* Right Panel */}
+      <div className="onboarding-main">
+        {/* Mobile Header - Only visible on mobile */}
+        <div className="mobile-header">
+          <img src="/logo.png" alt="Revise It Logo" />
+          <span>Revise It</span>
+        </div>
+
+        {/* Progress Bar */}
+        <div className="progress-bar-container">
+          <div className="progress-bar-wrapper">
+            <div className="progress-bar-label">
+              <span>Progress</span>
+              <span>{progressPercentage.toFixed(0)}%</span>
+            </div>
+            <div className="progress-bar-track">
+              <div
+                className="progress-bar-fill"
+                style={{ width: `${progressPercentage}%` }}
+              ></div>
+            </div>
+          </div>
+        </div>
+
+        {/* Form Content */}
+        <div className="form-content-wrapper">
+          <div className="form-card">
+            <div className="form-header">
+              <h2>{FORM_TITLES[currentStep - 1]}</h2>
+              <p>
+                {currentStep === 1 && "Tell us about your business"}
+                {currentStep === 2 && "Connect your WhatsApp Business account"}
+                {currentStep === 3 && "Configure your messaging preferences"}
+                {currentStep === 4 &&
+                  "Verify your setup and complete onboarding"}
+              </p>
+            </div>
+
+            {currentStep === 1 && (
+              <BusinessInfoForm
+                data={businessData}
+                onChange={handleBusinessDataChange}
+                onLogoUpload={handleLogoUpload}
+              />
+            )}
+
+            {currentStep === 2 && (
+              <WhatsAppConnectionForm
+                data={whatsappData}
+                onChange={handleWhatsAppDataChange}
+              />
+            )}
+
+            {currentStep === 3 && (
+              <MessagingSettingsForm
+                data={messagingData}
+                onChange={handleMessagingDataChange}
+              />
+            )}
+
+            {currentStep === 4 && (
+              <VerificationForm
+                onComplete={handleComplete}
+                isCompleting={isCompleting}
+              />
+            )}
+
+            {currentStep < 4 && (
+              <div className="form-actions">
+                <button
+                  type="button"
+                  className="btn-secondary"
+                  onClick={handleBack}
+                  disabled={currentStep === 1}
+                >
+                  Back
+                </button>
+                <button
+                  type="button"
+                  className="btn-primary"
+                  onClick={handleNext}
+                >
+                  Save & Continue
+                </button>
+              </div>
+            )}
+          </div>
         </div>
       </div>
     </div>
