@@ -1,0 +1,144 @@
+.toast {
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  min-width: 320px;
+  max-width: 500px;
+  background: white;
+  border-radius: 12px;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.15), 0 4px 12px rgba(0, 0, 0, 0.1);
+  overflow: hidden;
+  z-index: 9999;
+  animation: slideInFromTop 0.3s ease-out;
+}
+
+@keyframes slideInFromTop {
+  from {
+    transform: translateY(-100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+.toastContent {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 16px;
+  position: relative;
+}
+
+.toastIcon {
+  flex-shrink: 0;
+  width: 20px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.toastMessage {
+  flex: 1;
+  margin: 0;
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 1.5;
+  color: #1f2937;
+}
+
+.toastClose {
+  flex-shrink: 0;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  border-radius: 6px;
+  transition: background-color 0.2s;
+  color: #6b7280;
+}
+
+.toastClose:hover {
+  background-color: rgba(0, 0, 0, 0.05);
+}
+
+.toastProgress {
+  height: 4px;
+  background: currentColor;
+  animation: shrink linear;
+  transform-origin: left;
+}
+
+@keyframes shrink {
+  from {
+    transform: scaleX(1);
+  }
+  to {
+    transform: scaleX(0);
+  }
+}
+/* 
+
+.error {
+  border-left: 4px solid #ef4444;
+} */
+
+.error .toastIcon {
+  color: #ef4444;
+}
+
+.error .toastProgress {
+  color: #ef4444;
+}
+
+/* .success {
+  border-left: 4px solid #22c55e;
+} */
+
+.success .toastIcon {
+  color: #22c55e;
+}
+
+.success .toastProgress {
+  color: #22c55e;
+}
+
+/* .warning {
+  border-left: 4px solid #f59e0b;
+} */
+
+.warning .toastIcon {
+  color: #f59e0b;
+}
+
+.warning .toastProgress {
+  color: #f59e0b;
+}
+
+/* .info {
+  border-left: 4px solid #3b82f6;
+} */
+
+.info .toastIcon {
+  color: #3b82f6;
+}
+
+.info .toastProgress {
+  color: #3b82f6;
+}
+
+/* Mobile responsive */
+@media (max-width: 640px) {
+  .toast {
+    left: 20px;
+    right: 20px;
+    min-width: auto;
+    max-width: none;
+  }
+}

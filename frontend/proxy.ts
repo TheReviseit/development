@@ -44,15 +44,6 @@ export async function proxy(request: NextRequest) {
     return response;
   }
 
-  // If already logged in and trying to access login/signup
-  if (
-    session &&
-    (request.nextUrl.pathname === "/login" ||
-      request.nextUrl.pathname === "/signup")
-  ) {
-    return NextResponse.redirect(new URL("/dashboard", request.url));
-  }
-
   return NextResponse.next();
 }
 

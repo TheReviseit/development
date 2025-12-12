@@ -336,6 +336,52 @@ body {
   transform: translateY(-1px);
 }
 
+.login-page .btn-secondary {
+  font-family: var(--font-primary);
+  padding: 12px;
+  background: transparent;
+  color: var(--text-secondary);
+  border: 1px solid var(--border-light);
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  transition: all 0.3s ease;
+  width: 100%;
+  text-decoration: none;
+}
+
+.login-page .btn-secondary:hover {
+  background: var(--input-bg-light);
+  border-color: var(--gray-300);
+  transform: translateY(-1px);
+}
+
+.login-page .auth-divider {
+  display: flex;
+  align-items: center;
+  margin: 20px 0;
+  color: #9ca3af;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.login-page .auth-divider::before,
+.login-page .auth-divider::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: var(--border-light);
+}
+
+.login-page .auth-divider span {
+  padding: 0 16px;
+}
+
 .login-page .auth-footer {
   font-family: var(--font-primary);
   text-align: center;
