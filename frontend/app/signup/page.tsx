@@ -76,30 +76,30 @@ export default function SignupPage() {
         console.error("Session creation error:", sessionError);
       }
 
-      // Create user record in Supabase
-      try {
-        const response = await fetch("/api/auth/create-user", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            firebase_uid: userCredential.user.uid,
-            full_name: formData.name,
-            email: formData.email,
-          }),
-        });
+      // Create user record in Supabase (non-blocking)
+      fetch("/api/auth/create-user", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          firebase_uid: userCredential.user.uid,
+          full_name: formData.name,
+          email: formData.email,
+        }),
+      }).catch((error) => console.error("User creation error:", error));
 
-        if (!response.ok) {
-          console.error("Failed to create Supabase user record");
-        }
-      } catch (supabaseError) {
-        console.error("Supabase user creation error:", supabaseError);
-        // Continue anyway - user can still use the app
-      }
+      // Send verification code (non-blocking)
+      fetch("/api/auth/send-verification", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          userId: userCredential.user.uid,
+          email: formData.email,
+        }),
+      }).catch((error) => console.error("Verification email error:", error));
 
       console.log("User signed up:", userCredential.user);
-      router.push("/onboarding"); // Redirect to onboarding instead of dashboard
+      // Redirect immediately to email verification
+      router.push("/verify-email");
     } catch (err: any) {
       console.error("Signup error:", err);
       setError(handleFirebaseError(err));
