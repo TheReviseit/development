@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useState, useEffect } from "react";
+import { useState, useEffect, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { confirmPasswordReset, verifyPasswordResetCode } from "firebase/auth";
 import { auth } from "@/src/firebase/firebase";
@@ -9,7 +9,7 @@ import Toast from "../components/Toast/Toast";
 import { handleFirebaseError } from "../utils/firebaseErrors";
 import "../login/login.css";
 
-export default function ResetPasswordPage() {
+function ResetPasswordContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [oobCode, setOobCode] = useState<string | null>(null);
@@ -360,5 +360,40 @@ export default function ResetPasswordPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function ResetPasswordPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="auth-container login-page">
+          <div className="auth-split">
+            <div className="auth-left">
+              <div className="quote-section">
+                <p className="quote-label">A WISE QUOTE</p>
+              </div>
+              <div className="gradient-overlay"></div>
+              <div className="content-section">
+                <h1 className="main-heading">
+                  Reset
+                  <br />
+                  Your
+                  <br />
+                  Password
+                </h1>
+              </div>
+            </div>
+            <div className="auth-right">
+              <div className="form-container" style={{ textAlign: "center" }}>
+                <h2>Loading...</h2>
+              </div>
+            </div>
+          </div>
+        </div>
+      }
+    >
+      <ResetPasswordContent />
+    </Suspense>
   );
 }
