@@ -139,23 +139,32 @@
   color: #334155;
 }
 
-.optionSelected .optionIcon {
-  color: #ffffff;
-}
-
+/* Hover and highlighted states - BEFORE selected */
 .option:hover,
 .optionHighlighted {
   background: #f1f5f9;
+  color: #334155;
 }
 
+/* Selected option - AFTER hover so it wins */
 .optionSelected {
-  background: #000000;
-  color: #ffffff;
+  background: #000000 !important;
+  color: #ffffff !important;
   font-weight: 500;
 }
 
 .optionSelected:hover {
-  background: #dcfce7;
+  background: #000000 !important;
+  color: #ffffff !important;
+}
+
+.optionSelected.optionHighlighted {
+  background: #000000 !important;
+  color: #ffffff !important;
+}
+
+.optionSelected .optionIcon {
+  color: #ffffff !important;
 }
 
 .checkIcon {
