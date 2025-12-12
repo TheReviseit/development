@@ -3,6 +3,8 @@
 import Link from "next/link";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import Toast from "../components/Toast/Toast";
+import { handleFirebaseError } from "../utils/firebaseErrors";
 import {
   createUserWithEmailAndPassword,
   GoogleAuthProvider,
@@ -100,7 +102,7 @@ export default function SignupPage() {
       router.push("/onboarding"); // Redirect to onboarding instead of dashboard
     } catch (err: any) {
       console.error("Signup error:", err);
-      setError(err.message || "Failed to sign up");
+      setError(handleFirebaseError(err));
     } finally {
       setLoading(false);
     }
@@ -156,13 +158,7 @@ export default function SignupPage() {
       router.push("/onboarding");
     } catch (err: any) {
       console.error("Google sign up error:", err);
-      if (err.code === "auth/popup-closed-by-user") {
-        setError("Sign-up cancelled. Please try again.");
-      } else if (err.code === "auth/popup-blocked") {
-        setError("Popup was blocked. Please allow popups for this site.");
-      } else {
-        setError(err.message || "Failed to sign up with Google");
-      }
+      setError(handleFirebaseError(err));
       setGoogleLoading(false);
     }
   };
@@ -206,7 +202,11 @@ export default function SignupPage() {
             </div>
 
             {error && (
-              <div style={{ color: "red", marginBottom: "10px" }}>{error}</div>
+              <Toast
+                message={error}
+                type="error"
+                onClose={() => setError("")}
+              />
             )}
 
             <form className="auth-form" onSubmit={handleSubmit}>
