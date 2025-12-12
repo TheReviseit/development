@@ -134,40 +134,59 @@ export default function CustomDropdown({
 
       {isOpen && (
         <ul className={styles.menu} role="listbox">
-          {options.map((option, index) => (
-            <li
-              key={option.value}
-              role="option"
-              aria-selected={value === option.value}
-              className={`${styles.option} ${
-                value === option.value ? styles.optionSelected : ""
-              } ${highlightedIndex === index ? styles.optionHighlighted : ""}`}
-              onClick={() => handleSelect(option)}
-              onMouseEnter={() => setHighlightedIndex(index)}
-            >
-              <span className={styles.optionContent}>
-                {option.icon && (
-                  <span className={styles.optionIcon}>{option.icon}</span>
-                )}
-                {option.label}
-              </span>
-              {value === option.value && (
-                <svg
-                  width="16"
-                  height="16"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="3"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  className={styles.checkIcon}
+          {options.map((option, index) => {
+            const isSelected = value === option.value;
+            const isHighlighted = highlightedIndex === index;
+
+            return (
+              <li
+                key={option.value}
+                role="option"
+                aria-selected={isSelected}
+                className={`${styles.option} ${
+                  isSelected ? styles.optionSelected : ""
+                } ${
+                  isHighlighted && !isSelected ? styles.optionHighlighted : ""
+                }`}
+                style={
+                  isSelected
+                    ? { background: "#000000", color: "#ffffff" }
+                    : undefined
+                }
+                onClick={() => handleSelect(option)}
+                onMouseEnter={() => setHighlightedIndex(index)}
+              >
+                <span
+                  className={styles.optionContent}
+                  style={isSelected ? { color: "#ffffff" } : undefined}
                 >
-                  <polyline points="20 6 9 17 4 12" />
-                </svg>
-              )}
-            </li>
-          ))}
+                  {option.icon && (
+                    <span
+                      className={styles.optionIcon}
+                      style={isSelected ? { color: "#ffffff" } : undefined}
+                    >
+                      {option.icon}
+                    </span>
+                  )}
+                  {option.label}
+                </span>
+                {isSelected && (
+                  <svg
+                    width="16"
+                    height="16"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="#ffffff"
+                    strokeWidth="3"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  >
+                    <polyline points="20 6 9 17 4 12" />
+                  </svg>
+                )}
+              </li>
+            );
+          })}
         </ul>
       )}
     </div>
