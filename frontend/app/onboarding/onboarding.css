@@ -403,20 +403,29 @@
   font-weight: 400;
 }
 
-/* Select dropdown styling */
+/* Select dropdown styling - Fixed */
 .form-group select {
   appearance: none;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 16 16'%3E%3Cpath fill='%230f172a' d='M4.427 6.427l3.396 3.396a.25.25 0 00.354 0l3.396-3.396A.25.25 0 0011.396 6H4.604a.25.25 0 00-.177.427z'/%3E%3C/svg%3E");
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  background-color: #ffffff;
+  background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23333' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e");
   background-repeat: no-repeat;
-  background-position: right 1rem center;
-  background-size: 16px;
-  padding-right: 3rem;
+  background-position: right 12px center;
+  background-size: 16px 16px;
+  padding-right: 40px;
   cursor: pointer;
+  color: #0f172a;
 }
 
 .form-group select option {
-  padding: 0.75rem;
-  font-weight: 400;
+  padding: 12px;
+  color: #0f172a;
+  background: #ffffff;
+}
+
+.form-group select:hover {
+  border-color: #94a3b8;
 }
 
 .form-group input:focus,
@@ -424,8 +433,7 @@
 .form-group textarea:focus {
   outline: none;
   border-color: #000000;
-  box-shadow: 0 0 0 3px rgba(0, 0, 0, 0.05);
-  background: #ffffff;
+  box-shadow: 0 0 0 3px rgba(0, 0, 0, 0.06);
 }
 
 .form-group textarea {
