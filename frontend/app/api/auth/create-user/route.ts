@@ -35,22 +35,8 @@ export async function POST(request: NextRequest) {
       email,
     });
 
-    // Send welcome email automatically to new users
-    // This runs in the background and doesn't block user creation
-    sendWelcomeEmail(email, full_name || "there")
-      .then((result) => {
-        if (result.success) {
-          console.log(`✅ Welcome email sent to ${email}`);
-        } else {
-          console.error(
-            `❌ Failed to send welcome email to ${email}:`,
-            result.error
-          );
-        }
-      })
-      .catch((error) => {
-        console.error(`❌ Error sending welcome email to ${email}:`, error);
-      });
+    // Note: Welcome email is now sent AFTER email verification
+    // (see /api/auth/verify-email route)
 
     return NextResponse.json({ user, created: true });
   } catch (error: any) {
@@ -59,7 +45,15 @@ export async function POST(request: NextRequest) {
     console.error("Error details:", {
       message: error.message,
       code: error.code,
+      details: error.details,
+      hint: error.hint,
     });
+
+    // In development, log the full stack trace
+    if (process.env.NODE_ENV !== "production") {
+      console.error("Full error stack:", error);
+    }
+
     return NextResponse.json(
       {
         error: "Internal server error",

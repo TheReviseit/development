@@ -151,12 +151,56 @@ export const announcementTemplate: EmailTemplate = {
   },
 };
 
+// Email Verification template
+export const emailVerificationTemplate: EmailTemplate = {
+  name: "email-verification",
+  subject: "Verify your ReviseIt account",
+  generateHtml: (data: TemplateData) => {
+    const code = data.code || "000000";
+    const content = `
+      <h1>Verify Your Email Address</h1>
+      <p>Welcome to ReviseIt! Please verify your email address to complete your registration.</p>
+      <p>Your verification code is:</p>
+      <div style="background-color: #f5f5f5; padding: 20px; border-radius: 8px; text-align: center; margin: 30px 0;">
+        <h1 style="font-size: 48px; letter-spacing: 12px; font-weight: bold; color: #000000; margin: 0; font-family: 'Courier New', monospace;">${code}</h1>
+      </div>
+      <p style="font-size: 14px; color: #666;">This code will expire in <strong>15 minutes</strong>.</p>
+      <p>If you didn't create an account with ReviseIt, you can safely ignore this email.</p>
+    `;
+    return baseEmailHtml(content);
+  },
+};
+
+// Welcome email after verification template
+export const welcomeAfterVerificationTemplate: EmailTemplate = {
+  name: "welcome-verified",
+  subject: "Welcome to ReviseIt! 🎉",
+  generateHtml: (data: TemplateData) => {
+    const userName = data.userName || "there";
+    const content = `
+      <h1>Welcome to ReviseIt, ${userName}! 🎉</h1>
+      <p>Your email has been verified successfully!</p>
+      // <p>Here's what you can do next:</p>
+      <ul style="line-height: 2;">
+        <li>Complete your business profile</li>
+        <li>Set up WhatsApp integration</li>
+        <li>Create your first automated response</li>
+      </ul>
+      <a href="https://www.reviseit.in/onboarding" class="button" style="display: inline-block; padding: 12px 24px; background-color: #000000; color: #ffffff !important; text-decoration: none; border-radius: 6px; margin: 20px 0;">Complete Onboarding</a>
+      <p>If you have any questions, feel free to reach out to us at contact@reviseit.in</p>
+    `;
+    return baseEmailHtml(content);
+  },
+};
+
 // Map of all available templates
 export const emailTemplates: Record<string, EmailTemplate> = {
   welcome: welcomeTemplate,
   newsletter: newsletterTemplate,
   custom: customTemplate,
   announcement: announcementTemplate,
+  "email-verification": emailVerificationTemplate,
+  "welcome-verified": welcomeAfterVerificationTemplate,
 };
 
 // Helper function to get template by name

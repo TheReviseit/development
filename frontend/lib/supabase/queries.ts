@@ -51,13 +51,13 @@ export async function getUserByFirebaseUID(firebaseUID: string) {
     .from("users")
     .select("*")
     .eq("firebase_uid", firebaseUID)
-    .single();
+    .maybeSingle(); // Use maybeSingle() instead of single() to avoid PGRST116 error
 
   if (error) {
     console.error("Error fetching user:", error);
     return null;
   }
-  return data as User;
+  return data as User | null;
 }
 
 export async function createUser(userData: {
