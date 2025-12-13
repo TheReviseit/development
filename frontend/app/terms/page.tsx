@@ -359,7 +359,8 @@ export default function TermsOfService() {
                   attempted to be resolved amicably. If unresolved, it shall be
                   referred to arbitration in accordance with the Arbitration and
                   Conciliation Act, 1996. The seat of arbitration shall be
-                  [City, State, India], and the language shall be English.
+                  Tirunelveli, Tamil Nadu, India, and the language shall be
+                  English.
                 </p>
               </section>
 

@@ -133,12 +133,14 @@ export default function PrivacyPolicy() {
                     <strong>Data Fiduciary:</strong> ReviseIt
                   </p>
                   <p className="privacy-highlight-text">
-                    <strong>Registered Address:</strong> [Your Registered
-                    address, City, State, Pin Code]
+                    <strong>Registered Address:</strong> Ambasamudram,
+                    Tirunelveli, Tamil Nadu 627428
                   </p>
                   <p className="privacy-highlight-text">
-                    <strong>Registration No:</strong> [Your Company Registration
-                    Number]
+                    <strong>Business Type:</strong> Sole Proprietorship
+                  </p>
+                  <p className="privacy-highlight-text">
+                    <strong>GST Registration:</strong> In Progress
                   </p>
                 </div>
               </section>
@@ -393,20 +395,23 @@ export default function PrivacyPolicy() {
                 </p>
                 <div className="privacy-contact-box">
                   <p className="privacy-text">
-                    <strong>Name:</strong> [Grievance Officer Name]
+                    <strong>Name:</strong> S.Raja Raman
+                  </p>
+                  <p className="privacy-text">
+                    <strong>Designation:</strong> Grievance Officer
                   </p>
                   <p className="privacy-text">
                     <strong>Email:</strong>{" "}
                     <a
-                      href="mailto:grievance@reviseit.in"
+                      href="mailto:contact@reviseit.in"
                       className="privacy-link"
                     >
-                      grievance@reviseit.in
+                      contact@reviseit.in
                     </a>
                   </p>
                   <p className="privacy-text">
                     <strong>Response Time:</strong> We aim to respond to all
-                    grievances within 7 days.
+                    grievances within 5 business days.
                   </p>
                 </div>
               </section>

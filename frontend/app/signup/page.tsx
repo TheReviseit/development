@@ -324,7 +324,26 @@ export default function SignupPage() {
               <div className={styles.formOptions}>
                 <label className={styles.checkboxLabel}>
                   <input type="checkbox" required />
-                  <span>I agree to the Terms & Conditions</span>
+                  <span>
+                    I agree to the{" "}
+                    <a
+                      href="/terms"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      style={{ color: "#22C15A", textDecoration: "underline" }}
+                    >
+                      Terms of Service
+                    </a>{" "}
+                    and{" "}
+                    <a
+                      href="/privacy"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      style={{ color: "#22C15A", textDecoration: "underline" }}
+                    >
+                      Privacy Policy
+                    </a>
+                  </span>
                 </label>
               </div>
 
