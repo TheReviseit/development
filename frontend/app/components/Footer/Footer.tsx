@@ -25,12 +25,16 @@ export default function Footer() {
               © 2025 ReviseIt. All rights reserved.
             </p>
             <div className={styles.legalLinks}>
-              <a href="#terms" className={styles.legalLink}>
+              <a href="/terms" className={styles.legalLink}>
                 Terms of Service
               </a>
               <span>|</span>
-              <a href="#privacy" className={styles.legalLink}>
+              <a href="/privacy" className={styles.legalLink}>
                 Privacy Policy
+              </a>
+              <span>|</span>
+              <a href="/data-deletion" className={styles.legalLink}>
+                Data Deletion
               </a>
             </div>
           </div>
