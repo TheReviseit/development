@@ -19,6 +19,9 @@ export async function proxy(request: NextRequest) {
     "/api/auth/login",
     "/api/auth/logout",
     "/api/auth/create-user",
+    "/privacy",
+    "/terms",
+    "/data-deletion",
   ];
 
   const isPublicPath =
