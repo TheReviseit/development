@@ -1,0 +1,131 @@
+/* 404 Not Found Page Styles */
+
+.notFoundContainer {
+  min-height: 100vh;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: white;
+  overflow: hidden;
+  margin-top: -75px; /* Offset the body padding-top */
+  padding-top: 75px; /* Add it back for proper centering */
+}
+
+.contentWrapper {
+  width: 100%;
+  max-width: 1024px;
+  margin: 0 auto;
+  padding: 0 1rem;
+}
+
+.textCenter {
+  text-align: center;
+}
+
+.imageContainer {
+  position: relative;
+  width: 100%;
+  height: 350px;
+  background-position: center;
+  background-repeat: no-repeat;
+  background-size: cover;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 1.5rem;
+}
+
+.heading404 {
+  font-size: 4.5rem;
+  font-weight: 700;
+  color: #1f2937;
+  filter: drop-shadow(0 10px 8px rgb(0 0 0 / 0.04)) drop-shadow(0 4px 3px rgb(0 0 0 / 0.1));
+  margin: 0;
+}
+
+.errorContent {
+  margin-top: 1rem;
+}
+
+.errorTitle {
+  font-size: 1.5rem;
+  font-weight: 600;
+  color: #1f2937;
+  margin-bottom: 0.75rem;
+}
+
+.errorDescription {
+  font-size: 1rem;
+  color: #4b5563;
+  margin-bottom: 1.5rem;
+}
+
+.homeButton {
+  display: inline-block;
+  background-color: #000000;
+  color: white;
+  font-weight: 500;
+  font-size: 1rem;
+  padding: 0.75rem 1.5rem;
+  border-radius: 0.5rem;
+  text-decoration: none;
+  transition: all 0.2s;
+  box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+  width: auto !important;
+  min-width: fit-content;
+}
+
+.homeButton:hover {
+  background-color: rgba(0, 0, 0, 0.8);
+  box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
+  transform: translateY(-1px);
+}
+
+/* Mobile Responsive */
+@media (max-width: 768px) {
+  .notFoundContainer {
+    margin-top: -70px;
+    padding-top: 70px;
+  }
+
+  .imageContainer {
+    height: 280px;
+  }
+
+  .heading404 {
+    font-size: 3.5rem;
+  }
+
+  .errorTitle {
+    font-size: 1.25rem;
+  }
+
+  .errorDescription {
+    font-size: 0.875rem;
+  }
+
+  .homeButton {
+    font-size: 0.875rem;
+    padding: 0.625rem 1.25rem;
+  }
+}
+
+@media (min-width: 768px) {
+  .imageContainer {
+    height: 450px;
+  }
+
+  .heading404 {
+    font-size: 6rem;
+  }
+
+  .errorTitle {
+    font-size: 2.25rem;
+  }
+
+  .errorDescription {
+    font-size: 1.125rem;
+  }
+}
+
