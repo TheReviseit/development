@@ -96,6 +96,18 @@ async function createSessionWithRetry(
   return false;
 }
 
+// Helper function to check onboarding status with fallback
+async function checkOnboardingStatus(): Promise<boolean> {
+  try {
+    const response = await fetch("/api/onboarding/check");
+    if (!response.ok) return false;
+    const data = await response.json();
+    return data.onboardingCompleted ?? false;
+  } catch {
+    return false; // Default to onboarding on error
+  }
+}
+
 export default function SignupPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
@@ -171,18 +183,25 @@ export default function SignupPage() {
     [name, email, password, confirmPassword, router]
   );
 
-  const handleGoogleSignIn = useCallback(async () => {
+  const handleGoogleSignUp = useCallback(async () => {
     setError("");
     setGoogleLoading(true);
 
     try {
       const provider = new GoogleAuthProvider();
+      // Add custom parameters to improve auth flow
+      provider.setCustomParameters({
+        prompt: "select_account", // Always show account selection
+      });
+
       const result = await signInWithPopup(auth, provider);
       const idToken = await result.user.getIdToken();
 
-      // PARALLEL execution
-      const [sessionSuccess] = await Promise.all([
+      // PARALLEL execution - all three operations at once
+      const [sessionSuccess, onboardingCompleted] = await Promise.all([
         createSessionWithRetry(idToken),
+        checkOnboardingStatus(),
+        // Non-blocking user creation
         fetch("/api/auth/create-user", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -198,10 +217,34 @@ export default function SignupPage() {
         throw new Error("Failed to create session");
       }
 
-      router.push("/onboarding");
+      router.push(onboardingCompleted ? "/dashboard" : "/onboarding");
     } catch (err: any) {
       console.error("Google sign up error:", err);
-      setError(handleFirebaseError(err));
+
+      // Handle specific Firebase auth errors
+      let errorMessage = "Failed to sign up with Google";
+
+      if (err.code === "auth/popup-closed-by-user") {
+        errorMessage =
+          "Sign-up cancelled. Please try again and complete the Google sign-in process.";
+      } else if (err.code === "auth/popup-blocked") {
+        errorMessage =
+          "Pop-up blocked by browser. Please allow pop-ups for this site and try again.";
+      } else if (err.code === "auth/account-exists-with-different-credential") {
+        errorMessage =
+          "An account already exists with this email. Please try signing in instead.";
+      } else if (err.code === "auth/cancelled-popup-request") {
+        errorMessage = "Sign-up cancelled. Only one sign-up request at a time.";
+      } else if (err.code === "auth/network-request-failed") {
+        errorMessage = "Network error. Please check your internet connection.";
+      } else if (err.message && err.message.includes("initial state")) {
+        errorMessage =
+          "Browser storage issue detected. Please enable cookies and try again, or try using a different browser.";
+      } else {
+        errorMessage = handleFirebaseError(err);
+      }
+
+      setError(errorMessage);
       setGoogleLoading(false);
     }
   }, [router]);
@@ -358,7 +401,7 @@ export default function SignupPage() {
               <button
                 type="button"
                 className={styles.btnGoogle}
-                onClick={handleGoogleSignIn}
+                onClick={handleGoogleSignUp}
                 disabled={googleLoading}
               >
                 {googleLoading ? (

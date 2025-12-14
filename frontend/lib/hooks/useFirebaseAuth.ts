@@ -65,6 +65,7 @@ export function useFirebaseAuth() {
 
     try {
       const provider = new GoogleAuthProvider();
+      // Set custom parameters for better UX
       provider.setCustomParameters({
         prompt: "select_account",
       });
@@ -79,7 +80,25 @@ export function useFirebaseAuth() {
       return { user, supabaseUser };
     } catch (err: any) {
       setLoading(false);
-      const errorMessage = err.message || "Failed to sign in with Google";
+
+      // Provide more specific error messages
+      let errorMessage = "Failed to sign in with Google";
+
+      if (err.code === "auth/popup-closed-by-user") {
+        errorMessage =
+          "Sign-in cancelled. Please complete the Google sign-in process.";
+      } else if (err.code === "auth/popup-blocked") {
+        errorMessage = "Pop-up blocked. Please enable pop-ups for this site.";
+      } else if (err.code === "auth/cancelled-popup-request") {
+        errorMessage =
+          "Sign-in cancelled. Please wait for the current request to complete.";
+      } else if (err.message && err.message.includes("initial state")) {
+        errorMessage =
+          "Browser storage issue. Please enable cookies and try again.";
+      } else {
+        errorMessage = err.message || "Failed to sign in with Google";
+      }
+
       setError(errorMessage);
       throw new Error(errorMessage);
     }

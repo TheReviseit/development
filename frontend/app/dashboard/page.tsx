@@ -229,7 +229,18 @@ export default function Dashboard() {
             <button className={styles.actionCard}>
               <div className={styles.actionIcon}>🤖</div>
               <h3 className={styles.actionTitle}>Train AI</h3>
-              <p className={styles.actionDescription}>Add FAQs & responses</p>
+              <p className={styles.actionDescription}>
+                Add FAQs &amp; responses
+              </p>
+            </button>
+
+            <button
+              className={styles.actionCard}
+              onClick={() => router.push("/whatsapp-admin")}
+            >
+              <div className={styles.actionIcon}>💬</div>
+              <h3 className={styles.actionTitle}>WhatsApp Admin</h3>
+              <p className={styles.actionDescription}>Send test messages</p>
             </button>
           </div>
         </section>

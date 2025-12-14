@@ -177,6 +177,11 @@ export default function LoginPage() {
 
     try {
       const provider = new GoogleAuthProvider();
+      // Add custom parameters to improve auth flow
+      provider.setCustomParameters({
+        prompt: "select_account", // Always show account selection
+      });
+
       const result = await signInWithPopup(auth, provider);
       const idToken = await result.user.getIdToken();
 
@@ -203,7 +208,30 @@ export default function LoginPage() {
       router.push(onboardingCompleted ? "/dashboard" : "/onboarding");
     } catch (err: any) {
       console.error("Google sign in error:", err);
-      setError(handleFirebaseError(err));
+
+      // Handle specific Firebase auth errors
+      let errorMessage = "Failed to sign in with Google";
+
+      if (err.code === "auth/popup-closed-by-user") {
+        errorMessage =
+          "Sign-in cancelled. Please try again and complete the Google sign-in process.";
+      } else if (err.code === "auth/popup-blocked") {
+        errorMessage =
+          "Pop-up blocked by browser. Please allow pop-ups for this site and try again.";
+      } else if (err.code === "auth/unauthorized-domain") {
+        errorMessage = "This domain is not authorized. Please contact support.";
+      } else if (err.code === "auth/cancelled-popup-request") {
+        errorMessage = "Sign-in cancelled. Only one sign-in request at a time.";
+      } else if (err.code === "auth/network-request-failed") {
+        errorMessage = "Network error. Please check your internet connection.";
+      } else if (err.message && err.message.includes("initial state")) {
+        errorMessage =
+          "Browser storage issue detected. Please enable cookies and try again, or try using a different browser.";
+      } else {
+        errorMessage = handleFirebaseError(err);
+      }
+
+      setError(errorMessage);
       setGoogleLoading(false);
     }
   }, [router]);
