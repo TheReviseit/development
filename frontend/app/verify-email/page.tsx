@@ -228,14 +228,7 @@ export default function VerifyEmailPage() {
             )}
 
             <form className="auth-form" onSubmit={handleSubmit}>
-              <div
-                style={{
-                  display: "flex",
-                  gap: "12px",
-                  justifyContent: "center",
-                  marginBottom: "24px",
-                }}
-              >
+              <div className="otp-input-container">
                 {code.map((digit, index) => (
                   <input
                     key={index}
@@ -249,16 +242,6 @@ export default function VerifyEmailPage() {
                     onChange={(e) => handleChange(index, e.target.value)}
                     onKeyDown={(e) => handleKeyDown(index, e)}
                     onPaste={index === 0 ? handlePaste : undefined}
-                    style={{
-                      width: "50px",
-                      height: "60px",
-                      textAlign: "center",
-                      fontSize: "24px",
-                      fontWeight: "600",
-                      border: "2px solid #e5e7eb",
-                      borderRadius: "8px",
-                      outline: "none",
-                    }}
                     className="verification-input"
                     disabled={loading}
                   />
@@ -296,18 +279,6 @@ export default function VerifyEmailPage() {
           </div>
         </div>
       </div>
-
-      <style jsx>{`
-        .verification-input:focus {
-          border-color: #1a1a1a !important;
-          box-shadow: 0 0 0 3px rgba(26, 26, 26, 0.1);
-        }
-
-        .verification-input:disabled {
-          opacity: 0.6;
-          cursor: not-allowed;
-        }
-      `}</style>
     </div>
   );
 }
