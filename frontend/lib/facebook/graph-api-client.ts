@@ -1,0 +1,384 @@
+/**
+ * Meta Graph API Client
+ * Handles communication with Facebook Graph API
+ * Server-side only - includes access token handling
+ */
+
+import {
+  MetaBusinessManager,
+  MetaWhatsAppBusinessAccount,
+  MetaPhoneNumber,
+  MetaGraphAPIResponse,
+  MetaGraphAPIError,
+} from '@/types/facebook-whatsapp.types';
+
+const GRAPH_API_VERSION = 'v21.0';
+const GRAPH_API_BASE_URL = `https://graph.facebook.com/${GRAPH_API_VERSION}`;
+
+export class MetaGraphAPIClient {
+  private accessToken: string;
+
+  constructor(accessToken: string) {
+    this.accessToken = accessToken;
+  }
+
+  /**
+   * Make a GET request to Graph API
+   */
+  private async get<T>(
+    endpoint: string,
+    params: Record<string, string> = {}
+  ): Promise<T> {
+    const url = new URL(`${GRAPH_API_BASE_URL}${endpoint}`);
+    
+    // Add access token
+    url.searchParams.append('access_token', this.accessToken);
+    
+    // Add additional params
+    Object.entries(params).forEach(([key, value]) => {
+      url.searchParams.append(key, value);
+    });
+
+    const response = await fetch(url.toString(), {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+    });
+
+    const data = await response.json();
+
+    if (!response.ok || data.error) {
+      throw this.handleError(data.error || data);
+    }
+
+    return data;
+  }
+
+  /**
+   * Make a POST request to Graph API
+   */
+  private async post<T>(
+    endpoint: string,
+    body: Record<string, any> = {}
+  ): Promise<T> {
+    const url = new URL(`${GRAPH_API_BASE_URL}${endpoint}`);
+    url.searchParams.append('access_token', this.accessToken);
+
+    const response = await fetch(url.toString(), {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(body),
+    });
+
+    const data = await response.json();
+
+    if (!response.ok || data.error) {
+      throw this.handleError(data.error || data);
+    }
+
+    return data;
+  }
+
+  /**
+   * Handle Graph API errors
+   */
+  private handleError(error: MetaGraphAPIError): Error {
+    const message = error.message || 'Unknown Graph API error';
+    const code = error.code || 0;
+    const type = error.type || 'UnknownError';
+
+    return new Error(`[${type}:${code}] ${message}`);
+  }
+
+  /**
+   * Get user's basic profile information
+   */
+  public async getUserProfile(): Promise<{
+    id: string;
+    name: string;
+    email?: string;
+  }> {
+    const data = await this.get<{
+      id: string;
+      name: string;
+      email?: string;
+    }>('/me', { fields: 'id,name,email' });
+
+    return data;
+  }
+
+  /**
+   * Get user's Business Managers
+   * These are the businesses the user has access to
+   */
+  public async getBusinessManagers(): Promise<MetaBusinessManager[]> {
+    const response = await this.get<MetaGraphAPIResponse<MetaBusinessManager>>(
+      '/me/businesses',
+      { fields: 'id,name,created_time,verification_status,permitted_roles' }
+    );
+
+    return response.data || [];
+  }
+
+  /**
+   * Get WhatsApp Business Accounts owned by a Business Manager
+   */
+  public async getWhatsAppBusinessAccounts(
+    businessId: string
+  ): Promise<MetaWhatsAppBusinessAccount[]> {
+    const response = await this.get<MetaGraphAPIResponse<MetaWhatsAppBusinessAccount>>(
+      `/${businessId}/owned_whatsapp_business_accounts`,
+      {
+        fields: 'id,name,account_review_status,business_verification_status,currency,message_template_namespace,quality_rating,timezone_id',
+      }
+    );
+
+    return response.data || [];
+  }
+
+  /**
+   * Get phone numbers associated with a WhatsApp Business Account
+   */
+  public async getPhoneNumbers(wabaId: string): Promise<MetaPhoneNumber[]> {
+    const response = await this.get<MetaGraphAPIResponse<MetaPhoneNumber>>(
+      `/${wabaId}/phone_numbers`,
+      {
+        fields: 'id,display_phone_number,verified_name,quality_rating,code_verification_status,is_official_business_account,platform_type',
+      }
+    );
+
+    return response.data || [];
+  }
+
+  /**
+   * Send a WhatsApp message
+   */
+  public async sendWhatsAppMessage(
+    phoneNumberId: string,
+    to: string,
+    message: string
+  ): Promise<{
+    messaging_product: string;
+    contacts: Array<{ input: string; wa_id: string }>;
+    messages: Array<{ id: string }>;
+  }> {
+    const body = {
+      messaging_product: 'whatsapp',
+      recipient_type: 'individual',
+      to,
+      type: 'text',
+      text: {
+        preview_url: false,
+        body: message,
+      },
+    };
+
+    const response = await this.post<{
+      messaging_product: string;
+      contacts: Array<{ input: string; wa_id: string }>;
+      messages: Array<{ id: string }>;
+    }>(`/${phoneNumberId}/messages`, body);
+
+    return response;
+  }
+
+  /**
+   * Send a WhatsApp template message
+   */
+  public async sendTemplateMessage(
+    phoneNumberId: string,
+    to: string,
+    templateName: string,
+    languageCode: string,
+    components?: Array<{
+      type: 'header' | 'body' | 'button';
+      parameters: Array<{
+        type: 'text' | 'currency' | 'date_time' | 'image' | 'document' | 'video';
+        text?: string;
+        currency?: { fallback_value: string; code: string; amount_1000: number };
+        date_time?: { fallback_value: string };
+        image?: { link: string };
+        document?: { link: string; filename: string };
+        video?: { link: string };
+      }>;
+    }>
+  ): Promise<{
+    messaging_product: string;
+    contacts: Array<{ input: string; wa_id: string }>;
+    messages: Array<{ id: string }>;
+  }> {
+    const body = {
+      messaging_product: 'whatsapp',
+      recipient_type: 'individual',
+      to,
+      type: 'template',
+      template: {
+        name: templateName,
+        language: {
+          code: languageCode,
+        },
+        components: components || [],
+      },
+    };
+
+    const response = await this.post<{
+      messaging_product: string;
+      contacts: Array<{ input: string; wa_id: string }>;
+      messages: Array<{ id: string }>;
+    }>(`/${phoneNumberId}/messages`, body);
+
+    return response;
+  }
+
+  /**
+   * Get WhatsApp Business Account details
+   */
+  public async getWABADetails(wabaId: string): Promise<MetaWhatsAppBusinessAccount> {
+    const data = await this.get<MetaWhatsAppBusinessAccount>(
+      `/${wabaId}`,
+      {
+        fields: 'id,name,account_review_status,business_verification_status,currency,message_template_namespace,quality_rating,timezone_id',
+      }
+    );
+
+    return data;
+  }
+
+  /**
+   * Get phone number details
+   */
+  public async getPhoneNumberDetails(phoneNumberId: string): Promise<MetaPhoneNumber> {
+    const data = await this.get<MetaPhoneNumber>(
+      `/${phoneNumberId}`,
+      {
+        fields: 'id,display_phone_number,verified_name,quality_rating,code_verification_status,is_official_business_account,platform_type',
+      }
+    );
+
+    return data;
+  }
+
+  /**
+   * Register a webhook for WhatsApp messages
+   */
+  public async subscribeToWebhook(
+    wabaId: string,
+    callbackUrl: string,
+    verifyToken: string,
+    fields: string[] = ['messages']
+  ): Promise<{ success: boolean }> {
+    const body = {
+      override_callback_uri: callbackUrl,
+      verify_token: verifyToken,
+      subscribed_fields: fields,
+    };
+
+    const response = await this.post<{ success: boolean }>(
+      `/${wabaId}/subscribed_apps`,
+      body
+    );
+
+    return response;
+  }
+
+  /**
+   * Get message templates for a WABA
+   */
+  public async getMessageTemplates(wabaId: string): Promise<Array<{
+    name: string;
+    language: string;
+    status: string;
+    category: string;
+    id: string;
+  }>> {
+    const response = await this.get<MetaGraphAPIResponse<{
+      name: string;
+      language: string;
+      status: string;
+      category: string;
+      id: string;
+    }>>(
+      `/${wabaId}/message_templates`,
+      { fields: 'name,language,status,category,id' }
+    );
+
+    return response.data || [];
+  }
+
+  /**
+   * Validate access token
+   */
+  public async validateToken(): Promise<{
+    isValid: boolean;
+    app_id?: string;
+    application?: string;
+    expires_at?: number;
+    user_id?: string;
+  }> {
+    try {
+      const response = await this.get<{
+        data: {
+          app_id: string;
+          application: string;
+          expires_at: number;
+          is_valid: boolean;
+          user_id: string;
+        };
+      }>('/debug_token', { input_token: this.accessToken });
+
+      return {
+        isValid: response.data.is_valid,
+        app_id: response.data.app_id,
+        application: response.data.application,
+        expires_at: response.data.expires_at,
+        user_id: response.data.user_id,
+      };
+    } catch (error) {
+      return { isValid: false };
+    }
+  }
+
+  /**
+   * Exchange short-lived token for long-lived token (60 days)
+   */
+  public static async exchangeToken(
+    shortLivedToken: string
+  ): Promise<{
+    access_token: string;
+    token_type: string;
+    expires_in: number;
+  }> {
+    const appId = process.env.FACEBOOK_APP_ID;
+    const appSecret = process.env.FACEBOOK_APP_SECRET;
+
+    if (!appId || !appSecret) {
+      throw new Error('Facebook App credentials not configured');
+    }
+
+    const url = new URL(`${GRAPH_API_BASE_URL}/oauth/access_token`);
+    url.searchParams.append('grant_type', 'fb_exchange_token');
+    url.searchParams.append('client_id', appId);
+    url.searchParams.append('client_secret', appSecret);
+    url.searchParams.append('fb_exchange_token', shortLivedToken);
+
+    const response = await fetch(url.toString());
+    const data = await response.json();
+
+    if (!response.ok || data.error) {
+      throw new Error(data.error?.message || 'Token exchange failed');
+    }
+
+    return data;
+  }
+}
+
+/**
+ * Helper function to create a Graph API client with a user's access token
+ */
+export function createGraphAPIClient(accessToken: string): MetaGraphAPIClient {
+  return new MetaGraphAPIClient(accessToken);
+}
+
