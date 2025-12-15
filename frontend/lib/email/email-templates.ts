@@ -86,15 +86,17 @@ const baseEmailHtml = (content: string) => `
 // Welcome email template
 export const welcomeTemplate: EmailTemplate = {
   name: "welcome",
-  subject: "Welcome to ReviseIt!",
+  subject: "Welcome to ReviseIt! 🎉",
   generateHtml: (data: TemplateData) => {
     const userName = data.userName || "there";
     const content = `
-      <h1>Welcome to ReviseIt, ${userName}! 🎉</h1>
-      <p>We're thrilled to have you on board. ReviseIt is here to help you achieve your goals.</p>
-      <p>To get started, simply log in to your dashboard and explore our features.</p>
-      <a href="https://reviseit.in/dashboard" class="button" style="display: inline-block; padding: 12px 24px; background-color: #000000; color: #ffffff !important; text-decoration: none; border-radius: 6px; margin: 20px 0;">Go to Dashboard</a>
-      <p>If you have any questions, feel free to reach out to us at contact@reviseit.in</p>
+      <h1>Hey ${userName}, Welcome Aboard! 🚀</h1>
+      <p style="font-size: 16px; line-height: 1.8;">We're absolutely <strong>thrilled</strong> to have you here! You've just taken the first step towards revolutionizing how you manage customer conversations. Let's make magic happen! ✨</p>
+      
+      <p style="font-size: 16px; margin-top: 24px;">Ready to dive in? Your journey starts here!</p>
+      <a href="https://reviseit.in/dashboard" class="button" style="display: inline-block; padding: 12px 24px; background-color: #000000; color: #ffffff !important; text-decoration: none; border-radius: 6px; margin: 20px 0;">Go to Dashboard ❤️</a>
+      
+      <p style="font-size: 14px; color: #666; margin-top: 32px;">Got questions? We're here to help! Shoot us an email at <a href="mailto:contact@reviseit.in" style="color: #22c15a; text-decoration: none;">contact@reviseit.in</a> - we'd love to hear from you! 💚</p>
     `;
     return baseEmailHtml(content);
   },
@@ -178,15 +180,20 @@ export const welcomeAfterVerificationTemplate: EmailTemplate = {
   generateHtml: (data: TemplateData) => {
     const userName = data.userName || "there";
     const content = `
-      <h1>Welcome to ReviseIt, ${userName}! 🎉</h1>
-      <p>Your email has been verified successfully!</p>
-      <ul style="line-height: 2;">
-        <li>Complete your business profile</li>
-        <li>Set up WhatsApp integration</li>
-        <li>Create your first automated response</li>
+      <h1>Hey ${userName}, Welcome Aboard! 🚀</h1>
+      <p style="font-size: 16px; line-height: 1.8;">We're absolutely <strong>thrilled</strong> to have you here! You've just taken the first step towards revolutionizing how you manage customer conversations. Let's make magic happen! ✨</p>
+      
+      <p style="font-size: 16px; margin-top: 24px;"><strong>Here's what's waiting for you:</strong></p>
+      <ul style="line-height: 2; font-size: 15px;">
+        <li> <strong>Set up your business profile</strong> - Let's personalize your experience</li>
+        <li> <strong>Connect WhatsApp</strong> - Where the magic begins</li>
+        <li> <strong>Create automated responses</strong> - Save time, delight customers</li>
       </ul>
-      <a href="https://www.reviseit.in/onboarding" class="button" style="display: inline-block; padding: 12px 24px; background-color: #000000; color: #ffffff !important; text-decoration: none; border-radius: 6px; margin: 20px 0;">Complete Onboarding</a>
-      <p>If you have any questions, feel free to reach out to us at contact@reviseit.in</p>
+      
+      <p style="font-size: 16px; margin-top: 24px;">Ready to dive in? Your journey starts here!</p>
+      <a href="https://www.reviseit.in/onboarding" class="button" style="display: inline-block; padding: 12px 24px; background-color: #000000; color: #ffffff !important; text-decoration: none; border-radius: 6px; margin: 20px 0;">Let's Get Started ❤️ </a>
+      
+      <p style="font-size: 14px; color: #666; margin-top: 32px;">Got questions? We're here to help! Shoot us an email at <a href="mailto:contact@reviseit.in" style="color: #22c15a; text-decoration: none;">contact@reviseit.in</a> - we'd love to hear from you! 💚</p>
     `;
     return baseEmailHtml(content);
   },

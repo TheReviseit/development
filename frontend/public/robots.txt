@@ -82,4 +82,4 @@ Disallow: /
 
 # Sitemap location (critical for indexing)
 Sitemap: https://www.reviseit.in/sitemap.xml
-Sitemap: https://www.reviseit.in/sitemap.xml
+
