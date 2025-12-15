@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useState, useCallback, memo } from "react";
 import { useRouter } from "next/navigation";
 import dynamic from "next/dynamic";
+import Image from "next/image";
 import ButtonSpinner from "../components/ui/ButtonSpinner";
 import { handleFirebaseError } from "../utils/firebaseErrors";
 import {
@@ -264,7 +265,12 @@ export default function LoginPage() {
         {/* Right Side - Form */}
         <div className={styles.authRight}>
           <div className={styles.brandTag}>
-            <img src="/logo.png" alt="Revise It Logo" width="24" height="24" />
+            <Image
+              src="/logo.png"
+              alt="Revise It Logo"
+              width={24}
+              height={24}
+            />
             <span>Revise It</span>
           </div>
 

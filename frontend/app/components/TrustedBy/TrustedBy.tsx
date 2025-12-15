@@ -1,14 +1,7 @@
 "use client";
 
 import React, { useEffect, useRef } from "react";
-import { gsap } from "gsap";
-import { ScrollTrigger } from "gsap/ScrollTrigger";
 import "./TrustedBy.css";
-
-// Register ScrollTrigger plugin
-if (typeof window !== "undefined") {
-  gsap.registerPlugin(ScrollTrigger);
-}
 
 const TrustedBy = () => {
   const sectionRef = useRef<HTMLElement>(null);
@@ -30,7 +23,12 @@ const TrustedBy = () => {
   ];
 
   useEffect(() => {
-    if (sectionRef.current) {
+    if (!sectionRef.current) return;
+
+    import("gsap").then(async ({ gsap }) => {
+      const { ScrollTrigger } = await import("gsap/ScrollTrigger");
+      gsap.registerPlugin(ScrollTrigger);
+
       gsap.fromTo(
         sectionRef.current,
         { opacity: 0, y: 20 },
@@ -46,7 +44,7 @@ const TrustedBy = () => {
           },
         }
       );
-    }
+    });
   }, []);
 
   return (

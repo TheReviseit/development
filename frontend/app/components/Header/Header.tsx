@@ -52,7 +52,6 @@ export default function Header({ minimal = false }: HeaderProps) {
               height={48}
               className="header-logo-img"
               priority
-              unoptimized
             />
             <span className="header-logo-text">ReviseIt</span>
           </a>

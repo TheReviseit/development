@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { gsap } from "gsap";
 import FeatureCarousel from "./FeatureCarousel";
 import "./HeroSection.css";
 
@@ -19,60 +18,76 @@ export default function HeroSection() {
   const heroRightRef = useRef<HTMLDivElement>(null);
   const ctaRef = useRef<HTMLDivElement>(null);
   const dynamicTextRef = useRef<HTMLSpanElement>(null);
+  const gsapRef = useRef<typeof import("gsap").gsap | null>(null);
 
-  // Initial entrance animations
+  // Initial entrance animations with dynamic GSAP import - deferred until idle
   useEffect(() => {
-    const ctx = gsap.context(() => {
-      // Animate text from left
-      gsap.fromTo(
-        heroLeftRef.current?.querySelectorAll(
-          ".hero-title > span, .hero-description"
-        ) || [],
-        { opacity: 0, x: -60 },
-        {
-          opacity: 1,
-          x: 0,
-          duration: 0.8,
-          stagger: 0.15,
-          ease: "power3.out",
-        }
-      );
+    let ctx: ReturnType<typeof import("gsap").gsap.context> | null = null;
 
-      // Animate buttons from bottom
-      gsap.fromTo(
-        ctaRef.current?.querySelectorAll(".hero-cta-button") || [],
-        { opacity: 0, y: 40 },
-        {
-          opacity: 1,
-          y: 0,
-          duration: 0.8,
-          delay: 0.6,
-          stagger: 0.15,
-          ease: "power3.out",
-        }
-      );
+    const loadGsap = () => {
+      import("gsap").then(({ gsap }) => {
+        gsapRef.current = gsap;
+        ctx = gsap.context(() => {
+          // Animate text from left
+          gsap.fromTo(
+            heroLeftRef.current?.querySelectorAll(
+              ".hero-title > span, .hero-description"
+            ) || [],
+            { opacity: 0, x: -60 },
+            {
+              opacity: 1,
+              x: 0,
+              duration: 0.8,
+              stagger: 0.15,
+              ease: "power3.out",
+            }
+          );
 
-      // Animate carousel from right
-      gsap.fromTo(
-        heroRightRef.current,
-        { opacity: 0, x: 60 },
-        {
-          opacity: 1,
-          x: 0,
-          duration: 0.8,
-          delay: 0.3,
-          ease: "power3.out",
-        }
-      );
-    });
+          // Animate buttons from bottom
+          gsap.fromTo(
+            ctaRef.current?.querySelectorAll(".hero-cta-button") || [],
+            { opacity: 0, y: 40 },
+            {
+              opacity: 1,
+              y: 0,
+              duration: 0.8,
+              delay: 0.6,
+              stagger: 0.15,
+              ease: "power3.out",
+            }
+          );
 
-    return () => ctx.revert();
+          // Animate carousel from right
+          gsap.fromTo(
+            heroRightRef.current,
+            { opacity: 0, x: 60 },
+            {
+              opacity: 1,
+              x: 0,
+              duration: 0.8,
+              delay: 0.3,
+              ease: "power3.out",
+            }
+          );
+        });
+      });
+    };
+
+    // Defer GSAP loading until browser is idle to reduce TBT
+    if ("requestIdleCallback" in window) {
+      (window as Window).requestIdleCallback(loadGsap, { timeout: 1000 });
+    } else {
+      setTimeout(loadGsap, 200);
+    }
+
+    return () => ctx?.revert();
   }, []);
 
   // Smooth dynamic text rotation with GSAP
   useEffect(() => {
     const interval = setInterval(() => {
-      if (dynamicTextRef.current) {
+      if (dynamicTextRef.current && gsapRef.current) {
+        const gsap = gsapRef.current;
         // Fade out
         gsap.to(dynamicTextRef.current, {
           opacity: 0,
