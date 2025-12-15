@@ -3,6 +3,7 @@ import { Outfit, Plus_Jakarta_Sans } from "next/font/google";
 import "./globals.css";
 import Script from "next/script";
 import { SpeedInsights } from "@vercel/speed-insights/next";
+import { ServiceWorkerRegistration } from "@/components/pwa/ServiceWorkerRegistration";
 
 const jakarta = Plus_Jakarta_Sans({
   variable: "--font-jakarta",
@@ -515,6 +516,7 @@ export default function RootLayout({
         />
       </head>
       <body className={`${jakarta.variable} ${outfit.variable} antialiased`}>
+        <ServiceWorkerRegistration />
         {children}
         <SpeedInsights />
       </body>
