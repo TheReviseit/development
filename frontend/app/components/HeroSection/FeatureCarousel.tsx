@@ -90,6 +90,8 @@ export default function FeatureCarousel() {
                   fill
                   className="carousel-image"
                   priority={index === 0}
+                  loading={index === 0 ? "eager" : "lazy"}
+                  sizes="(max-width: 768px) 100vw, 50vw"
                 />
               </div>
               <div className="carousel-text-overlay">

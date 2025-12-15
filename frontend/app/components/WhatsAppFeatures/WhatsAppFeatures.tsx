@@ -1,14 +1,7 @@
 "use client";
 
 import React, { useEffect, useRef, useState } from "react";
-import { gsap } from "gsap";
-import { ScrollTrigger } from "gsap/ScrollTrigger";
 import "./WhatsAppFeatures.css";
-
-// Register ScrollTrigger plugin
-if (typeof window !== "undefined") {
-  gsap.registerPlugin(ScrollTrigger);
-}
 
 const WhatsAppFeatures = () => {
   const sectionRef = useRef<HTMLElement>(null);
@@ -62,8 +55,13 @@ const WhatsAppFeatures = () => {
   ];
 
   useEffect(() => {
-    // GSAP ScrollTrigger for title reveal
-    if (titleRef.current && subtitleRef.current) {
+    // GSAP ScrollTrigger for title reveal with dynamic import
+    if (!titleRef.current || !subtitleRef.current) return;
+
+    import("gsap").then(async ({ gsap }) => {
+      const { ScrollTrigger } = await import("gsap/ScrollTrigger");
+      gsap.registerPlugin(ScrollTrigger);
+
       gsap.fromTo(
         titleRef.current,
         { opacity: 0, y: 30 },
@@ -96,7 +94,7 @@ const WhatsAppFeatures = () => {
           },
         }
       );
-    }
+    });
 
     const observer = new IntersectionObserver(
       (entries) => {

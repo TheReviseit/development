@@ -1,14 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useRef } from "react";
-import { gsap } from "gsap";
-import { ScrollTrigger } from "gsap/ScrollTrigger";
 import "./Testimonials.css";
-
-// Register ScrollTrigger plugin
-if (typeof window !== "undefined") {
-  gsap.registerPlugin(ScrollTrigger);
-}
 
 interface Testimonial {
   id: number;
@@ -54,9 +47,14 @@ export default function Testimonials() {
   const titleRef = useRef<HTMLHeadingElement>(null);
   const subtitleRef = useRef<HTMLParagraphElement>(null);
 
-  // Scroll animations for header
+  // Scroll animations for header with dynamic GSAP import
   useEffect(() => {
-    if (titleRef.current && subtitleRef.current) {
+    if (!titleRef.current || !subtitleRef.current) return;
+
+    import("gsap").then(async ({ gsap }) => {
+      const { ScrollTrigger } = await import("gsap/ScrollTrigger");
+      gsap.registerPlugin(ScrollTrigger);
+
       gsap.fromTo(
         titleRef.current,
         { opacity: 0, y: 30 },
@@ -89,7 +87,7 @@ export default function Testimonials() {
           },
         }
       );
-    }
+    });
   }, []);
 
   // Detect mobile screen size

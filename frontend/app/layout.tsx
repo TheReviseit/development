@@ -1,9 +1,9 @@
 import type { Metadata } from "next";
 import { Outfit, Plus_Jakarta_Sans } from "next/font/google";
 import "./globals.css";
-import Script from "next/script";
 import { SpeedInsights } from "@vercel/speed-insights/next";
 import { ServiceWorkerRegistration } from "@/components/pwa/ServiceWorkerRegistration";
+import { PWAInstallPrompt } from "@/components/pwa/PWAInstallPrompt";
 
 const jakarta = Plus_Jakarta_Sans({
   variable: "--font-jakarta",
@@ -422,60 +422,54 @@ export default function RootLayout({
         />
 
         {/* Structured Data - Organization (Critical for Logo in Google) */}
-        <Script
+        <script
           id="organization-schema"
           type="application/ld+json"
-          strategy="beforeInteractive"
           dangerouslySetInnerHTML={{
             __html: JSON.stringify(organizationSchema),
           }}
         />
 
         {/* Structured Data - Website */}
-        <Script
+        <script
           id="website-schema"
           type="application/ld+json"
-          strategy="beforeInteractive"
           dangerouslySetInnerHTML={{
             __html: JSON.stringify(websiteSchema),
           }}
         />
 
         {/* Structured Data - WebPage */}
-        <Script
+        <script
           id="webpage-schema"
           type="application/ld+json"
-          strategy="beforeInteractive"
           dangerouslySetInnerHTML={{
             __html: JSON.stringify(webPageSchema),
           }}
         />
 
         {/* Structured Data - Software Application */}
-        <Script
+        <script
           id="software-schema"
           type="application/ld+json"
-          strategy="beforeInteractive"
           dangerouslySetInnerHTML={{
             __html: JSON.stringify(softwareAppSchema),
           }}
         />
 
         {/* Structured Data - Breadcrumb */}
-        <Script
+        <script
           id="breadcrumb-schema"
           type="application/ld+json"
-          strategy="beforeInteractive"
           dangerouslySetInnerHTML={{
             __html: JSON.stringify(breadcrumbSchema),
           }}
         />
 
         {/* Structured Data - FAQ */}
-        <Script
+        <script
           id="faq-schema"
           type="application/ld+json"
-          strategy="beforeInteractive"
           dangerouslySetInnerHTML={{
             __html: JSON.stringify(faqSchema),
           }}
@@ -517,6 +511,7 @@ export default function RootLayout({
       </head>
       <body className={`${jakarta.variable} ${outfit.variable} antialiased`}>
         <ServiceWorkerRegistration />
+        <PWAInstallPrompt />
         {children}
         <SpeedInsights />
       </body>
