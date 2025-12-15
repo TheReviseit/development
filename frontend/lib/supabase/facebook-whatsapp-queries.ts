@@ -3,14 +3,14 @@
  * Database operations for multi-tenant WhatsApp integration
  */
 
-import { createClient } from '@supabase/supabase-js';
+import { createClient } from "@supabase/supabase-js";
 import {
   ConnectedFacebookAccount,
   ConnectedBusinessManager,
   ConnectedWhatsAppAccount,
   ConnectedPhoneNumber,
   WhatsAppMessage,
-} from '@/types/facebook-whatsapp.types';
+} from "@/types/facebook-whatsapp.types";
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
@@ -33,10 +33,10 @@ export async function createFacebookAccount(data: {
   granted_permissions: string[];
 }): Promise<ConnectedFacebookAccount> {
   const { data: account, error } = await supabaseAdmin
-    .from('connected_facebook_accounts')
+    .from("connected_facebook_accounts")
     .insert({
       ...data,
-      status: 'active',
+      status: "active",
     })
     .select()
     .single();
@@ -49,14 +49,14 @@ export async function getFacebookAccountByUserId(
   userId: string
 ): Promise<ConnectedFacebookAccount | null> {
   const { data, error } = await supabaseAdmin
-    .from('connected_facebook_accounts')
-    .select('*')
-    .eq('user_id', userId)
-    .eq('status', 'active')
-    .is('deleted_at', null)
+    .from("connected_facebook_accounts")
+    .select("*")
+    .eq("user_id", userId)
+    .eq("status", "active")
+    .is("deleted_at", null)
     .single();
 
-  if (error && error.code !== 'PGRST116') throw error; // PGRST116 = no rows
+  if (error && error.code !== "PGRST116") throw error;
   return data;
 }
 
@@ -65,9 +65,9 @@ export async function updateFacebookAccount(
   updates: Partial<ConnectedFacebookAccount>
 ): Promise<ConnectedFacebookAccount> {
   const { data, error } = await supabaseAdmin
-    .from('connected_facebook_accounts')
+    .from("connected_facebook_accounts")
     .update(updates)
-    .eq('id', id)
+    .eq("id", id)
     .select()
     .single();
 
@@ -77,7 +77,7 @@ export async function updateFacebookAccount(
 
 export async function revokeFacebookAccount(id: string): Promise<void> {
   // Soft delete using the function we created
-  const { error } = await supabaseAdmin.rpc('soft_delete_facebook_connection', {
+  const { error } = await supabaseAdmin.rpc("soft_delete_facebook_connection", {
     p_facebook_account_id: id,
   });
 
@@ -98,7 +98,7 @@ export async function createBusinessManager(data: {
   permitted_roles: string[];
 }): Promise<ConnectedBusinessManager> {
   const { data: manager, error } = await supabaseAdmin
-    .from('connected_business_managers')
+    .from("connected_business_managers")
     .insert(data)
     .select()
     .single();
@@ -111,11 +111,11 @@ export async function getBusinessManagersByFacebookAccount(
   facebookAccountId: string
 ): Promise<ConnectedBusinessManager[]> {
   const { data, error } = await supabaseAdmin
-    .from('connected_business_managers')
-    .select('*')
-    .eq('facebook_account_id', facebookAccountId)
-    .eq('is_active', true)
-    .is('deleted_at', null);
+    .from("connected_business_managers")
+    .select("*")
+    .eq("facebook_account_id", facebookAccountId)
+    .eq("is_active", true)
+    .is("deleted_at", null);
 
   if (error) throw error;
   return data || [];
@@ -125,11 +125,11 @@ export async function getBusinessManagersByUserId(
   userId: string
 ): Promise<ConnectedBusinessManager[]> {
   const { data, error } = await supabaseAdmin
-    .from('connected_business_managers')
-    .select('*')
-    .eq('user_id', userId)
-    .eq('is_active', true)
-    .is('deleted_at', null);
+    .from("connected_business_managers")
+    .select("*")
+    .eq("user_id", userId)
+    .eq("is_active", true)
+    .is("deleted_at", null);
 
   if (error) throw error;
   return data || [];
@@ -150,7 +150,7 @@ export async function createWhatsAppAccount(data: {
   messaging_limit_tier: string | null;
 }): Promise<ConnectedWhatsAppAccount> {
   const { data: account, error } = await supabaseAdmin
-    .from('connected_whatsapp_accounts')
+    .from("connected_whatsapp_accounts")
     .insert(data)
     .select()
     .single();
@@ -163,11 +163,11 @@ export async function getWhatsAppAccountsByBusinessManager(
   businessManagerId: string
 ): Promise<ConnectedWhatsAppAccount[]> {
   const { data, error } = await supabaseAdmin
-    .from('connected_whatsapp_accounts')
-    .select('*')
-    .eq('business_manager_id', businessManagerId)
-    .eq('is_active', true)
-    .is('deleted_at', null);
+    .from("connected_whatsapp_accounts")
+    .select("*")
+    .eq("business_manager_id", businessManagerId)
+    .eq("is_active", true)
+    .is("deleted_at", null);
 
   if (error) throw error;
   return data || [];
@@ -177,11 +177,11 @@ export async function getWhatsAppAccountsByUserId(
   userId: string
 ): Promise<ConnectedWhatsAppAccount[]> {
   const { data, error } = await supabaseAdmin
-    .from('connected_whatsapp_accounts')
-    .select('*')
-    .eq('user_id', userId)
-    .eq('is_active', true)
-    .is('deleted_at', null);
+    .from("connected_whatsapp_accounts")
+    .select("*")
+    .eq("user_id", userId)
+    .eq("is_active", true)
+    .is("deleted_at", null);
 
   if (error) throw error;
   return data || [];
@@ -191,12 +191,12 @@ export async function getWhatsAppAccountByWabaId(
   wabaId: string
 ): Promise<ConnectedWhatsAppAccount | null> {
   const { data, error } = await supabaseAdmin
-    .from('connected_whatsapp_accounts')
-    .select('*')
-    .eq('waba_id', wabaId)
+    .from("connected_whatsapp_accounts")
+    .select("*")
+    .eq("waba_id", wabaId)
     .single();
 
-  if (error && error.code !== 'PGRST116') throw error;
+  if (error && error.code !== "PGRST116") throw error;
   return data;
 }
 
@@ -220,14 +220,14 @@ export async function createPhoneNumber(data: {
   // If this is primary, unset other primary numbers for this user
   if (data.is_primary) {
     await supabaseAdmin
-      .from('connected_phone_numbers')
+      .from("connected_phone_numbers")
       .update({ is_primary: false })
-      .eq('user_id', data.user_id)
-      .eq('is_primary', true);
+      .eq("user_id", data.user_id)
+      .eq("is_primary", true);
   }
 
   const { data: phoneNumber, error } = await supabaseAdmin
-    .from('connected_phone_numbers')
+    .from("connected_phone_numbers")
     .insert(data)
     .select()
     .single();
@@ -240,11 +240,11 @@ export async function getPhoneNumbersByWhatsAppAccount(
   whatsappAccountId: string
 ): Promise<ConnectedPhoneNumber[]> {
   const { data, error } = await supabaseAdmin
-    .from('connected_phone_numbers')
-    .select('*')
-    .eq('whatsapp_account_id', whatsappAccountId)
-    .eq('is_active', true)
-    .is('deleted_at', null);
+    .from("connected_phone_numbers")
+    .select("*")
+    .eq("whatsapp_account_id", whatsappAccountId)
+    .eq("is_active", true)
+    .is("deleted_at", null);
 
   if (error) throw error;
   return data || [];
@@ -254,11 +254,11 @@ export async function getPhoneNumbersByUserId(
   userId: string
 ): Promise<ConnectedPhoneNumber[]> {
   const { data, error } = await supabaseAdmin
-    .from('connected_phone_numbers')
-    .select('*')
-    .eq('user_id', userId)
-    .eq('is_active', true)
-    .is('deleted_at', null);
+    .from("connected_phone_numbers")
+    .select("*")
+    .eq("user_id", userId)
+    .eq("is_active", true)
+    .is("deleted_at", null);
 
   if (error) throw error;
   return data || [];
@@ -268,15 +268,15 @@ export async function getPrimaryPhoneNumber(
   userId: string
 ): Promise<ConnectedPhoneNumber | null> {
   const { data, error } = await supabaseAdmin
-    .from('connected_phone_numbers')
-    .select('*')
-    .eq('user_id', userId)
-    .eq('is_primary', true)
-    .eq('is_active', true)
-    .is('deleted_at', null)
+    .from("connected_phone_numbers")
+    .select("*")
+    .eq("user_id", userId)
+    .eq("is_primary", true)
+    .eq("is_active", true)
+    .is("deleted_at", null)
     .single();
 
-  if (error && error.code !== 'PGRST116') throw error;
+  if (error && error.code !== "PGRST116") throw error;
   return data;
 }
 
@@ -284,12 +284,12 @@ export async function getPhoneNumberByPhoneNumberId(
   phoneNumberId: string
 ): Promise<ConnectedPhoneNumber | null> {
   const { data, error } = await supabaseAdmin
-    .from('connected_phone_numbers')
-    .select('*')
-    .eq('phone_number_id', phoneNumberId)
+    .from("connected_phone_numbers")
+    .select("*")
+    .eq("phone_number_id", phoneNumberId)
     .single();
 
-  if (error && error.code !== 'PGRST116') throw error;
+  if (error && error.code !== "PGRST116") throw error;
   return data;
 }
 
@@ -298,9 +298,9 @@ export async function updatePhoneNumber(
   updates: Partial<ConnectedPhoneNumber>
 ): Promise<ConnectedPhoneNumber> {
   const { data, error } = await supabaseAdmin
-    .from('connected_phone_numbers')
+    .from("connected_phone_numbers")
     .update(updates)
-    .eq('id', id)
+    .eq("id", id)
     .select()
     .single();
 
@@ -317,7 +317,7 @@ export async function createMessage(data: {
   user_id: string;
   message_id: string;
   wamid?: string;
-  direction: 'inbound' | 'outbound';
+  direction: "inbound" | "outbound";
   from_number: string;
   to_number: string;
   message_type: string;
@@ -330,11 +330,12 @@ export async function createMessage(data: {
   status?: string;
   conversation_id?: string;
   conversation_category?: string;
+  conversation_origin?: string;
   metadata?: Record<string, any>;
   sent_at?: string;
 }): Promise<WhatsAppMessage> {
   const { data: message, error } = await supabaseAdmin
-    .from('whatsapp_messages')
+    .from("whatsapp_messages")
     .insert(data)
     .select()
     .single();
@@ -346,7 +347,7 @@ export async function createMessage(data: {
 export async function updateMessageStatus(
   messageId: string,
   updates: {
-    status: 'sent' | 'delivered' | 'read' | 'failed';
+    status: "sent" | "delivered" | "read" | "failed";
     delivered_at?: string;
     read_at?: string;
     failed_at?: string;
@@ -355,9 +356,9 @@ export async function updateMessageStatus(
   }
 ): Promise<WhatsAppMessage> {
   const { data, error } = await supabaseAdmin
-    .from('whatsapp_messages')
+    .from("whatsapp_messages")
     .update(updates)
-    .eq('message_id', messageId)
+    .eq("message_id", messageId)
     .select()
     .single();
 
@@ -371,10 +372,10 @@ export async function getMessagesByUserId(
   offset: number = 0
 ): Promise<WhatsAppMessage[]> {
   const { data, error } = await supabaseAdmin
-    .from('whatsapp_messages')
-    .select('*')
-    .eq('user_id', userId)
-    .order('created_at', { ascending: false })
+    .from("whatsapp_messages")
+    .select("*")
+    .eq("user_id", userId)
+    .order("created_at", { ascending: false })
     .range(offset, offset + limit - 1);
 
   if (error) throw error;
@@ -385,12 +386,12 @@ export async function getMessageById(
   messageId: string
 ): Promise<WhatsAppMessage | null> {
   const { data, error } = await supabaseAdmin
-    .from('whatsapp_messages')
-    .select('*')
-    .eq('message_id', messageId)
+    .from("whatsapp_messages")
+    .select("*")
+    .eq("message_id", messageId)
     .single();
 
-  if (error && error.code !== 'PGRST116') throw error;
+  if (error && error.code !== "PGRST116") throw error;
   return data;
 }
 
@@ -406,9 +407,7 @@ export async function logWebhookEvent(data: {
   signature_verified: boolean;
   signature_value?: string;
 }): Promise<void> {
-  const { error } = await supabaseAdmin
-    .from('webhook_events_log')
-    .insert(data);
+  const { error } = await supabaseAdmin.from("webhook_events_log").insert(data);
 
   if (error) throw error;
 }
@@ -419,13 +418,13 @@ export async function markWebhookProcessed(
   error?: string
 ): Promise<void> {
   const { error: updateError } = await supabaseAdmin
-    .from('webhook_events_log')
+    .from("webhook_events_log")
     .update({
       processed: true,
       processed_at: new Date().toISOString(),
       processing_error: error || null,
     })
-    .eq('id', id);
+    .eq("id", id);
 
   if (updateError) throw updateError;
 }
@@ -442,7 +441,7 @@ export async function getUserWhatsAppConnection(userId: string): Promise<{
   primaryPhoneNumber: ConnectedPhoneNumber | null;
 }> {
   const facebookAccount = await getFacebookAccountByUserId(userId);
-  
+
   if (!facebookAccount) {
     return {
       facebookAccount: null,
@@ -453,7 +452,9 @@ export async function getUserWhatsAppConnection(userId: string): Promise<{
     };
   }
 
-  const businessManagers = await getBusinessManagersByFacebookAccount(facebookAccount.id);
+  const businessManagers = await getBusinessManagersByFacebookAccount(
+    facebookAccount.id
+  );
   const whatsappAccounts = await getWhatsAppAccountsByUserId(userId);
   const phoneNumbers = await getPhoneNumbersByUserId(userId);
   const primaryPhoneNumber = await getPrimaryPhoneNumber(userId);
@@ -466,4 +467,3 @@ export async function getUserWhatsAppConnection(userId: string): Promise<{
     primaryPhoneNumber,
   };
 }
-
