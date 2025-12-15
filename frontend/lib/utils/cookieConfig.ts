@@ -56,7 +56,7 @@ export const COOKIE_SCRIPTS: CookieScript[] = [
     enabled: !!process.env.NEXT_PUBLIC_FB_PIXEL_ID,
     init: () => {
       // Initialize Facebook Pixel
-      !(function (f: any, b: any, e: any, v: any, n?: any, t?: any, s?: any) {
+      (function (f: any, b: any, e: any, v: any, n?: any, t?: any, s?: any) {
         if (f.fbq) return;
         n = f.fbq = function () {
           n.callMethod
