@@ -2,8 +2,7 @@ import { Metadata } from "next";
 
 // Signup page metadata - highly optimized for conversions
 export const metadata: Metadata = {
-  title:
-    "Sign Up Free - Start WhatsApp Automation Today | 14-Day Trial | ReviseIt",
+  title: "Sign Up Free - WhatsApp Automation | 14-Day Trial",
   description:
     "Create your free ReviseIt account in 60 seconds. Start automating WhatsApp messages with AI-powered responses. No credit card required for 14-day trial. Join 500+ businesses automating customer conversations.",
   keywords: [
@@ -46,4 +45,3 @@ export default function SignupLayout({
 }) {
   return <>{children}</>;
 }
-

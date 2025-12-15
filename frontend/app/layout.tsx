@@ -27,9 +27,8 @@ export const metadata: Metadata = {
 
   // Primary Meta Tags - Enhanced for better CTR
   title: {
-    default:
-      "ReviseIt - AI WhatsApp Automation & Business Messaging Platform | Free Trial",
-    template: "%s | ReviseIt - WhatsApp Automation Platform",
+    default: "ReviseIt - AI WhatsApp Automation Platform | Free Trial",
+    template: "%s | ReviseIt",
   },
   description:
     "Transform your WhatsApp into a powerful business tool with AI automation. Get instant customer responses, automated follow-ups, and CRM integration. Trusted by 500+ businesses. Start your 14-day free trial today!",
@@ -97,8 +96,7 @@ export const metadata: Metadata = {
     locale: "en_US",
     url: "https://www.reviseit.in",
     siteName: "ReviseIt - WhatsApp Automation Platform",
-    title:
-      "ReviseIt - AI WhatsApp Automation & Business Messaging Platform | Free Trial",
+    title: "ReviseIt - AI WhatsApp Automation Platform | Free Trial",
     description:
       "Transform your WhatsApp into a powerful business tool with AI automation. Get instant customer responses, automated follow-ups, and CRM integration. Trusted by 500+ businesses. Start free!",
     images: [
@@ -126,8 +124,7 @@ export const metadata: Metadata = {
     card: "summary_large_image",
     site: "@reviseit",
     creator: "@reviseit",
-    title:
-      "ReviseIt - AI WhatsApp Automation & Business Messaging Platform | Free Trial",
+    title: "ReviseIt - AI WhatsApp Automation Platform | Free Trial",
     description:
       "Transform your WhatsApp into a powerful business tool with AI automation. Get instant customer responses, automated follow-ups, and CRM integration. Start free today!",
     images: {

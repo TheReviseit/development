@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useState, useCallback, memo } from "react";
+import { useState, useCallback, memo, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import dynamic from "next/dynamic";
 import ButtonSpinner from "../components/ui/ButtonSpinner";
@@ -14,6 +14,7 @@ import {
 } from "firebase/auth";
 import { auth } from "@/src/firebase/firebase";
 import styles from "./Signup.module.css";
+import { useDebounce } from "@/lib/hooks/useDebounce";
 
 // Lazy load Toast component
 const Toast = dynamic(() => import("../components/Toast/Toast"), {
@@ -118,7 +119,69 @@ export default function SignupPage() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
+
+  // Real-time validation states
+  const [emailError, setEmailError] = useState("");
+  const [passwordError, setPasswordError] = useState("");
+  const [passwordStrength, setPasswordStrength] = useState("");
+
+  // Debounced values for validation
+  const debouncedEmail = useDebounce(email, 500);
+  const debouncedPassword = useDebounce(password, 300);
+  const debouncedConfirmPassword = useDebounce(confirmPassword, 300);
+
   const router = useRouter();
+
+  // Real-time email validation
+  useEffect(() => {
+    if (debouncedEmail) {
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(debouncedEmail)) {
+        setEmailError("Please enter a valid email address");
+      } else {
+        setEmailError("");
+      }
+    } else {
+      setEmailError("");
+    }
+  }, [debouncedEmail]);
+
+  // Real-time password strength validation
+  useEffect(() => {
+    if (debouncedPassword) {
+      if (debouncedPassword.length < 6) {
+        setPasswordStrength("weak");
+        setPasswordError("Password must be at least 6 characters");
+      } else if (debouncedPassword.length < 8) {
+        setPasswordStrength("medium");
+        setPasswordError("");
+      } else if (
+        debouncedPassword.length >= 8 &&
+        /[A-Z]/.test(debouncedPassword) &&
+        /[0-9]/.test(debouncedPassword)
+      ) {
+        setPasswordStrength("strong");
+        setPasswordError("");
+      } else {
+        setPasswordStrength("medium");
+        setPasswordError("");
+      }
+    } else {
+      setPasswordStrength("");
+      setPasswordError("");
+    }
+  }, [debouncedPassword]);
+
+  // Real-time password match validation
+  useEffect(() => {
+    if (debouncedConfirmPassword && debouncedPassword) {
+      if (debouncedPassword !== debouncedConfirmPassword) {
+        setPasswordError("Passwords do not match");
+      } else if (!passwordError || passwordError === "Passwords do not match") {
+        setPasswordError("");
+      }
+    }
+  }, [debouncedPassword, debouncedConfirmPassword, passwordError]);
 
   const clearError = useCallback(() => setError(""), []);
 
@@ -189,19 +252,18 @@ export default function SignupPage() {
 
     try {
       const provider = new GoogleAuthProvider();
-      // Add custom parameters to improve auth flow
+
       provider.setCustomParameters({
-        prompt: "select_account", // Always show account selection
+        prompt: "select_account",
       });
 
       const result = await signInWithPopup(auth, provider);
       const idToken = await result.user.getIdToken();
 
-      // PARALLEL execution - all three operations at once
       const [sessionSuccess, onboardingCompleted] = await Promise.all([
         createSessionWithRetry(idToken),
         checkOnboardingStatus(),
-        // Non-blocking user creation
+
         fetch("/api/auth/create-user", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -211,6 +273,16 @@ export default function SignupPage() {
             email: result.user.email || "",
           }),
         }).catch((err) => console.error("User creation error:", err)),
+
+        // Send welcome email for Google users
+        fetch("/api/auth/send-welcome", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            email: result.user.email || "",
+            userName: result.user.displayName || "",
+          }),
+        }).catch((err) => console.error("Welcome email error:", err)),
       ]);
 
       if (!sessionSuccess) {
@@ -221,7 +293,6 @@ export default function SignupPage() {
     } catch (err: any) {
       console.error("Google sign up error:", err);
 
-      // Handle specific Firebase auth errors
       let errorMessage = "Failed to sign up with Google";
 
       if (err.code === "auth/popup-closed-by-user") {
@@ -315,7 +386,11 @@ export default function SignupPage() {
                   onChange={(e) => setEmail(e.target.value)}
                   required
                   autoComplete="email"
+                  className={emailError ? styles.inputError : ""}
                 />
+                {emailError && (
+                  <span className={styles.validationError}>{emailError}</span>
+                )}
               </div>
 
               <div className={styles.formGroup}>
@@ -329,6 +404,7 @@ export default function SignupPage() {
                     onChange={(e) => setPassword(e.target.value)}
                     required
                     autoComplete="new-password"
+                    className={passwordError ? styles.inputError : ""}
                   />
                   <button
                     type="button"
@@ -339,6 +415,21 @@ export default function SignupPage() {
                     {showPassword ? <EyeIcon /> : <EyeOffIcon />}
                   </button>
                 </div>
+                {passwordStrength && password.length > 0 && (
+                  <div className={styles.passwordStrength}>
+                    <div
+                      className={`${styles.strengthBar} ${styles[passwordStrength]}`}
+                    ></div>
+                    <span className={styles.strengthText}>
+                      Password strength: {passwordStrength}
+                    </span>
+                  </div>
+                )}
+                {passwordError && (
+                  <span className={styles.validationError}>
+                    {passwordError}
+                  </span>
+                )}
               </div>
 
               <div className={styles.formGroup}>

@@ -423,6 +423,54 @@
   }
 }
 
+/* Validation Styles */
+.inputError {
+  border-color: #ef4444 !important;
+  background: rgba(239, 68, 68, 0.05) !important;
+}
+
+.validationError {
+  font-family: var(--font-primary);
+  font-size: 12px;
+  color: #ef4444;
+  margin-top: 4px;
+  display: block;
+}
+
+/* Password Strength Indicator */
+.passwordStrength {
+  margin-top: 8px;
+}
+
+.strengthBar {
+  height: 4px;
+  border-radius: 2px;
+  transition: all 0.3s ease;
+  margin-bottom: 4px;
+}
+
+.strengthBar.weak {
+  width: 33%;
+  background: #ef4444;
+}
+
+.strengthBar.medium {
+  width: 66%;
+  background: #f59e0b;
+}
+
+.strengthBar.strong {
+  width: 100%;
+  background: #22c55e;
+}
+
+.strengthText {
+  font-family: var(--font-primary);
+  font-size: 11px;
+  color: var(--text-muted);
+  text-transform: capitalize;
+}
+
 /* Spinner Animation */
 @keyframes spin {
   from {

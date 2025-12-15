@@ -13,7 +13,7 @@ const STATIC_ASSETS = [
   "/icon-192.png",
   "/icon-512.png",
   "/logo.png",
-  "/manifest.json",
+  "/manifest.webmanifest",
 ];
 
 // URLs to never cache (authentication, API calls)
