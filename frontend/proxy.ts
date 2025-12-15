@@ -2,14 +2,14 @@ import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
 /**
- * Middleware for Next.js Edge Runtime
+ * Proxy for Next.js Edge Runtime
  *
  * NOTE: This runs in Edge Runtime and cannot use Node.js APIs
  * - No Firebase Admin SDK
  * - No Supabase server client
  * - Session validation must happen in API routes
  */
-export async function middleware(request: NextRequest) {
+export async function proxy(request: NextRequest) {
   const session = request.cookies.get("session");
 
   // Public paths that don't require auth

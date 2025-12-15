@@ -4,17 +4,17 @@
  * from Meta's WhatsApp Cloud API
  */
 
-import { NextRequest, NextResponse } from 'next/server';
-import crypto from 'crypto';
+import { NextRequest, NextResponse } from "next/server";
+import crypto from "crypto";
 import {
   getPhoneNumberByPhoneNumberId,
   createMessage,
   updateMessageStatus,
   logWebhookEvent,
   markWebhookProcessed,
-} from '@/lib/supabase/facebook-whatsapp-queries';
-import { decryptToken } from '@/lib/encryption/crypto';
-import { WhatsAppWebhookPayload } from '@/types/facebook-whatsapp.types';
+} from "@/lib/supabase/facebook-whatsapp-queries";
+import { decryptToken } from "@/lib/encryption/crypto";
+import { WhatsAppWebhookPayload } from "@/types/facebook-whatsapp.types";
 
 /**
  * Verify webhook signature from Meta
@@ -27,9 +27,9 @@ function verifyWebhookSignature(
   if (!signature) return false;
 
   const expectedSignature = crypto
-    .createHmac('sha256', appSecret)
+    .createHmac("sha256", appSecret)
     .update(payload)
-    .digest('hex');
+    .digest("hex");
 
   return crypto.timingSafeEqual(
     Buffer.from(signature),
@@ -42,20 +42,20 @@ function verifyWebhookSignature(
  */
 export async function GET(request: NextRequest) {
   const searchParams = request.nextUrl.searchParams;
-  const mode = searchParams.get('hub.mode');
-  const token = searchParams.get('hub.verify_token');
-  const challenge = searchParams.get('hub.challenge');
+  const mode = searchParams.get("hub.mode");
+  const token = searchParams.get("hub.verify_token");
+  const challenge = searchParams.get("hub.challenge");
 
   // Verify token (you should configure this in Meta dashboard)
   const verifyToken = process.env.WHATSAPP_WEBHOOK_VERIFY_TOKEN;
 
-  if (mode === 'subscribe' && token === verifyToken) {
-    console.log('Webhook verified successfully');
+  if (mode === "subscribe" && token === verifyToken) {
+    console.log("Webhook verified successfully");
     return new NextResponse(challenge, { status: 200 });
   }
 
   return NextResponse.json(
-    { error: 'Forbidden - Invalid verify token' },
+    { error: "Forbidden - Invalid verify token" },
     { status: 403 }
   );
 }
@@ -68,27 +68,29 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.text();
-    const signature = request.headers.get('x-hub-signature-256');
+    const signature = request.headers.get("x-hub-signature-256");
 
     // Verify signature
     const appSecret = process.env.FACEBOOK_APP_SECRET;
     if (!appSecret) {
-      throw new Error('Facebook App Secret not configured');
+      throw new Error("Facebook App Secret not configured");
     }
 
     const isValid = verifyWebhookSignature(body, signature, appSecret);
-    
+
     // Parse payload
     const payload: WhatsAppWebhookPayload = JSON.parse(body);
 
     // Log webhook event
     const { data: logEntry } = await (async () => {
       try {
-        const supabase = (await import('@/lib/supabase/server')).default;
+        const { supabaseAdmin: supabase } = await import(
+          "@/lib/supabase/server"
+        );
         return await supabase
-          .from('webhook_events_log')
+          .from("webhook_events_log")
           .insert({
-            event_type: 'whatsapp_webhook',
+            event_type: "whatsapp_webhook",
             webhook_payload: payload,
             signature_verified: isValid,
             signature_value: signature,
@@ -96,7 +98,7 @@ export async function POST(request: NextRequest) {
           .select()
           .single();
       } catch (error) {
-        console.error('Error logging webhook:', error);
+        console.error("Error logging webhook:", error);
         return { data: null };
       }
     })();
@@ -107,18 +109,15 @@ export async function POST(request: NextRequest) {
 
     // Reject if signature is invalid
     if (!isValid) {
-      console.error('Invalid webhook signature');
+      console.error("Invalid webhook signature");
       if (webhookEventId) {
-        await markWebhookProcessed(webhookEventId, false, 'Invalid signature');
+        await markWebhookProcessed(webhookEventId, false, "Invalid signature");
       }
-      return NextResponse.json(
-        { error: 'Invalid signature' },
-        { status: 401 }
-      );
+      return NextResponse.json({ error: "Invalid signature" }, { status: 401 });
     }
 
     // Process webhook
-    if (payload.object === 'whatsapp_business_account') {
+    if (payload.object === "whatsapp_business_account") {
       for (const entry of payload.entry) {
         for (const change of entry.changes) {
           const value = change.value;
@@ -145,14 +144,16 @@ export async function POST(request: NextRequest) {
                   user_id: phoneNumber.user_id,
                   message_id: message.id,
                   wamid: message.id,
-                  direction: 'inbound',
+                  direction: "inbound",
                   from_number: message.from,
                   to_number: value.metadata.display_phone_number,
                   message_type: message.type,
                   message_body: message.text?.body || null,
-                  status: 'delivered',
-                  sent_at: new Date(parseInt(message.timestamp) * 1000).toISOString(),
-                  conversation_origin: 'user_initiated',
+                  status: "delivered",
+                  sent_at: new Date(
+                    parseInt(message.timestamp) * 1000
+                  ).toISOString(),
+                  conversation_origin: "user_initiated",
                   metadata: {
                     contact_name: value.contacts?.[0]?.profile?.name || null,
                   },
@@ -160,7 +161,7 @@ export async function POST(request: NextRequest) {
 
                 console.log(`Stored incoming message ${message.id}`);
               } catch (error) {
-                console.error('Error storing message:', error);
+                console.error("Error storing message:", error);
               }
             }
           }
@@ -173,19 +174,19 @@ export async function POST(request: NextRequest) {
                   status: status.status,
                 };
 
-                if (status.status === 'delivered') {
+                if (status.status === "delivered") {
                   updates.delivered_at = new Date(
                     parseInt(status.timestamp) * 1000
                   ).toISOString();
-                } else if (status.status === 'read') {
+                } else if (status.status === "read") {
                   updates.read_at = new Date(
                     parseInt(status.timestamp) * 1000
                   ).toISOString();
-                } else if (status.status === 'failed') {
+                } else if (status.status === "failed") {
                   updates.failed_at = new Date(
                     parseInt(status.timestamp) * 1000
                   ).toISOString();
-                  
+
                   if (status.errors && status.errors.length > 0) {
                     updates.error_code = status.errors[0].code.toString();
                     updates.error_message = status.errors[0].title;
@@ -194,9 +195,11 @@ export async function POST(request: NextRequest) {
 
                 await updateMessageStatus(status.id, updates);
 
-                console.log(`Updated message status: ${status.id} -> ${status.status}`);
+                console.log(
+                  `Updated message status: ${status.id} -> ${status.status}`
+                );
               } catch (error) {
-                console.error('Error updating message status:', error);
+                console.error("Error updating message status:", error);
               }
             }
           }
@@ -212,7 +215,7 @@ export async function POST(request: NextRequest) {
     // Always return 200 to Meta to acknowledge receipt
     return NextResponse.json({ success: true }, { status: 200 });
   } catch (error: any) {
-    console.error('Webhook processing error:', error);
+    console.error("Webhook processing error:", error);
 
     // Mark webhook as failed
     if (webhookEventId) {
@@ -223,4 +226,3 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ success: false }, { status: 200 });
   }
 }
-
