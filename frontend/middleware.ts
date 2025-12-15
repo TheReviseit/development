@@ -2,14 +2,14 @@ import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
 /**
- * Proxy for Next.js Edge Runtime
+ * Middleware for Next.js Edge Runtime
  *
  * NOTE: This runs in Edge Runtime and cannot use Node.js APIs
  * - No Firebase Admin SDK
  * - No Supabase server client
  * - Session validation must happen in API routes
  */
-export async function proxy(request: NextRequest) {
+export async function middleware(request: NextRequest) {
   const session = request.cookies.get("session");
 
   // Public paths that don't require auth
@@ -22,6 +22,7 @@ export async function proxy(request: NextRequest) {
     "/privacy",
     "/terms",
     "/data-deletion",
+    "/onboarding-embedded",
   ];
 
   const isPublicPath =
