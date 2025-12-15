@@ -148,7 +148,7 @@ export async function POST(request: NextRequest) {
                   from_number: message.from,
                   to_number: value.metadata.display_phone_number,
                   message_type: message.type,
-                  message_body: message.text?.body || null,
+                  message_body: message.text?.body ?? undefined,
                   status: "delivered",
                   sent_at: new Date(
                     parseInt(message.timestamp) * 1000
