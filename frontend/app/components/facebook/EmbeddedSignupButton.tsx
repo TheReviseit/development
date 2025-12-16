@@ -47,18 +47,32 @@ export default function EmbeddedSignupButton({
         return;
       }
 
-      // Check if all required permissions were granted
-      const missingPermissions = REQUIRED_FACEBOOK_PERMISSIONS.filter(
+      // Separate basic and advanced permissions
+      const basicPermissions = ["public_profile", "email"];
+      const advancedPermissions = [
+        "business_management",
+        "whatsapp_business_management",
+        "whatsapp_business_messaging",
+      ];
+
+      // Check basic permissions (required)
+      const missingBasicPermissions = basicPermissions.filter(
         (perm) => !result.grantedPermissions?.includes(perm)
       );
 
-      if (missingPermissions.length > 0) {
-        const errorMsg = `Missing required permissions: ${missingPermissions.join(
+      // Check advanced permissions (optional during development)
+      const missingAdvancedPermissions = advancedPermissions.filter(
+        (perm) => !result.grantedPermissions?.includes(perm)
+      );
+
+      // Block only if basic permissions are missing
+      if (missingBasicPermissions.length > 0) {
+        const errorMsg = `Missing required permissions: ${missingBasicPermissions.join(
           ", "
         )}`;
-        console.warn(
-          "[EmbeddedSignup] Missing permissions:",
-          missingPermissions
+        console.error(
+          "[EmbeddedSignup] Missing basic permissions:",
+          missingBasicPermissions
         );
         setError(errorMsg);
         onError?.(errorMsg);
@@ -66,20 +80,48 @@ export default function EmbeddedSignupButton({
         return;
       }
 
-      console.log("[EmbeddedSignup] Sending to backend...");
+      // Warn about missing advanced permissions but allow continuation
+      if (missingAdvancedPermissions.length > 0) {
+        console.warn(
+          "⚠️ [EmbeddedSignup] Missing advanced permissions:",
+          missingAdvancedPermissions.join(", "),
+          "\nThese permissions require Meta App Review approval.\nSome features may be limited until approved."
+        );
+      }
+
+      console.log("[EmbeddedSignup] Preparing to send to backend...");
+      console.log("[EmbeddedSignup] Result from SDK:", {
+        success: result.success,
+        hasAccessToken: !!result.accessToken,
+        hasUserID: !!result.userID,
+        accessTokenLength: result.accessToken?.length,
+        userID: result.userID,
+        expiresIn: result.expiresIn,
+        grantedPermissionsCount: result.grantedPermissions?.length,
+        grantedPermissions: result.grantedPermissions,
+        setupData: result.setupData,
+      });
+
       // Send to backend to complete setup
+      const requestBody = {
+        accessToken: result.accessToken,
+        userID: result.userID,
+        expiresIn: result.expiresIn,
+        grantedPermissions: result.grantedPermissions,
+        setupData: result.setupData,
+      };
+
+      console.log(
+        "[EmbeddedSignup] Request body:",
+        JSON.stringify(requestBody, null, 2)
+      );
+
       const response = await fetch("/api/facebook/embedded-signup", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({
-          accessToken: result.accessToken,
-          userID: result.userID,
-          expiresIn: result.expiresIn,
-          grantedPermissions: result.grantedPermissions,
-          setupData: result.setupData,
-        }),
+        body: JSON.stringify(requestBody),
       });
 
       const data = await response.json();

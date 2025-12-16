@@ -23,13 +23,34 @@ export default function GoogleSignInButton({
 
   const handleSignIn = async () => {
     setLocalLoading(true);
+    console.log("🔵 Starting Google sign-in...");
+
     try {
-      await signInWithGoogle();
-      if (onSuccess) onSuccess();
+      const result = await signInWithGoogle();
+      console.log("✅ Google sign-in successful:", result);
+
+      if (onSuccess) {
+        try {
+          onSuccess();
+        } catch (callbackError: any) {
+          console.error("❌ onSuccess callback error:", callbackError);
+        }
+      }
     } catch (err: any) {
-      if (onError) onError(err.message);
+      console.error("❌ Google sign-in error:", err);
+      const errorMessage =
+        err.message || "An unexpected error occurred during sign-in";
+
+      if (onError) {
+        try {
+          onError(errorMessage);
+        } catch (callbackError: any) {
+          console.error("❌ onError callback error:", callbackError);
+        }
+      }
     } finally {
       setLocalLoading(false);
+      console.log("🔵 Google sign-in process completed");
     }
   };
 

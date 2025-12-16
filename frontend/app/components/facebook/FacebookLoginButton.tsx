@@ -3,15 +3,15 @@
  * Handles Facebook OAuth login and permission requests
  */
 
-'use client';
+"use client";
 
-import { useState, useEffect } from 'react';
-import { facebookSDK } from '@/lib/facebook/facebook-sdk';
+import { useState, useEffect } from "react";
+import { facebookSDK } from "@/lib/facebook/facebook-sdk";
 import {
   REQUIRED_FACEBOOK_PERMISSIONS,
   PERMISSION_DESCRIPTIONS,
   PERMISSIONS_REQUIRING_REVIEW,
-} from '@/types/facebook-whatsapp.types';
+} from "@/types/facebook-whatsapp.types";
 
 interface FacebookLoginButtonProps {
   onSuccess: (data: {
@@ -29,7 +29,7 @@ export default function FacebookLoginButton({
   onSuccess,
   onError,
   disabled = false,
-  className = '',
+  className = "",
 }: FacebookLoginButtonProps) {
   const [isLoading, setIsLoading] = useState(false);
   const [sdkLoaded, setSdkLoaded] = useState(false);
@@ -43,8 +43,8 @@ export default function FacebookLoginButton({
         setSdkLoaded(true);
       })
       .catch((error) => {
-        console.error('Failed to load Facebook SDK:', error);
-        onError('Failed to load Facebook SDK');
+        console.error("Failed to load Facebook SDK:", error);
+        onError("Failed to load Facebook SDK");
       });
   }, []);
 
@@ -55,20 +55,47 @@ export default function FacebookLoginButton({
       const result = await facebookSDK.login();
 
       if (result.success && result.accessToken && result.userID) {
-        // Check if all required permissions were granted
-        const missingPermissions = REQUIRED_FACEBOOK_PERMISSIONS.filter(
+        // Separate basic and advanced permissions
+        const basicPermissions = ["public_profile", "email"];
+        const advancedPermissions = [
+          "business_management",
+          "whatsapp_business_management",
+          "whatsapp_business_messaging",
+        ];
+
+        // Check basic permissions (required)
+        const missingBasicPermissions = basicPermissions.filter(
           (perm) => !result.grantedPermissions?.includes(perm)
         );
 
-        if (missingPermissions.length > 0) {
+        // Check advanced permissions (optional during development)
+        const missingAdvancedPermissions = advancedPermissions.filter(
+          (perm) => !result.grantedPermissions?.includes(perm)
+        );
+
+        // Block login only if basic permissions are missing
+        if (missingBasicPermissions.length > 0) {
           onError(
-            `Missing required permissions: ${missingPermissions.join(', ')}. Please grant all permissions to continue.`
+            `Missing required permissions: ${missingBasicPermissions.join(
+              ", "
+            )}. Please grant all permissions to continue.`
           );
           setIsLoading(false);
           return;
         }
 
-        // Success
+        // Warn about missing advanced permissions but allow login
+        if (missingAdvancedPermissions.length > 0) {
+          console.warn(
+            "⚠️ Missing advanced permissions:",
+            missingAdvancedPermissions.join(", "),
+            "\n" +
+              "These permissions require Meta App Review approval.\n" +
+              "Some features may be limited until approved."
+          );
+        }
+
+        // Success - proceed with login
         onSuccess({
           accessToken: result.accessToken,
           userID: result.userID,
@@ -76,10 +103,10 @@ export default function FacebookLoginButton({
           grantedPermissions: result.grantedPermissions || [],
         });
       } else {
-        onError(result.error || 'Login failed');
+        onError(result.error || "Login failed");
       }
     } catch (error: any) {
-      onError(error.message || 'An unexpected error occurred');
+      onError(error.message || "An unexpected error occurred");
     } finally {
       setIsLoading(false);
     }
@@ -118,7 +145,7 @@ export default function FacebookLoginButton({
         onClick={() => setShowPermissionInfo(!showPermissionInfo)}
         className="permission-info-toggle"
       >
-        {showPermissionInfo ? 'Hide' : 'Show'} required permissions
+        {showPermissionInfo ? "Hide" : "Show"} required permissions
       </button>
 
       {showPermissionInfo && (
@@ -322,4 +349,3 @@ export default function FacebookLoginButton({
     </div>
   );
 }
-

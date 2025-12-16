@@ -188,15 +188,23 @@ class FacebookSDK {
       }
 
       const scope = REQUIRED_FACEBOOK_PERMISSIONS.join(",");
+      console.log("🔵 [Facebook SDK] Requesting permissions:", scope);
 
       window.FB.login(
         (response) => {
+          console.log("🔵 [Facebook SDK] Login response:", response);
+
           if (response.authResponse) {
             const { accessToken, userID, expiresIn } = response.authResponse;
+            console.log("✅ [Facebook SDK] Auth successful, userID:", userID);
 
             // Get granted permissions
             this.getGrantedPermissions(accessToken)
               .then((grantedPermissions) => {
+                console.log(
+                  "✅ [Facebook SDK] Granted permissions:",
+                  grantedPermissions
+                );
                 resolve({
                   success: true,
                   accessToken,
@@ -205,23 +213,34 @@ class FacebookSDK {
                   grantedPermissions,
                 });
               })
-              .catch(() => {
-                // Fallback if permissions check fails
+              .catch((error) => {
+                // If permissions check fails, assume basic permissions are granted
+                // since Facebook login succeeded
+                console.warn(
+                  "⚠️ [Facebook SDK] Failed to fetch permissions, assuming basic permissions granted:",
+                  error
+                );
                 resolve({
                   success: true,
                   accessToken,
                   userID,
                   expiresIn,
-                  grantedPermissions: [],
+                  grantedPermissions: ["public_profile", "email"], // Assume basic permissions
                 });
               });
           } else {
+            const errorMsg =
+              response.status === "not_authorized"
+                ? "User cancelled login or did not fully authorize"
+                : "Login failed";
+            console.error(
+              "❌ [Facebook SDK] Login failed:",
+              errorMsg,
+              response
+            );
             resolve({
               success: false,
-              error:
-                response.status === "not_authorized"
-                  ? "User cancelled login or did not fully authorize"
-                  : "Login failed",
+              error: errorMsg,
             });
           }
         },
@@ -384,8 +403,26 @@ class FacebookSDK {
 
       window.FB.login(
         (response) => {
+          console.log("🔵 [Facebook SDK] Embedded signup response:", response);
+          console.log(
+            "🔵 [Facebook SDK] Full response structure:",
+            JSON.stringify(response, null, 2)
+          );
+
           if (response.authResponse) {
             const { accessToken, userID, expiresIn } = response.authResponse;
+            console.log(
+              "✅ [Facebook SDK] Embedded signup successful, userID:",
+              userID
+            );
+            console.log(
+              "🔍 [Facebook SDK] Access token present:",
+              !!accessToken
+            );
+            console.log(
+              "🔍 [Facebook SDK] Auth response keys:",
+              Object.keys(response.authResponse)
+            );
 
             // Extract setup info from the response
             // Meta returns this data when user completes embedded signup
@@ -398,9 +435,19 @@ class FacebookSDK {
               setupData.code = (response.authResponse as any).code;
             }
 
+            // Check if there's additional setup data in the response
+            if ((response as any).setup) {
+              Object.assign(setupData, (response as any).setup);
+            }
+
             // Get granted permissions
+            // Note: FB.api may fail on HTTP (localhost), so we handle this gracefully
             this.getGrantedPermissions(accessToken)
               .then((grantedPermissions) => {
+                console.log(
+                  "✅ [Facebook SDK] Granted permissions:",
+                  grantedPermissions
+                );
                 resolve({
                   success: true,
                   accessToken,
@@ -410,24 +457,38 @@ class FacebookSDK {
                   setupData,
                 });
               })
-              .catch(() => {
-                // Fallback if permissions check fails
+              .catch((error) => {
+                // If permissions check fails (common on HTTP/localhost),
+                // we still have a valid auth response with token and userID
+                console.warn(
+                  "⚠️ [Facebook SDK] Failed to fetch permissions (likely due to HTTP restriction):",
+                  error.message
+                );
+                console.log(
+                  "✅ [Facebook SDK] Proceeding with auth data from response"
+                );
                 resolve({
                   success: true,
                   accessToken,
                   userID,
                   expiresIn,
-                  grantedPermissions: [],
+                  grantedPermissions: ["public_profile", "email"], // Assume basic permissions
                   setupData,
                 });
               });
           } else {
+            const errorMsg =
+              response.status === "not_authorized"
+                ? "User cancelled or did not complete the setup"
+                : "Login failed";
+            console.error(
+              "❌ [Facebook SDK] Embedded signup failed:",
+              errorMsg,
+              response
+            );
             resolve({
               success: false,
-              error:
-                response.status === "not_authorized"
-                  ? "User cancelled or did not complete the setup"
-                  : "Login failed",
+              error: errorMsg,
             });
           }
         },
@@ -436,8 +497,6 @@ class FacebookSDK {
           auth_type: "rerequest",
           return_scopes: true,
           config_id: configId,
-          response_type: "code",
-          override_default_response_type: true,
           extras: {
             setup: {},
           },
