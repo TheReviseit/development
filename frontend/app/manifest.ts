@@ -2,6 +2,7 @@ import { MetadataRoute } from "next";
 
 export default function manifest(): MetadataRoute.Manifest {
   return {
+    id: "/",
     name: "ReviseIt - AI WhatsApp Automation & Business Messaging Platform",
     short_name: "ReviseIt",
     description:
@@ -29,19 +30,19 @@ export default function manifest(): MetadataRoute.Manifest {
         purpose: "any",
       },
       {
-        src: "/logo.png",
-        sizes: "512x512",
-        type: "image/png",
-        purpose: "maskable",
-      },
-      {
         src: "/icon-192.png",
         sizes: "192x192",
         type: "image/png",
-        purpose: "maskable",
+        purpose: "any",
       },
       {
         src: "/icon-512.png",
+        sizes: "512x512",
+        type: "image/png",
+        purpose: "any",
+      },
+      {
+        src: "/logo.png",
         sizes: "512x512",
         type: "image/png",
         purpose: "maskable",

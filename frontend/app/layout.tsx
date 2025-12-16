@@ -158,8 +158,6 @@ export const metadata: Metadata = {
     ],
   },
 
-  manifest: "/manifest.json",
-
   // Verification - Ready for verification codes
   verification: {
     google: process.env.NEXT_PUBLIC_GOOGLE_VERIFICATION,
