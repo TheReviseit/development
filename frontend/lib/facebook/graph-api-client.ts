@@ -83,14 +83,54 @@ export class MetaGraphAPIClient {
   }
 
   /**
-   * Handle Graph API errors
+   * Handle Graph API errors with detailed context
    */
   private handleError(error: MetaGraphAPIError): Error {
     const message = error.message || 'Unknown Graph API error';
     const code = error.code || 0;
+    const subcode = error.error_subcode || 0;
     const type = error.type || 'UnknownError';
+    const traceId = error.fbtrace_id || 'N/A';
 
-    return new Error(`[${type}:${code}] ${message}`);
+    // Map common error codes to user-friendly messages
+    let userMessage = message;
+    
+    switch (code) {
+      case 190: // Invalid token
+        userMessage = 'Your Facebook session has expired. Please reconnect your account.';
+        break;
+      case 200: // Permission error
+      case 10: // Permission denied
+        userMessage = 'Missing required permissions. Please grant all requested permissions when connecting.';
+        break;
+      case 4: // Rate limit
+      case 17: // Rate limit
+      case 32: // Rate limit
+      case 613: // Rate limit
+        userMessage = 'Too many requests. Please wait a moment and try again.';
+        break;
+      case 368: // Temporarily blocked
+        userMessage = 'Your account is temporarily blocked from this action. Please try again later.';
+        break;
+      case 100: // Invalid parameter
+        userMessage = `Invalid request: ${message}`;
+        break;
+      case 803: // Some of the aliases you requested do not exist
+      case 804: // Cannot access the object
+        userMessage = 'The requested WhatsApp resource was not found or is not accessible.';
+        break;
+      default:
+        userMessage = message;
+    }
+
+    const errorObj = new Error(userMessage);
+    (errorObj as any).originalMessage = message;
+    (errorObj as any).code = code;
+    (errorObj as any).subcode = subcode;
+    (errorObj as any).type = type;
+    (errorObj as any).traceId = traceId;
+
+    return errorObj;
   }
 
   /**

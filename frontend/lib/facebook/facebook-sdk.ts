@@ -473,23 +473,27 @@ class FacebookSDK {
               })
               .catch((error) => {
                 // If permissions check fails (common on HTTP/localhost),
-                // we still have a valid auth response with token and userID
+                // we cannot verify client-side but should not fail the flow
+                // Backend will validate by testing actual API calls
                 console.warn(
-                  "⚠️ [Facebook SDK] Failed to fetch permissions (likely due to HTTP restriction):",
+                  "⚠️ [Facebook SDK] Failed to fetch permissions:",
                   error.message
                 );
                 console.log(
-                  "✅ [Facebook SDK] Proceeding with auth data from response"
+                  "⚠️ [Facebook SDK] This is normal on HTTP/localhost"
                 );
-                console.warn(
-                  "⚠️ [Facebook SDK] Cannot verify permissions client-side, backend will validate"
+                console.log(
+                  "✅ [Facebook SDK] Backend will validate by testing Graph API"
                 );
+                
+                // Return NULL to indicate "unknown" rather than "none granted"
+                // Backend will detect this and validate differently
                 resolve({
                   success: true,
                   accessToken,
                   userID,
                   expiresIn,
-                  grantedPermissions: [], // Force backend validation instead of assuming
+                  grantedPermissions: null as any, // null = unknown, [] = explicitly none
                   setupData,
                 });
               });
