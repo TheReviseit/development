@@ -18,7 +18,12 @@ declare global {
       }) => void;
       login: (
         callback: (response: any) => void,
-        options?: { scope: string; auth_type?: string; return_scopes?: boolean }
+        options?: {
+          scope: string;
+          auth_type?: string;
+          return_scopes?: boolean;
+          config_id?: string;
+        }
       ) => void;
       logout: (callback: () => void) => void;
       getLoginStatus: (callback: (response: any) => void) => void;
@@ -425,20 +430,29 @@ class FacebookSDK {
             );
 
             // Extract setup info from the response
-            // Meta returns this data when user completes embedded signup
+            // Meta returns this data at the ROOT level when user completes embedded signup
             const setupData: any = {};
 
-            // The auth response may contain setup info in different formats
-            // depending on Meta's API version
+            // Capture setup fields from root level (Meta's actual response structure)
+            if ((response as any).business_id) {
+              setupData.businessId = (response as any).business_id;
+            }
+            if ((response as any).waba_id) {
+              setupData.wabaId = (response as any).waba_id;
+            }
+            if ((response as any).phone_number_id) {
+              setupData.phoneNumberId = (response as any).phone_number_id;
+            }
+
+            // Check for authorization code (should NOT be present in token flow)
             if ((response.authResponse as any).code) {
-              // If using authorization code flow
+              console.warn(
+                "⚠️ [Facebook SDK] Received authorization code instead of token - check SDK config"
+              );
               setupData.code = (response.authResponse as any).code;
             }
 
-            // Check if there's additional setup data in the response
-            if ((response as any).setup) {
-              Object.assign(setupData, (response as any).setup);
-            }
+            console.log("🔍 [Facebook SDK] Captured setup data:", setupData);
 
             // Get granted permissions
             // Note: FB.api may fail on HTTP (localhost), so we handle this gracefully
@@ -467,12 +481,15 @@ class FacebookSDK {
                 console.log(
                   "✅ [Facebook SDK] Proceeding with auth data from response"
                 );
+                console.warn(
+                  "⚠️ [Facebook SDK] Cannot verify permissions client-side, backend will validate"
+                );
                 resolve({
                   success: true,
                   accessToken,
                   userID,
                   expiresIn,
-                  grantedPermissions: ["public_profile", "email"], // Assume basic permissions
+                  grantedPermissions: [], // Force backend validation instead of assuming
                   setupData,
                 });
               });
@@ -497,10 +514,7 @@ class FacebookSDK {
           auth_type: "rerequest",
           return_scopes: true,
           config_id: configId,
-          extras: {
-            setup: {},
-          },
-        } as any
+        }
       );
     });
   }
