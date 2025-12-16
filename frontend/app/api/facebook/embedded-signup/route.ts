@@ -46,7 +46,17 @@ export async function POST(request: NextRequest) {
 
     // Parse request body
     const body = await request.json();
-    const {
+    console.log("🔵 [Embedded Signup API] Received body:", {
+      hasAccessToken: !!body.accessToken,
+      hasUserID: !!body.userID,
+      hasCode: !!body.setupData?.code,
+      accessTokenLength: body.accessToken?.length,
+      userID: body.userID,
+      grantedPermissionsCount: body.grantedPermissions?.length,
+      setupData: body.setupData,
+    });
+
+    let {
       accessToken,
       userID,
       expiresIn,
@@ -54,9 +64,82 @@ export async function POST(request: NextRequest) {
       setupData = {},
     } = body;
 
+    // Handle authorization code flow
+    // If we have a code but no access token, exchange the code
+    if (!accessToken && setupData.code) {
+      console.log(
+        "🔄 [Embedded Signup API] Exchanging authorization code for access token..."
+      );
+      try {
+        const tokenResponse = await fetch(
+          `https://graph.facebook.com/v21.0/oauth/access_token?` +
+            `client_id=${process.env.NEXT_PUBLIC_FACEBOOK_APP_ID}` +
+            `&client_secret=${process.env.FACEBOOK_APP_SECRET}` +
+            `&code=${setupData.code}`,
+          { method: "GET" }
+        );
+
+        if (!tokenResponse.ok) {
+          const errorData = await tokenResponse.json();
+          console.error(
+            "❌ [Embedded Signup API] Code exchange failed:",
+            errorData
+          );
+          return NextResponse.json(
+            {
+              error: "Failed to exchange authorization code",
+              details: errorData,
+            },
+            { status: 400 }
+          );
+        }
+
+        const tokenData = await tokenResponse.json();
+        accessToken = tokenData.access_token;
+        expiresIn = tokenData.expires_in;
+
+        console.log(
+          "✅ [Embedded Signup API] Successfully exchanged code for token"
+        );
+
+        // Now get the user ID from the token
+        const meResponse = await fetch(
+          `https://graph.facebook.com/v21.0/me?access_token=${accessToken}`,
+          { method: "GET" }
+        );
+
+        if (meResponse.ok) {
+          const meData = await meResponse.json();
+          userID = meData.id;
+          console.log("✅ [Embedded Signup API] Got user ID:", userID);
+        }
+      } catch (error: any) {
+        console.error(
+          "❌ [Embedded Signup API] Error during code exchange:",
+          error
+        );
+        return NextResponse.json(
+          {
+            error: "Failed to process authorization code",
+            message: error.message,
+          },
+          { status: 500 }
+        );
+      }
+    }
+
     if (!accessToken || !userID) {
+      console.error("❌ [Embedded Signup API] Missing required fields:", {
+        accessToken: !!accessToken,
+        userID: !!userID,
+        hasCode: !!setupData.code,
+        receivedBody: body,
+      });
       return NextResponse.json(
-        { error: "Missing required fields: accessToken, userID" },
+        {
+          error: "Missing required fields: accessToken and userID",
+          hint: "Make sure Facebook login completed successfully",
+        },
         { status: 400 }
       );
     }
@@ -272,4 +355,3 @@ export async function POST(request: NextRequest) {
     );
   }
 }
-

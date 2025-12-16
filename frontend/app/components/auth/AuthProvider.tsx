@@ -79,23 +79,31 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
    */
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUserData) => {
-      setFirebaseUser(firebaseUserData);
+      try {
+        setFirebaseUser(firebaseUserData);
 
-      if (firebaseUserData) {
-        try {
-          // Get ID token and sync to Supabase
-          const idToken = await firebaseUserData.getIdToken();
-          await syncUser(idToken);
-        } catch (err) {
-          console.error("Auto-sync failed:", err);
-          setError(err);
+        if (firebaseUserData) {
+          try {
+            // Get ID token and sync to Supabase
+            const idToken = await firebaseUserData.getIdToken();
+            await syncUser(idToken);
+            console.log("✅ User synced successfully to Supabase");
+          } catch (err) {
+            console.error("❌ Auto-sync failed:", err);
+            setError(err);
+            // Don't throw - allow user to stay logged in to Firebase even if Supabase sync fails
+          }
+        } else {
+          // User signed out
+          setUser(null);
         }
-      } else {
-        // User signed out
-        setUser(null);
+      } catch (err) {
+        console.error("❌ Auth state change error:", err);
+        setError(err);
+      } finally {
+        // Always set loading to false, even if there's an error
+        setLoading(false);
       }
-
-      setLoading(false);
     });
 
     return () => unsubscribe();
