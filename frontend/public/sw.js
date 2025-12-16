@@ -1,19 +1,19 @@
 // Service Worker for ReviseIt PWA
 // Enhanced caching with separate strategies for different asset types
 
-const CACHE_VERSION = "v2";
+const CACHE_VERSION = "v3";
 const STATIC_CACHE = `reviseit-static-${CACHE_VERSION}`;
 const IMAGE_CACHE = `reviseit-images-${CACHE_VERSION}`;
 const FONT_CACHE = `reviseit-fonts-${CACHE_VERSION}`;
 
-// Static assets to precache
+// Static assets to precache (only files that definitely exist)
 const STATIC_ASSETS = [
   "/",
   "/favicon.ico",
   "/icon-192.png",
   "/icon-512.png",
   "/logo.png",
-  "/manifest.webmanifest",
+  "/offline",
 ];
 
 // URLs to never cache (authentication, API calls)
@@ -36,9 +36,21 @@ function shouldExcludeFromCache(url) {
 // Install event - precache static assets
 self.addEventListener("install", (event) => {
   event.waitUntil(
-    caches.open(STATIC_CACHE).then((cache) => {
-      return cache.addAll(STATIC_ASSETS);
-    })
+    caches
+      .open(STATIC_CACHE)
+      .then((cache) => {
+        // Use addAll with error handling for each item
+        return Promise.allSettled(
+          STATIC_ASSETS.map((url) =>
+            cache.add(url).catch((err) => {
+              console.warn(`Failed to cache ${url}:`, err);
+            })
+          )
+        );
+      })
+      .then(() => {
+        console.log("SW installed, static assets cached");
+      })
   );
   self.skipWaiting();
 });
@@ -55,7 +67,10 @@ self.addEventListener("activate", (event) => {
               name.startsWith("reviseit-") && !name.includes(CACHE_VERSION)
             );
           })
-          .map((name) => caches.delete(name))
+          .map((name) => {
+            console.log("Deleting old cache:", name);
+            return caches.delete(name);
+          })
       );
     })
   );
@@ -65,12 +80,41 @@ self.addEventListener("activate", (event) => {
 // Fetch event - intelligent caching strategies
 self.addEventListener("fetch", (event) => {
   const url = event.request.url;
+  const request = event.request;
 
   // Skip non-GET requests
-  if (event.request.method !== "GET") return;
+  if (request.method !== "GET") return;
 
   // Skip authentication and API requests entirely
   if (shouldExcludeFromCache(url)) return;
+
+  // Skip chrome-extension and other non-http(s) requests
+  if (!url.startsWith("http")) return;
+
+  // Handle navigation requests (HTML pages)
+  if (request.mode === "navigate") {
+    event.respondWith(
+      fetch(request)
+        .then((response) => {
+          // Cache successful navigation responses
+          if (response.status === 200) {
+            const responseClone = response.clone();
+            caches.open(STATIC_CACHE).then((cache) => {
+              cache.put(request, responseClone);
+            });
+          }
+          return response;
+        })
+        .catch(() => {
+          // Offline - try cache first, then offline page
+          return caches.match(request).then((cached) => {
+            if (cached) return cached;
+            return caches.match("/offline");
+          });
+        })
+    );
+    return;
+  }
 
   // Handle font requests (cache-first, long expiry)
   if (
@@ -79,32 +123,38 @@ self.addEventListener("fetch", (event) => {
   ) {
     event.respondWith(
       caches.open(FONT_CACHE).then((cache) => {
-        return cache.match(event.request).then((cached) => {
+        return cache.match(request).then((cached) => {
           if (cached) return cached;
-          return fetch(event.request).then((response) => {
-            cache.put(event.request, response.clone());
-            return response;
-          });
+          return fetch(request)
+            .then((response) => {
+              if (response.status === 200) {
+                cache.put(request, response.clone());
+              }
+              return response;
+            })
+            .catch(() => cached);
         });
       })
     );
     return;
   }
 
-  // Handle image requests (cache-first)
+  // Handle image requests (stale-while-revalidate)
   if (
     url.match(/\.(png|jpg|jpeg|gif|webp|svg|ico)$/) ||
     url.includes("/images/")
   ) {
     event.respondWith(
       caches.open(IMAGE_CACHE).then((cache) => {
-        return cache.match(event.request).then((cached) => {
-          const fetchPromise = fetch(event.request).then((response) => {
-            if (response.status === 200) {
-              cache.put(event.request, response.clone());
-            }
-            return response;
-          });
+        return cache.match(request).then((cached) => {
+          const fetchPromise = fetch(request)
+            .then((response) => {
+              if (response.status === 200) {
+                cache.put(request, response.clone());
+              }
+              return response;
+            })
+            .catch(() => null);
           return cached || fetchPromise;
         });
       })
@@ -112,22 +162,29 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
-  // Handle same-origin requests (network-first with cache fallback)
+  // Handle other same-origin requests (network-first with cache fallback)
   if (url.startsWith(self.location.origin)) {
     event.respondWith(
-      fetch(event.request)
+      fetch(request)
         .then((response) => {
           if (response.status === 200) {
             const responseClone = response.clone();
             caches.open(STATIC_CACHE).then((cache) => {
-              cache.put(event.request, responseClone);
+              cache.put(request, responseClone);
             });
           }
           return response;
         })
         .catch(() => {
-          return caches.match(event.request);
+          return caches.match(request);
         })
     );
+  }
+});
+
+// Handle messages from the client
+self.addEventListener("message", (event) => {
+  if (event.data && event.data.type === "SKIP_WAITING") {
+    self.skipWaiting();
   }
 });

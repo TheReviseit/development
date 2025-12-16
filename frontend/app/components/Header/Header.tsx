@@ -11,6 +11,7 @@ interface HeaderProps {
 export default function Header({ minimal = false }: HeaderProps) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const mobileMenuRef = useRef<HTMLDivElement>(null);
+  const mobileMenuButtonRef = useRef<HTMLButtonElement>(null);
 
   // Close mobile menu when clicking outside
   useEffect(() => {
@@ -18,7 +19,9 @@ export default function Header({ minimal = false }: HeaderProps) {
       if (
         mobileMenuOpen &&
         mobileMenuRef.current &&
-        !mobileMenuRef.current.contains(event.target as Node)
+        !mobileMenuRef.current.contains(event.target as Node) &&
+        mobileMenuButtonRef.current &&
+        !mobileMenuButtonRef.current.contains(event.target as Node)
       ) {
         setMobileMenuOpen(false);
       }
@@ -205,6 +208,7 @@ export default function Header({ minimal = false }: HeaderProps) {
 
           {/* Mobile Menu Button */}
           <button
+            ref={mobileMenuButtonRef}
             className="mobile-menu-btn"
             onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
             aria-label="Toggle menu"
