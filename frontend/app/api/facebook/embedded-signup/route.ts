@@ -201,8 +201,47 @@ export async function POST(request: NextRequest) {
       });
     }
 
+    // Validate that user has business_management permission
+    // This is CRITICAL - without it, getBusinessManagers() will return empty array
+    if (!grantedPermissions.includes("business_management")) {
+      console.error(
+        "❌ [Embedded Signup API] Missing business_management permission"
+      );
+      return NextResponse.json(
+        {
+          error: "Missing required permission: business_management",
+          hint: "Please accept all permissions when logging in with Facebook",
+          grantedPermissions: grantedPermissions,
+        },
+        { status: 403 }
+      );
+    }
+
     // Fetch and store all Business Managers
     const businessManagers = await graphClient.getBusinessManagers();
+
+    // Validate that at least one Business Manager was found
+    if (businessManagers.length === 0) {
+      console.error("❌ [Embedded Signup API] No Business Managers found");
+      console.error("Possible causes:");
+      console.error("1. User doesn't have business_management permission");
+      console.error("2. User doesn't have access to any Business Managers");
+      console.error("3. Access token is invalid or expired");
+
+      return NextResponse.json(
+        {
+          error: "No Business Managers found for this account",
+          hint: "Please ensure you have access to a Business Manager on Meta Business Suite",
+          troubleshooting: [
+            "Verify business_management permission was granted",
+            "Check if you have access to Meta Business Manager at business.facebook.com",
+            "Try creating a Business Manager if you don't have one",
+            "Ensure your Facebook account is an admin of the Business Manager",
+          ],
+        },
+        { status: 404 }
+      );
+    }
 
     const storedBusinessManagers = [];
     for (const bm of businessManagers) {

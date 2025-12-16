@@ -24,10 +24,18 @@ export default function EmbeddedSignupButton({
   className = "",
 }: EmbeddedSignupButtonProps) {
   const [isLoading, setIsLoading] = useState(false);
+  const [isProcessing, setIsProcessing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showPermissionInfo, setShowPermissionInfo] = useState(false);
 
   const handleConnect = async () => {
+    // Prevent double-clicks and race conditions
+    if (isProcessing) {
+      console.log("[EmbeddedSignup] Already processing, ignoring click");
+      return;
+    }
+
+    setIsProcessing(true);
     setIsLoading(true);
     setError(null);
 
@@ -47,45 +55,66 @@ export default function EmbeddedSignupButton({
         return;
       }
 
-      // Separate basic and advanced permissions
-      const basicPermissions = ["public_profile", "email"];
+      // CRITICAL: business_management is REQUIRED for Embedded Signup to function
+      // Without it, backend cannot fetch Business Managers and the flow fails silently
+      const criticalPermissions = ["business_management"];
+
+      // Advanced WhatsApp permissions (optional during development mode)
       const advancedPermissions = [
-        "business_management",
         "whatsapp_business_management",
         "whatsapp_business_messaging",
       ];
 
-      // Check basic permissions (required)
-      const missingBasicPermissions = basicPermissions.filter(
+      // Basic user profile permissions
+      const basicPermissions = ["public_profile", "email"];
+
+      // Check critical permissions - BLOCK if missing
+      const missingCritical = criticalPermissions.filter(
         (perm) => !result.grantedPermissions?.includes(perm)
       );
 
-      // Check advanced permissions (optional during development)
-      const missingAdvancedPermissions = advancedPermissions.filter(
+      // Check advanced permissions - WARN if missing
+      const missingAdvanced = advancedPermissions.filter(
         (perm) => !result.grantedPermissions?.includes(perm)
       );
 
-      // Block only if basic permissions are missing
-      if (missingBasicPermissions.length > 0) {
-        const errorMsg = `Missing required permissions: ${missingBasicPermissions.join(
-          ", "
-        )}`;
+      // Check basic permissions - WARN if missing
+      const missingBasic = basicPermissions.filter(
+        (perm) => !result.grantedPermissions?.includes(perm)
+      );
+
+      // BLOCK if critical permissions are missing
+      if (missingCritical.length > 0) {
+        const errorMsg =
+          `Critical permissions missing: ${missingCritical.join(", ")}. ` +
+          `These are required for WhatsApp Business integration. ` +
+          `Please accept all permissions and try again.`;
         console.error(
-          "[EmbeddedSignup] Missing basic permissions:",
-          missingBasicPermissions
+          "❌ [EmbeddedSignup] Missing critical permissions:",
+          missingCritical
         );
         setError(errorMsg);
         onError?.(errorMsg);
         setIsLoading(false);
+        setIsProcessing(false);
         return;
       }
 
-      // Warn about missing advanced permissions but allow continuation
-      if (missingAdvancedPermissions.length > 0) {
+      // Warn about missing advanced permissions but allow continuation (dev mode)
+      if (missingAdvanced.length > 0) {
         console.warn(
           "⚠️ [EmbeddedSignup] Missing advanced permissions:",
-          missingAdvancedPermissions.join(", "),
-          "\nThese permissions require Meta App Review approval.\nSome features may be limited until approved."
+          missingAdvanced.join(", "),
+          "\nThese permissions require Meta App Review approval.",
+          "\nSome features may be limited until approved."
+        );
+      }
+
+      // Warn about missing basic permissions (shouldn't happen but log if it does)
+      if (missingBasic.length > 0) {
+        console.warn(
+          "⚠️ [EmbeddedSignup] Missing basic permissions:",
+          missingBasic.join(", ")
         );
       }
 
@@ -145,6 +174,7 @@ export default function EmbeddedSignupButton({
       onError?.(errorMsg);
     } finally {
       setIsLoading(false);
+      setIsProcessing(false);
     }
   };
 
