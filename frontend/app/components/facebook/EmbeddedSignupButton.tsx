@@ -55,94 +55,108 @@ export default function EmbeddedSignupButton({
         return;
       }
 
-      // CRITICAL: business_management is REQUIRED for Embedded Signup to function
-      // Without it, backend cannot fetch Business Managers and the flow fails silently
-      const criticalPermissions = ["business_management"];
-
-      // Advanced WhatsApp permissions (optional during development mode)
-      const advancedPermissions = [
-        "whatsapp_business_management",
-        "whatsapp_business_messaging",
-      ];
-
-      // Basic user profile permissions
-      const basicPermissions = ["public_profile", "email"];
-
-      // Check critical permissions - BLOCK if missing
-      const missingCritical = criticalPermissions.filter(
-        (perm) => !result.grantedPermissions?.includes(perm)
-      );
-
-      // Check advanced permissions - WARN if missing
-      const missingAdvanced = advancedPermissions.filter(
-        (perm) => !result.grantedPermissions?.includes(perm)
-      );
-
-      // Check basic permissions - WARN if missing
-      const missingBasic = basicPermissions.filter(
-        (perm) => !result.grantedPermissions?.includes(perm)
-      );
-
-      // BLOCK if critical permissions are missing
-      if (missingCritical.length > 0) {
-        const errorMsg =
-          `Critical permissions missing: ${missingCritical.join(", ")}. ` +
-          `These are required for WhatsApp Business integration. ` +
-          `Please accept all permissions and try again.`;
-        console.error(
-          "❌ [EmbeddedSignup] Missing critical permissions:",
-          missingCritical
-        );
-        setError(errorMsg);
-        onError?.(errorMsg);
-        setIsLoading(false);
-        setIsProcessing(false);
-        return;
-      }
-
-      // Warn about missing advanced permissions but allow continuation (dev mode)
-      if (missingAdvanced.length > 0) {
-        console.warn(
-          "⚠️ [EmbeddedSignup] Missing advanced permissions:",
-          missingAdvanced.join(", "),
-          "\nThese permissions require Meta App Review approval.",
-          "\nSome features may be limited until approved."
-        );
-      }
-
-      // Warn about missing basic permissions (shouldn't happen but log if it does)
-      if (missingBasic.length > 0) {
-        console.warn(
-          "⚠️ [EmbeddedSignup] Missing basic permissions:",
-          missingBasic.join(", ")
-        );
-      }
-
-      console.log("[EmbeddedSignup] Preparing to send to backend...");
-      console.log("[EmbeddedSignup] Result from SDK:", {
+      // Log what we received from the SDK
+      console.log("[EmbeddedSignup] SDK result:", {
         success: result.success,
+        hasCode: !!(result as any).code,
         hasAccessToken: !!result.accessToken,
         hasUserID: !!result.userID,
-        accessTokenLength: result.accessToken?.length,
-        userID: result.userID,
-        expiresIn: result.expiresIn,
-        grantedPermissionsCount: result.grantedPermissions?.length,
         grantedPermissions: result.grantedPermissions,
         setupData: result.setupData,
       });
 
-      // Send to backend to complete setup
-      const requestBody = {
-        accessToken: result.accessToken,
+      // PERMISSION VALIDATION:
+      // With Authorization Code Flow (v21+), permissions are UNKNOWN on frontend
+      // because we receive a code, not a token. Backend will validate after code exchange.
+      //
+      // With Implicit Flow (deprecated), we may get permissions but only over HTTPS.
+      // On HTTP/localhost, permissions are also null.
+      //
+      // Strategy: Only block if permissions are EXPLICITLY known and critical ones are missing.
+
+      if (
+        result.grantedPermissions !== null &&
+        result.grantedPermissions !== undefined
+      ) {
+        // Permissions are known - validate them
+        const criticalPermissions = ["business_management"];
+        const missingCritical = criticalPermissions.filter(
+          (perm) => !result.grantedPermissions?.includes(perm)
+        );
+
+        if (missingCritical.length > 0) {
+          const errorMsg =
+            `Critical permissions missing: ${missingCritical.join(", ")}. ` +
+            `These are required for WhatsApp Business integration. ` +
+            `Please accept all permissions and try again.`;
+          console.error(
+            "❌ [EmbeddedSignup] Missing critical permissions:",
+            missingCritical
+          );
+          setError(errorMsg);
+          onError?.(errorMsg);
+          setIsLoading(false);
+          setIsProcessing(false);
+          return;
+        }
+
+        // Log warnings for advanced permissions (require Meta App Review)
+        const advancedPermissions = [
+          "whatsapp_business_management",
+          "whatsapp_business_messaging",
+        ];
+        const missingAdvanced = advancedPermissions.filter(
+          (perm) => !result.grantedPermissions?.includes(perm)
+        );
+        if (missingAdvanced.length > 0) {
+          console.warn(
+            "⚠️ [EmbeddedSignup] Missing advanced permissions:",
+            missingAdvanced.join(", "),
+            "\nThese require Meta App Review approval."
+          );
+        }
+      } else {
+        // Permissions are unknown (Code Flow or HTTP limitation)
+        // This is EXPECTED with Authorization Code Flow - backend will validate
+        console.log(
+          "ℹ️ [EmbeddedSignup] Permissions unknown on frontend (using Code Flow or HTTP).",
+          "Backend will validate permissions after code exchange."
+        );
+      }
+
+      console.log("[EmbeddedSignup] Preparing to send to backend...");
+
+      // Build request body - handle both code flow and token flow
+      const requestBody: any = {
         userID: result.userID,
-        expiresIn: result.expiresIn,
         grantedPermissions: result.grantedPermissions,
         setupData: result.setupData,
       };
 
+      // Authorization Code Flow (preferred, v21+)
+      if ((result as any).code) {
+        requestBody.code = (result as any).code;
+        console.log("[EmbeddedSignup] Using Authorization Code Flow");
+      }
+
+      // Implicit Flow fallback (deprecated)
+      if (result.accessToken) {
+        requestBody.accessToken = result.accessToken;
+        requestBody.expiresIn = result.expiresIn;
+        console.log("[EmbeddedSignup] Using Implicit Flow (legacy)");
+      }
+
       console.log(
         "[EmbeddedSignup] Request body:",
-        JSON.stringify(requestBody, null, 2)
+        JSON.stringify(
+          {
+            ...requestBody,
+            code: requestBody.code ? "[PRESENT]" : undefined,
+            accessToken: requestBody.accessToken ? "[PRESENT]" : undefined,
+          },
+          null,
+          2
+        )
       );
 
       const response = await fetch("/api/facebook/embedded-signup", {

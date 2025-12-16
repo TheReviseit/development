@@ -23,6 +23,13 @@ declare global {
           auth_type?: string;
           return_scopes?: boolean;
           config_id?: string;
+          response_type?: string;
+          override_default_response_type?: boolean;
+          extras?: {
+            setup?: Record<string, any>;
+            feature?: string;
+            sessionInfoVersion?: number;
+          };
         }
       ) => void;
       logout: (callback: () => void) => void;
@@ -373,15 +380,16 @@ class FacebookSDK {
 
   /**
    * Launch Embedded Signup with Configuration
-   * Uses Meta's pre-configured onboarding flow
-   * @returns Promise with setup information
+   * Uses Meta's pre-configured onboarding flow with Authorization Code Flow (v21+ required)
+   * @returns Promise with setup information including authorization code for backend exchange
    */
   public async launchEmbeddedSignup(): Promise<{
     success: boolean;
-    accessToken?: string;
+    code?: string; // Authorization code for backend exchange
+    accessToken?: string; // Fallback if token returned
     userID?: string;
     expiresIn?: number;
-    grantedPermissions?: string[];
+    grantedPermissions?: string[] | null; // null = unknown (HTTP limitation)
     setupData?: {
       businessId?: string;
       wabaId?: string;
@@ -415,15 +423,23 @@ class FacebookSDK {
           );
 
           if (response.authResponse) {
-            const { accessToken, userID, expiresIn } = response.authResponse;
+            // IMPORTANT: With response_type=code (Authorization Code Flow),
+            // authResponse contains 'code' instead of 'accessToken'
+            const authCode = (response.authResponse as any).code;
+            const accessToken = response.authResponse.accessToken;
+            const userID = response.authResponse.userID;
+            const expiresIn = response.authResponse.expiresIn;
+
+            console.log("✅ [Facebook SDK] Embedded signup successful");
             console.log(
-              "✅ [Facebook SDK] Embedded signup successful, userID:",
-              userID
+              "🔍 [Facebook SDK] Authorization code present:",
+              !!authCode
             );
             console.log(
               "🔍 [Facebook SDK] Access token present:",
               !!accessToken
             );
+            console.log("🔍 [Facebook SDK] User ID:", userID);
             console.log(
               "🔍 [Facebook SDK] Auth response keys:",
               Object.keys(response.authResponse)
@@ -436,67 +452,96 @@ class FacebookSDK {
             // Capture setup fields from root level (Meta's actual response structure)
             if ((response as any).business_id) {
               setupData.businessId = (response as any).business_id;
+              console.log(
+                "🔍 [Facebook SDK] Business ID:",
+                setupData.businessId
+              );
             }
             if ((response as any).waba_id) {
               setupData.wabaId = (response as any).waba_id;
+              console.log("🔍 [Facebook SDK] WABA ID:", setupData.wabaId);
             }
             if ((response as any).phone_number_id) {
               setupData.phoneNumberId = (response as any).phone_number_id;
-            }
-
-            // Check for authorization code (should NOT be present in token flow)
-            if ((response.authResponse as any).code) {
-              console.warn(
-                "⚠️ [Facebook SDK] Received authorization code instead of token - check SDK config"
+              console.log(
+                "🔍 [Facebook SDK] Phone Number ID:",
+                setupData.phoneNumberId
               );
-              setupData.code = (response.authResponse as any).code;
             }
 
             console.log("🔍 [Facebook SDK] Captured setup data:", setupData);
 
-            // Get granted permissions
-            // Note: FB.api may fail on HTTP (localhost), so we handle this gracefully
-            this.getGrantedPermissions(accessToken)
-              .then((grantedPermissions) => {
-                console.log(
-                  "✅ [Facebook SDK] Granted permissions:",
-                  grantedPermissions
-                );
-                resolve({
-                  success: true,
-                  accessToken,
-                  userID,
-                  expiresIn,
-                  grantedPermissions,
-                  setupData,
-                });
-              })
-              .catch((error) => {
-                // If permissions check fails (common on HTTP/localhost),
-                // we cannot verify client-side but should not fail the flow
-                // Backend will validate by testing actual API calls
-                console.warn(
-                  "⚠️ [Facebook SDK] Failed to fetch permissions:",
-                  error.message
-                );
-                console.log(
-                  "⚠️ [Facebook SDK] This is normal on HTTP/localhost"
-                );
-                console.log(
-                  "✅ [Facebook SDK] Backend will validate by testing Graph API"
-                );
-                
-                // Return NULL to indicate "unknown" rather than "none granted"
-                // Backend will detect this and validate differently
-                resolve({
-                  success: true,
-                  accessToken,
-                  userID,
-                  expiresIn,
-                  grantedPermissions: null as any, // null = unknown, [] = explicitly none
-                  setupData,
-                });
+            // If we have an authorization code (Code Flow - preferred for v21+)
+            if (authCode) {
+              console.log(
+                "✅ [Facebook SDK] Using Authorization Code Flow (v21+ compliant)"
+              );
+              // With code flow, we don't have a token on frontend to check permissions
+              // Backend will exchange code for token and validate permissions
+              resolve({
+                success: true,
+                code: authCode,
+                userID,
+                grantedPermissions: null, // Unknown - backend will verify after code exchange
+                setupData,
               });
+              return;
+            }
+
+            // Fallback: If we got an access token (Implicit Flow - deprecated but may still work)
+            if (accessToken) {
+              console.warn(
+                "⚠️ [Facebook SDK] Using Implicit Flow fallback - consider updating to Code Flow"
+              );
+
+              // Get granted permissions (may fail on HTTP)
+              this.getGrantedPermissions(accessToken)
+                .then((grantedPermissions) => {
+                  console.log(
+                    "✅ [Facebook SDK] Granted permissions:",
+                    grantedPermissions
+                  );
+                  resolve({
+                    success: true,
+                    accessToken,
+                    userID,
+                    expiresIn,
+                    grantedPermissions,
+                    setupData,
+                  });
+                })
+                .catch((error) => {
+                  // If permissions check fails (common on HTTP/localhost),
+                  // we cannot verify client-side but should not fail the flow
+                  console.warn(
+                    "⚠️ [Facebook SDK] Failed to fetch permissions:",
+                    error.message
+                  );
+                  console.log(
+                    "⚠️ [Facebook SDK] This is normal on HTTP/localhost. Backend will validate."
+                  );
+
+                  // Return NULL to indicate "unknown" rather than "none granted"
+                  resolve({
+                    success: true,
+                    accessToken,
+                    userID,
+                    expiresIn,
+                    grantedPermissions: null,
+                    setupData,
+                  });
+                });
+              return;
+            }
+
+            // Neither code nor token - unexpected state
+            console.error(
+              "❌ [Facebook SDK] No code or accessToken in response"
+            );
+            resolve({
+              success: false,
+              error: "Authentication response missing code or accessToken",
+            });
           } else {
             const errorMsg =
               response.status === "not_authorized"
@@ -514,10 +559,14 @@ class FacebookSDK {
           }
         },
         {
-          scope: REQUIRED_FACEBOOK_PERMISSIONS.join(","),
-          auth_type: "rerequest",
-          return_scopes: true,
           config_id: configId,
+          response_type: "code", // CRITICAL: Use Authorization Code Flow (v21+ required)
+          override_default_response_type: true, // Force code flow even if SDK defaults to token
+          scope: REQUIRED_FACEBOOK_PERMISSIONS.join(","),
+          extras: {
+            feature: "whatsapp_embedded_signup", // Required for WhatsApp Embedded Signup
+            sessionInfoVersion: 2, // Use latest session info format
+          },
         }
       );
     });

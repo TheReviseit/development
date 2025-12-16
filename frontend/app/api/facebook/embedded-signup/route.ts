@@ -49,10 +49,11 @@ export async function POST(request: NextRequest) {
     console.log("🔵 [Embedded Signup API] Received body:", {
       hasAccessToken: !!body.accessToken,
       hasUserID: !!body.userID,
-      hasCode: !!body.setupData?.code,
+      hasCode: !!body.code, // Code at root level (Authorization Code Flow)
+      hasSetupDataCode: !!body.setupData?.code, // Legacy: code in setupData
       accessTokenLength: body.accessToken?.length,
       userID: body.userID,
-      grantedPermissionsCount: body.grantedPermissions?.length,
+      grantedPermissions: body.grantedPermissions,
       setupData: body.setupData,
     });
 
@@ -60,31 +61,105 @@ export async function POST(request: NextRequest) {
       accessToken,
       userID,
       expiresIn,
+      code, // Authorization code at root level (v21+ Code Flow)
       grantedPermissions = null, // null = unknown permissions (frontend couldn't check)
       setupData = {},
     } = body;
 
-    // Handle authorization code flow
-    // If we have a code but no access token, exchange the code
-    if (!accessToken && setupData.code) {
+    // Determine which code to use (root level preferred, fallback to setupData)
+    const authorizationCode = code || setupData.code;
+
+    // Handle Authorization Code Flow
+    // If we have a code but no access token, exchange the code for a token
+    if (!accessToken && authorizationCode) {
       console.log(
         "🔄 [Embedded Signup API] Exchanging authorization code for access token..."
       );
+      console.log(
+        "🔍 [Embedded Signup API] Code length:",
+        authorizationCode.length
+      );
+
       try {
-        const tokenResponse = await fetch(
-          `https://graph.facebook.com/v21.0/oauth/access_token?` +
-            `client_id=${process.env.NEXT_PUBLIC_FACEBOOK_APP_ID}` +
-            `&client_secret=${process.env.FACEBOOK_APP_SECRET}` +
-            `&code=${setupData.code}`,
-          { method: "GET" }
+        // Build the token exchange URL
+        // NOTE: redirect_uri is REQUIRED and must match what was used during authorization
+        // For embedded signup, we typically don't need redirect_uri since SDK handles it
+        const tokenUrl = new URL(
+          "https://graph.facebook.com/v21.0/oauth/access_token"
         );
+        tokenUrl.searchParams.append(
+          "client_id",
+          process.env.NEXT_PUBLIC_FACEBOOK_APP_ID || ""
+        );
+        tokenUrl.searchParams.append(
+          "client_secret",
+          process.env.FACEBOOK_APP_SECRET || ""
+        );
+        tokenUrl.searchParams.append("code", authorizationCode);
+
+        // CRITICAL: redirect_uri must EXACTLY match the page URL where FB.login() was called
+        // Production: https://www.reviseit.in/onboarding
+        // Local dev: http://localhost:3000/onboarding
+        const redirectUri =
+          process.env.NODE_ENV === "production"
+            ? "https://www.reviseit.in/onboarding"
+            : "http://localhost:3000/onboarding";
+
+        tokenUrl.searchParams.append("redirect_uri", redirectUri);
+        console.log(
+          "🔍 [Embedded Signup API] Using redirect_uri:",
+          redirectUri
+        );
+
+        console.log(
+          "🔍 [Embedded Signup API] Token exchange URL (without secret):",
+          tokenUrl
+            .toString()
+            .replace(process.env.FACEBOOK_APP_SECRET || "", "[REDACTED]")
+        );
+
+        const tokenResponse = await fetch(tokenUrl.toString(), {
+          method: "GET",
+        });
 
         if (!tokenResponse.ok) {
           const errorData = await tokenResponse.json();
           console.error(
             "❌ [Embedded Signup API] Code exchange failed:",
-            errorData
+            JSON.stringify(errorData, null, 2)
           );
+
+          // Check for common errors
+          if (
+            errorData.error?.code === 100 &&
+            errorData.error?.error_subcode === 36008
+          ) {
+            // Invalid redirect_uri
+            return NextResponse.json(
+              {
+                error: "Code exchange failed: redirect_uri mismatch",
+                hint: "The redirect_uri must match the page that initiated login. Check NEXT_PUBLIC_SITE_URL environment variable.",
+                details: errorData,
+              },
+              { status: 400 }
+            );
+          }
+
+          if (
+            errorData.error?.code === 100 &&
+            errorData.error?.message?.includes("code")
+          ) {
+            // Code already used or expired
+            return NextResponse.json(
+              {
+                error: "Authorization code expired or already used",
+                hint: "Please try connecting again. Authorization codes can only be used once and expire quickly.",
+                details: errorData,
+              },
+              { status: 400 }
+            );
+          }
+
           return NextResponse.json(
             {
               error: "Failed to exchange authorization code",
@@ -101,17 +176,28 @@ export async function POST(request: NextRequest) {
         console.log(
           "✅ [Embedded Signup API] Successfully exchanged code for token"
         );
-
-        // Now get the user ID from the token
-        const meResponse = await fetch(
-          `https://graph.facebook.com/v21.0/me?access_token=${accessToken}`,
-          { method: "GET" }
+        console.log(
+          "🔍 [Embedded Signup API] Token expires in:",
+          expiresIn,
+          "seconds"
         );
 
-        if (meResponse.ok) {
-          const meData = await meResponse.json();
-          userID = meData.id;
-          console.log("✅ [Embedded Signup API] Got user ID:", userID);
+        // Get the user ID from the token if not provided
+        if (!userID) {
+          const meResponse = await fetch(
+            `https://graph.facebook.com/v21.0/me?access_token=${accessToken}`,
+            { method: "GET" }
+          );
+
+          if (meResponse.ok) {
+            const meData = await meResponse.json();
+            userID = meData.id;
+            console.log("✅ [Embedded Signup API] Got user ID:", userID);
+          } else {
+            console.warn(
+              "⚠️ [Embedded Signup API] Failed to get user ID from /me"
+            );
+          }
         }
       } catch (error: any) {
         console.error(
@@ -160,8 +246,13 @@ export async function POST(request: NextRequest) {
         "days"
       );
     } catch (error: any) {
-      console.error("⚠️ [Embedded Signup API] Token exchange failed:", error.message);
-      console.log("⚠️ [Embedded Signup API] Using short-lived token as fallback");
+      console.error(
+        "⚠️ [Embedded Signup API] Token exchange failed:",
+        error.message
+      );
+      console.log(
+        "⚠️ [Embedded Signup API] Using short-lived token as fallback"
+      );
       longLivedToken = accessToken;
       tokenExpiresIn = expiresIn;
     }
@@ -172,7 +263,7 @@ export async function POST(request: NextRequest) {
     // Validate the token before proceeding
     console.log("🔍 [Embedded Signup API] Validating access token...");
     const tokenValidation = await graphClient.validateToken();
-    
+
     if (!tokenValidation.isValid) {
       console.error("❌ [Embedded Signup API] Token validation failed");
       return NextResponse.json(
@@ -183,15 +274,84 @@ export async function POST(request: NextRequest) {
         { status: 401 }
       );
     }
-    
+
     console.log("✅ [Embedded Signup API] Token validated successfully");
     console.log("🔍 [Embedded Signup API] Token details:", {
       app_id: tokenValidation.app_id,
       user_id: tokenValidation.user_id,
-      expires_at: tokenValidation.expires_at 
-        ? new Date(tokenValidation.expires_at * 1000).toISOString() 
-        : 'never',
+      expires_at: tokenValidation.expires_at
+        ? new Date(tokenValidation.expires_at * 1000).toISOString()
+        : "never",
     });
+
+    // Validate permissions by fetching them from Graph API
+    // This is crucial for Code Flow where frontend can't check permissions
+    console.log("🔍 [Embedded Signup API] Validating permissions...");
+    let validatedPermissions: string[] = [];
+    try {
+      const permissionsResponse = await fetch(
+        `https://graph.facebook.com/v21.0/me/permissions?access_token=${longLivedToken}`,
+        { method: "GET" }
+      );
+
+      if (permissionsResponse.ok) {
+        const permissionsData = await permissionsResponse.json();
+        validatedPermissions =
+          permissionsData.data
+            ?.filter((p: any) => p.status === "granted")
+            ?.map((p: any) => p.permission) || [];
+
+        console.log(
+          "✅ [Embedded Signup API] Granted permissions:",
+          validatedPermissions
+        );
+
+        // Update grantedPermissions with validated data
+        grantedPermissions = validatedPermissions;
+
+        // Check for critical permission: business_management
+        if (!validatedPermissions.includes("business_management")) {
+          console.error(
+            "❌ [Embedded Signup API] Missing critical permission: business_management"
+          );
+          console.error("   Granted permissions:", validatedPermissions);
+          return NextResponse.json(
+            {
+              error: "Missing required permission: business_management",
+              hint: "Please reconnect and accept all permissions when prompted. The 'business_management' permission is required to access your Business Manager and WhatsApp accounts.",
+              grantedPermissions: validatedPermissions,
+            },
+            { status: 403 }
+          );
+        }
+
+        // Warn about other missing permissions but don't block
+        const requiredPermissions = [
+          "whatsapp_business_management",
+          "whatsapp_business_messaging",
+        ];
+        const missingAdvanced = requiredPermissions.filter(
+          (p) => !validatedPermissions.includes(p)
+        );
+        if (missingAdvanced.length > 0) {
+          console.warn(
+            "⚠️ [Embedded Signup API] Missing advanced permissions:",
+            missingAdvanced,
+            "\nThese require Meta App Review approval."
+          );
+        }
+      } else {
+        console.warn(
+          "⚠️ [Embedded Signup API] Failed to fetch permissions, continuing anyway"
+        );
+      }
+    } catch (permError) {
+      console.warn(
+        "⚠️ [Embedded Signup API] Error checking permissions:",
+        permError
+      );
+      // Continue anyway - we'll catch permission errors when fetching business managers
+    }
 
     // Get user profile from Facebook
     const profile = await graphClient.getUserProfile();
@@ -231,7 +391,6 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    
     let businessManagers;
     try {
       businessManagers = await graphClient.getBusinessManagers();
@@ -240,9 +399,12 @@ export async function POST(request: NextRequest) {
         "❌ [Embedded Signup API] Failed to fetch Business Managers:",
         error.message
       );
-      
+
       // Check if it's a permission error
-      if (error.message?.includes("403") || error.message?.includes("permission")) {
+      if (
+        error.message?.includes("403") ||
+        error.message?.includes("permission")
+      ) {
         return NextResponse.json(
           {
             error: "Missing required permission: business_management",
@@ -253,7 +415,7 @@ export async function POST(request: NextRequest) {
           { status: 403 }
         );
       }
-      
+
       // Other Graph API errors
       return NextResponse.json(
         {
