@@ -60,7 +60,7 @@ export async function POST(request: NextRequest) {
       accessToken,
       userID,
       expiresIn,
-      grantedPermissions = [],
+      grantedPermissions = null, // null = unknown permissions (frontend couldn't check)
       setupData = {},
     } = body;
 
@@ -154,14 +154,44 @@ export async function POST(request: NextRequest) {
       );
       longLivedToken = exchangeResult.access_token;
       tokenExpiresIn = exchangeResult.expires_in;
-    } catch (error) {
-      console.error("Token exchange failed:", error);
+      console.log(
+        "✅ [Embedded Signup API] Token exchanged, expires in:",
+        Math.floor(tokenExpiresIn / 86400),
+        "days"
+      );
+    } catch (error: any) {
+      console.error("⚠️ [Embedded Signup API] Token exchange failed:", error.message);
+      console.log("⚠️ [Embedded Signup API] Using short-lived token as fallback");
       longLivedToken = accessToken;
       tokenExpiresIn = expiresIn;
     }
 
     // Create Graph API client
     const graphClient = createGraphAPIClient(longLivedToken);
+
+    // Validate the token before proceeding
+    console.log("🔍 [Embedded Signup API] Validating access token...");
+    const tokenValidation = await graphClient.validateToken();
+    
+    if (!tokenValidation.isValid) {
+      console.error("❌ [Embedded Signup API] Token validation failed");
+      return NextResponse.json(
+        {
+          error: "Invalid access token",
+          hint: "The access token from Facebook is invalid or expired. Please try connecting again.",
+        },
+        { status: 401 }
+      );
+    }
+    
+    console.log("✅ [Embedded Signup API] Token validated successfully");
+    console.log("🔍 [Embedded Signup API] Token details:", {
+      app_id: tokenValidation.app_id,
+      user_id: tokenValidation.user_id,
+      expires_at: tokenValidation.expires_at 
+        ? new Date(tokenValidation.expires_at * 1000).toISOString() 
+        : 'never',
+    });
 
     // Get user profile from Facebook
     const profile = await graphClient.getUserProfile();
@@ -182,7 +212,7 @@ export async function POST(request: NextRequest) {
       facebookAccount = await updateFacebookAccount(existingAccount.id, {
         access_token: encryptedToken,
         expires_at: expiresAt,
-        granted_permissions: grantedPermissions,
+        granted_permissions: grantedPermissions || [], // Store empty array if null
         status: "active",
         facebook_user_name: profile.name,
         facebook_email: profile.email || null,
@@ -197,28 +227,43 @@ export async function POST(request: NextRequest) {
         access_token: encryptedToken,
         token_type: "Bearer",
         expires_at: expiresAt,
-        granted_permissions: grantedPermissions,
+        granted_permissions: grantedPermissions || [], // Store empty array if null
       });
     }
 
-    // Validate that user has business_management permission
-    // This is CRITICAL - without it, getBusinessManagers() will return empty array
-    if (!grantedPermissions.includes("business_management")) {
+    
+    let businessManagers;
+    try {
+      businessManagers = await graphClient.getBusinessManagers();
+    } catch (error: any) {
       console.error(
-        "❌ [Embedded Signup API] Missing business_management permission"
+        "❌ [Embedded Signup API] Failed to fetch Business Managers:",
+        error.message
       );
+      
+      // Check if it's a permission error
+      if (error.message?.includes("403") || error.message?.includes("permission")) {
+        return NextResponse.json(
+          {
+            error: "Missing required permission: business_management",
+            hint: "Please accept all permissions when logging in with Facebook. Click the button again and ensure you approve all permission requests.",
+            details: error.message,
+            grantedPermissions: grantedPermissions,
+          },
+          { status: 403 }
+        );
+      }
+      
+      // Other Graph API errors
       return NextResponse.json(
         {
-          error: "Missing required permission: business_management",
-          hint: "Please accept all permissions when logging in with Facebook",
-          grantedPermissions: grantedPermissions,
+          error: "Failed to fetch Business Managers from Meta",
+          hint: "There was an error communicating with Facebook. Please try again.",
+          details: error.message,
         },
-        { status: 403 }
+        { status: 500 }
       );
     }
-
-    // Fetch and store all Business Managers
-    const businessManagers = await graphClient.getBusinessManagers();
 
     // Validate that at least one Business Manager was found
     if (businessManagers.length === 0) {
