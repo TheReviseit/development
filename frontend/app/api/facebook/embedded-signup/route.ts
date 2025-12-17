@@ -97,75 +97,59 @@ export async function POST(request: NextRequest) {
         );
         tokenUrl.searchParams.append("code", authorizationCode);
 
-        // Try redirect_uri options
-        const redirectUriOptions = [
-          body.redirectUri,
-          process.env.NODE_ENV === "production"
-            ? "https://www.reviseit.in/"
-            : "http://localhost:3000/",
-          process.env.NODE_ENV === "production"
-            ? "https://www.reviseit.in/onboarding"
-            : "http://localhost:3000/onboarding",
-        ].filter(Boolean);
+        // CRITICAL: Use EXACT redirect_uri from frontend
+        // Authorization codes are SINGLE-USE and tied to the exact redirect_uri
+        // Trying multiple URIs will invalidate the code on first failure
+        const redirectUri = body.redirectUri;
 
-        let tokenData: any = null;
-        let lastError: any = null;
-
-        // First try without redirect_uri
-        try {
-          const response = await fetch(tokenUrl.toString(), { method: "GET" });
-          if (response.ok) {
-            tokenData = await response.json();
-            console.log(
-              "✅ [Embedded Signup API] Code exchange succeeded without redirect_uri"
-            );
-          } else {
-            lastError = await response.json();
-          }
-        } catch (err: any) {
-          console.log("⚠️ [Embedded Signup API] Without redirect_uri failed");
+        if (!redirectUri) {
+          console.error(
+            "❌ [Embedded Signup API] No redirect_uri provided in request body"
+          );
+          return NextResponse.json(
+            {
+              error: "redirect_uri is required for Authorization Code Flow",
+              hint: "Ensure the frontend sends 'redirectUri' in the request body",
+            },
+            { status: 400 }
+          );
         }
 
-        // Try each redirect_uri
-        if (!tokenData) {
-          for (const redirectUri of redirectUriOptions) {
-            try {
-              const urlWithRedirect = new URL(tokenUrl.toString());
-              urlWithRedirect.searchParams.append("redirect_uri", redirectUri);
-              const response = await fetch(urlWithRedirect.toString(), {
-                method: "GET",
-              });
-              if (response.ok) {
-                tokenData = await response.json();
-                console.log(
-                  `✅ [Embedded Signup API] Code exchange succeeded with: ${redirectUri}`
-                );
-                break;
-              } else {
-                lastError = await response.json();
-              }
-            } catch (err: any) {
-              console.log(
-                `⚠️ [Embedded Signup API] Failed with ${redirectUri}`
-              );
-            }
-          }
-        }
+        console.log(
+          "🔄 [Embedded Signup API] Exchanging code with redirect_uri:",
+          redirectUri
+        );
+        tokenUrl.searchParams.append("redirect_uri", redirectUri);
 
-        if (!tokenData) {
+        // Make ONE token exchange request (authorization codes are single-use)
+        const response = await fetch(tokenUrl.toString(), { method: "GET" });
+
+        if (!response.ok) {
+          const errorData = await response.json();
           console.error(
             "❌ [Embedded Signup API] Code exchange failed:",
-            lastError
+            JSON.stringify(errorData, null, 2)
           );
 
+          // Provide helpful error messages
           if (
-            lastError?.error?.code === 100 &&
-            lastError?.error?.message?.includes("code")
+            errorData?.error?.code === 100 &&
+            (errorData?.error?.message?.includes("code") ||
+              errorData?.error?.error_subcode === 36008)
           ) {
+            let hint = "The authorization code could not be exchanged.";
+            if (errorData?.error?.error_subcode === 36008) {
+              hint = `The redirect_uri doesn't match. Make sure your Facebook App's Valid OAuth Redirect URIs includes: ${redirectUri}`;
+            } else {
+              hint =
+                "The authorization code may have expired or already been used. Please try the OAuth flow again.";
+            }
+
             return NextResponse.json(
               {
-                error: "Authorization code expired or already used",
-                hint: "Please try connecting again. Authorization codes expire quickly.",
+                error: "Failed to exchange authorization code",
+                hint,
+                details: errorData,
               },
               { status: 400 }
             );
@@ -174,11 +158,17 @@ export async function POST(request: NextRequest) {
           return NextResponse.json(
             {
               error: "Failed to exchange authorization code",
-              details: lastError,
+              details: errorData,
             },
             { status: 400 }
           );
         }
+
+        const tokenData = await response.json();
+        console.log(
+          "✅ [Embedded Signup API] Code exchange succeeded with redirect_uri:",
+          redirectUri
+        );
 
         accessToken = tokenData.access_token;
         expiresIn = tokenData.expires_in;

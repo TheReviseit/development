@@ -86,115 +86,79 @@ export async function POST(request: NextRequest) {
         );
         tokenUrl.searchParams.append("code", code);
 
-        // Try different redirect_uri options
-        // Facebook requires EXACT match with what was used in FB.login()
-        const baseUrl =
-          process.env.NODE_ENV === "production"
-            ? "https://www.reviseit.in"
-            : "http://localhost:3000";
+        // CRITICAL: Use EXACT redirect_uri from frontend
+        // Authorization codes are SINGLE-USE and tied to the exact redirect_uri
+        // Trying multiple URIs will invalidate the code on first failure
+        const redirectUri = body.redirectUri;
 
-        const redirectUriOptions = [
-          body.redirectUri, // Exact URI from frontend (most likely to work)
-          `${baseUrl}/onboarding`, // Without trailing slash
-          `${baseUrl}/onboarding/`, // With trailing slash
-          `${baseUrl}`, // Base URL only
-          `${baseUrl}/`, // Base URL with trailing slash
-        ].filter(Boolean);
-
-        let tokenData: any = null;
-        let lastError: any = null;
-
-        // First try without redirect_uri
-        try {
-          console.log(
-            "🔄 [Login for Business API] Trying without redirect_uri..."
-          );
-          const response = await fetch(tokenUrl.toString(), { method: "GET" });
-          if (response.ok) {
-            tokenData = await response.json();
-            console.log(
-              "✅ [Login for Business API] Code exchange succeeded without redirect_uri"
-            );
-          } else {
-            lastError = await response.json();
-          }
-        } catch (err: any) {
-          console.log(
-            "⚠️ [Login for Business API] Without redirect_uri failed:",
-            err.message
-          );
-        }
-
-        // Try each redirect_uri option if needed
-        if (!tokenData) {
-          for (const redirectUri of redirectUriOptions) {
-            try {
-              console.log(
-                `🔄 [Login for Business API] Trying redirect_uri: ${redirectUri}`
-              );
-              const urlWithRedirect = new URL(tokenUrl.toString());
-              urlWithRedirect.searchParams.append("redirect_uri", redirectUri);
-
-              const response = await fetch(urlWithRedirect.toString(), {
-                method: "GET",
-              });
-              if (response.ok) {
-                tokenData = await response.json();
-                console.log(
-                  `✅ [Login for Business API] Code exchange succeeded with: ${redirectUri}`
-                );
-                break;
-              } else {
-                lastError = await response.json();
-              }
-            } catch (err: any) {
-              console.log(
-                `⚠️ [Login for Business API] Failed with ${redirectUri}:`,
-                err.message
-              );
-            }
-          }
-        }
-
-        if (!tokenData) {
+        if (!redirectUri) {
           console.error(
-            "❌ [Login for Business API] Code exchange failed. Last error:",
-            JSON.stringify(lastError, null, 2)
+            "❌ [Login for Business API] No redirect_uri provided in request body"
+          );
+          return NextResponse.json(
+            {
+              error: "redirect_uri is required for Authorization Code Flow",
+              hint: "Ensure the frontend sends 'redirectUri' in the request body",
+            },
+            { status: 400 }
+          );
+        }
+
+        console.log(
+          "🔄 [Login for Business API] Exchanging code with redirect_uri:",
+          redirectUri
+        );
+        tokenUrl.searchParams.append("redirect_uri", redirectUri);
+
+        // Make ONE token exchange request (authorization codes are single-use)
+        const response = await fetch(tokenUrl.toString(), { method: "GET" });
+
+        if (!response.ok) {
+          const errorData = await response.json();
+          console.error(
+            "❌ [Login for Business API] Code exchange failed:",
+            JSON.stringify(errorData, null, 2)
           );
           console.error("📋 [Login for Business API] Debug info:", {
-            receivedRedirectUri: body.redirectUri,
-            triedRedirectUris: redirectUriOptions,
+            redirectUri,
             hasCode: !!code,
             codeLength: code?.length,
-            errorCode: lastError?.error?.code,
-            errorMessage: lastError?.error?.message,
+            errorCode: errorData?.error?.code,
+            errorMessage: errorData?.error?.message,
+            errorSubcode: errorData?.error?.error_subcode,
           });
 
-          // Provide more helpful error messages
+          // Provide helpful error messages
           let hint =
             "The authorization code could not be exchanged for an access token.";
-          if (lastError?.error?.message?.includes("redirect_uri")) {
+          if (
+            errorData?.error?.message?.includes("redirect_uri") ||
+            errorData?.error?.error_subcode === 36008
+          ) {
+            hint = `The redirect_uri doesn't match. Make sure your Facebook App's Valid OAuth Redirect URIs includes: ${redirectUri}`;
+          } else if (errorData?.error?.message?.includes("code")) {
             hint =
-              "The redirect_uri doesn't match. Make sure your Facebook App's Valid OAuth Redirect URIs include: " +
-              (body.redirectUri || "the page URL where you clicked the button");
-          } else if (lastError?.error?.message?.includes("code")) {
-            hint =
-              "The authorization code may have expired. Codes expire quickly - try again.";
+              "The authorization code may have expired or already been used. Please try the OAuth flow again.";
           }
 
           return NextResponse.json(
             {
               error: "Failed to exchange authorization code",
               hint,
-              details: lastError,
+              details: errorData,
               debug: {
-                receivedRedirectUri: body.redirectUri,
-                triedRedirectUris: redirectUriOptions,
+                redirectUri,
               },
             },
             { status: 400 }
           );
         }
+
+        const tokenData = await response.json();
+        console.log(
+          "✅ [Login for Business API] Code exchange succeeded with redirect_uri:",
+          redirectUri
+        );
 
         accessToken = tokenData.access_token;
         expiresIn = tokenData.expires_in;

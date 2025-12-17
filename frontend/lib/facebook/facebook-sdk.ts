@@ -421,7 +421,7 @@ class FacebookSDK {
       // Log the redirect_uri being used - use origin only to avoid trailing slash issues
       const redirectUri =
         typeof window !== "undefined"
-          ? window.location.origin + "/"
+          ? window.location.origin + "/onboarding"
           : undefined;
       console.log(
         "🔵 [Facebook SDK] Using redirect_uri for OAuth:",
@@ -599,7 +599,7 @@ class FacebookSDK {
           scope: WHATSAPP_EMBEDDED_SIGNUP_PERMISSIONS.join(","),
           redirect_uri:
             typeof window !== "undefined"
-              ? window.location.origin + "/"
+              ? window.location.origin + "/onboarding"
               : undefined,
           extras: {
             feature: "whatsapp_embedded_signup",
@@ -637,7 +637,7 @@ class FacebookSDK {
 
       const redirectUri =
         typeof window !== "undefined"
-          ? window.location.origin + "/"
+          ? window.location.origin + "/onboarding"
           : undefined;
       console.log("🔵 [Facebook SDK] Using redirect_uri:", redirectUri);
 
