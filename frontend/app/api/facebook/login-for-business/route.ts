@@ -87,14 +87,18 @@ export async function POST(request: NextRequest) {
         tokenUrl.searchParams.append("code", code);
 
         // Try different redirect_uri options
+        // Facebook requires EXACT match with what was used in FB.login()
+        const baseUrl =
+          process.env.NODE_ENV === "production"
+            ? "https://www.reviseit.in"
+            : "http://localhost:3000";
+
         const redirectUriOptions = [
-          body.redirectUri,
-          process.env.NODE_ENV === "production"
-            ? "https://www.reviseit.in/"
-            : "http://localhost:3000/",
-          process.env.NODE_ENV === "production"
-            ? "https://www.reviseit.in/onboarding"
-            : "http://localhost:3000/onboarding",
+          body.redirectUri, // Exact URI from frontend (most likely to work)
+          `${baseUrl}/onboarding`, // Without trailing slash
+          `${baseUrl}/onboarding/`, // With trailing slash
+          `${baseUrl}`, // Base URL only
+          `${baseUrl}/`, // Base URL with trailing slash
         ].filter(Boolean);
 
         let tokenData: any = null;
@@ -154,13 +158,39 @@ export async function POST(request: NextRequest) {
 
         if (!tokenData) {
           console.error(
-            "❌ [Login for Business API] Code exchange failed:",
-            lastError
+            "❌ [Login for Business API] Code exchange failed. Last error:",
+            JSON.stringify(lastError, null, 2)
           );
+          console.error("📋 [Login for Business API] Debug info:", {
+            receivedRedirectUri: body.redirectUri,
+            triedRedirectUris: redirectUriOptions,
+            hasCode: !!code,
+            codeLength: code?.length,
+            errorCode: lastError?.error?.code,
+            errorMessage: lastError?.error?.message,
+          });
+
+          // Provide more helpful error messages
+          let hint =
+            "The authorization code could not be exchanged for an access token.";
+          if (lastError?.error?.message?.includes("redirect_uri")) {
+            hint =
+              "The redirect_uri doesn't match. Make sure your Facebook App's Valid OAuth Redirect URIs include: " +
+              (body.redirectUri || "the page URL where you clicked the button");
+          } else if (lastError?.error?.message?.includes("code")) {
+            hint =
+              "The authorization code may have expired. Codes expire quickly - try again.";
+          }
+
           return NextResponse.json(
             {
               error: "Failed to exchange authorization code",
+              hint,
               details: lastError,
+              debug: {
+                receivedRedirectUri: body.redirectUri,
+                triedRedirectUris: redirectUriOptions,
+              },
             },
             { status: 400 }
           );

@@ -418,10 +418,10 @@ class FacebookSDK {
         return;
       }
 
-      // Log the redirect_uri being used
+      // Log the redirect_uri being used - use origin only to avoid trailing slash issues
       const redirectUri =
         typeof window !== "undefined"
-          ? window.location.origin + window.location.pathname
+          ? window.location.origin + "/"
           : undefined;
       console.log(
         "🔵 [Facebook SDK] Using redirect_uri for OAuth:",
@@ -459,44 +459,66 @@ class FacebookSDK {
               Object.keys(response.authResponse)
             );
 
-            // Extract setup info from the response
-            // Meta returns this data at the ROOT level when user completes embedded signup
-            const setupData: any = {};
+            // ================================================================
+            // CRITICAL: Extract setup info from the ROOT level of the response
+            // Meta returns business_id, waba_id, phone_number_id at the ROOT
+            // of the FB.login() callback response, NOT inside authResponse
+            // ================================================================
 
-            // Capture setup fields from root level (Meta's actual response structure)
-            if ((response as any).business_id) {
-              setupData.businessId = (response as any).business_id;
-              console.log(
-                "🔍 [Facebook SDK] Business ID:",
-                setupData.businessId
+            // Log the FULL response structure to help debug
+            console.log(
+              "🔍 [Facebook SDK] Full response keys:",
+              Object.keys(response)
+            );
+            console.log(
+              "🔍 [Facebook SDK] Checking root-level IDs from Meta..."
+            );
+
+            // Extract IDs from root level (this is where Meta puts them)
+            const businessId = (response as any).business_id || undefined;
+            const wabaId = (response as any).waba_id || undefined;
+            const phoneNumberId =
+              (response as any).phone_number_id || undefined;
+
+            // Log what we found
+            console.log("✅ [Facebook SDK] Extracted from root level:", {
+              business_id: businessId || "NOT FOUND",
+              waba_id: wabaId || "NOT FOUND",
+              phone_number_id: phoneNumberId || "NOT FOUND",
+            });
+
+            // Build setupData object with all captured IDs
+            const setupData: {
+              businessId?: string;
+              wabaId?: string;
+              phoneNumberId?: string;
+            } = {
+              businessId,
+              wabaId,
+              phoneNumberId,
+            };
+
+            // Warn if critical IDs are missing
+            if (!wabaId) {
+              console.warn(
+                "⚠️ [Facebook SDK] waba_id NOT found in response!",
+                "This may cause 'No WhatsApp Business Account found' error.",
+                "Full response:",
+                JSON.stringify(response, null, 2)
               );
             }
-            if ((response as any).waba_id) {
-              setupData.wabaId = (response as any).waba_id;
-              console.log("🔍 [Facebook SDK] WABA ID:", setupData.wabaId);
-            }
-            if ((response as any).phone_number_id) {
-              setupData.phoneNumberId = (response as any).phone_number_id;
-              console.log(
-                "🔍 [Facebook SDK] Phone Number ID:",
-                setupData.phoneNumberId
-              );
-            }
 
-            console.log("🔍 [Facebook SDK] Captured setup data:", setupData);
+            console.log("🔍 [Facebook SDK] Final setupData:", setupData);
 
-            // If we have an authorization code (Code Flow - preferred for v21+)
             if (authCode) {
               console.log(
                 "✅ [Facebook SDK] Using Authorization Code Flow (v21+ compliant)"
               );
-              // With code flow, we don't have a token on frontend to check permissions
-              // Backend will exchange code for token and validate permissions
               resolve({
                 success: true,
                 code: authCode,
                 userID,
-                grantedPermissions: null, // Unknown - backend will verify after code exchange
+                grantedPermissions: null,
                 setupData,
               });
               return;
@@ -525,8 +547,6 @@ class FacebookSDK {
                   });
                 })
                 .catch((error) => {
-                  // If permissions check fails (common on HTTP/localhost),
-                  // we cannot verify client-side but should not fail the flow
                   console.warn(
                     "⚠️ [Facebook SDK] Failed to fetch permissions:",
                     error.message
@@ -574,36 +594,26 @@ class FacebookSDK {
         },
         {
           config_id: configId,
-          response_type: "code", // CRITICAL: Use Authorization Code Flow (v21+ required)
-          override_default_response_type: true, // Force code flow even if SDK defaults to token
-          // IMPORTANT: Only request WhatsApp permissions here
-          // business_management is obtained via loginForBusiness() (Step 1)
+          response_type: "code",
+          override_default_response_type: true,
           scope: WHATSAPP_EMBEDDED_SIGNUP_PERMISSIONS.join(","),
-          // CRITICAL: redirect_uri must be set here so that code exchange can use the same URI
-          // This tells Facebook which redirect_uri to associate with the authorization code
           redirect_uri:
             typeof window !== "undefined"
-              ? window.location.origin + window.location.pathname
+              ? window.location.origin + "/"
               : undefined,
           extras: {
-            feature: "whatsapp_embedded_signup", // Required for WhatsApp Embedded Signup
-            sessionInfoVersion: 2, // Use latest session info format
+            feature: "whatsapp_embedded_signup",
+            sessionInfoVersion: 2,
           },
         }
       );
     });
   }
 
-  /**
-   * STEP 1: Facebook Login for Business
-   * Gets business_management permission to access Business Managers
-   * NO config_id - this is standard Facebook Login
-   * @returns Promise with authorization code for backend exchange
-   */
   public async loginForBusiness(): Promise<{
     success: boolean;
-    code?: string; // Authorization code for backend exchange
-    accessToken?: string; // Fallback if token returned (implicit flow)
+    code?: string;
+    accessToken?: string;
     userID?: string;
     expiresIn?: number;
     grantedPermissions?: string[] | null;
@@ -617,9 +627,6 @@ class FacebookSDK {
         return;
       }
 
-      // Permission scope for Facebook Login for Business
-      // Only business_management, public_profile, email
-      // NO whatsapp permissions here (those come from Embedded Signup)
       const scope = FACEBOOK_LOGIN_PERMISSIONS.join(",");
 
       console.log(
@@ -630,7 +637,7 @@ class FacebookSDK {
 
       const redirectUri =
         typeof window !== "undefined"
-          ? window.location.origin + window.location.pathname
+          ? window.location.origin + "/"
           : undefined;
       console.log("🔵 [Facebook SDK] Using redirect_uri:", redirectUri);
 
@@ -655,19 +662,17 @@ class FacebookSDK {
             );
             console.log("🔍 [Facebook SDK] User ID:", userID);
 
-            // Authorization Code Flow (preferred)
             if (authCode) {
               console.log("✅ [Facebook SDK] Using Authorization Code Flow");
               resolve({
                 success: true,
                 code: authCode,
                 userID,
-                grantedPermissions: null, // Backend will verify
+                grantedPermissions: null,
               });
               return;
             }
 
-            // Implicit Flow fallback
             if (accessToken) {
               console.warn("⚠️ [Facebook SDK] Using Implicit Flow fallback");
               this.getGrantedPermissions(accessToken)
@@ -712,8 +717,7 @@ class FacebookSDK {
           }
         },
         {
-          // NO config_id for Facebook Login for Business
-          response_type: "code", // Authorization Code Flow
+          response_type: "code",
           override_default_response_type: true,
           scope,
           auth_type: "rerequest",
@@ -725,5 +729,4 @@ class FacebookSDK {
   }
 }
 
-// Export singleton instance
 export const facebookSDK = FacebookSDK.getInstance();

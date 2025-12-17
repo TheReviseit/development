@@ -382,36 +382,84 @@ export async function POST(request: NextRequest) {
     // Fallback: Fetch from API if setupData incomplete
     if (!wabaId) {
       console.log(
-        "🔄 [Embedded Signup API] wabaId not in setupData, fetching from API..."
+        "🔄 [Embedded Signup API] wabaId not in setupData, waiting 2s for Meta to process..."
       );
 
-      try {
-        const wabaResponse = await fetch(
-          `https://graph.facebook.com/v21.0/me/whatsapp_business_accounts?access_token=${longLivedToken}`
-        );
+      // CRITICAL: Wait 2 seconds for Meta to process the new WABA
+      // This fixes the race condition where the API returns empty immediately after signup
+      await new Promise((resolve) => setTimeout(resolve, 2000));
 
-        if (wabaResponse.ok) {
-          const wabaData = await wabaResponse.json();
-          if (wabaData.data && wabaData.data.length > 0) {
-            wabaId = wabaData.data[0].id;
+      // Try fetching with retries
+      const maxRetries = 2;
+      for (let attempt = 1; attempt <= maxRetries; attempt++) {
+        try {
+          console.log(
+            `🔄 [Embedded Signup API] Fetching WABAs from API (attempt ${attempt}/${maxRetries})...`
+          );
+
+          const wabaResponse = await fetch(
+            `https://graph.facebook.com/v21.0/me/whatsapp_business_accounts?access_token=${longLivedToken}`
+          );
+
+          if (wabaResponse.ok) {
+            const wabaData = await wabaResponse.json();
             console.log(
-              "✅ [Embedded Signup API] Found WABA from API:",
-              wabaId
+              "🔍 [Embedded Signup API] API response:",
+              JSON.stringify(wabaData)
+            );
+
+            if (wabaData.data && wabaData.data.length > 0) {
+              wabaId = wabaData.data[0].id;
+              console.log(
+                "✅ [Embedded Signup API] Found WABA from API:",
+                wabaId
+              );
+              break;
+            } else {
+              console.warn(
+                "⚠️ [Embedded Signup API] API returned empty data array"
+              );
+            }
+          } else {
+            const errorBody = await wabaResponse.json().catch(() => ({}));
+            console.warn(
+              `⚠️ [Embedded Signup API] API error (attempt ${attempt}):`,
+              errorBody
             );
           }
+
+          // Wait before retry
+          if (attempt < maxRetries) {
+            console.log("⏳ [Embedded Signup API] Waiting 3s before retry...");
+            await new Promise((resolve) => setTimeout(resolve, 3000));
+          }
+        } catch (err) {
+          console.warn("⚠️ [Embedded Signup API] Error fetching WABAs:", err);
         }
-      } catch (err) {
-        console.warn("⚠️ [Embedded Signup API] Error fetching WABAs:", err);
       }
     }
 
     if (!wabaId) {
       console.error("❌ [Embedded Signup API] Could not determine WABA ID");
+      console.error("📋 [Embedded Signup API] Debug info:", {
+        setupDataReceived: body.setupData,
+        hasCode: !!body.code,
+        hasAccessToken: !!body.accessToken,
+        validatedPermissions: grantedPermissions,
+      });
+
       return NextResponse.json(
         {
           error: "No WhatsApp Business Account found",
-          hint: "Complete the Embedded Signup flow fully, or ensure you have a WABA connected.",
+          hint: "The WABA ID was not returned from Embedded Signup and the API fallback also failed.",
+          troubleshooting: [
+            "1. Make sure you completed the full Embedded Signup flow (selected Business, WABA, and phone number)",
+            "2. Check that your Facebook account has a WhatsApp Business Account",
+            "3. Try the flow again - sometimes Meta needs a moment to process",
+            "4. Check browser console logs for 'waba_id' in the response from Meta",
+          ],
           setupData: body.setupData,
+          grantedPermissions,
         },
         { status: 404 }
       );
