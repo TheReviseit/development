@@ -122,10 +122,10 @@ export default function EmbeddedSignupButton({
 
       console.log("[EmbeddedSignup] Preparing to send to backend...");
 
-      // Build request body - handle both code flow and token flow
-      // CRITICAL: Include the redirect_uri (current page URL) for OAuth code exchange
-      // Facebook requires the redirect_uri to EXACTLY match the page where FB.login() was called
-      const redirectUri = window.location.origin + window.location.pathname;
+      // CRITICAL: Must match EXACTLY what the SDK used in FB.login()
+      // The SDK uses window.location.origin + "/" (see facebook-sdk.ts launchEmbeddedSignup)
+      // Facebook requires the redirect_uri to EXACTLY match what was used in FB.login()
+      const redirectUri = window.location.origin + "/";
       console.log(
         "[EmbeddedSignup] Current page URL (redirect_uri):",
         redirectUri
@@ -135,7 +135,7 @@ export default function EmbeddedSignupButton({
         userID: result.userID,
         grantedPermissions: result.grantedPermissions,
         setupData: result.setupData,
-        redirectUri: redirectUri, // Send the exact page URL for OAuth code exchange
+        redirectUri: redirectUri, // Send the exact redirect_uri used in FB.login()
       };
 
       // Authorization Code Flow (preferred, v21+)
