@@ -418,11 +418,12 @@ class FacebookSDK {
         return;
       }
 
-      // Log the redirect_uri being used - use origin only to avoid trailing slash issues
+      // Use environment variable if set, otherwise fallback to dynamic origin
       const redirectUri =
-        typeof window !== "undefined"
+        process.env.NEXT_PUBLIC_FACEBOOK_REDIRECT_URI ||
+        (typeof window !== "undefined"
           ? window.location.origin + "/onboarding"
-          : undefined;
+          : undefined);
       console.log(
         "🔵 [Facebook SDK] Using redirect_uri for OAuth:",
         redirectUri
@@ -597,10 +598,7 @@ class FacebookSDK {
           response_type: "code",
           override_default_response_type: true,
           scope: WHATSAPP_EMBEDDED_SIGNUP_PERMISSIONS.join(","),
-          redirect_uri:
-            typeof window !== "undefined"
-              ? window.location.origin + "/onboarding"
-              : undefined,
+          redirect_uri: redirectUri,
           extras: {
             feature: "whatsapp_embedded_signup",
             sessionInfoVersion: 2,
@@ -635,10 +633,13 @@ class FacebookSDK {
       );
       console.log("🔵 [Facebook SDK] NOTE: No config_id used for this flow");
 
+      // Use environment variable if set, otherwise fallback to dynamic origin
+      // This ensures consistency with FacebookLoginForBusinessButton component
       const redirectUri =
-        typeof window !== "undefined"
+        process.env.NEXT_PUBLIC_FACEBOOK_REDIRECT_URI ||
+        (typeof window !== "undefined"
           ? window.location.origin + "/onboarding"
-          : undefined;
+          : undefined);
       console.log("🔵 [Facebook SDK] Using redirect_uri:", redirectUri);
 
       window.FB.login(
