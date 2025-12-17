@@ -85,10 +85,8 @@ export async function POST(request: NextRequest) {
           process.env.FACEBOOK_APP_SECRET || ""
         );
         tokenUrl.searchParams.append("code", code);
+        tokenUrl.searchParams.append("grant_type", "authorization_code");
 
-        // CRITICAL: Use EXACT redirect_uri from frontend
-        // Authorization codes are SINGLE-USE and tied to the exact redirect_uri
-        // Trying multiple URIs will invalidate the code on first failure
         const redirectUri = body.redirectUri;
 
         if (!redirectUri) {
@@ -110,8 +108,39 @@ export async function POST(request: NextRequest) {
         );
         tokenUrl.searchParams.append("redirect_uri", redirectUri);
 
+        // Log the request being sent
+        console.log("Token exchange request:", {
+          endpoint: "https://graph.facebook.com/v21.0/oauth/access_token",
+          client_id: process.env.NEXT_PUBLIC_FACEBOOK_APP_ID,
+          client_secret: process.env.FACEBOOK_APP_SECRET
+            ? "PRESENT (starts with " +
+              process.env.FACEBOOK_APP_SECRET.substring(0, 4) +
+              ")"
+            : "MISSING",
+          redirect_uri: redirectUri,
+          code: code ? code.substring(0, 10) + "..." : "MISSING",
+          grant_type: "authorization_code",
+        });
+
         // Make ONE token exchange request (authorization codes are single-use)
-        const response = await fetch(tokenUrl.toString(), { method: "GET" });
+        // IMPORTANT: Facebook OAuth token endpoint accepts both GET and POST,
+        // but POST is recommended for security (keeps secrets out of URLs/logs)
+        const response = await fetch(
+          "https://graph.facebook.com/v21.0/oauth/access_token",
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/x-www-form-urlencoded",
+            },
+            body: new URLSearchParams({
+              client_id: process.env.NEXT_PUBLIC_FACEBOOK_APP_ID || "",
+              client_secret: process.env.FACEBOOK_APP_SECRET || "",
+              redirect_uri: redirectUri,
+              code: code,
+              grant_type: "authorization_code",
+            }).toString(),
+          }
+        );
 
         if (!response.ok) {
           const errorData = await response.json();
