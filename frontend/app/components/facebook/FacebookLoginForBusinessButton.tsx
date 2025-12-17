@@ -68,7 +68,7 @@ export default function FacebookLoginForBusinessButton({
 
       console.log("[LoginForBusiness] Preparing to send to backend...");
 
-      const redirectUri = window.location.origin + "/";
+      const redirectUri = window.location.origin + "/onboarding";
       console.log("[LoginForBusiness] redirect_uri:", redirectUri);
 
       const requestBody: any = {
