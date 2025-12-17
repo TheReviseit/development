@@ -10,9 +10,9 @@ import {
   MetaPhoneNumber,
   MetaGraphAPIResponse,
   MetaGraphAPIError,
-} from '@/types/facebook-whatsapp.types';
+} from "@/types/facebook-whatsapp.types";
 
-const GRAPH_API_VERSION = 'v21.0';
+const GRAPH_API_VERSION = "v21.0";
 const GRAPH_API_BASE_URL = `https://graph.facebook.com/${GRAPH_API_VERSION}`;
 
 export class MetaGraphAPIClient {
@@ -30,19 +30,19 @@ export class MetaGraphAPIClient {
     params: Record<string, string> = {}
   ): Promise<T> {
     const url = new URL(`${GRAPH_API_BASE_URL}${endpoint}`);
-    
+
     // Add access token
-    url.searchParams.append('access_token', this.accessToken);
-    
+    url.searchParams.append("access_token", this.accessToken);
+
     // Add additional params
     Object.entries(params).forEach(([key, value]) => {
       url.searchParams.append(key, value);
     });
 
     const response = await fetch(url.toString(), {
-      method: 'GET',
+      method: "GET",
       headers: {
-        'Content-Type': 'application/json',
+        "Content-Type": "application/json",
       },
     });
 
@@ -63,12 +63,12 @@ export class MetaGraphAPIClient {
     body: Record<string, any> = {}
   ): Promise<T> {
     const url = new URL(`${GRAPH_API_BASE_URL}${endpoint}`);
-    url.searchParams.append('access_token', this.accessToken);
+    url.searchParams.append("access_token", this.accessToken);
 
     const response = await fetch(url.toString(), {
-      method: 'POST',
+      method: "POST",
       headers: {
-        'Content-Type': 'application/json',
+        "Content-Type": "application/json",
       },
       body: JSON.stringify(body),
     });
@@ -86,38 +86,42 @@ export class MetaGraphAPIClient {
    * Handle Graph API errors with detailed context
    */
   private handleError(error: MetaGraphAPIError): Error {
-    const message = error.message || 'Unknown Graph API error';
+    const message = error.message || "Unknown Graph API error";
     const code = error.code || 0;
     const subcode = error.error_subcode || 0;
-    const type = error.type || 'UnknownError';
-    const traceId = error.fbtrace_id || 'N/A';
+    const type = error.type || "UnknownError";
+    const traceId = error.fbtrace_id || "N/A";
 
     // Map common error codes to user-friendly messages
     let userMessage = message;
-    
+
     switch (code) {
       case 190: // Invalid token
-        userMessage = 'Your Facebook session has expired. Please reconnect your account.';
+        userMessage =
+          "Your Facebook session has expired. Please reconnect your account.";
         break;
       case 200: // Permission error
       case 10: // Permission denied
-        userMessage = 'Missing required permissions. Please grant all requested permissions when connecting.';
+        userMessage =
+          "Missing required permissions. Please grant all requested permissions when connecting.";
         break;
       case 4: // Rate limit
       case 17: // Rate limit
       case 32: // Rate limit
       case 613: // Rate limit
-        userMessage = 'Too many requests. Please wait a moment and try again.';
+        userMessage = "Too many requests. Please wait a moment and try again.";
         break;
       case 368: // Temporarily blocked
-        userMessage = 'Your account is temporarily blocked from this action. Please try again later.';
+        userMessage =
+          "Your account is temporarily blocked from this action. Please try again later.";
         break;
       case 100: // Invalid parameter
         userMessage = `Invalid request: ${message}`;
         break;
       case 803: // Some of the aliases you requested do not exist
       case 804: // Cannot access the object
-        userMessage = 'The requested WhatsApp resource was not found or is not accessible.';
+        userMessage =
+          "The requested WhatsApp resource was not found or is not accessible.";
         break;
       default:
         userMessage = message;
@@ -145,7 +149,7 @@ export class MetaGraphAPIClient {
       id: string;
       name: string;
       email?: string;
-    }>('/me', { fields: 'id,name,email' });
+    }>("/me", { fields: "id,name,email" });
 
     return data;
   }
@@ -156,8 +160,8 @@ export class MetaGraphAPIClient {
    */
   public async getBusinessManagers(): Promise<MetaBusinessManager[]> {
     const response = await this.get<MetaGraphAPIResponse<MetaBusinessManager>>(
-      '/me/businesses',
-      { fields: 'id,name,created_time,verification_status,permitted_roles' }
+      "/me/businesses",
+      { fields: "id,name,created_time,verification_status,permitted_roles" }
     );
 
     return response.data || [];
@@ -169,12 +173,12 @@ export class MetaGraphAPIClient {
   public async getWhatsAppBusinessAccounts(
     businessId: string
   ): Promise<MetaWhatsAppBusinessAccount[]> {
-    const response = await this.get<MetaGraphAPIResponse<MetaWhatsAppBusinessAccount>>(
-      `/${businessId}/owned_whatsapp_business_accounts`,
-      {
-        fields: 'id,name,account_review_status,business_verification_status,currency,message_template_namespace,quality_rating,timezone_id',
-      }
-    );
+    const response = await this.get<
+      MetaGraphAPIResponse<MetaWhatsAppBusinessAccount>
+    >(`/${businessId}/owned_whatsapp_business_accounts`, {
+      fields:
+        "id,name,account_review_status,business_verification_status,currency,message_template_namespace,quality_rating,timezone_id",
+    });
 
     return response.data || [];
   }
@@ -186,7 +190,8 @@ export class MetaGraphAPIClient {
     const response = await this.get<MetaGraphAPIResponse<MetaPhoneNumber>>(
       `/${wabaId}/phone_numbers`,
       {
-        fields: 'id,display_phone_number,verified_name,quality_rating,code_verification_status,is_official_business_account,platform_type',
+        fields:
+          "id,display_phone_number,verified_name,quality_rating,code_verification_status,is_official_business_account,platform_type",
       }
     );
 
@@ -206,10 +211,10 @@ export class MetaGraphAPIClient {
     messages: Array<{ id: string }>;
   }> {
     const body = {
-      messaging_product: 'whatsapp',
-      recipient_type: 'individual',
+      messaging_product: "whatsapp",
+      recipient_type: "individual",
       to,
-      type: 'text',
+      type: "text",
       text: {
         preview_url: false,
         body: message,
@@ -234,11 +239,21 @@ export class MetaGraphAPIClient {
     templateName: string,
     languageCode: string,
     components?: Array<{
-      type: 'header' | 'body' | 'button';
+      type: "header" | "body" | "button";
       parameters: Array<{
-        type: 'text' | 'currency' | 'date_time' | 'image' | 'document' | 'video';
+        type:
+          | "text"
+          | "currency"
+          | "date_time"
+          | "image"
+          | "document"
+          | "video";
         text?: string;
-        currency?: { fallback_value: string; code: string; amount_1000: number };
+        currency?: {
+          fallback_value: string;
+          code: string;
+          amount_1000: number;
+        };
         date_time?: { fallback_value: string };
         image?: { link: string };
         document?: { link: string; filename: string };
@@ -251,10 +266,10 @@ export class MetaGraphAPIClient {
     messages: Array<{ id: string }>;
   }> {
     const body = {
-      messaging_product: 'whatsapp',
-      recipient_type: 'individual',
+      messaging_product: "whatsapp",
+      recipient_type: "individual",
       to,
-      type: 'template',
+      type: "template",
       template: {
         name: templateName,
         language: {
@@ -276,13 +291,13 @@ export class MetaGraphAPIClient {
   /**
    * Get WhatsApp Business Account details
    */
-  public async getWABADetails(wabaId: string): Promise<MetaWhatsAppBusinessAccount> {
-    const data = await this.get<MetaWhatsAppBusinessAccount>(
-      `/${wabaId}`,
-      {
-        fields: 'id,name,account_review_status,business_verification_status,currency,message_template_namespace,quality_rating,timezone_id',
-      }
-    );
+  public async getWABADetails(
+    wabaId: string
+  ): Promise<MetaWhatsAppBusinessAccount> {
+    const data = await this.get<MetaWhatsAppBusinessAccount>(`/${wabaId}`, {
+      fields:
+        "id,name,account_review_status,business_verification_status,currency,message_template_namespace,quality_rating,timezone_id",
+    });
 
     return data;
   }
@@ -290,13 +305,13 @@ export class MetaGraphAPIClient {
   /**
    * Get phone number details
    */
-  public async getPhoneNumberDetails(phoneNumberId: string): Promise<MetaPhoneNumber> {
-    const data = await this.get<MetaPhoneNumber>(
-      `/${phoneNumberId}`,
-      {
-        fields: 'id,display_phone_number,verified_name,quality_rating,code_verification_status,is_official_business_account,platform_type',
-      }
-    );
+  public async getPhoneNumberDetails(
+    phoneNumberId: string
+  ): Promise<MetaPhoneNumber> {
+    const data = await this.get<MetaPhoneNumber>(`/${phoneNumberId}`, {
+      fields:
+        "id,display_phone_number,verified_name,quality_rating,code_verification_status,is_official_business_account,platform_type",
+    });
 
     return data;
   }
@@ -308,7 +323,7 @@ export class MetaGraphAPIClient {
     wabaId: string,
     callbackUrl: string,
     verifyToken: string,
-    fields: string[] = ['messages']
+    fields: string[] = ["messages"]
   ): Promise<{ success: boolean }> {
     const body = {
       override_callback_uri: callbackUrl,
@@ -327,29 +342,38 @@ export class MetaGraphAPIClient {
   /**
    * Get message templates for a WABA
    */
-  public async getMessageTemplates(wabaId: string): Promise<Array<{
-    name: string;
-    language: string;
-    status: string;
-    category: string;
-    id: string;
-  }>> {
-    const response = await this.get<MetaGraphAPIResponse<{
+  public async getMessageTemplates(wabaId: string): Promise<
+    Array<{
       name: string;
       language: string;
       status: string;
       category: string;
       id: string;
-    }>>(
-      `/${wabaId}/message_templates`,
-      { fields: 'name,language,status,category,id' }
-    );
+    }>
+  > {
+    const response = await this.get<
+      MetaGraphAPIResponse<{
+        name: string;
+        language: string;
+        status: string;
+        category: string;
+        id: string;
+      }>
+    >(`/${wabaId}/message_templates`, {
+      fields: "name,language,status,category,id",
+    });
 
     return response.data || [];
   }
 
   /**
-   * Validate access token
+   * Validate access token using /debug_token endpoint
+   *
+   * CRITICAL: /debug_token requires App Access Token (app_id|app_secret) as the
+   * access_token parameter, NOT a user access token. The input_token parameter
+   * is the token being inspected (the user token).
+   *
+   * @see https://developers.facebook.com/docs/facebook-login/guides/access-tokens/get-session-info
    */
   public async validateToken(): Promise<{
     isValid: boolean;
@@ -357,58 +381,113 @@ export class MetaGraphAPIClient {
     application?: string;
     expires_at?: number;
     user_id?: string;
+    scopes?: string[];
+    error?: string;
   }> {
     try {
-      const response = await this.get<{
-        data: {
-          app_id: string;
-          application: string;
-          expires_at: number;
-          is_valid: boolean;
-          user_id: string;
+      const appId = process.env.NEXT_PUBLIC_FACEBOOK_APP_ID;
+      const appSecret = process.env.FACEBOOK_APP_SECRET;
+
+      if (!appId || !appSecret) {
+        console.error("❌ [validateToken] Missing Facebook App credentials");
+        return { isValid: false, error: "Missing app credentials" };
+      }
+
+      // App Access Token format: {app_id}|{app_secret}
+      const appAccessToken = `${appId}|${appSecret}`;
+
+      const url = new URL(`${GRAPH_API_BASE_URL}/debug_token`);
+      // CRITICAL: access_token must be App Access Token, NOT user token
+      url.searchParams.append("access_token", appAccessToken);
+      // input_token is the user token we want to validate
+      url.searchParams.append("input_token", this.accessToken);
+
+      console.log(
+        "🔍 [validateToken] Calling /debug_token with App Access Token..."
+      );
+
+      const response = await fetch(url.toString(), {
+        method: "GET",
+        headers: { "Content-Type": "application/json" },
+      });
+
+      const data = await response.json();
+
+      if (!response.ok || data.error) {
+        console.error(
+          "❌ [validateToken] API error:",
+          data.error?.message || data
+        );
+        return {
+          isValid: false,
+          error: data.error?.message || "Token validation API error",
         };
-      }>('/debug_token', { input_token: this.accessToken });
+      }
+
+      const tokenData = data.data;
+
+      // Validate that the token belongs to our app
+      if (tokenData.app_id !== appId) {
+        console.error(
+          "❌ [validateToken] Token app_id mismatch!",
+          `Expected: ${appId}, Got: ${tokenData.app_id}`
+        );
+        return {
+          isValid: false,
+          error: `Token belongs to different app (${tokenData.app_id})`,
+        };
+      }
+
+      console.log("✅ [validateToken] Token validation result:", {
+        is_valid: tokenData.is_valid,
+        app_id: tokenData.app_id,
+        user_id: tokenData.user_id,
+        expires_at: tokenData.expires_at
+          ? new Date(tokenData.expires_at * 1000).toISOString()
+          : "never/unknown",
+        scopes: tokenData.scopes,
+      });
 
       return {
-        isValid: response.data.is_valid,
-        app_id: response.data.app_id,
-        application: response.data.application,
-        expires_at: response.data.expires_at,
-        user_id: response.data.user_id,
+        isValid: tokenData.is_valid === true,
+        app_id: tokenData.app_id,
+        application: tokenData.application,
+        expires_at: tokenData.expires_at,
+        user_id: tokenData.user_id,
+        scopes: tokenData.scopes,
       };
-    } catch (error) {
-      return { isValid: false };
+    } catch (error: any) {
+      console.error("❌ [validateToken] Exception:", error.message);
+      return { isValid: false, error: error.message };
     }
   }
 
   /**
    * Exchange short-lived token for long-lived token (60 days)
    */
-  public static async exchangeToken(
-    shortLivedToken: string
-  ): Promise<{
+  public static async exchangeToken(shortLivedToken: string): Promise<{
     access_token: string;
     token_type: string;
     expires_in: number;
   }> {
-    const appId = process.env.FACEBOOK_APP_ID;
+    const appId = process.env.NEXT_PUBLIC_FACEBOOK_APP_ID;
     const appSecret = process.env.FACEBOOK_APP_SECRET;
 
     if (!appId || !appSecret) {
-      throw new Error('Facebook App credentials not configured');
+      throw new Error("Facebook App credentials not configured");
     }
 
     const url = new URL(`${GRAPH_API_BASE_URL}/oauth/access_token`);
-    url.searchParams.append('grant_type', 'fb_exchange_token');
-    url.searchParams.append('client_id', appId);
-    url.searchParams.append('client_secret', appSecret);
-    url.searchParams.append('fb_exchange_token', shortLivedToken);
+    url.searchParams.append("grant_type", "fb_exchange_token");
+    url.searchParams.append("client_id", appId);
+    url.searchParams.append("client_secret", appSecret);
+    url.searchParams.append("fb_exchange_token", shortLivedToken);
 
     const response = await fetch(url.toString());
     const data = await response.json();
 
     if (!response.ok || data.error) {
-      throw new Error(data.error?.message || 'Token exchange failed');
+      throw new Error(data.error?.message || "Token exchange failed");
     }
 
     return data;
@@ -421,4 +500,3 @@ export class MetaGraphAPIClient {
 export function createGraphAPIClient(accessToken: string): MetaGraphAPIClient {
   return new MetaGraphAPIClient(accessToken);
 }
-

@@ -3,7 +3,10 @@
  * Handles Facebook Login and SDK initialization
  */
 
-import { REQUIRED_FACEBOOK_PERMISSIONS } from "@/types/facebook-whatsapp.types";
+import {
+  FACEBOOK_LOGIN_PERMISSIONS,
+  WHATSAPP_EMBEDDED_SIGNUP_PERMISSIONS,
+} from "@/types/facebook-whatsapp.types";
 
 declare global {
   interface Window {
@@ -25,6 +28,7 @@ declare global {
           config_id?: string;
           response_type?: string;
           override_default_response_type?: boolean;
+          redirect_uri?: string; // CRITICAL: Required for code exchange to work
           extras?: {
             setup?: Record<string, any>;
             feature?: string;
@@ -199,7 +203,7 @@ class FacebookSDK {
         return;
       }
 
-      const scope = REQUIRED_FACEBOOK_PERMISSIONS.join(",");
+      const scope = FACEBOOK_LOGIN_PERMISSIONS.join(",");
       console.log("🔵 [Facebook SDK] Requesting permissions:", scope);
 
       window.FB.login(
@@ -257,7 +261,7 @@ class FacebookSDK {
           }
         },
         {
-          scope,
+          scope: FACEBOOK_LOGIN_PERMISSIONS.join(","),
           auth_type: "rerequest", // Re-request declined permissions
           return_scopes: true,
         }
@@ -414,6 +418,16 @@ class FacebookSDK {
         return;
       }
 
+      // Log the redirect_uri being used
+      const redirectUri =
+        typeof window !== "undefined"
+          ? window.location.origin + window.location.pathname
+          : undefined;
+      console.log(
+        "🔵 [Facebook SDK] Using redirect_uri for OAuth:",
+        redirectUri
+      );
+
       window.FB.login(
         (response) => {
           console.log("🔵 [Facebook SDK] Embedded signup response:", response);
@@ -562,11 +576,149 @@ class FacebookSDK {
           config_id: configId,
           response_type: "code", // CRITICAL: Use Authorization Code Flow (v21+ required)
           override_default_response_type: true, // Force code flow even if SDK defaults to token
-          scope: REQUIRED_FACEBOOK_PERMISSIONS.join(","),
+          // IMPORTANT: Only request WhatsApp permissions here
+          // business_management is obtained via loginForBusiness() (Step 1)
+          scope: WHATSAPP_EMBEDDED_SIGNUP_PERMISSIONS.join(","),
+          // CRITICAL: redirect_uri must be set here so that code exchange can use the same URI
+          // This tells Facebook which redirect_uri to associate with the authorization code
+          redirect_uri:
+            typeof window !== "undefined"
+              ? window.location.origin + window.location.pathname
+              : undefined,
           extras: {
             feature: "whatsapp_embedded_signup", // Required for WhatsApp Embedded Signup
             sessionInfoVersion: 2, // Use latest session info format
           },
+        }
+      );
+    });
+  }
+
+  /**
+   * STEP 1: Facebook Login for Business
+   * Gets business_management permission to access Business Managers
+   * NO config_id - this is standard Facebook Login
+   * @returns Promise with authorization code for backend exchange
+   */
+  public async loginForBusiness(): Promise<{
+    success: boolean;
+    code?: string; // Authorization code for backend exchange
+    accessToken?: string; // Fallback if token returned (implicit flow)
+    userID?: string;
+    expiresIn?: number;
+    grantedPermissions?: string[] | null;
+    error?: string;
+  }> {
+    await this.init();
+
+    return new Promise((resolve) => {
+      if (!window.FB) {
+        resolve({ success: false, error: "Facebook SDK not loaded" });
+        return;
+      }
+
+      // Permission scope for Facebook Login for Business
+      // Only business_management, public_profile, email
+      // NO whatsapp permissions here (those come from Embedded Signup)
+      const scope = FACEBOOK_LOGIN_PERMISSIONS.join(",");
+
+      console.log(
+        "🔵 [Facebook SDK] loginForBusiness - Requesting permissions:",
+        scope
+      );
+      console.log("🔵 [Facebook SDK] NOTE: No config_id used for this flow");
+
+      const redirectUri =
+        typeof window !== "undefined"
+          ? window.location.origin + window.location.pathname
+          : undefined;
+      console.log("🔵 [Facebook SDK] Using redirect_uri:", redirectUri);
+
+      window.FB.login(
+        (response) => {
+          console.log("🔵 [Facebook SDK] loginForBusiness response:", response);
+
+          if (response.authResponse) {
+            const authCode = (response.authResponse as any).code;
+            const accessToken = response.authResponse.accessToken;
+            const userID = response.authResponse.userID;
+            const expiresIn = response.authResponse.expiresIn;
+
+            console.log("✅ [Facebook SDK] loginForBusiness successful");
+            console.log(
+              "🔍 [Facebook SDK] Authorization code present:",
+              !!authCode
+            );
+            console.log(
+              "🔍 [Facebook SDK] Access token present:",
+              !!accessToken
+            );
+            console.log("🔍 [Facebook SDK] User ID:", userID);
+
+            // Authorization Code Flow (preferred)
+            if (authCode) {
+              console.log("✅ [Facebook SDK] Using Authorization Code Flow");
+              resolve({
+                success: true,
+                code: authCode,
+                userID,
+                grantedPermissions: null, // Backend will verify
+              });
+              return;
+            }
+
+            // Implicit Flow fallback
+            if (accessToken) {
+              console.warn("⚠️ [Facebook SDK] Using Implicit Flow fallback");
+              this.getGrantedPermissions(accessToken)
+                .then((grantedPermissions) => {
+                  resolve({
+                    success: true,
+                    accessToken,
+                    userID,
+                    expiresIn,
+                    grantedPermissions,
+                  });
+                })
+                .catch(() => {
+                  resolve({
+                    success: true,
+                    accessToken,
+                    userID,
+                    expiresIn,
+                    grantedPermissions: null,
+                  });
+                });
+              return;
+            }
+
+            resolve({
+              success: false,
+              error: "No code or accessToken in response",
+            });
+          } else {
+            const errorMsg =
+              response.status === "not_authorized"
+                ? "User cancelled or did not authorize"
+                : "Login failed";
+            console.error(
+              "❌ [Facebook SDK] loginForBusiness failed:",
+              errorMsg
+            );
+            resolve({
+              success: false,
+              error: errorMsg,
+            });
+          }
+        },
+        {
+          // NO config_id for Facebook Login for Business
+          response_type: "code", // Authorization Code Flow
+          override_default_response_type: true,
+          scope,
+          auth_type: "rerequest",
+          return_scopes: true,
+          redirect_uri: redirectUri,
         }
       );
     });

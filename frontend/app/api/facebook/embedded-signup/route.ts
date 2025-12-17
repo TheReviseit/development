@@ -1,6 +1,16 @@
 /**
- * Embedded Signup API Route
- * Handles the complete embedded signup flow from Meta
+ * Embedded Signup API Route (STEP 2)
+ * Handles WhatsApp Embedded Signup flow from Meta
+ *
+ * IMPORTANT: This endpoint does NOT require business_management permission.
+ * business_management is obtained via /api/facebook/login-for-business (Step 1)
+ *
+ * This endpoint:
+ * 1. Exchanges authorization code for access token
+ * 2. Validates whatsapp_business_management permission
+ * 3. Uses setupData (waba_id, phone_number_id) from Embedded Signup
+ * 4. Falls back to /me/whatsapp_business_accounts if setupData incomplete
+ * 5. Links to existing Business Manager (from Step 1)
  */
 
 import { NextRequest, NextResponse } from "next/server";
@@ -11,10 +21,11 @@ import {
   createFacebookAccount,
   getFacebookAccountByUserId,
   updateFacebookAccount,
-  createBusinessManager,
   createWhatsAppAccount,
   createPhoneNumber,
   getBusinessManagersByUserId,
+  getWhatsAppAccountsByUserId,
+  updatePhoneNumber,
 } from "@/lib/supabase/facebook-whatsapp-queries";
 import {
   createGraphAPIClient,
@@ -49,11 +60,8 @@ export async function POST(request: NextRequest) {
     console.log("🔵 [Embedded Signup API] Received body:", {
       hasAccessToken: !!body.accessToken,
       hasUserID: !!body.userID,
-      hasCode: !!body.code, // Code at root level (Authorization Code Flow)
-      hasSetupDataCode: !!body.setupData?.code, // Legacy: code in setupData
-      accessTokenLength: body.accessToken?.length,
-      userID: body.userID,
-      grantedPermissions: body.grantedPermissions,
+      hasCode: !!body.code,
+      hasSetupData: !!body.setupData,
       setupData: body.setupData,
     });
 
@@ -61,29 +69,21 @@ export async function POST(request: NextRequest) {
       accessToken,
       userID,
       expiresIn,
-      code, // Authorization code at root level (v21+ Code Flow)
-      grantedPermissions = null, // null = unknown permissions (frontend couldn't check)
+      code,
+      grantedPermissions = null,
       setupData = {},
     } = body;
 
-    // Determine which code to use (root level preferred, fallback to setupData)
+    // Determine authorization code (root level preferred, fallback to setupData)
     const authorizationCode = code || setupData.code;
 
     // Handle Authorization Code Flow
-    // If we have a code but no access token, exchange the code for a token
     if (!accessToken && authorizationCode) {
       console.log(
         "🔄 [Embedded Signup API] Exchanging authorization code for access token..."
       );
-      console.log(
-        "🔍 [Embedded Signup API] Code length:",
-        authorizationCode.length
-      );
 
       try {
-        // Build the token exchange URL
-        // NOTE: redirect_uri is REQUIRED and must match what was used during authorization
-        // For embedded signup, we typically don't need redirect_uri since SDK handles it
         const tokenUrl = new URL(
           "https://graph.facebook.com/v21.0/oauth/access_token"
         );
@@ -97,64 +97,75 @@ export async function POST(request: NextRequest) {
         );
         tokenUrl.searchParams.append("code", authorizationCode);
 
-        // CRITICAL: redirect_uri must EXACTLY match the page URL where FB.login() was called
-        // Production: https://www.reviseit.in/onboarding
-        // Local dev: http://localhost:3000/onboarding
-        const redirectUri =
+        // Try redirect_uri options
+        const redirectUriOptions = [
+          body.redirectUri,
+          process.env.NODE_ENV === "production"
+            ? "https://www.reviseit.in/"
+            : "http://localhost:3000/",
           process.env.NODE_ENV === "production"
             ? "https://www.reviseit.in/onboarding"
-            : "http://localhost:3000/onboarding";
+            : "http://localhost:3000/onboarding",
+        ].filter(Boolean);
 
-        tokenUrl.searchParams.append("redirect_uri", redirectUri);
-        console.log(
-          "🔍 [Embedded Signup API] Using redirect_uri:",
-          redirectUri
-        );
+        let tokenData: any = null;
+        let lastError: any = null;
 
-        console.log(
-          "🔍 [Embedded Signup API] Token exchange URL (without secret):",
-          tokenUrl
-            .toString()
-            .replace(process.env.FACEBOOK_APP_SECRET || "", "[REDACTED]")
-        );
+        // First try without redirect_uri
+        try {
+          const response = await fetch(tokenUrl.toString(), { method: "GET" });
+          if (response.ok) {
+            tokenData = await response.json();
+            console.log(
+              "✅ [Embedded Signup API] Code exchange succeeded without redirect_uri"
+            );
+          } else {
+            lastError = await response.json();
+          }
+        } catch (err: any) {
+          console.log("⚠️ [Embedded Signup API] Without redirect_uri failed");
+        }
 
-        const tokenResponse = await fetch(tokenUrl.toString(), {
-          method: "GET",
-        });
+        // Try each redirect_uri
+        if (!tokenData) {
+          for (const redirectUri of redirectUriOptions) {
+            try {
+              const urlWithRedirect = new URL(tokenUrl.toString());
+              urlWithRedirect.searchParams.append("redirect_uri", redirectUri);
+              const response = await fetch(urlWithRedirect.toString(), {
+                method: "GET",
+              });
+              if (response.ok) {
+                tokenData = await response.json();
+                console.log(
+                  `✅ [Embedded Signup API] Code exchange succeeded with: ${redirectUri}`
+                );
+                break;
+              } else {
+                lastError = await response.json();
+              }
+            } catch (err: any) {
+              console.log(
+                `⚠️ [Embedded Signup API] Failed with ${redirectUri}`
+              );
+            }
+          }
+        }
 
-        if (!tokenResponse.ok) {
-          const errorData = await tokenResponse.json();
+        if (!tokenData) {
           console.error(
             "❌ [Embedded Signup API] Code exchange failed:",
-            JSON.stringify(errorData, null, 2)
+            lastError
           );
 
-          // Check for common errors
           if (
-            errorData.error?.code === 100 &&
-            errorData.error?.error_subcode === 36008
+            lastError?.error?.code === 100 &&
+            lastError?.error?.message?.includes("code")
           ) {
-            // Invalid redirect_uri
-            return NextResponse.json(
-              {
-                error: "Code exchange failed: redirect_uri mismatch",
-                hint: "The redirect_uri must match the page that initiated login. Check NEXT_PUBLIC_SITE_URL environment variable.",
-                details: errorData,
-              },
-              { status: 400 }
-            );
-          }
-
-          if (
-            errorData.error?.code === 100 &&
-            errorData.error?.message?.includes("code")
-          ) {
-            // Code already used or expired
             return NextResponse.json(
               {
                 error: "Authorization code expired or already used",
-                hint: "Please try connecting again. Authorization codes can only be used once and expire quickly.",
-                details: errorData,
+                hint: "Please try connecting again. Authorization codes expire quickly.",
               },
               { status: 400 }
             );
@@ -163,47 +174,27 @@ export async function POST(request: NextRequest) {
           return NextResponse.json(
             {
               error: "Failed to exchange authorization code",
-              details: errorData,
+              details: lastError,
             },
             { status: 400 }
           );
         }
 
-        const tokenData = await tokenResponse.json();
         accessToken = tokenData.access_token;
         expiresIn = tokenData.expires_in;
 
-        console.log(
-          "✅ [Embedded Signup API] Successfully exchanged code for token"
-        );
-        console.log(
-          "🔍 [Embedded Signup API] Token expires in:",
-          expiresIn,
-          "seconds"
-        );
-
-        // Get the user ID from the token if not provided
+        // Get user ID if not provided
         if (!userID) {
           const meResponse = await fetch(
-            `https://graph.facebook.com/v21.0/me?access_token=${accessToken}`,
-            { method: "GET" }
+            `https://graph.facebook.com/v21.0/me?access_token=${accessToken}`
           );
-
           if (meResponse.ok) {
             const meData = await meResponse.json();
             userID = meData.id;
-            console.log("✅ [Embedded Signup API] Got user ID:", userID);
-          } else {
-            console.warn(
-              "⚠️ [Embedded Signup API] Failed to get user ID from /me"
-            );
           }
         }
       } catch (error: any) {
-        console.error(
-          "❌ [Embedded Signup API] Error during code exchange:",
-          error
-        );
+        console.error("❌ [Embedded Signup API] Code exchange error:", error);
         return NextResponse.json(
           {
             error: "Failed to process authorization code",
@@ -215,22 +206,13 @@ export async function POST(request: NextRequest) {
     }
 
     if (!accessToken || !userID) {
-      console.error("❌ [Embedded Signup API] Missing required fields:", {
-        accessToken: !!accessToken,
-        userID: !!userID,
-        hasCode: !!setupData.code,
-        receivedBody: body,
-      });
       return NextResponse.json(
-        {
-          error: "Missing required fields: accessToken and userID",
-          hint: "Make sure Facebook login completed successfully",
-        },
+        { error: "Missing required fields: accessToken and userID" },
         { status: 400 }
       );
     }
 
-    // Exchange short-lived token for long-lived token (60 days)
+    // Exchange for long-lived token
     let longLivedToken: string;
     let tokenExpiresIn: number;
 
@@ -240,58 +222,40 @@ export async function POST(request: NextRequest) {
       );
       longLivedToken = exchangeResult.access_token;
       tokenExpiresIn = exchangeResult.expires_in;
-      console.log(
-        "✅ [Embedded Signup API] Token exchanged, expires in:",
-        Math.floor(tokenExpiresIn / 86400),
-        "days"
-      );
+      console.log("✅ [Embedded Signup API] Long-lived token obtained");
     } catch (error: any) {
-      console.error(
-        "⚠️ [Embedded Signup API] Token exchange failed:",
-        error.message
-      );
-      console.log(
-        "⚠️ [Embedded Signup API] Using short-lived token as fallback"
+      console.warn(
+        "⚠️ [Embedded Signup API] Token exchange failed, using short-lived"
       );
       longLivedToken = accessToken;
-      tokenExpiresIn = expiresIn;
+      tokenExpiresIn = expiresIn || 3600;
     }
 
-    // Create Graph API client
-    const graphClient = createGraphAPIClient(longLivedToken);
+    if (!tokenExpiresIn || isNaN(tokenExpiresIn)) {
+      tokenExpiresIn = 3600;
+    }
 
-    // Validate the token before proceeding
-    console.log("🔍 [Embedded Signup API] Validating access token...");
+    // Create Graph API client and validate token
+    const graphClient = createGraphAPIClient(longLivedToken);
     const tokenValidation = await graphClient.validateToken();
 
     if (!tokenValidation.isValid) {
-      console.error("❌ [Embedded Signup API] Token validation failed");
       return NextResponse.json(
-        {
-          error: "Invalid access token",
-          hint: "The access token from Facebook is invalid or expired. Please try connecting again.",
-        },
+        { error: "Invalid access token" },
         { status: 401 }
       );
     }
 
-    console.log("✅ [Embedded Signup API] Token validated successfully");
-    console.log("🔍 [Embedded Signup API] Token details:", {
-      app_id: tokenValidation.app_id,
-      user_id: tokenValidation.user_id,
-      expires_at: tokenValidation.expires_at
-        ? new Date(tokenValidation.expires_at * 1000).toISOString()
-        : "never",
-    });
+    console.log("✅ [Embedded Signup API] Token validated");
 
-    // Validate permissions by fetching them from Graph API
-    // This is crucial for Code Flow where frontend can't check permissions
-    console.log("🔍 [Embedded Signup API] Validating permissions...");
+    // Validate permissions - ONLY require whatsapp_business_management
+    // DO NOT check for business_management (that's Step 1's job)
+    console.log("🔍 [Embedded Signup API] Validating WhatsApp permissions...");
+
     let validatedPermissions: string[] = [];
     try {
       const permissionsResponse = await fetch(
-        `https://graph.facebook.com/v21.0/me/permissions?access_token=${longLivedToken}`,
-        { method: "GET" }
+        `https://graph.facebook.com/v21.0/me/permissions?access_token=${longLivedToken}`
       );
 
       if (permissionsResponse.ok) {
@@ -305,55 +269,44 @@ export async function POST(request: NextRequest) {
           "✅ [Embedded Signup API] Granted permissions:",
           validatedPermissions
         );
-
-        // Update grantedPermissions with validated data
         grantedPermissions = validatedPermissions;
 
-        // Check for critical permission: business_management
-        if (!validatedPermissions.includes("business_management")) {
+        // ONLY require whatsapp_business_management
+        // DO NOT require business_management here
+        if (!validatedPermissions.includes("whatsapp_business_management")) {
           console.error(
-            "❌ [Embedded Signup API] Missing critical permission: business_management"
+            "❌ [Embedded Signup API] Missing whatsapp_business_management permission"
           );
-          console.error("   Granted permissions:", validatedPermissions);
           return NextResponse.json(
             {
-              error: "Missing required permission: business_management",
-              hint: "Please reconnect and accept all permissions when prompted. The 'business_management' permission is required to access your Business Manager and WhatsApp accounts.",
+              error:
+                "Missing required permission: whatsapp_business_management",
+              hint: "Please complete the WhatsApp Embedded Signup and grant WhatsApp access.",
               grantedPermissions: validatedPermissions,
             },
             { status: 403 }
           );
         }
 
-        // Warn about other missing permissions but don't block
-        const requiredPermissions = [
-          "whatsapp_business_management",
-          "whatsapp_business_messaging",
-        ];
-        const missingAdvanced = requiredPermissions.filter(
-          (p) => !validatedPermissions.includes(p)
+        console.log(
+          "✅ [Embedded Signup API] whatsapp_business_management permission verified"
         );
-        if (missingAdvanced.length > 0) {
+
+        // Check for messaging permission (warning only)
+        if (!validatedPermissions.includes("whatsapp_business_messaging")) {
           console.warn(
-            "⚠️ [Embedded Signup API] Missing advanced permissions:",
-            missingAdvanced,
-            "\nThese require Meta App Review approval."
+            "⚠️ [Embedded Signup API] Missing whatsapp_business_messaging - messaging features limited"
           );
         }
-      } else {
-        console.warn(
-          "⚠️ [Embedded Signup API] Failed to fetch permissions, continuing anyway"
-        );
       }
     } catch (permError) {
       console.warn(
         "⚠️ [Embedded Signup API] Error checking permissions:",
         permError
       );
-      // Continue anyway - we'll catch permission errors when fetching business managers
     }
 
-    // Get user profile from Facebook
+    // Get user profile
     const profile = await graphClient.getUserProfile();
 
     // Calculate token expiration
@@ -361,24 +314,34 @@ export async function POST(request: NextRequest) {
       Date.now() + tokenExpiresIn * 1000
     ).toISOString();
 
-    // Encrypt the access token
+    // Encrypt token
     const encryptedToken = encryptToken(longLivedToken);
 
-    // Store or update Facebook account
+    // Get existing Facebook account (should exist from Step 1)
     const existingAccount = await getFacebookAccountByUserId(user.id);
 
     let facebookAccount;
     if (existingAccount) {
+      // Update with WhatsApp token
       facebookAccount = await updateFacebookAccount(existingAccount.id, {
         access_token: encryptedToken,
         expires_at: expiresAt,
-        granted_permissions: grantedPermissions || [], // Store empty array if null
+        granted_permissions: [
+          ...(existingAccount.granted_permissions || []),
+          ...validatedPermissions.filter(
+            (p) => !existingAccount.granted_permissions?.includes(p)
+          ),
+        ],
         status: "active",
         facebook_user_name: profile.name,
         facebook_email: profile.email || null,
         connection_error: null,
       });
+      console.log("✅ [Embedded Signup API] Updated existing Facebook account");
     } else {
+      console.warn(
+        "⚠️ [Embedded Signup API] No existing Facebook account - user may have skipped Step 1"
+      );
       facebookAccount = await createFacebookAccount({
         user_id: user.id,
         facebook_user_id: userID,
@@ -387,189 +350,231 @@ export async function POST(request: NextRequest) {
         access_token: encryptedToken,
         token_type: "Bearer",
         expires_at: expiresAt,
-        granted_permissions: grantedPermissions || [], // Store empty array if null
+        granted_permissions: grantedPermissions || [],
       });
     }
 
-    let businessManagers;
-    try {
-      businessManagers = await graphClient.getBusinessManagers();
-    } catch (error: any) {
-      console.error(
-        "❌ [Embedded Signup API] Failed to fetch Business Managers:",
-        error.message
+    // Check for existing Business Manager from Step 1
+    const businessManagers = await getBusinessManagersByUserId(user.id);
+    let businessManagerId: string | null = null;
+
+    if (businessManagers.length > 0) {
+      businessManagerId = businessManagers[0].id;
+      console.log(
+        "✅ [Embedded Signup API] Using Business Manager from Step 1:",
+        businessManagers[0].business_name
       );
-
-      // Check if it's a permission error
-      if (
-        error.message?.includes("403") ||
-        error.message?.includes("permission")
-      ) {
-        return NextResponse.json(
-          {
-            error: "Missing required permission: business_management",
-            hint: "Please accept all permissions when logging in with Facebook. Click the button again and ensure you approve all permission requests.",
-            details: error.message,
-            grantedPermissions: grantedPermissions,
-          },
-          { status: 403 }
-        );
-      }
-
-      // Other Graph API errors
-      return NextResponse.json(
-        {
-          error: "Failed to fetch Business Managers from Meta",
-          hint: "There was an error communicating with Facebook. Please try again.",
-          details: error.message,
-        },
-        { status: 500 }
+    } else {
+      console.warn(
+        "⚠️ [Embedded Signup API] No Business Manager found from Step 1"
       );
     }
 
-    // Validate that at least one Business Manager was found
-    if (businessManagers.length === 0) {
-      console.error("❌ [Embedded Signup API] No Business Managers found");
-      console.error("Possible causes:");
-      console.error("1. User doesn't have business_management permission");
-      console.error("2. User doesn't have access to any Business Managers");
-      console.error("3. Access token is invalid or expired");
+    // Get WABA and phone number data from setupData or API
+    let wabaId = setupData.wabaId || setupData.waba_id;
+    let phoneNumberId = setupData.phoneNumberId || setupData.phone_number_id;
 
+    console.log("🔍 [Embedded Signup API] SetupData:", {
+      wabaId,
+      phoneNumberId,
+    });
+
+    // Fallback: Fetch from API if setupData incomplete
+    if (!wabaId) {
+      console.log(
+        "🔄 [Embedded Signup API] wabaId not in setupData, fetching from API..."
+      );
+
+      try {
+        const wabaResponse = await fetch(
+          `https://graph.facebook.com/v21.0/me/whatsapp_business_accounts?access_token=${longLivedToken}`
+        );
+
+        if (wabaResponse.ok) {
+          const wabaData = await wabaResponse.json();
+          if (wabaData.data && wabaData.data.length > 0) {
+            wabaId = wabaData.data[0].id;
+            console.log(
+              "✅ [Embedded Signup API] Found WABA from API:",
+              wabaId
+            );
+          }
+        }
+      } catch (err) {
+        console.warn("⚠️ [Embedded Signup API] Error fetching WABAs:", err);
+      }
+    }
+
+    if (!wabaId) {
+      console.error("❌ [Embedded Signup API] Could not determine WABA ID");
       return NextResponse.json(
         {
-          error: "No Business Managers found for this account",
-          hint: "Please ensure you have access to a Business Manager on Meta Business Suite",
-          troubleshooting: [
-            "Verify business_management permission was granted",
-            "Check if you have access to Meta Business Manager at business.facebook.com",
-            "Try creating a Business Manager if you don't have one",
-            "Ensure your Facebook account is an admin of the Business Manager",
-          ],
+          error: "No WhatsApp Business Account found",
+          hint: "Complete the Embedded Signup flow fully, or ensure you have a WABA connected.",
+          setupData: body.setupData,
         },
         { status: 404 }
       );
     }
 
-    const storedBusinessManagers = [];
-    for (const bm of businessManagers) {
+    // Fetch WABA details
+    console.log("🔍 [Embedded Signup API] Fetching WABA details for:", wabaId);
+    let wabaDetails;
+    try {
+      wabaDetails = await graphClient.getWABADetails(wabaId);
+      console.log("✅ [Embedded Signup API] WABA details:", wabaDetails.name);
+    } catch (error: any) {
+      console.error(
+        "❌ [Embedded Signup API] Failed to fetch WABA details:",
+        error.message
+      );
+      return NextResponse.json(
+        {
+          error: "Failed to fetch WhatsApp Business Account details",
+          hint: "The WABA may not be accessible with these permissions.",
+          wabaId,
+        },
+        { status: 500 }
+      );
+    }
+
+    // Store WABA
+    let storedWABA;
+    try {
+      storedWABA = await createWhatsAppAccount({
+        business_manager_id: businessManagerId || facebookAccount.id,
+        user_id: user.id,
+        waba_id: wabaId,
+        waba_name: wabaDetails.name || null,
+        account_review_status: wabaDetails.account_review_status || null,
+        business_verification_status:
+          wabaDetails.business_verification_status || null,
+        quality_rating: wabaDetails.quality_rating || null,
+        messaging_limit_tier: null,
+      });
+      console.log("✅ [Embedded Signup API] Stored WABA:", storedWABA.id);
+    } catch (error: any) {
+      if (
+        error.message?.includes("duplicate") ||
+        error.code?.includes("23505")
+      ) {
+        console.log(
+          "ℹ️ [Embedded Signup API] WABA already exists, continuing..."
+        );
+        const existingWABAs = await getWhatsAppAccountsByUserId(user.id);
+        storedWABA = existingWABAs.find((w: any) => w.waba_id === wabaId);
+      } else {
+        throw error;
+      }
+    }
+
+    // Ensure we have a valid storedWABA
+    if (!storedWABA) {
+      console.error("❌ [Embedded Signup API] storedWABA is undefined");
+      return NextResponse.json(
+        { error: "Failed to store WhatsApp Business Account" },
+        { status: 500 }
+      );
+    }
+
+    // Fetch phone numbers
+    const allPhoneNumbers: any[] = [];
+
+    if (phoneNumberId) {
+      console.log(
+        "🔍 [Embedded Signup API] Fetching phone number:",
+        phoneNumberId
+      );
       try {
-        const storedBM = await createBusinessManager({
-          facebook_account_id: facebookAccount.id,
+        const phoneDetails = await graphClient.getPhoneNumberDetails(
+          phoneNumberId
+        );
+
+        const verifyToken = crypto.randomBytes(32).toString("hex");
+        const encryptedVerifyToken = encryptToken(verifyToken);
+        const webhookUrl = `${process.env.NEXT_PUBLIC_SITE_URL}/api/webhooks/whatsapp/${phoneNumberId}`;
+
+        const storedPhone = await createPhoneNumber({
+          whatsapp_account_id: storedWABA.id,
           user_id: user.id,
-          business_id: bm.id,
-          business_name: bm.name,
-          business_email: null,
-          business_vertical: null,
-          permitted_roles: bm.permitted_roles || [],
+          phone_number_id: phoneNumberId,
+          display_phone_number: phoneDetails.display_phone_number,
+          verified_name: phoneDetails.verified_name || null,
+          quality_rating: phoneDetails.quality_rating || null,
+          code_verification_status:
+            phoneDetails.code_verification_status || null,
+          is_official_business_account:
+            phoneDetails.is_official_business_account || false,
+          webhook_url: webhookUrl,
+          webhook_verify_token: encryptedVerifyToken,
+          is_primary: true,
         });
-        storedBusinessManagers.push(storedBM);
+        allPhoneNumbers.push(storedPhone);
+        console.log("✅ [Embedded Signup API] Stored phone number");
       } catch (error: any) {
-        // Ignore duplicate errors
         if (
           !error.message?.includes("duplicate") &&
           !error.code?.includes("23505")
         ) {
-          console.error("Error storing business manager:", error);
+          console.error("Error storing phone number:", error);
         }
       }
-    }
-
-    // Fetch and store all WhatsApp Business Accounts for each Business Manager
-    const allWABAs = [];
-    const allPhoneNumbers = [];
-
-    for (const bm of storedBusinessManagers) {
+    } else {
+      console.log(
+        "🔍 [Embedded Signup API] Fetching all phone numbers for WABA..."
+      );
       try {
-        // Get WABAs for this business
-        const wabas = await graphClient.getWhatsAppBusinessAccounts(
-          bm.business_id
-        );
+        const phoneNumbers = await graphClient.getPhoneNumbers(wabaId);
 
-        for (const waba of wabas) {
+        for (const phone of phoneNumbers) {
           try {
-            const storedWABA = await createWhatsAppAccount({
-              business_manager_id: bm.id,
+            const verifyToken = crypto.randomBytes(32).toString("hex");
+            const encryptedVerifyToken = encryptToken(verifyToken);
+            const webhookUrl = `${process.env.NEXT_PUBLIC_SITE_URL}/api/webhooks/whatsapp/${phone.id}`;
+
+            const storedPhone = await createPhoneNumber({
+              whatsapp_account_id: storedWABA.id,
               user_id: user.id,
-              waba_id: waba.id,
-              waba_name: waba.name || null,
-              account_review_status: waba.account_review_status || null,
-              business_verification_status:
-                waba.business_verification_status || null,
-              quality_rating: waba.quality_rating || null,
-              messaging_limit_tier: null,
+              phone_number_id: phone.id,
+              display_phone_number: phone.display_phone_number,
+              verified_name: phone.verified_name || null,
+              quality_rating: phone.quality_rating || null,
+              code_verification_status: phone.code_verification_status || null,
+              is_official_business_account:
+                phone.is_official_business_account || false,
+              webhook_url: webhookUrl,
+              webhook_verify_token: encryptedVerifyToken,
+              is_primary: allPhoneNumbers.length === 0,
             });
-            allWABAs.push(storedWABA);
-
-            // Get phone numbers for this WABA
-            const phoneNumbers = await graphClient.getPhoneNumbers(waba.id);
-
-            for (const phone of phoneNumbers) {
-              try {
-                // Generate webhook verify token
-                const verifyToken = crypto.randomBytes(32).toString("hex");
-                const encryptedVerifyToken = encryptToken(verifyToken);
-
-                // Webhook URL
-                const webhookUrl = `${process.env.NEXT_PUBLIC_SITE_URL}/api/webhooks/whatsapp/${phone.id}`;
-
-                const storedPhone = await createPhoneNumber({
-                  whatsapp_account_id: storedWABA.id,
-                  user_id: user.id,
-                  phone_number_id: phone.id,
-                  display_phone_number: phone.display_phone_number,
-                  verified_name: phone.verified_name || null,
-                  quality_rating: phone.quality_rating || null,
-                  code_verification_status:
-                    phone.code_verification_status || null,
-                  is_official_business_account:
-                    phone.is_official_business_account || false,
-                  webhook_url: webhookUrl,
-                  webhook_verify_token: encryptedVerifyToken,
-                  is_primary: allPhoneNumbers.length === 0, // First phone is primary
-                });
-                allPhoneNumbers.push(storedPhone);
-              } catch (error: any) {
-                if (
-                  !error.message?.includes("duplicate") &&
-                  !error.code?.includes("23505")
-                ) {
-                  console.error("Error storing phone number:", error);
-                }
-              }
-            }
+            allPhoneNumbers.push(storedPhone);
           } catch (error: any) {
             if (
               !error.message?.includes("duplicate") &&
               !error.code?.includes("23505")
             ) {
-              console.error("Error storing WABA:", error);
+              console.error("Error storing phone number:", error);
             }
           }
         }
+        console.log(
+          "✅ [Embedded Signup API] Stored",
+          allPhoneNumbers.length,
+          "phone numbers"
+        );
       } catch (error) {
         console.error(
-          `Error fetching WABAs for business ${bm.business_id}:`,
+          "❌ [Embedded Signup API] Error fetching phone numbers:",
           error
         );
       }
     }
 
-    // Subscribe to webhooks for all phone numbers
+    // Activate phone numbers
     for (const phone of allPhoneNumbers) {
       try {
-        const waba = allWABAs.find((w) => w.id === phone.whatsapp_account_id);
-        if (waba) {
-          // We'll subscribe to webhook in Meta dashboard or via separate call
-          // For now, just mark the phone as active
-          const { updatePhoneNumber } = await import(
-            "@/lib/supabase/facebook-whatsapp-queries"
-          );
-          await updatePhoneNumber(phone.id, {
-            is_active: true,
-          });
-        }
+        await updatePhoneNumber(phone.id, { is_active: true });
       } catch (error) {
-        console.error("Error subscribing webhook:", error);
+        console.error("Error activating phone:", error);
       }
     }
 
@@ -580,18 +585,20 @@ export async function POST(request: NextRequest) {
           ...facebookAccount,
           access_token: "[ENCRYPTED]",
         },
-        businessManagers: storedBusinessManagers,
-        whatsappAccounts: allWABAs,
+        whatsappAccount: storedWABA,
         phoneNumbers: allPhoneNumbers,
+        businessManagerLinked: !!businessManagerId,
         summary: {
-          businessManagersCount: storedBusinessManagers.length,
-          whatsappAccountsCount: allWABAs.length,
+          step: 2,
+          description: "WhatsApp Embedded Signup completed",
+          wabaName: storedWABA?.waba_name,
           phoneNumbersCount: allPhoneNumbers.length,
+          previousStepCompleted: !!businessManagerId,
         },
       },
     });
   } catch (error: any) {
-    console.error("Embedded signup error:", error);
+    console.error("❌ [Embedded Signup API] Error:", error);
     return NextResponse.json(
       {
         error: "Failed to complete embedded signup",
