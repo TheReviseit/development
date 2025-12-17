@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createUser, getUserByFirebaseUID } from "@/lib/supabase/queries";
 import { sendWelcomeEmail } from "@/lib/email/automated-emails";
 import { createUserSchema } from "@/lib/validation/schemas";
+import { getUserCache } from "@/app/utils/userCache";
 
 export async function POST(request: NextRequest) {
   try {
@@ -25,6 +26,10 @@ export async function POST(request: NextRequest) {
     // Check if user already exists
     const existingUser = await getUserByFirebaseUID(firebase_uid);
     if (existingUser) {
+      // User exists - add to cache if not already there
+      const cache = getUserCache();
+      cache.set(existingUser);
+
       return NextResponse.json({ user: existingUser, created: false });
     }
 
@@ -34,6 +39,11 @@ export async function POST(request: NextRequest) {
       full_name: full_name || "",
       email,
     });
+
+    // Add newly created user to cache for fast future lookups
+    const cache = getUserCache();
+    cache.set(user);
+    console.log("[create-user] User cached successfully");
 
     // Note: Welcome email is now sent AFTER email verification
     // (see /api/auth/verify-email route)
