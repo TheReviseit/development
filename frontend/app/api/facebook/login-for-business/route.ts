@@ -123,8 +123,7 @@ export async function POST(request: NextRequest) {
         });
 
         // Make ONE token exchange request (authorization codes are single-use)
-        // IMPORTANT: Facebook OAuth token endpoint accepts both GET and POST,
-        // but POST is recommended for security (keeps secrets out of URLs/logs)
+
         const response = await fetch(
           "https://graph.facebook.com/v21.0/oauth/access_token",
           {

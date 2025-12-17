@@ -103,7 +103,7 @@ export default function FacebookLoginForBusinessButton({
       });
 
       const data = await response.json();
-      console.log("[LoginForBusiness] Backend response:", data.success);
+      console.log("[LoginForBusiness] Backend response:", data);
 
       if (data.success) {
         console.log(
@@ -112,9 +112,24 @@ export default function FacebookLoginForBusinessButton({
         );
         onSuccess?.(data.data?.businessManagers || []);
       } else {
-        const errorMsg = data.error || "Failed to complete business login";
-        console.error("[LoginForBusiness] Backend error:", errorMsg);
-        setError(errorMsg);
+        // Log FULL error details for debugging
+        console.error("[LoginForBusiness] Backend error - FULL DETAILS:", {
+          error: data.error,
+          hint: data.hint,
+          details: data.details,
+          debug: data.debug,
+        });
+
+        // Show Facebook's actual error message if available
+        const fbErrorMsg = data.details?.error?.message;
+        const errorMsg = fbErrorMsg
+          ? `Facebook Error: ${fbErrorMsg}`
+          : data.error || "Failed to complete business login";
+
+        console.error("[LoginForBusiness] Error message:", errorMsg);
+        console.error("[LoginForBusiness] Hint:", data.hint);
+
+        setError(data.hint || errorMsg);
         onError?.(errorMsg);
       }
     } catch (err: any) {
