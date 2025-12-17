@@ -1,28 +1,31 @@
 /**
- * Embedded Signup Button Component
- * Uses Meta's Configuration ID for streamlined WhatsApp Business onboarding
+ * Facebook Login for Business Button Component
+ * STEP 1: Gets business_management permission to access Business Managers
+ * This does NOT use config_id - it's standard Facebook Login
  */
 
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { facebookSDK } from "@/lib/facebook/facebook-sdk";
 import {
-  WHATSAPP_EMBEDDED_SIGNUP_PERMISSIONS,
+  FACEBOOK_LOGIN_PERMISSIONS,
   PERMISSION_DESCRIPTIONS,
 } from "@/types/facebook-whatsapp.types";
 
-interface EmbeddedSignupButtonProps {
-  onSuccess?: () => void;
+interface FacebookLoginForBusinessButtonProps {
+  onSuccess?: (businessManagers: any[]) => void;
   onError?: (error: string) => void;
   className?: string;
+  disabled?: boolean;
 }
 
-export default function EmbeddedSignupButton({
+export default function FacebookLoginForBusinessButton({
   onSuccess,
   onError,
   className = "",
-}: EmbeddedSignupButtonProps) {
+  disabled = false,
+}: FacebookLoginForBusinessButtonProps) {
   const [isLoading, setIsLoading] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -30,8 +33,10 @@ export default function EmbeddedSignupButton({
 
   const handleConnect = async () => {
     // Prevent double-clicks and race conditions
-    if (isProcessing) {
-      console.log("[EmbeddedSignup] Already processing, ignoring click");
+    if (isProcessing || disabled) {
+      console.log(
+        "[LoginForBusiness] Already processing or disabled, ignoring click"
+      );
       return;
     }
 
@@ -40,131 +45,55 @@ export default function EmbeddedSignupButton({
     setError(null);
 
     try {
-      console.log("[EmbeddedSignup] Starting connection flow...");
+      console.log(
+        "[LoginForBusiness] Starting Facebook Login for Business flow..."
+      );
+      console.log(
+        "[LoginForBusiness] NOTE: This is STEP 1 - getting business_management permission"
+      );
 
-      // Launch Meta's embedded signup
-      const result = await facebookSDK.launchEmbeddedSignup();
-      console.log("[EmbeddedSignup] SDK result:", result.success);
+      // Launch Facebook Login for Business (NO config_id)
+      const result = await facebookSDK.loginForBusiness();
+      console.log("[LoginForBusiness] SDK result:", result.success);
 
       if (!result.success) {
         const errorMsg = result.error || "Connection failed";
-        console.error("[EmbeddedSignup] Connection failed:", errorMsg);
+        console.error("[LoginForBusiness] Connection failed:", errorMsg);
         setError(errorMsg);
         onError?.(errorMsg);
         setIsLoading(false);
+        setIsProcessing(false);
         return;
       }
 
-      // Log what we received from the SDK
-      console.log("[EmbeddedSignup] SDK result:", {
-        success: result.success,
-        hasCode: !!(result as any).code,
-        hasAccessToken: !!result.accessToken,
-        hasUserID: !!result.userID,
-        grantedPermissions: result.grantedPermissions,
-        setupData: result.setupData,
-      });
+      console.log("[LoginForBusiness] Preparing to send to backend...");
 
-      // PERMISSION VALIDATION:
-      // With Authorization Code Flow (v21+), permissions are UNKNOWN on frontend
-      // because we receive a code, not a token. Backend will validate after code exchange.
-      //
-      // IMPORTANT: WhatsApp Embedded Signup only grants whatsapp_business_management
-      // and whatsapp_business_messaging. It does NOT grant business_management.
-      // business_management is obtained via Facebook Login for Business (Step 1).
-
-      if (
-        result.grantedPermissions !== null &&
-        result.grantedPermissions !== undefined
-      ) {
-        // Permissions are known - validate WhatsApp permissions only
-        // DO NOT check for business_management here
-        const hasWhatsAppAccess = result.grantedPermissions.includes(
-          "whatsapp_business_management"
-        );
-
-        if (!hasWhatsAppAccess) {
-          const errorMsg =
-            `Missing permission: whatsapp_business_management. ` +
-            `This is required for WhatsApp Business integration. ` +
-            `Please complete the Embedded Signup and grant access.`;
-          console.error(
-            "❌ [EmbeddedSignup] Missing whatsapp_business_management permission"
-          );
-          setError(errorMsg);
-          onError?.(errorMsg);
-          setIsLoading(false);
-          setIsProcessing(false);
-          return;
-        }
-
-        console.log(
-          "✅ [EmbeddedSignup] WhatsApp permission verified: whatsapp_business_management"
-        );
-
-        // Log warning for messaging permission (optional but recommended)
-        if (
-          !result.grantedPermissions.includes("whatsapp_business_messaging")
-        ) {
-          console.warn(
-            "⚠️ [EmbeddedSignup] Missing whatsapp_business_messaging permission",
-            "\nThis requires Meta App Review approval."
-          );
-        }
-      } else {
-        // Permissions are unknown (Code Flow or HTTP limitation)
-        // This is EXPECTED with Authorization Code Flow - backend will validate
-        console.log(
-          "ℹ️ [EmbeddedSignup] Permissions unknown on frontend (using Code Flow or HTTP).",
-          "Backend will validate permissions after code exchange."
-        );
-      }
-
-      console.log("[EmbeddedSignup] Preparing to send to backend...");
-
-      // Build request body - handle both code flow and token flow
-      // CRITICAL: Include the redirect_uri (current page URL) for OAuth code exchange
-      // Facebook requires the redirect_uri to EXACTLY match the page where FB.login() was called
+      // Build request body for backend
       const redirectUri = window.location.origin + window.location.pathname;
-      console.log(
-        "[EmbeddedSignup] Current page URL (redirect_uri):",
-        redirectUri
-      );
+      console.log("[LoginForBusiness] redirect_uri:", redirectUri);
 
       const requestBody: any = {
         userID: result.userID,
         grantedPermissions: result.grantedPermissions,
-        setupData: result.setupData,
-        redirectUri: redirectUri, // Send the exact page URL for OAuth code exchange
+        redirectUri: redirectUri,
       };
 
-      // Authorization Code Flow (preferred, v21+)
+      // Authorization Code Flow (preferred)
       if ((result as any).code) {
         requestBody.code = (result as any).code;
-        console.log("[EmbeddedSignup] Using Authorization Code Flow");
+        console.log("[LoginForBusiness] Using Authorization Code Flow");
       }
 
-      // Implicit Flow fallback (deprecated)
+      // Implicit Flow fallback
       if (result.accessToken) {
         requestBody.accessToken = result.accessToken;
         requestBody.expiresIn = result.expiresIn;
-        console.log("[EmbeddedSignup] Using Implicit Flow (legacy)");
+        console.log("[LoginForBusiness] Using Implicit Flow (legacy)");
       }
 
-      console.log(
-        "[EmbeddedSignup] Request body:",
-        JSON.stringify(
-          {
-            ...requestBody,
-            code: requestBody.code ? "[PRESENT]" : undefined,
-            accessToken: requestBody.accessToken ? "[PRESENT]" : undefined,
-          },
-          null,
-          2
-        )
-      );
+      console.log("[LoginForBusiness] Sending to backend...");
 
-      const response = await fetch("/api/facebook/embedded-signup", {
+      const response = await fetch("/api/facebook/login-for-business", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -173,21 +102,22 @@ export default function EmbeddedSignupButton({
       });
 
       const data = await response.json();
-      console.log("[EmbeddedSignup] Backend response:", data.success);
+      console.log("[LoginForBusiness] Backend response:", data.success);
 
       if (data.success) {
-        console.log("[EmbeddedSignup] Success! Redirecting...");
-        onSuccess?.();
-        // Redirect to dashboard
-        window.location.href = "/dashboard?connection=success";
+        console.log(
+          "[LoginForBusiness] Success! Business Managers:",
+          data.data?.businessManagers?.length
+        );
+        onSuccess?.(data.data?.businessManagers || []);
       } else {
-        const errorMsg = data.error || "Failed to complete setup";
-        console.error("[EmbeddedSignup] Backend error:", errorMsg);
+        const errorMsg = data.error || "Failed to complete business login";
+        console.error("[LoginForBusiness] Backend error:", errorMsg);
         setError(errorMsg);
         onError?.(errorMsg);
       }
     } catch (err: any) {
-      console.error("[EmbeddedSignup] Exception:", err);
+      console.error("[LoginForBusiness] Exception:", err);
       const errorMsg = err.message || "An unexpected error occurred";
       setError(errorMsg);
       onError?.(errorMsg);
@@ -198,12 +128,12 @@ export default function EmbeddedSignupButton({
   };
 
   return (
-    <div className="embedded-signup-container">
+    <div className="login-for-business-container">
       <button
         onClick={handleConnect}
-        disabled={isLoading}
-        className={`facebook-embedded-button ${className}`}
-        aria-label="Connect WhatsApp Business with Facebook"
+        disabled={isLoading || disabled}
+        className={`facebook-login-business-button ${className}`}
+        aria-label="Connect Business Manager with Facebook"
       >
         {isLoading ? (
           <>
@@ -219,9 +149,9 @@ export default function EmbeddedSignupButton({
               fill="currentColor"
               className="facebook-icon"
             >
-              <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z" />
+              <path d="M12 2C6.477 2 2 6.477 2 12c0 4.991 3.657 9.128 8.438 9.879V14.89h-2.54V12h2.54V9.797c0-2.506 1.492-3.89 3.777-3.89 1.094 0 2.238.195 2.238.195v2.46h-1.26c-1.243 0-1.63.771-1.63 1.562V12h2.773l-.443 2.89h-2.33v6.989C18.343 21.129 22 16.99 22 12c0-5.523-4.477-10-10-10z" />
             </svg>
-            <span>Connect WhatsApp Business</span>
+            <span>Connect Business Manager</span>
           </>
         )}
       </button>
@@ -253,13 +183,14 @@ export default function EmbeddedSignupButton({
 
       {showPermissionInfo && (
         <div className="permission-info-panel">
-          <h4>Step 2: WhatsApp Access</h4>
+          <h4>Step 1: Business Manager Access</h4>
           <p className="permission-info-description">
-            This connects your WhatsApp Business Account and phone number:
+            This connects your Facebook Business Manager so we can access your
+            businesses:
           </p>
 
           <ul className="permission-list">
-            {WHATSAPP_EMBEDDED_SIGNUP_PERMISSIONS.map((permission) => (
+            {FACEBOOK_LOGIN_PERMISSIONS.map((permission) => (
               <li key={permission} className="permission-item">
                 <div className="permission-name">{permission}</div>
                 <div className="permission-description">
@@ -282,23 +213,22 @@ export default function EmbeddedSignupButton({
               <path d="M12 16v-4M12 8h.01" />
             </svg>
             <p>
-              Meta's secure popup will guide you through selecting your Business
-              Manager, WhatsApp Account, and phone number. Your credentials stay
-              safe with Meta.
+              After connecting your Business Manager, you'll proceed to Step 2
+              to connect your WhatsApp Business Account.
             </p>
           </div>
         </div>
       )}
 
       <style jsx>{`
-        .embedded-signup-container {
+        .login-for-business-container {
           display: flex;
           flex-direction: column;
           gap: 12px;
           width: 100%;
         }
 
-        .facebook-embedded-button {
+        .facebook-login-business-button {
           display: flex;
           align-items: center;
           justify-content: center;
@@ -316,17 +246,17 @@ export default function EmbeddedSignupButton({
           box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
         }
 
-        .facebook-embedded-button:hover:not(:disabled) {
+        .facebook-login-business-button:hover:not(:disabled) {
           background: #166fe5;
           transform: translateY(-1px);
           box-shadow: 0 4px 12px rgba(24, 119, 242, 0.3);
         }
 
-        .facebook-embedded-button:active:not(:disabled) {
+        .facebook-login-business-button:active:not(:disabled) {
           transform: translateY(0);
         }
 
-        .facebook-embedded-button:disabled {
+        .facebook-login-business-button:disabled {
           background: #ccc;
           cursor: not-allowed;
           opacity: 0.6;

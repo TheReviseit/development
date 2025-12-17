@@ -16,7 +16,7 @@ export interface FacebookLoginResponse {
     graphDomain: string;
     data_access_expiration_time: number;
   };
-  status: 'connected' | 'not_authorized' | 'unknown';
+  status: "connected" | "not_authorized" | "unknown";
 }
 
 export interface FacebookUserProfile {
@@ -32,7 +32,7 @@ export interface FacebookUserProfile {
 
 export interface FacebookPermission {
   permission: string;
-  status: 'granted' | 'declined' | 'expired';
+  status: "granted" | "declined" | "expired";
 }
 
 // =====================================================
@@ -51,7 +51,7 @@ export interface ConnectedFacebookAccount {
   refresh_token: string | null;
   last_refreshed_at: string | null;
   granted_permissions: string[];
-  status: 'active' | 'expired' | 'revoked' | 'error';
+  status: "active" | "expired" | "revoked" | "error";
   connection_error: string | null;
   connected_at: string;
   updated_at: string;
@@ -83,7 +83,7 @@ export interface ConnectedWhatsAppAccount {
   business_verification_status: string | null;
   currency: string;
   message_template_namespace: string | null;
-  quality_rating: 'GREEN' | 'YELLOW' | 'RED' | 'UNKNOWN' | null;
+  quality_rating: "GREEN" | "YELLOW" | "RED" | "UNKNOWN" | null;
   messaging_limit_tier: string | null;
   is_active: boolean;
   created_at: string;
@@ -99,7 +99,7 @@ export interface ConnectedPhoneNumber {
   display_phone_number: string;
   verified_name: string | null;
   code_verification_status: string | null;
-  quality_rating: 'GREEN' | 'YELLOW' | 'RED' | 'UNKNOWN' | null;
+  quality_rating: "GREEN" | "YELLOW" | "RED" | "UNKNOWN" | null;
   platform_type: string;
   webhook_url: string | null;
   webhook_verified: boolean;
@@ -119,17 +119,17 @@ export interface WhatsAppMessage {
   user_id: string;
   message_id: string;
   wamid: string | null;
-  direction: 'inbound' | 'outbound';
+  direction: "inbound" | "outbound";
   from_number: string;
   to_number: string;
-  message_type: 'text' | 'image' | 'video' | 'document' | 'audio' | 'template';
+  message_type: "text" | "image" | "video" | "document" | "audio" | "template";
   message_body: string | null;
   media_url: string | null;
   media_id: string | null;
   template_name: string | null;
   template_language: string | null;
   template_parameters: Record<string, any> | null;
-  status: 'sent' | 'delivered' | 'read' | 'failed';
+  status: "sent" | "delivered" | "read" | "failed";
   error_code: string | null;
   error_message: string | null;
   conversation_id: string | null;
@@ -163,7 +163,7 @@ export interface MetaWhatsAppBusinessAccount {
   business_verification_status?: string;
   currency?: string;
   message_template_namespace?: string;
-  quality_rating?: 'GREEN' | 'YELLOW' | 'RED' | 'UNKNOWN';
+  quality_rating?: "GREEN" | "YELLOW" | "RED" | "UNKNOWN";
   timezone_id?: string;
 }
 
@@ -171,7 +171,7 @@ export interface MetaPhoneNumber {
   id: string;
   display_phone_number: string;
   verified_name: string;
-  quality_rating?: 'GREEN' | 'YELLOW' | 'RED' | 'UNKNOWN';
+  quality_rating?: "GREEN" | "YELLOW" | "RED" | "UNKNOWN";
   code_verification_status?: string;
   is_official_business_account?: boolean;
   platform_type?: string;
@@ -289,7 +289,7 @@ export interface SendWhatsAppMessageResponse {
 // =====================================================
 
 export interface WhatsAppWebhookValue {
-  messaging_product: 'whatsapp';
+  messaging_product: "whatsapp";
   metadata: {
     display_phone_number: string;
     phone_number_id: string;
@@ -304,7 +304,14 @@ export interface WhatsAppWebhookValue {
     from: string;
     id: string;
     timestamp: string;
-    type: 'text' | 'image' | 'video' | 'document' | 'audio' | 'location' | 'contacts';
+    type:
+      | "text"
+      | "image"
+      | "video"
+      | "document"
+      | "audio"
+      | "location"
+      | "contacts";
     text?: {
       body: string;
     };
@@ -318,7 +325,7 @@ export interface WhatsAppWebhookValue {
   }>;
   statuses?: Array<{
     id: string;
-    status: 'sent' | 'delivered' | 'read' | 'failed';
+    status: "sent" | "delivered" | "read" | "failed";
     timestamp: string;
     recipient_id: string;
     conversation?: {
@@ -331,7 +338,7 @@ export interface WhatsAppWebhookValue {
     pricing?: {
       pricing_model: string;
       billable: boolean;
-      category: 'authentication' | 'marketing' | 'utility' | 'service';
+      category: "authentication" | "marketing" | "utility" | "service";
     };
     errors?: Array<{
       code: number;
@@ -348,12 +355,12 @@ export interface WhatsAppWebhookEntry {
   id: string;
   changes: Array<{
     value: WhatsAppWebhookValue;
-    field: 'messages';
+    field: "messages";
   }>;
 }
 
 export interface WhatsAppWebhookPayload {
-  object: 'whatsapp_business_account';
+  object: "whatsapp_business_account";
   entry: WhatsAppWebhookEntry[];
 }
 
@@ -365,7 +372,7 @@ export interface FacebookConnectionStep {
   id: number;
   title: string;
   description: string;
-  status: 'pending' | 'in_progress' | 'completed' | 'error';
+  status: "pending" | "in_progress" | "completed" | "error";
   error?: string;
 }
 
@@ -386,27 +393,57 @@ export interface WhatsAppConnectionState {
 // PERMISSION CONSTANTS
 // =====================================================
 
-export const REQUIRED_FACEBOOK_PERMISSIONS = [
-  'business_management',
-  'whatsapp_business_management',
-  'whatsapp_business_messaging',
-  'public_profile',
-  'email',
+/**
+ * STEP 1: Facebook Login for Business
+ * Used to get access to Business Managers
+ * Does NOT use config_id
+ */
+export const FACEBOOK_LOGIN_PERMISSIONS = [
+  "business_management",
+  "public_profile",
+  "email",
 ] as const;
 
-export type FacebookPermissionType = typeof REQUIRED_FACEBOOK_PERMISSIONS[number];
+/**
+ * STEP 2: WhatsApp Embedded Signup
+ * Used to connect WABA and phone numbers
+ * Uses config_id
+ * IMPORTANT: This NEVER includes business_management
+ */
+export const WHATSAPP_EMBEDDED_SIGNUP_PERMISSIONS = [
+  "whatsapp_business_management",
+  "whatsapp_business_messaging",
+] as const;
 
-export const PERMISSION_DESCRIPTIONS: Record<FacebookPermissionType, string> = {
-  business_management: 'Access and manage your Business Manager',
-  whatsapp_business_management: 'Manage WhatsApp Business Accounts',
-  whatsapp_business_messaging: 'Send and receive WhatsApp messages',
-  public_profile: 'Access your basic profile information',
-  email: 'Access your email address',
+/**
+ * Combined permissions (for reference only)
+ * @deprecated Use FACEBOOK_LOGIN_PERMISSIONS or WHATSAPP_EMBEDDED_SIGNUP_PERMISSIONS
+ */
+export const REQUIRED_FACEBOOK_PERMISSIONS = [
+  ...FACEBOOK_LOGIN_PERMISSIONS,
+  ...WHATSAPP_EMBEDDED_SIGNUP_PERMISSIONS,
+] as const;
+
+export type FacebookLoginPermissionType =
+  (typeof FACEBOOK_LOGIN_PERMISSIONS)[number];
+
+export type WhatsAppPermissionType =
+  (typeof WHATSAPP_EMBEDDED_SIGNUP_PERMISSIONS)[number];
+
+export type FacebookPermissionType =
+  (typeof REQUIRED_FACEBOOK_PERMISSIONS)[number];
+
+export const PERMISSION_DESCRIPTIONS: Record<string, string> = {
+  business_management: "Access and manage your Business Manager",
+  whatsapp_business_management: "Manage WhatsApp Business Accounts",
+  whatsapp_business_messaging: "Send and receive WhatsApp messages",
+  public_profile: "Access your basic profile information",
+  email: "Access your email address",
 };
 
-export const PERMISSIONS_REQUIRING_REVIEW: FacebookPermissionType[] = [
-  'whatsapp_business_management',
-  'whatsapp_business_messaging',
+export const PERMISSIONS_REQUIRING_REVIEW: string[] = [
+  "whatsapp_business_management",
+  "whatsapp_business_messaging",
 ];
 
 // =====================================================
@@ -414,17 +451,17 @@ export const PERMISSIONS_REQUIRING_REVIEW: FacebookPermissionType[] = [
 // =====================================================
 
 export const QUALITY_RATING_COLORS = {
-  GREEN: '#10b981',
-  YELLOW: '#f59e0b',
-  RED: '#ef4444',
-  UNKNOWN: '#6b7280',
+  GREEN: "#10b981",
+  YELLOW: "#f59e0b",
+  RED: "#ef4444",
+  UNKNOWN: "#6b7280",
 } as const;
 
 export const QUALITY_RATING_LABELS = {
-  GREEN: 'High Quality',
-  YELLOW: 'Medium Quality',
-  RED: 'Low Quality',
-  UNKNOWN: 'Not Rated',
+  GREEN: "High Quality",
+  YELLOW: "Medium Quality",
+  RED: "Low Quality",
+  UNKNOWN: "Not Rated",
 } as const;
 
 // =====================================================
@@ -439,4 +476,3 @@ export const MESSAGE_LIMIT_TIERS = {
   TIER_100K: 100000,
   TIER_UNLIMITED: Infinity,
 } as const;
-
