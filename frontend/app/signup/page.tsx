@@ -239,8 +239,18 @@ export default function SignupPage() {
         router.push("/verify-email");
       } catch (err: any) {
         console.error("Signup error:", err);
-        setError(handleFirebaseError(err));
+
+        // Ensure we always reset loading state on error
         setLoading(false);
+
+        // Handle the error and display it to the user
+        const errorMessage = handleFirebaseError(err);
+        setError(errorMessage);
+
+        // Log the specific error code for debugging
+        if (err?.code) {
+          console.error("Firebase error code:", err.code);
+        }
       }
     },
     [name, email, password, confirmPassword, router]
@@ -260,6 +270,30 @@ export default function SignupPage() {
       const result = await signInWithPopup(auth, provider);
       const idToken = await result.user.getIdToken();
 
+      // Check if user already exists in the database
+      const checkResponse = await fetch("/api/auth/check-user-exists", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ idToken }),
+      });
+
+      if (checkResponse.ok) {
+        const { exists } = await checkResponse.json();
+
+        if (exists) {
+          // User already exists - show error and stop signup
+          setError(
+            "An account with this email already exists. Please use the login page instead."
+          );
+          setGoogleLoading(false);
+
+          // Sign out the user from Firebase since they shouldn't be signing up
+          await auth.signOut();
+          return;
+        }
+      }
+
+      // User doesn't exist - proceed with signup
       const [sessionSuccess, onboardingCompleted] = await Promise.all([
         createSessionWithRetry(idToken),
         checkOnboardingStatus(),
