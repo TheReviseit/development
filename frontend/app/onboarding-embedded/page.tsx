@@ -35,6 +35,18 @@ export default function OnboardingPageEmbedded() {
       "🔐 redirect_uri sent back by Facebook:",
       window.location.origin + window.location.pathname
     );
+    console.log("🔍 AUTH URL USED BY FACEBOOK:", window.location.href);
+    console.log("🔍 FULL REDIRECT URI SENT TO BACKEND:", {
+      origin: window.location.origin,
+      pathname: window.location.pathname,
+      search: window.location.search,
+      hash: window.location.hash,
+      full:
+        window.location.origin +
+        window.location.pathname +
+        window.location.search +
+        window.location.hash,
+    });
     console.groupEnd();
 
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
