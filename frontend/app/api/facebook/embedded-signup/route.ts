@@ -85,7 +85,7 @@ export async function POST(request: NextRequest) {
 
       try {
         const tokenUrl = new URL(
-          "https://graph.facebook.com/v21.0/oauth/access_token"
+          "https://graph.facebook.com/v24.0/oauth/access_token"
         );
         tokenUrl.searchParams.append(
           "client_id",
@@ -176,7 +176,7 @@ export async function POST(request: NextRequest) {
         // Get user ID if not provided
         if (!userID) {
           const meResponse = await fetch(
-            `https://graph.facebook.com/v21.0/me?access_token=${accessToken}`
+            `https://graph.facebook.com/v24.0/me?access_token=${accessToken}`
           );
           if (meResponse.ok) {
             const meData = await meResponse.json();
@@ -245,7 +245,7 @@ export async function POST(request: NextRequest) {
     let validatedPermissions: string[] = [];
     try {
       const permissionsResponse = await fetch(
-        `https://graph.facebook.com/v21.0/me/permissions?access_token=${longLivedToken}`
+        `https://graph.facebook.com/v24.0/me/permissions?access_token=${longLivedToken}`
       );
 
       if (permissionsResponse.ok) {
@@ -388,7 +388,7 @@ export async function POST(request: NextRequest) {
           );
 
           const wabaResponse = await fetch(
-            `https://graph.facebook.com/v21.0/me/whatsapp_business_accounts?access_token=${longLivedToken}`
+            `https://graph.facebook.com/v24.0/me/whatsapp_business_accounts?access_token=${longLivedToken}`
           );
 
           if (wabaResponse.ok) {

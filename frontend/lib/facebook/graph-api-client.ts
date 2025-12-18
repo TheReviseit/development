@@ -12,7 +12,7 @@ import {
   MetaGraphAPIError,
 } from "@/types/facebook-whatsapp.types";
 
-const GRAPH_API_VERSION = "v21.0";
+const GRAPH_API_VERSION = "v24.0";
 const GRAPH_API_BASE_URL = `https://graph.facebook.com/${GRAPH_API_VERSION}`;
 
 export class MetaGraphAPIClient {

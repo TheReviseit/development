@@ -74,7 +74,7 @@ export async function POST(request: NextRequest) {
 
       try {
         const tokenUrl = new URL(
-          "https://graph.facebook.com/v21.0/oauth/access_token"
+          "https://graph.facebook.com/v24.0/oauth/access_token"
         );
         tokenUrl.searchParams.append(
           "client_id",
@@ -110,7 +110,7 @@ export async function POST(request: NextRequest) {
 
         // Log the request being sent
         console.log("Token exchange request:", {
-          endpoint: "https://graph.facebook.com/v21.0/oauth/access_token",
+          endpoint: "https://graph.facebook.com/v24.0/oauth/access_token",
           client_id: process.env.NEXT_PUBLIC_FACEBOOK_APP_ID,
           client_secret: process.env.FACEBOOK_APP_SECRET
             ? "PRESENT (starts with " +
@@ -125,7 +125,7 @@ export async function POST(request: NextRequest) {
         // Make ONE token exchange request (authorization codes are single-use)
 
         const response = await fetch(
-          "https://graph.facebook.com/v21.0/oauth/access_token",
+          "https://graph.facebook.com/v24.0/oauth/access_token",
           {
             method: "POST",
             headers: {
@@ -195,7 +195,7 @@ export async function POST(request: NextRequest) {
         // Get user ID if not provided
         if (!userID) {
           const meResponse = await fetch(
-            `https://graph.facebook.com/v21.0/me?access_token=${accessToken}`
+            `https://graph.facebook.com/v24.0/me?access_token=${accessToken}`
           );
           if (meResponse.ok) {
             const meData = await meResponse.json();
@@ -267,7 +267,7 @@ export async function POST(request: NextRequest) {
     );
 
     const permissionsResponse = await fetch(
-      `https://graph.facebook.com/v21.0/me/permissions?access_token=${longLivedToken}`
+      `https://graph.facebook.com/v24.0/me/permissions?access_token=${longLivedToken}`
     );
 
     let validatedPermissions: string[] = [];
