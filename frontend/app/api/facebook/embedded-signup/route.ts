@@ -77,78 +77,54 @@ export async function POST(request: NextRequest) {
     // Determine authorization code (root level preferred, fallback to setupData)
     const authorizationCode = code || setupData.code;
 
-    // Handle Authorization Code Flow
+    // Handle Authorization Code Flow - TWO-STEP TOKEN EXCHANGE
     if (!accessToken && authorizationCode) {
       console.log(
-        "🔄 [Embedded Signup API] Exchanging authorization code for access token..."
+        "🔄 [Embedded Signup API] Starting two-step token exchange..."
       );
 
       try {
-        const tokenUrl = new URL(
+        // STEP 1: Exchange authorization code for SHORT-lived access token
+        // NOTE: For FB.login() Embedded Signup, redirect_uri is NOT required
+        // The SDK handles this internally based on Meta App configuration
+        const step1Url = new URL(
           "https://graph.facebook.com/v24.0/oauth/access_token"
         );
-        tokenUrl.searchParams.append(
+        step1Url.searchParams.append(
           "client_id",
           process.env.NEXT_PUBLIC_FACEBOOK_APP_ID || ""
         );
-        tokenUrl.searchParams.append(
+        step1Url.searchParams.append(
           "client_secret",
           process.env.FACEBOOK_APP_SECRET || ""
         );
-        tokenUrl.searchParams.append("code", authorizationCode);
-
-        // CRITICAL: Use EXACT redirect_uri from frontend
-        // Authorization codes are SINGLE-USE and tied to the exact redirect_uri
-        // Trying multiple URIs will invalidate the code on first failure
-        const redirectUri = body.redirectUri;
-
-        if (!redirectUri) {
-          console.error(
-            "❌ [Embedded Signup API] No redirect_uri provided in request body"
-          );
-          return NextResponse.json(
-            {
-              error: "redirect_uri is required for Authorization Code Flow",
-              hint: "Ensure the frontend sends 'redirectUri' in the request body",
-            },
-            { status: 400 }
-          );
-        }
+        step1Url.searchParams.append("code", authorizationCode);
 
         console.log(
-          "🔄 [Embedded Signup API] Exchanging code with redirect_uri:",
-          redirectUri
+          "🔄 [Embedded Signup API] Step 1: Exchanging code for short-lived token..."
         );
-        tokenUrl.searchParams.append("redirect_uri", redirectUri);
 
-        // Make ONE token exchange request (authorization codes are single-use)
-        const response = await fetch(tokenUrl.toString(), { method: "GET" });
+        const step1Response = await fetch(step1Url.toString(), {
+          method: "GET",
+        });
 
-        if (!response.ok) {
-          const errorData = await response.json();
+        if (!step1Response.ok) {
+          const errorData = await step1Response.json();
           console.error(
-            "❌ [Embedded Signup API] Code exchange failed:",
+            "❌ [Embedded Signup API] Step 1 failed:",
             JSON.stringify(errorData, null, 2)
           );
 
           // Provide helpful error messages
           if (
             errorData?.error?.code === 100 &&
-            (errorData?.error?.message?.includes("code") ||
-              errorData?.error?.error_subcode === 36008)
+            errorData?.error?.message?.includes("code")
           ) {
-            let hint = "The authorization code could not be exchanged.";
-            if (errorData?.error?.error_subcode === 36008) {
-              hint = `The redirect_uri doesn't match. Make sure your Facebook App's Valid OAuth Redirect URIs includes: ${redirectUri}`;
-            } else {
-              hint =
-                "The authorization code may have expired or already been used. Please try the OAuth flow again.";
-            }
-
             return NextResponse.json(
               {
-                error: "Failed to exchange authorization code",
-                hint,
+                error: "This connection session has expired",
+                hint: "Please close this window and click 'Connect WhatsApp' again.",
+                action: "RESTART_FLOW",
                 details: errorData,
               },
               { status: 400 }
@@ -164,14 +140,54 @@ export async function POST(request: NextRequest) {
           );
         }
 
-        const tokenData = await response.json();
+        const step1Data = await step1Response.json();
+        const shortLivedToken = step1Data.access_token;
         console.log(
-          "✅ [Embedded Signup API] Code exchange succeeded with redirect_uri:",
-          redirectUri
+          "✅ [Embedded Signup API] Step 1 complete: Got short-lived token"
         );
 
-        accessToken = tokenData.access_token;
-        expiresIn = tokenData.expires_in;
+        // STEP 2: Exchange short-lived token for LONG-lived token (60 days)
+        console.log(
+          "🔄 [Embedded Signup API] Step 2: Exchanging for long-lived token..."
+        );
+
+        const step2Url = new URL(
+          "https://graph.facebook.com/v24.0/oauth/access_token"
+        );
+        step2Url.searchParams.append("grant_type", "fb_exchange_token");
+        step2Url.searchParams.append(
+          "client_id",
+          process.env.NEXT_PUBLIC_FACEBOOK_APP_ID || ""
+        );
+        step2Url.searchParams.append(
+          "client_secret",
+          process.env.FACEBOOK_APP_SECRET || ""
+        );
+        step2Url.searchParams.append("fb_exchange_token", shortLivedToken);
+
+        const step2Response = await fetch(step2Url.toString(), {
+          method: "GET",
+        });
+
+        if (!step2Response.ok) {
+          const errorData = await step2Response.json();
+          console.warn(
+            "⚠️ [Embedded Signup API] Step 2 failed, using short-lived token:",
+            errorData
+          );
+          // Fall back to short-lived token
+          accessToken = shortLivedToken;
+          expiresIn = step1Data.expires_in || 3600;
+        } else {
+          const step2Data = await step2Response.json();
+          accessToken = step2Data.access_token;
+          expiresIn = step2Data.expires_in; // ~60 days in seconds
+          console.log(
+            "✅ [Embedded Signup API] Step 2 complete: Got long-lived token (expires in",
+            Math.round(expiresIn / 86400),
+            "days)"
+          );
+        }
 
         // Get user ID if not provided
         if (!userID) {
@@ -184,7 +200,7 @@ export async function POST(request: NextRequest) {
           }
         }
       } catch (error: any) {
-        console.error("❌ [Embedded Signup API] Code exchange error:", error);
+        console.error("❌ [Embedded Signup API] Token exchange error:", error);
         return NextResponse.json(
           {
             error: "Failed to process authorization code",
@@ -202,23 +218,27 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Exchange for long-lived token
-    let longLivedToken: string;
-    let tokenExpiresIn: number;
+    // Use the already-processed token (should be long-lived from two-step exchange above)
+    // If accessToken was passed directly (implicit flow), try to exchange it
+    let longLivedToken: string = accessToken;
+    let tokenExpiresIn: number = expiresIn || 3600;
 
-    try {
-      const exchangeResult = await MetaGraphAPIClient.exchangeToken(
-        accessToken
-      );
-      longLivedToken = exchangeResult.access_token;
-      tokenExpiresIn = exchangeResult.expires_in;
-      console.log("✅ [Embedded Signup API] Long-lived token obtained");
-    } catch (error: any) {
-      console.warn(
-        "⚠️ [Embedded Signup API] Token exchange failed, using short-lived"
-      );
-      longLivedToken = accessToken;
-      tokenExpiresIn = expiresIn || 3600;
+    // Only try exchange if we haven't already done two-step exchange
+    if (!authorizationCode && accessToken) {
+      try {
+        const exchangeResult = await MetaGraphAPIClient.exchangeToken(
+          accessToken
+        );
+        longLivedToken = exchangeResult.access_token;
+        tokenExpiresIn = exchangeResult.expires_in;
+        console.log(
+          "✅ [Embedded Signup API] Long-lived token obtained via fallback exchange"
+        );
+      } catch (error: any) {
+        console.warn(
+          "⚠️ [Embedded Signup API] Fallback token exchange failed, using provided token"
+        );
+      }
     }
 
     if (!tokenExpiresIn || isNaN(tokenExpiresIn)) {
@@ -513,6 +533,62 @@ export async function POST(request: NextRequest) {
         { error: "Failed to store WhatsApp Business Account" },
         { status: 500 }
       );
+    }
+
+    // Subscribe app to WABA webhooks
+    // NOTE: Webhook URL is configured in Meta App Dashboard, not passed here
+    console.log("🔗 [Embedded Signup API] Subscribing to WABA webhooks...");
+    try {
+      const subscribeResponse = await fetch(
+        `https://graph.facebook.com/v24.0/${wabaId}/subscribed_apps`,
+        {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${longLivedToken}`,
+            "Content-Type": "application/json",
+          },
+        }
+      );
+
+      if (subscribeResponse.ok) {
+        console.log("✅ [Embedded Signup API] Webhook subscription successful");
+
+        // Verify subscription
+        const verifyResponse = await fetch(
+          `https://graph.facebook.com/v24.0/${wabaId}/subscribed_apps`,
+          {
+            headers: { Authorization: `Bearer ${longLivedToken}` },
+          }
+        );
+
+        if (verifyResponse.ok) {
+          const verifyData = await verifyResponse.json();
+          const isSubscribed = verifyData.data?.some(
+            (app: any) => app.id === process.env.NEXT_PUBLIC_FACEBOOK_APP_ID
+          );
+          if (isSubscribed) {
+            console.log(
+              "✅ [Embedded Signup API] Webhook subscription verified"
+            );
+          } else {
+            console.warn(
+              "⚠️ [Embedded Signup API] Webhook subscription not found in verification"
+            );
+          }
+        }
+      } else {
+        const errorData = await subscribeResponse.json().catch(() => ({}));
+        console.warn(
+          "⚠️ [Embedded Signup API] Webhook subscription failed:",
+          errorData
+        );
+      }
+    } catch (webhookError) {
+      console.warn(
+        "⚠️ [Embedded Signup API] Error subscribing to webhooks:",
+        webhookError
+      );
+      // Don't fail the entire flow for webhook subscription failure
     }
 
     // Fetch phone numbers

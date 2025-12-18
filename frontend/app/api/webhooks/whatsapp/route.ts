@@ -122,17 +122,41 @@ export async function POST(request: NextRequest) {
         for (const change of entry.changes) {
           const value = change.value;
 
-          // Get phone number from database
-          const phoneNumber = await getPhoneNumberByPhoneNumberId(
-            value.metadata.phone_number_id
+          // Get phone number AND associated client with AI configuration
+          // This enables multi-tenant routing with client-specific AI processing
+          const { supabaseAdmin: supabase } = await import(
+            "@/lib/supabase/server"
           );
 
-          if (!phoneNumber) {
+          const { data: phoneNumber, error: phoneError } = await supabase
+            .from("connected_phone_numbers")
+            .select(
+              `
+              *,
+              user:user_id (
+                id,
+                ai_config,
+                business_name,
+                knowledge_base
+              )
+            `
+            )
+            .eq("phone_number_id", value.metadata.phone_number_id)
+            .single();
+
+          if (!phoneNumber || phoneError) {
             console.warn(
               `Phone number ${value.metadata.phone_number_id} not found in database`
             );
             continue;
           }
+
+          // Log client context for debugging
+          console.log(
+            `📱 [Webhook] Processing message for client: ${
+              phoneNumber.user?.business_name || phoneNumber.user_id
+            }`
+          );
 
           // Process incoming messages
           if (value.messages) {
