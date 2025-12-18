@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { onAuthStateChanged, User } from "firebase/auth";
 import { auth } from "@/src/firebase/firebase";
 import BusinessInfoForm from "../components/onboarding/BusinessInfoForm";
-import WhatsAppConnectionForm from "../components/onboarding/WhatsAppConnectionForm";
+import WhatsAppEmbeddedSignupForm from "../components/onboarding/WhatsAppEmbeddedSignupForm";
 import MessagingSettingsForm from "../components/onboarding/MessagingSettingsForm";
 import VerificationForm from "../components/onboarding/VerificationForm";
 import SpaceshipLoader from "../components/loading/SpaceshipLoader";
@@ -104,8 +104,10 @@ export default function OnboardingPage() {
     phoneNumber: "",
     phoneNumberId: "",
     businessIdMeta: "",
-    apiToken: "",
+    apiToken: "[MANAGED]", // Token managed server-side
   });
+  const [whatsappConnected, setWhatsappConnected] = useState(false);
+  const [whatsappError, setWhatsappError] = useState<string | null>(null);
 
   // Messaging Settings State
   const [messagingData, setMessagingData] = useState({
@@ -177,8 +179,9 @@ export default function OnboardingPage() {
         }
         return true;
       case 2:
-        if (!whatsappData.phoneNumber || !whatsappData.apiToken) {
-          alert("Please fill in all required fields");
+        // For Embedded Signup, we just check if WhatsApp was connected
+        if (!whatsappConnected) {
+          alert("Please connect your WhatsApp Business account");
           return false;
         }
         return true;
@@ -378,9 +381,22 @@ export default function OnboardingPage() {
             )}
 
             {currentStep === 2 && (
-              <WhatsAppConnectionForm
-                data={whatsappData}
-                onChange={handleWhatsAppDataChange}
+              <WhatsAppEmbeddedSignupForm
+                onSuccess={(data) => {
+                  setWhatsappData({
+                    providerType: "cloud_api",
+                    phoneNumber: data.displayPhoneNumber,
+                    phoneNumberId: data.phoneNumberId,
+                    businessIdMeta: data.wabaId,
+                    apiToken: "[MANAGED]", // Token stored server-side
+                  });
+                  setWhatsappConnected(true);
+                  setWhatsappError(null);
+                }}
+                onError={(error) => {
+                  setWhatsappError(error);
+                  setWhatsappConnected(false);
+                }}
               />
             )}
 
