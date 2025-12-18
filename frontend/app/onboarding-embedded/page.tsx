@@ -25,6 +25,18 @@ export default function OnboardingPageEmbedded() {
   const router = useRouter();
 
   useEffect(() => {
+    // 🔍 FACEBOOK REDIRECT DEBUG - Capture the exact redirect URI
+    console.group("🔍 FACEBOOK REDIRECT DEBUG");
+    console.log("➡️ Full browser URL:", window.location.href);
+    console.log("➡️ Pathname:", window.location.pathname);
+    console.log("➡️ Search Params:", window.location.search);
+    console.log("➡️ Hash:", window.location.hash);
+    console.log(
+      "🔐 redirect_uri sent back by Facebook:",
+      window.location.origin + window.location.pathname
+    );
+    console.groupEnd();
+
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
       if (currentUser) {
         setUser(currentUser);
