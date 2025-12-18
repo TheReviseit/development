@@ -55,7 +55,6 @@ export async function POST(request: NextRequest) {
       hasAccessToken: !!body.accessToken,
       hasUserID: !!body.userID,
       hasCode: !!body.code,
-      redirectUri: body.redirectUri,
     });
 
     let {
@@ -73,40 +72,12 @@ export async function POST(request: NextRequest) {
       );
 
       try {
-        const tokenUrl = new URL(
-          "https://graph.facebook.com/v24.0/oauth/access_token"
-        );
-        tokenUrl.searchParams.append(
-          "client_id",
-          process.env.NEXT_PUBLIC_FACEBOOK_APP_ID || ""
-        );
-        tokenUrl.searchParams.append(
-          "client_secret",
-          process.env.FACEBOOK_APP_SECRET || ""
-        );
-        tokenUrl.searchParams.append("code", code);
-        tokenUrl.searchParams.append("grant_type", "authorization_code");
-
-        const redirectUri = body.redirectUri;
-
-        if (!redirectUri) {
-          console.error(
-            "❌ [Login for Business API] No redirect_uri provided in request body"
-          );
-          return NextResponse.json(
-            {
-              error: "redirect_uri is required for Authorization Code Flow",
-              hint: "Ensure the frontend sends 'redirectUri' in the request body",
-            },
-            { status: 400 }
-          );
-        }
+        const redirectUri = "https://www.reviseit.in/onboarding";
 
         console.log(
           "🔄 [Login for Business API] Exchanging code with redirect_uri:",
           redirectUri
         );
-        tokenUrl.searchParams.append("redirect_uri", redirectUri);
 
         // Log the request being sent
         console.log("Token exchange request:", {
@@ -122,23 +93,17 @@ export async function POST(request: NextRequest) {
           grant_type: "authorization_code",
         });
 
-        // Make ONE token exchange request (authorization codes are single-use)
+        const params = new URLSearchParams({
+          client_id: process.env.NEXT_PUBLIC_FACEBOOK_APP_ID!,
+          client_secret: process.env.FACEBOOK_APP_SECRET!,
+          redirect_uri: redirectUri,
+          code,
+          grant_type: "authorization_code",
+        });
 
         const response = await fetch(
-          "https://graph.facebook.com/v24.0/oauth/access_token",
-          {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/x-www-form-urlencoded",
-            },
-            body: new URLSearchParams({
-              client_id: process.env.NEXT_PUBLIC_FACEBOOK_APP_ID || "",
-              client_secret: process.env.FACEBOOK_APP_SECRET || "",
-              redirect_uri: redirectUri,
-              code: code,
-              grant_type: "authorization_code",
-            }).toString(),
-          }
+          `https://graph.facebook.com/v24.0/oauth/access_token?${params.toString()}`,
+          { method: "GET" }
         );
 
         if (!response.ok) {
@@ -163,7 +128,7 @@ export async function POST(request: NextRequest) {
             errorData?.error?.message?.includes("redirect_uri") ||
             errorData?.error?.error_subcode === 36008
           ) {
-            hint = `The redirect_uri doesn't match. Make sure your Facebook App's Valid OAuth Redirect URIs includes: ${redirectUri}`;
+            hint = `The redirect_uri doesn't match. Make sure your Facebook App's Valid OAuth Redirect URIs includes exactly: ${redirectUri}`;
           } else if (errorData?.error?.message?.includes("code")) {
             hint =
               "The authorization code may have expired or already been used. Please try the OAuth flow again.";
