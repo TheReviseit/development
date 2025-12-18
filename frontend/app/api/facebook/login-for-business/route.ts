@@ -72,11 +72,8 @@ export async function POST(request: NextRequest) {
       );
 
       try {
-        const redirectUri = "";
-
         console.log(
-          "🔄 [Login for Business API] Exchanging code with redirect_uri:",
-          redirectUri
+          "🔄 [Login for Business API] Exchanging code (no redirect_uri needed for SDK popup flow)"
         );
 
         // Log the request being sent
@@ -88,17 +85,16 @@ export async function POST(request: NextRequest) {
               process.env.FACEBOOK_APP_SECRET.substring(0, 4) +
               ")"
             : "MISSING",
-          redirect_uri: redirectUri,
           code: code ? code.substring(0, 10) + "..." : "MISSING",
-          grant_type: "authorization_code",
         });
 
+        // IMPORTANT: Do NOT include redirect_uri when using FB SDK popup flow
+        // The authorization code from FB.login() popup is not bound to any redirect_uri
+        // See: https://developers.facebook.com/community/threads/
         const params = new URLSearchParams({
           client_id: process.env.NEXT_PUBLIC_FACEBOOK_APP_ID!,
           client_secret: process.env.FACEBOOK_APP_SECRET!,
-          redirect_uri: redirectUri,
           code,
-          grant_type: "authorization_code",
         });
 
         const response = await fetch(
@@ -113,7 +109,6 @@ export async function POST(request: NextRequest) {
             JSON.stringify(errorData, null, 2)
           );
           console.error("📋 [Login for Business API] Debug info:", {
-            redirectUri,
             hasCode: !!code,
             codeLength: code?.length,
             errorCode: errorData?.error?.code,
@@ -128,7 +123,8 @@ export async function POST(request: NextRequest) {
             errorData?.error?.message?.includes("redirect_uri") ||
             errorData?.error?.error_subcode === 36008
           ) {
-            hint = `The redirect_uri doesn't match. Make sure your Facebook App's Valid OAuth Redirect URIs includes exactly: ${redirectUri}`;
+            hint =
+              "redirect_uri mismatch error. This should not happen with SDK popup flow - ensure FB.login() does not specify redirect_uri.";
           } else if (errorData?.error?.message?.includes("code")) {
             hint =
               "The authorization code may have expired or already been used. Please try the OAuth flow again.";
@@ -139,19 +135,13 @@ export async function POST(request: NextRequest) {
               error: "Failed to exchange authorization code",
               hint,
               details: errorData,
-              debug: {
-                redirectUri,
-              },
             },
             { status: 400 }
           );
         }
 
         const tokenData = await response.json();
-        console.log(
-          "✅ [Login for Business API] Code exchange succeeded with redirect_uri:",
-          redirectUri
-        );
+        console.log("✅ [Login for Business API] Code exchange succeeded");
 
         accessToken = tokenData.access_token;
         expiresIn = tokenData.expires_in;
