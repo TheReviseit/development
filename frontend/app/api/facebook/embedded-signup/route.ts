@@ -1,16 +1,15 @@
 /**
- * Embedded Signup API Route (STEP 2)
- * Handles WhatsApp Embedded Signup flow from Meta
- *
- * IMPORTANT: This endpoint does NOT require business_management permission.
- * business_management is obtained via /api/facebook/login-for-business (Step 1)
+ * WhatsApp Embedded Signup API Route
+ * Handles the complete WhatsApp Embedded Signup flow from Meta
  *
  * This endpoint:
  * 1. Exchanges authorization code for access token
  * 2. Validates whatsapp_business_management permission
- * 3. Uses setupData (waba_id, phone_number_id) from Embedded Signup
- * 4. Falls back to /me/whatsapp_business_accounts if setupData incomplete
- * 5. Links to existing Business Manager (from Step 1)
+ * 3. Creates/updates Facebook account record
+ * 4. Creates Business Manager from embedded signup data
+ * 5. Uses setupData (waba_id, phone_number_id) from Embedded Signup
+ * 6. Falls back to /me/whatsapp_business_accounts if setupData incomplete
+ * 7. Stores WABA and phone numbers
  */
 
 import { NextRequest, NextResponse } from "next/server";
@@ -23,6 +22,7 @@ import {
   updateFacebookAccount,
   createWhatsAppAccount,
   createPhoneNumber,
+  createBusinessManager,
   getBusinessManagersByUserId,
   getWhatsAppAccountsByUserId,
   updatePhoneNumber,
@@ -365,19 +365,89 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    // Check for existing Business Manager from Step 1
-    const businessManagers = await getBusinessManagersByUserId(user.id);
+    // Create or get Business Manager from embedded signup data
+    const businessId = setupData.businessId || setupData.business_id;
     let businessManagerId: string | null = null;
 
-    if (businessManagers.length > 0) {
-      businessManagerId = businessManagers[0].id;
-      console.log(
-        "✅ [Embedded Signup API] Using Business Manager from Step 1:",
-        businessManagers[0].business_name
+    // First check if business manager already exists for this user
+    const existingManagers = await getBusinessManagersByUserId(user.id);
+    if (existingManagers.length > 0) {
+      // Check if we have one for this specific business_id
+      const matchingManager = existingManagers.find(
+        (bm: any) => bm.business_id === businessId
       );
-    } else {
-      console.warn(
-        "⚠️ [Embedded Signup API] No Business Manager found from Step 1"
+      if (matchingManager) {
+        businessManagerId = matchingManager.id;
+        console.log(
+          "✅ [Embedded Signup API] Using existing Business Manager:",
+          matchingManager.business_name
+        );
+      }
+    }
+
+    // If no matching business manager, create one
+    if (!businessManagerId && businessId && facebookAccount) {
+      console.log(
+        "🔄 [Embedded Signup API] Creating Business Manager from embedded signup data..."
+      );
+
+      try {
+        // Fetch business details from Meta API
+        const businessResponse = await fetch(
+          `https://graph.facebook.com/v24.0/${businessId}?fields=id,name,verification_status&access_token=${longLivedToken}`
+        );
+
+        let businessName = "WhatsApp Business";
+        if (businessResponse.ok) {
+          const businessData = await businessResponse.json();
+          businessName = businessData.name || businessName;
+        }
+
+        const newBusinessManager = await createBusinessManager({
+          facebook_account_id: facebookAccount.id,
+          user_id: user.id,
+          business_id: businessId,
+          business_name: businessName,
+          business_email: null,
+          business_vertical: null,
+          permitted_roles: ["ADMIN"],
+        });
+
+        businessManagerId = newBusinessManager.id;
+        console.log(
+          "✅ [Embedded Signup API] Created Business Manager:",
+          businessName
+        );
+      } catch (bmError: any) {
+        // Handle duplicate business manager
+        if (
+          bmError.message?.includes("duplicate") ||
+          bmError.code?.includes("23505")
+        ) {
+          console.log(
+            "ℹ️ [Embedded Signup API] Business Manager already exists, fetching..."
+          );
+          const refreshedManagers = await getBusinessManagersByUserId(user.id);
+          if (refreshedManagers.length > 0) {
+            businessManagerId = refreshedManagers[0].id;
+          }
+        } else {
+          console.error(
+            "❌ [Embedded Signup API] Failed to create Business Manager:",
+            bmError
+          );
+        }
+      }
+    } else if (!businessManagerId && !businessId) {
+      console.error(
+        "❌ [Embedded Signup API] No businessId in setupData - cannot create Business Manager"
+      );
+      return NextResponse.json(
+        {
+          error: "Missing business ID from embedded signup",
+          hint: "The embedded signup did not return a business_id. Please try again.",
+        },
+        { status: 400 }
       );
     }
 
@@ -499,16 +569,30 @@ export async function POST(request: NextRequest) {
 
     // Store WABA
     let storedWABA;
+
+    // Validate that we have a valid business manager ID
+    if (!businessManagerId) {
+      console.error(
+        "❌ [Embedded Signup API] No valid Business Manager ID available"
+      );
+      return NextResponse.json(
+        {
+          error: "Failed to create WhatsApp Business Account",
+          hint: "Could not create or find a Business Manager. Please try the connection flow again.",
+        },
+        { status: 500 }
+      );
+    }
+
     try {
       storedWABA = await createWhatsAppAccount({
-        business_manager_id: businessManagerId || facebookAccount.id,
+        business_manager_id: businessManagerId,
         user_id: user.id,
         waba_id: wabaId,
         waba_name: wabaDetails.name || null,
         account_review_status: wabaDetails.account_review_status || null,
         business_verification_status:
           wabaDetails.business_verification_status || null,
-        quality_rating: wabaDetails.quality_rating || null,
         messaging_limit_tier: null,
       });
       console.log("✅ [Embedded Signup API] Stored WABA:", storedWABA.id);
@@ -564,17 +648,21 @@ export async function POST(request: NextRequest) {
 
         if (verifyResponse.ok) {
           const verifyData = await verifyResponse.json();
+          const appId = process.env.NEXT_PUBLIC_FACEBOOK_APP_ID;
+          // Meta may return app.id or app.whatsapp_business_api_data
           const isSubscribed = verifyData.data?.some(
-            (app: any) => app.id === process.env.NEXT_PUBLIC_FACEBOOK_APP_ID
+            (app: any) => app.id === appId || app.app_id === appId
           );
           if (isSubscribed) {
             console.log(
               "✅ [Embedded Signup API] Webhook subscription verified"
             );
           } else {
-            console.warn(
-              "⚠️ [Embedded Signup API] Webhook subscription not found in verification"
+            console.log(
+              "ℹ️ [Embedded Signup API] Subscribed apps:",
+              JSON.stringify(verifyData.data)
             );
+            // The subscription POST succeeded, so this is just informational
           }
         }
       } else {
@@ -615,7 +703,6 @@ export async function POST(request: NextRequest) {
           phone_number_id: phoneNumberId,
           display_phone_number: phoneDetails.display_phone_number,
           verified_name: phoneDetails.verified_name || null,
-          quality_rating: phoneDetails.quality_rating || null,
           code_verification_status:
             phoneDetails.code_verification_status || null,
           is_official_business_account:
@@ -653,7 +740,6 @@ export async function POST(request: NextRequest) {
               phone_number_id: phone.id,
               display_phone_number: phone.display_phone_number,
               verified_name: phone.verified_name || null,
-              quality_rating: phone.quality_rating || null,
               code_verification_status: phone.code_verification_status || null,
               is_official_business_account:
                 phone.is_official_business_account || false,

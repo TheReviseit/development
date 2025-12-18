@@ -177,7 +177,7 @@ export class MetaGraphAPIClient {
       MetaGraphAPIResponse<MetaWhatsAppBusinessAccount>
     >(`/${businessId}/owned_whatsapp_business_accounts`, {
       fields:
-        "id,name,account_review_status,business_verification_status,currency,message_template_namespace,quality_rating,timezone_id",
+        "id,name,account_review_status,business_verification_status,currency,message_template_namespace,timezone_id",
     });
 
     return response.data || [];
@@ -191,7 +191,7 @@ export class MetaGraphAPIClient {
       `/${wabaId}/phone_numbers`,
       {
         fields:
-          "id,display_phone_number,verified_name,quality_rating,code_verification_status,is_official_business_account,platform_type",
+          "id,display_phone_number,verified_name,code_verification_status,is_official_business_account,platform_type",
       }
     );
 
@@ -296,7 +296,7 @@ export class MetaGraphAPIClient {
   ): Promise<MetaWhatsAppBusinessAccount> {
     const data = await this.get<MetaWhatsAppBusinessAccount>(`/${wabaId}`, {
       fields:
-        "id,name,account_review_status,business_verification_status,currency,message_template_namespace,quality_rating,timezone_id",
+        "id,name,account_review_status,business_verification_status,currency,message_template_namespace,timezone_id",
     });
 
     return data;
@@ -310,7 +310,7 @@ export class MetaGraphAPIClient {
   ): Promise<MetaPhoneNumber> {
     const data = await this.get<MetaPhoneNumber>(`/${phoneNumberId}`, {
       fields:
-        "id,display_phone_number,verified_name,quality_rating,code_verification_status,is_official_business_account,platform_type",
+        "id,display_phone_number,verified_name,code_verification_status,is_official_business_account,certificate",
     });
 
     return data;
