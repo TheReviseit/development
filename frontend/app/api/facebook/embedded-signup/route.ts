@@ -85,8 +85,8 @@ export async function POST(request: NextRequest) {
 
       try {
         // STEP 1: Exchange authorization code for SHORT-lived access token
-        // NOTE: For FB.login() Embedded Signup, redirect_uri is NOT required
-        // The SDK handles this internally based on Meta App configuration
+        // NOTE: For Embedded Signup with FB.login(), redirect_uri is NOT required
+        // FB.login() handles the redirect automatically based on Meta App configuration
         const step1Url = new URL(
           "https://graph.facebook.com/v24.0/oauth/access_token"
         );
@@ -99,6 +99,7 @@ export async function POST(request: NextRequest) {
           process.env.FACEBOOK_APP_SECRET || ""
         );
         step1Url.searchParams.append("code", authorizationCode);
+        // NO redirect_uri - FB.login() handles it automatically for Embedded Signup
 
         console.log(
           "🔄 [Embedded Signup API] Step 1: Exchanging code for short-lived token..."
