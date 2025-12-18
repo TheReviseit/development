@@ -186,7 +186,7 @@ export default function LoginPage() {
       const result = await signInWithPopup(auth, provider);
       const idToken = await result.user.getIdToken();
 
-      // Step 1: Verify user exists in database
+      // Step 1: Check if user exists in database
       const checkResponse = await fetch("/api/auth/check-user-exists", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -199,12 +199,28 @@ export default function LoginPage() {
 
       const { exists } = await checkResponse.json();
 
+      // Step 2: If user doesn't exist, create them
+      // This handles cases where users signed up but the record wasn't created
       if (!exists) {
-        // User doesn't exist - block login
-        throw new Error("ACCOUNT_NOT_FOUND");
+        console.log("User not found in database, creating user record...");
+        try {
+          await fetch("/api/auth/create-user", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              firebase_uid: result.user.uid,
+              full_name: result.user.displayName || "",
+              email: result.user.email || "",
+            }),
+          });
+          console.log("User record created successfully");
+        } catch (createError) {
+          console.error("Error creating user record:", createError);
+          // Continue anyway - user might already exist but check failed
+        }
       }
 
-      // Step 2: User exists - proceed with login
+      // Step 3: Proceed with login
       const [sessionSuccess, onboardingCompleted] = await Promise.all([
         createSessionWithRetry(idToken),
         checkOnboardingStatus(),
@@ -221,11 +237,7 @@ export default function LoginPage() {
       // Handle specific Firebase auth errors
       let errorMessage = "Failed to sign in with Google";
 
-      // Handle account not found
-      if (err.message === "ACCOUNT_NOT_FOUND") {
-        errorMessage =
-          "No account found with this Google account. Please sign up first.";
-      } else if (err.code === "auth/popup-closed-by-user") {
+      if (err.code === "auth/popup-closed-by-user") {
         errorMessage =
           "Sign-in cancelled. Please try again and complete the Google sign-in process.";
       } else if (err.code === "auth/popup-blocked") {

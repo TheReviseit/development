@@ -17,6 +17,7 @@ import { auth } from "@/src/firebase/firebase";
 import WhatsAppEmbeddedSignupForm from "../components/onboarding/WhatsAppEmbeddedSignupForm";
 import SpaceshipLoader from "../components/loading/SpaceshipLoader";
 import "../onboarding/onboarding.css";
+import "./onboarding-embedded.css";
 
 export default function OnboardingPageEmbedded() {
   const [user, setUser] = useState<User | null>(null);
@@ -245,20 +246,6 @@ export default function OnboardingPageEmbedded() {
           color: #10b981;
         }
 
-        .onboarding-main-embedded {
-          display: flex;
-          align-items: flex-start;
-          justify-content: center;
-          padding: 40px;
-          overflow-y: auto;
-        }
-
-        .embedded-content {
-          max-width: 600px;
-          width: 100%;
-          padding: 20px 0;
-        }
-
         .success-message {
           text-align: center;
           padding: 60px 40px;
@@ -281,16 +268,6 @@ export default function OnboardingPageEmbedded() {
         .success-message p {
           color: var(--text-secondary);
           margin: 0;
-        }
-
-        @media (max-width: 768px) {
-          .onboarding-main-embedded {
-            padding: 20px;
-          }
-
-          .embedded-content {
-            padding: 0;
-          }
         }
       `}</style>
     </div>

@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from "next/server";
-import { cookies } from "next/headers";
 import { createClient } from "@supabase/supabase-js";
 
 const supabase = createClient(
@@ -14,15 +13,9 @@ function generateCode(): string {
 
 export async function POST(request: NextRequest) {
   try {
-    const cookieStore = await cookies();
-    const session = cookieStore.get("session");
-
-    if (!session) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-
-    // Get user from session (assuming you store user info in session or decode it)
-    // For now, we'll get userId from request body or decode session
+    // Get user info from request body
+    // Note: No session check here because this is called during signup
+    // before the session is fully established
     const { userId, email } = await request.json();
 
     if (!userId || !email) {

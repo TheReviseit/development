@@ -208,32 +208,54 @@ export default function SignupPage() {
 
         const idToken = await userCredential.user.getIdToken();
 
-        // Step 2: PARALLEL - Session creation + non-blocking user creation + verification
-        const [sessionSuccess] = await Promise.all([
-          createSessionWithRetry(idToken),
-          // Non-blocking: Create user in Supabase
-          fetch("/api/auth/create-user", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              firebase_uid: userCredential.user.uid,
-              full_name: name,
-              email: email,
-            }),
-          }).catch((err) => console.error("User creation error:", err)),
-          // Non-blocking: Send verification email
-          fetch("/api/auth/send-verification", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              userId: userCredential.user.uid,
-              email: email,
-            }),
-          }).catch((err) => console.error("Verification email error:", err)),
-        ]);
-
+        // Step 2: Create session first (critical path)
+        const sessionSuccess = await createSessionWithRetry(idToken);
         if (!sessionSuccess) {
           throw new Error("Failed to create session");
+        }
+
+        // Step 3: PARALLEL - Create user + send verification
+        const [userCreationResult, verificationResult] =
+          await Promise.allSettled([
+            // Create user in Supabase
+            fetch("/api/auth/create-user", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                firebase_uid: userCredential.user.uid,
+                full_name: name,
+                email: email,
+              }),
+            }),
+            // Send verification email
+            fetch("/api/auth/send-verification", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                userId: userCredential.user.uid,
+                email: email,
+              }),
+            }),
+          ]);
+
+        // Log user creation errors (non-critical)
+        if (userCreationResult.status === "rejected") {
+          console.error("User creation error:", userCreationResult.reason);
+        }
+
+        // Check verification email (important but not blocking)
+        if (verificationResult.status === "rejected") {
+          console.error("Verification email error:", verificationResult.reason);
+          // Continue anyway - user can resend from verify-email page
+        } else if (verificationResult.status === "fulfilled") {
+          const verifyResponse = verificationResult.value;
+          if (!verifyResponse.ok) {
+            console.error(
+              "Verification email failed with status:",
+              verifyResponse.status
+            );
+            // Continue anyway - user can resend from verify-email page
+          }
         }
 
         router.push("/verify-email");
