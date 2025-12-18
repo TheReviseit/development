@@ -608,28 +608,15 @@ class FacebookSDK {
         return;
       }
 
-      // CRITICAL: redirect_uri must match exactly what's registered in Meta App Settings
-      // For Embedded Signup, Meta typically uses the root path
-      // Use environment variable if set, otherwise use current page origin + root
+      // Use environment variable if set, otherwise fallback to dynamic origin
       const redirectUri =
         process.env.NEXT_PUBLIC_FACEBOOK_REDIRECT_URI ||
         (typeof window !== "undefined"
-          ? window.location.origin + "/"
+          ? window.location.origin + "/onboarding"
           : undefined);
-      
-      if (!redirectUri) {
-        return {
-          success: false,
-          error: "Could not determine redirect_uri. Ensure NEXT_PUBLIC_FACEBOOK_REDIRECT_URI is set or run in browser context.",
-        };
-      }
-
       console.log(
-        "🔵 [Facebook SDK] Embedded Signup - Using redirect_uri:",
+        "🔵 [Facebook SDK] Using redirect_uri for OAuth:",
         redirectUri
-      );
-      console.log(
-        "🔵 [Facebook SDK] Make sure this redirect_uri is registered in Meta App Settings → Valid OAuth Redirect URIs"
       );
 
       window.FB.login(
@@ -716,7 +703,6 @@ class FacebookSDK {
                 userID,
                 grantedPermissions: null,
                 setupData,
-                redirectUri, // Include redirect_uri for backend token exchange
               });
               return;
             }

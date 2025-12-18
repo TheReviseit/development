@@ -171,17 +171,13 @@ export default function EmbeddedSignupButton({
 
       console.log("[EmbeddedSignup] Preparing to send to backend...");
 
-      const redirectUri =
-        (result as any).redirectUri ||
-        process.env.NEXT_PUBLIC_FACEBOOK_REDIRECT_URI ||
-        window.location.origin + "/";
-      
+      // CRITICAL: Must match EXACTLY what the SDK used in FB.login()
+      // The SDK uses window.location.origin + "/" (see facebook-sdk.ts launchEmbeddedSignup)
+      // Facebook requires the redirect_uri to EXACTLY match what was used in FB.login()
+      const redirectUri = window.location.origin + "/";
       console.log(
-        "[EmbeddedSignup] Using redirect_uri for token exchange:",
+        "[EmbeddedSignup] Current page URL (redirect_uri):",
         redirectUri
-      );
-      console.log(
-        "[EmbeddedSignup] ⚠️ This MUST match exactly what was used in FB.login()"
       );
 
       const requestBody: any = {
