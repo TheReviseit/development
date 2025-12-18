@@ -32,6 +32,7 @@ export default function WhatsAppEmbeddedSignupForm({
   const [connectionState, setConnectionState] =
     useState<ConnectionState>("idle");
   const [errorInfo, setErrorInfo] = useState<ErrorInfo | null>(null);
+  const [sdkReady, setSdkReady] = useState(false);
   const [connectionData, setConnectionData] = useState<{
     wabaName: string;
     displayPhoneNumber: string;
@@ -40,11 +41,45 @@ export default function WhatsAppEmbeddedSignupForm({
     hasSystemUserToken: boolean;
   } | null>(null);
 
+  // Initialize Facebook SDK on mount
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      facebookSDK
+        .init()
+        .then(() => {
+          console.log("✅ [WhatsAppEmbeddedSignup] Facebook SDK initialized");
+          setSdkReady(true);
+        })
+        .catch((error) => {
+          console.error(
+            "❌ [WhatsAppEmbeddedSignup] Failed to initialize Facebook SDK:",
+            error
+          );
+          setErrorInfo({
+            message: "Failed to load Facebook SDK. Please refresh the page.",
+            action: "CONTACT_SUPPORT",
+          });
+          setConnectionState("error");
+        });
+    }
+  }, []);
+
   const handleConnect = useCallback(async () => {
+    // Check SDK readiness before allowing connection
+    if (!sdkReady) {
+      setErrorInfo({
+        message: "Facebook SDK not ready. Please wait or refresh the page.",
+        action: "CONTACT_SUPPORT",
+      });
+      return;
+    }
+
     setConnectionState("connecting");
     setErrorInfo(null);
 
     try {
+      console.log("🚀 [WhatsAppEmbeddedSignup] Launching embedded signup...");
+
       // Launch Embedded Signup flow
       const result = await facebookSDK.launchEmbeddedSignup();
 
@@ -62,30 +97,33 @@ export default function WhatsAppEmbeddedSignupForm({
         throw new Error(result.error || "Failed to connect");
       }
 
-      // Get data from postMessage (captured by SDK)
+      // Get setup data from postMessage ONLY (not from result.setupData)
+      // Per Meta docs: setup data comes ONLY from the postMessage event
       const embeddedData = facebookSDK.getLastEmbeddedSignupData();
 
+      if (!embeddedData?.data?.waba_id) {
+        throw new Error(
+          "Did not receive WABA data from embedded signup. Please try again."
+        );
+      }
+
       const setupData = {
-        wabaId: result.setupData?.wabaId || embeddedData?.data?.waba_id,
-        phoneNumberId:
-          result.setupData?.phoneNumberId ||
-          embeddedData?.data?.phone_number_id,
-        businessId:
-          result.setupData?.businessId || embeddedData?.data?.business_id,
+        wabaId: embeddedData.data.waba_id,
+        phoneNumberId: embeddedData.data.phone_number_id,
+        businessId: embeddedData.data.business_id,
       };
 
       console.log("📦 [WhatsAppEmbeddedSignup] Setup data:", setupData);
+      console.log("� [WhatsAppEmbeddedSignup] Authorization code received");
 
-      // Send to backend - NO redirectUri (FB.login() handles it internally)
+      // Send to backend - NO redirectUri (FB.login() handles it automatically)
+      // Per Meta docs: don't send accessToken or userID - not part of code flow
       const response = await fetch("/api/facebook/embedded-signup", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           code: result.code,
-          accessToken: result.accessToken, // Fallback for implicit flow
-          userID: result.userID,
           setupData,
-          // ✅ redirectUri removed - not needed for FB.login()
         }),
       });
 
@@ -95,7 +133,7 @@ export default function WhatsAppEmbeddedSignupForm({
         // Handle specific errors
         if (
           data.error?.includes("code has already been used") ||
-          data.hint?.includes("expired")
+          data.error?.includes("expired")
         ) {
           setErrorInfo({
             message:
@@ -113,7 +151,7 @@ export default function WhatsAppEmbeddedSignupForm({
           throw new Error(data.error);
         }
 
-        if (data.error?.includes("Business Account found")) {
+        if (data.error?.includes("Business Account")) {
           setErrorInfo({
             message:
               "No WhatsApp Business Account found. Please complete the full signup flow.",
@@ -125,17 +163,29 @@ export default function WhatsAppEmbeddedSignupForm({
         throw new Error(data.error || "Failed to complete signup");
       }
 
-      // Success!
-      const wabaAccount = data.data?.whatsappAccount;
-      const phoneNumbers = data.data?.phoneNumbers || [];
-      const primaryPhone = phoneNumbers[0];
+      // Extract success data from backend response
+      const { whatsappAccount, phoneNumbers } = data.data || {};
+      const primaryPhone = phoneNumbers?.[0];
+
+      if (!whatsappAccount || !primaryPhone) {
+        throw new Error("Incomplete connection data received from server");
+      }
+
+      // Calculate actual token expiration from backend response
+      const expiresAt = whatsappAccount.token_expires_at
+        ? new Date(whatsappAccount.token_expires_at)
+        : new Date(Date.now() + 60 * 24 * 60 * 60 * 1000); // Default 60 days
+      const now = new Date();
+      const daysUntilExpiry = Math.floor(
+        (expiresAt.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)
+      );
 
       setConnectionData({
-        wabaName: wabaAccount?.waba_name || "WhatsApp Business",
-        displayPhoneNumber: primaryPhone?.display_phone_number || "",
-        accountReviewStatus: wabaAccount?.account_review_status || "pending",
-        tokenExpiresIn: 60, // Default to 60 days for long-lived token
-        hasSystemUserToken: false,
+        wabaName: whatsappAccount.waba_name || "WhatsApp Business",
+        displayPhoneNumber: primaryPhone.display_phone_number || "",
+        accountReviewStatus: whatsappAccount.account_review_status || "PENDING",
+        tokenExpiresIn: daysUntilExpiry,
+        hasSystemUserToken: whatsappAccount.has_system_user_token || false,
       });
 
       setConnectionState("success");
@@ -143,12 +193,14 @@ export default function WhatsAppEmbeddedSignupForm({
       // Clear SDK data
       facebookSDK.clearEmbeddedSignupData();
 
+      console.log("✅ [WhatsAppEmbeddedSignup] Connection successful");
+
       // Notify parent
       onSuccess({
-        wabaId: wabaAccount?.waba_id,
-        phoneNumberId: primaryPhone?.phone_number_id,
-        displayPhoneNumber: primaryPhone?.display_phone_number,
-        wabaName: wabaAccount?.waba_name,
+        wabaId: whatsappAccount.waba_id,
+        phoneNumberId: primaryPhone.phone_number_id,
+        displayPhoneNumber: primaryPhone.display_phone_number,
+        wabaName: whatsappAccount.waba_name,
       });
     } catch (error: any) {
       console.error("❌ [WhatsAppEmbeddedSignup] Error:", error);
@@ -163,7 +215,7 @@ export default function WhatsAppEmbeddedSignupForm({
 
       onError(error.message);
     }
-  }, [onSuccess, onError, errorInfo]);
+  }, [sdkReady, onSuccess, onError, errorInfo]);
 
   const handleRetry = () => {
     setConnectionState("idle");
