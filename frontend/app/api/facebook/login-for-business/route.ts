@@ -72,7 +72,8 @@ export async function POST(request: NextRequest) {
       );
 
       try {
-        const redirectUri = "https://www.reviseit.in/onboarding";
+        const redirectUri =
+          "https://www.facebook.com/connect/login_success.html";
 
         console.log(
           "🔄 [Login for Business API] Exchanging code with redirect_uri:",
