@@ -146,7 +146,7 @@ export async function createWhatsAppAccount(data: {
   waba_name: string | null;
   account_review_status: string | null;
   business_verification_status: string | null;
-  quality_rating: string | null;
+  quality_rating?: string | null;
   messaging_limit_tier: string | null;
 }): Promise<ConnectedWhatsAppAccount> {
   const { data: account, error } = await supabaseAdmin
@@ -210,7 +210,7 @@ export async function createPhoneNumber(data: {
   phone_number_id: string;
   display_phone_number: string;
   verified_name: string | null;
-  quality_rating: string | null;
+  quality_rating?: string | null;
   code_verification_status: string | null;
   is_official_business_account: boolean;
   webhook_url: string | null;
