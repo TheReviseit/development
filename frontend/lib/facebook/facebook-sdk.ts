@@ -8,6 +8,17 @@ import {
   WHATSAPP_EMBEDDED_SIGNUP_PERMISSIONS,
 } from "@/types/facebook-whatsapp.types";
 
+export interface FacebookLoginStatusResponse {
+  status: "connected" | "not_authorized" | "unknown";
+  authResponse?: {
+    accessToken: string;
+    expiresIn: number;
+    reauthorize_required_in?: number;
+    signedRequest: string;
+    userID: string;
+  };
+}
+
 declare global {
   interface Window {
     fbAsyncInit: () => void;
@@ -28,7 +39,7 @@ declare global {
           config_id?: string;
           response_type?: string;
           override_default_response_type?: boolean;
-          redirect_uri?: string; // CRITICAL: Required for code exchange to work
+          redirect_uri?: string;
           extras?: {
             setup?: Record<string, any>;
             feature?: string;
@@ -37,13 +48,26 @@ declare global {
         }
       ) => void;
       logout: (callback: () => void) => void;
-      getLoginStatus: (callback: (response: any) => void) => void;
+      getLoginStatus: (
+        callback: (response: FacebookLoginStatusResponse) => void,
+        force?: boolean
+      ) => void;
       api: (
         path: string,
         method: string | Record<string, any>,
         params?: Record<string, any>,
         callback?: (response: any) => void
       ) => void;
+      XFBML: {
+        parse: (element?: HTMLElement, callback?: () => void) => void;
+      };
+      Event: {
+        subscribe: (event: string, callback: (...args: any[]) => void) => void;
+        unsubscribe: (
+          event: string,
+          callback: (...args: any[]) => void
+        ) => void;
+      };
     };
   }
 }
@@ -52,6 +76,7 @@ class FacebookSDK {
   private static instance: FacebookSDK;
   private isInitialized = false;
   private initPromise: Promise<void> | null = null;
+  private initialLoginStatus: FacebookLoginStatusResponse | null = null;
 
   private constructor() {}
 
@@ -122,12 +147,23 @@ class FacebookSDK {
               appId: appId,
               cookie: true,
               xfbml: true,
-              version: "v21.0", // Use latest stable version
+              version: "v24.0", // Latest stable version
               status: true,
             });
 
-            console.log("[Facebook SDK] Initialized successfully");
+            console.log("[Facebook SDK] Initialized successfully with v24.0");
             this.isInitialized = true;
+
+            // Auto-check login status after SDK init (as recommended by Facebook docs)
+            window.FB.getLoginStatus((statusResponse) => {
+              this.initialLoginStatus = statusResponse;
+              console.log("[Facebook SDK] Auto-status check:", {
+                status: statusResponse.status,
+                hasAuthResponse: !!statusResponse.authResponse,
+                userID: statusResponse.authResponse?.userID || "N/A",
+              });
+            });
+
             resolve();
           } catch (initError) {
             console.error("[Facebook SDK] FB.init() failed:", initError);
@@ -286,7 +322,7 @@ class FacebookSDK {
       }
 
       window.FB.getLoginStatus((response) => {
-        if (response.status === "connected") {
+        if (response.status === "connected" && response.authResponse) {
           resolve({
             connected: true,
             accessToken: response.authResponse.accessToken,
@@ -382,11 +418,6 @@ class FacebookSDK {
     }
   }
 
-  /**
-   * Launch Embedded Signup with Configuration
-   * Uses Meta's pre-configured onboarding flow with Authorization Code Flow (v21+ required)
-   * @returns Promise with setup information including authorization code for backend exchange
-   */
   public async launchEmbeddedSignup(): Promise<{
     success: boolean;
     code?: string; // Authorization code for backend exchange
@@ -438,8 +469,6 @@ class FacebookSDK {
           );
 
           if (response.authResponse) {
-            // IMPORTANT: With response_type=code (Authorization Code Flow),
-            // authResponse contains 'code' instead of 'accessToken'
             const authCode = (response.authResponse as any).code;
             const accessToken = response.authResponse.accessToken;
             const userID = response.authResponse.userID;
@@ -459,12 +488,6 @@ class FacebookSDK {
               "🔍 [Facebook SDK] Auth response keys:",
               Object.keys(response.authResponse)
             );
-
-            // ================================================================
-            // CRITICAL: Extract setup info from the ROOT level of the response
-            // Meta returns business_id, waba_id, phone_number_id at the ROOT
-            // of the FB.login() callback response, NOT inside authResponse
-            // ================================================================
 
             // Log the FULL response structure to help debug
             console.log(
@@ -615,6 +638,7 @@ class FacebookSDK {
     userID?: string;
     expiresIn?: number;
     grantedPermissions?: string[] | null;
+    redirectUri?: string; // Return the exact redirect_uri used
     error?: string;
   }> {
     await this.init();
@@ -633,14 +657,16 @@ class FacebookSDK {
       );
       console.log("🔵 [Facebook SDK] NOTE: No config_id used for this flow");
 
-      // Use environment variable if set, otherwise fallback to dynamic origin
-      // This ensures consistency with FacebookLoginForBusinessButton component
+      // CRITICAL: Use a hardcoded redirect_uri to ensure exact match
+      // The FB.login() SDK internally uses this URI, and token exchange MUST use the identical value
       const redirectUri =
         process.env.NEXT_PUBLIC_FACEBOOK_REDIRECT_URI ||
-        (typeof window !== "undefined"
-          ? window.location.origin + "/onboarding"
-          : undefined);
-      console.log("🔵 [Facebook SDK] Using redirect_uri:", redirectUri);
+        "https://www.reviseit.in/onboarding";
+
+      console.log("🔵 [Facebook SDK] Using EXACT redirect_uri:", redirectUri);
+      console.log(
+        "🔵 [Facebook SDK] IMPORTANT: This MUST match token exchange request"
+      );
 
       window.FB.login(
         (response) => {
@@ -662,6 +688,10 @@ class FacebookSDK {
               !!accessToken
             );
             console.log("🔍 [Facebook SDK] User ID:", userID);
+            console.log(
+              "🔍 [Facebook SDK] Returning redirect_uri:",
+              redirectUri
+            );
 
             if (authCode) {
               console.log("✅ [Facebook SDK] Using Authorization Code Flow");
@@ -670,6 +700,7 @@ class FacebookSDK {
                 code: authCode,
                 userID,
                 grantedPermissions: null,
+                redirectUri, // Return the exact URI used for FB.login()
               });
               return;
             }
@@ -684,6 +715,7 @@ class FacebookSDK {
                     userID,
                     expiresIn,
                     grantedPermissions,
+                    redirectUri,
                   });
                 })
                 .catch(() => {
@@ -693,6 +725,7 @@ class FacebookSDK {
                     userID,
                     expiresIn,
                     grantedPermissions: null,
+                    redirectUri,
                   });
                 });
               return;
@@ -727,6 +760,211 @@ class FacebookSDK {
         }
       );
     });
+  }
+
+  // =====================================================
+  // NEW HELPER METHODS (from Facebook documentation)
+  // =====================================================
+
+  /**
+   * Get the initial login status captured during SDK init
+   */
+  public getInitialLoginStatus(): FacebookLoginStatusResponse | null {
+    return this.initialLoginStatus;
+  }
+
+  /**
+   * Re-request a declined permission
+   * Uses auth_type: 'rerequest' to ask again for a permission the user declined
+   */
+  public async rerequestDeclinedPermission(permission: string): Promise<{
+    success: boolean;
+    granted: boolean;
+    error?: string;
+  }> {
+    await this.init();
+
+    return new Promise((resolve) => {
+      if (!window.FB) {
+        resolve({
+          success: false,
+          granted: false,
+          error: "Facebook SDK not loaded",
+        });
+        return;
+      }
+
+      console.log(
+        `🔵 [Facebook SDK] Re-requesting declined permission: ${permission}`
+      );
+
+      window.FB.login(
+        (response) => {
+          if (response.authResponse) {
+            // Check if permission was granted
+            this.getGrantedPermissions(response.authResponse.accessToken)
+              .then((grantedPermissions) => {
+                const granted = grantedPermissions.includes(permission);
+                console.log(
+                  granted
+                    ? `✅ [Facebook SDK] Permission '${permission}' granted`
+                    : `⚠️ [Facebook SDK] Permission '${permission}' still declined`
+                );
+                resolve({ success: true, granted });
+              })
+              .catch((err) => {
+                resolve({ success: true, granted: false, error: err.message });
+              });
+          } else {
+            resolve({
+              success: false,
+              granted: false,
+              error: "User cancelled or did not authorize",
+            });
+          }
+        },
+        {
+          scope: permission,
+          auth_type: "rerequest", // This tells FB to re-ask for declined permissions
+        }
+      );
+    });
+  }
+
+  /**
+   * Add a new permission to existing grants
+   * Simply re-launches login dialog with just the new permission
+   */
+  public async addPermission(permission: string): Promise<{
+    success: boolean;
+    granted: boolean;
+    error?: string;
+  }> {
+    await this.init();
+
+    return new Promise((resolve) => {
+      if (!window.FB) {
+        resolve({
+          success: false,
+          granted: false,
+          error: "Facebook SDK not loaded",
+        });
+        return;
+      }
+
+      console.log(`🔵 [Facebook SDK] Adding new permission: ${permission}`);
+
+      window.FB.login(
+        (response) => {
+          if (response.authResponse) {
+            this.getGrantedPermissions(response.authResponse.accessToken)
+              .then((grantedPermissions) => {
+                const granted = grantedPermissions.includes(permission);
+                console.log(
+                  granted
+                    ? `✅ [Facebook SDK] Permission '${permission}' added`
+                    : `⚠️ [Facebook SDK] Permission '${permission}' not granted`
+                );
+                resolve({ success: true, granted });
+              })
+              .catch((err) => {
+                resolve({ success: true, granted: false, error: err.message });
+              });
+          } else {
+            resolve({
+              success: false,
+              granted: false,
+              error: "User cancelled or did not authorize",
+            });
+          }
+        },
+        { scope: permission }
+      );
+    });
+  }
+
+  /**
+   * Get user information via Graph API
+   * Requires user to be logged in
+   */
+  public async getUserInfo(): Promise<{
+    success: boolean;
+    data?: {
+      id: string;
+      name: string;
+      email?: string;
+    };
+    error?: string;
+  }> {
+    await this.init();
+
+    const status = await this.getLoginStatus();
+    if (!status.connected || !status.accessToken) {
+      return { success: false, error: "User not logged in" };
+    }
+
+    return new Promise((resolve) => {
+      if (!window.FB) {
+        resolve({ success: false, error: "Facebook SDK not loaded" });
+        return;
+      }
+
+      window.FB.api(
+        "/me",
+        { fields: "id,name,email" },
+        (response: {
+          id?: string;
+          name?: string;
+          email?: string;
+          error?: { message: string };
+        }) => {
+          if (response && !response.error && response.id && response.name) {
+            console.log("✅ [Facebook SDK] Got user info:", response.name);
+            resolve({
+              success: true,
+              data: {
+                id: response.id,
+                name: response.name,
+                email: response.email,
+              },
+            });
+          } else {
+            resolve({
+              success: false,
+              error: response?.error?.message || "Failed to get user info",
+            });
+          }
+        }
+      );
+    });
+  }
+
+  public parseXFBML(element?: HTMLElement): Promise<void> {
+    return new Promise(async (resolve) => {
+      await this.init();
+
+      if (!window.FB || !window.FB.XFBML) {
+        console.warn("[Facebook SDK] XFBML not available");
+        resolve();
+        return;
+      }
+
+      console.log("[Facebook SDK] Parsing XFBML elements...");
+      window.FB.XFBML.parse(element, () => {
+        console.log("[Facebook SDK] XFBML parsing complete");
+        resolve();
+      });
+    });
+  }
+
+  /**
+   * Subscribe to XFBML render events
+   * Useful for knowing when login button has finished rendering
+   */
+  public subscribeToXFBMLRender(callback: () => void): void {
+    if (window.FB && window.FB.Event) {
+      window.FB.Event.subscribe("xfbml.render", callback);
+    }
   }
 }
 

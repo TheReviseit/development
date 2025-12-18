@@ -68,10 +68,16 @@ export default function FacebookLoginForBusinessButton({
 
       console.log("[LoginForBusiness] Preparing to send to backend...");
 
+      // CRITICAL: Use the EXACT redirectUri returned from the SDK
+      // This ensures the token exchange uses the identical URI that FB.login() used
       const redirectUri =
+        (result as any).redirectUri ||
         process.env.NEXT_PUBLIC_FACEBOOK_REDIRECT_URI ||
-        window.location.origin + "/onboarding";
-      console.log("[LoginForBusiness] redirect_uri:", redirectUri);
+        "https://www.reviseit.in/onboarding";
+      console.log(
+        "[LoginForBusiness] Using EXACT redirect_uri from SDK:",
+        redirectUri
+      );
 
       const requestBody: any = {
         userID: result.userID,
@@ -83,6 +89,10 @@ export default function FacebookLoginForBusinessButton({
       if ((result as any).code) {
         requestBody.code = (result as any).code;
         console.log("[LoginForBusiness] Using Authorization Code Flow");
+        console.log(
+          "[LoginForBusiness] IMPORTANT: redirect_uri for token exchange:",
+          redirectUri
+        );
       }
 
       // Implicit Flow fallback
