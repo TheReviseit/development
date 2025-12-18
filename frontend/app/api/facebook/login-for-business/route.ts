@@ -72,12 +72,10 @@ export async function POST(request: NextRequest) {
       );
 
       try {
-        console.log(
-          "🔄 [Login for Business API] Exchanging code (no redirect_uri needed for SDK popup flow)"
-        );
+        // Get redirect_uri from request body (sent by frontend)
+        const redirectUri = body.redirectUri;
 
-        // Log the request being sent
-        console.log("Token exchange request:", {
+        console.log("🔄 [Login for Business API] Token exchange request:", {
           endpoint: "https://graph.facebook.com/v24.0/oauth/access_token",
           client_id: process.env.NEXT_PUBLIC_FACEBOOK_APP_ID,
           client_secret: process.env.FACEBOOK_APP_SECRET
@@ -86,16 +84,28 @@ export async function POST(request: NextRequest) {
               ")"
             : "MISSING",
           code: code ? code.substring(0, 10) + "..." : "MISSING",
+          redirect_uri: redirectUri || "NOT PROVIDED",
         });
 
-        // IMPORTANT: Do NOT include redirect_uri when using FB SDK popup flow
-        // The authorization code from FB.login() popup is not bound to any redirect_uri
-        // See: https://developers.facebook.com/community/threads/
+        // Build params - include redirect_uri if provided
         const params = new URLSearchParams({
           client_id: process.env.NEXT_PUBLIC_FACEBOOK_APP_ID!,
           client_secret: process.env.FACEBOOK_APP_SECRET!,
           code,
         });
+
+        // Add redirect_uri if provided (required for some OAuth flows)
+        if (redirectUri) {
+          params.append("redirect_uri", redirectUri);
+          console.log(
+            "✅ [Login for Business API] Using redirect_uri:",
+            redirectUri
+          );
+        } else {
+          console.warn(
+            "⚠️ [Login for Business API] No redirect_uri provided - may fail for some flows"
+          );
+        }
 
         const response = await fetch(
           `https://graph.facebook.com/v24.0/oauth/access_token?${params.toString()}`,

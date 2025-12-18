@@ -797,6 +797,7 @@ class FacebookSDK {
     userID?: string;
     expiresIn?: number;
     grantedPermissions?: string[] | null;
+    redirectUri?: string; // Include redirect_uri for backend
     error?: string;
   }> {
     await this.init();
@@ -809,16 +810,15 @@ class FacebookSDK {
 
       const scope = FACEBOOK_LOGIN_PERMISSIONS.join(",");
 
+      // CRITICAL: Use same redirect_uri pattern as Embedded Signup
+      // Facebook requires redirect_uri to match between authorization and token exchange
+      const redirectUri = window.location.origin + "/onboarding";
+
       console.log(
         "🔵 [Facebook SDK] loginForBusiness - Requesting permissions:",
         scope
       );
-      console.log(
-        "🔵 [Facebook SDK] NOTE: No config_id or redirect_uri used for this flow"
-      );
-      console.log(
-        "🔵 [Facebook SDK] Using SDK default popup flow (requires empty string redirect_uri on backend)"
-      );
+      console.log("🔵 [Facebook SDK] Using redirect_uri:", redirectUri);
 
       window.FB.login(
         (response) => {
@@ -848,6 +848,7 @@ class FacebookSDK {
                 code: authCode,
                 userID,
                 grantedPermissions: null,
+                redirectUri, // Include redirect_uri for backend
               });
               return;
             }
@@ -901,9 +902,7 @@ class FacebookSDK {
           scope,
           auth_type: "rerequest",
           return_scopes: true,
-          // NOTE: Do NOT specify redirect_uri here!
-          // When using FB SDK popup flow without redirect_uri, the authorization code
-          // is not bound to any redirect, and backend must use empty string "" for exchange.
+          redirect_uri: redirectUri, // CRITICAL: Must match token exchange redirect_uri
         }
       );
     });
