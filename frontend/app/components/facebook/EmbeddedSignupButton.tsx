@@ -5,8 +5,11 @@
 
 "use client";
 
-import { useState } from "react";
-import { facebookSDK } from "@/lib/facebook/facebook-sdk";
+import { useState, useEffect } from "react";
+import {
+  facebookSDK,
+  EmbeddedSignupMessageEvent,
+} from "@/lib/facebook/facebook-sdk";
 import {
   WHATSAPP_EMBEDDED_SIGNUP_PERMISSIONS,
   PERMISSION_DESCRIPTIONS,
@@ -27,6 +30,52 @@ export default function EmbeddedSignupButton({
   const [isProcessing, setIsProcessing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showPermissionInfo, setShowPermissionInfo] = useState(false);
+  const [messageEventData, setMessageEventData] =
+    useState<EmbeddedSignupMessageEvent | null>(null);
+
+  // Subscribe to Embedded Signup message events
+  useEffect(() => {
+    console.log("[EmbeddedSignup] Setting up message event handler...");
+
+    const unsubscribe = facebookSDK.onEmbeddedSignupEvent((eventData) => {
+      console.log("[EmbeddedSignup] Received message event:", eventData);
+      setMessageEventData(eventData);
+
+      // Log valuable info for debugging
+      if (
+        eventData.event === "FINISH" ||
+        eventData.event === "FINISH_ONLY_WABA" ||
+        eventData.event === "FINISH_WHATSAPP_BUSINESS_APP_ONBOARDING"
+      ) {
+        console.log(
+          "✅ [EmbeddedSignup] Message event captured success data:",
+          {
+            waba_id: eventData.data.waba_id,
+            phone_number_id: eventData.data.phone_number_id,
+            business_id: eventData.data.business_id,
+          }
+        );
+      } else if (eventData.event === "CANCEL") {
+        if (eventData.data.error_message) {
+          console.warn(
+            "⚠️ [EmbeddedSignup] User reported error:",
+            eventData.data.error_message
+          );
+        } else if (eventData.data.current_step) {
+          console.warn(
+            "⚠️ [EmbeddedSignup] Flow abandoned at:",
+            eventData.data.current_step
+          );
+        }
+      }
+    });
+
+    // Cleanup on unmount
+    return () => {
+      console.log("[EmbeddedSignup] Cleaning up message event handler");
+      unsubscribe();
+    };
+  }, []);
 
   const handleConnect = async () => {
     // Prevent double-clicks and race conditions
@@ -164,6 +213,38 @@ export default function EmbeddedSignupButton({
         )
       );
 
+      // CRITICAL: Also check for message event data
+      // The message event may arrive slightly before or after the callback
+      // We'll send both and let the backend use whichever has the most complete data
+      const messageData =
+        messageEventData || facebookSDK.getLastEmbeddedSignupData();
+
+      if (messageData) {
+        console.log(
+          "📨 [EmbeddedSignup] Including message event data in request:",
+          {
+            event: messageData.event,
+            waba_id: messageData.data.waba_id || "N/A",
+            phone_number_id: messageData.data.phone_number_id || "N/A",
+            business_id: messageData.data.business_id || "N/A",
+          }
+        );
+
+        // Add message event data to request
+        requestBody.messageEventData = {
+          event: messageData.event,
+          waba_id: messageData.data.waba_id,
+          phone_number_id: messageData.data.phone_number_id,
+          business_id: messageData.data.business_id,
+          current_step: messageData.data.current_step, // For abandonment tracking
+          error_message: messageData.data.error_message, // For error reporting
+          error_id: messageData.data.error_id,
+          session_id: messageData.data.session_id,
+        };
+      } else {
+        console.warn("⚠️ [EmbeddedSignup] No message event data captured yet");
+      }
+
       const response = await fetch("/api/facebook/embedded-signup", {
         method: "POST",
         headers: {
@@ -176,13 +257,90 @@ export default function EmbeddedSignupButton({
       console.log("[EmbeddedSignup] Backend response:", data.success);
 
       if (data.success) {
-        console.log("[EmbeddedSignup] Success! Redirecting...");
+        console.log("✅ [EmbeddedSignup] Embedded Signup successful!");
+
+        // STEP 2: Perform Tech Provider customer onboarding
+        // This handles: token exchange, webhook subscription, phone registration
+        console.log("📝 [EmbeddedSignup] Starting customer onboarding...");
+
+        const wabaId =
+          messageData?.data.waba_id || data.data?.whatsappAccount?.waba_id;
+        const phoneNumberId =
+          messageData?.data.phone_number_id ||
+          data.data?.phoneNumbers?.[0]?.phone_number_id;
+        const authCode = (result as any).code || requestBody.code;
+
+        if (wabaId && phoneNumberId && authCode) {
+          console.log("🚀 [EmbeddedSignup] Calling onboarding API...", {
+            wabaId,
+            phoneNumberId,
+            hasCode: !!authCode,
+          });
+
+          try {
+            const onboardingResponse = await fetch(
+              "/api/facebook/onboard-customer",
+              {
+                method: "POST",
+                headers: {
+                  "Content-Type": "application/json",
+                },
+                body: JSON.stringify({
+                  code: authCode,
+                  wabaId: wabaId,
+                  phoneNumberId: phoneNumberId,
+                  // Optional: specify custom PIN, otherwise random 6-digit PIN is generated
+                  // pin: "123456",
+                }),
+              }
+            );
+
+            const onboardingData = await onboardingResponse.json();
+
+            if (onboardingData.success) {
+              console.log(
+                "🎉 [EmbeddedSignup] Customer onboarded successfully!"
+              );
+              console.log(
+                "📋 [EmbeddedSignup] Next steps:",
+                onboardingData.data?.summary?.nextSteps
+              );
+            } else {
+              console.warn(
+                "⚠️ [EmbeddedSignup] Onboarding failed (non-critical):",
+                onboardingData.error
+              );
+              console.log(
+                "ℹ️ [EmbeddedSignup] Customer can complete onboarding manually"
+              );
+            }
+          } catch (onboardingError: any) {
+            console.warn(
+              "⚠️ [EmbeddedSignup] Onboarding request failed (non-critical):",
+              onboardingError.message
+            );
+            console.log(
+              "ℹ️ [EmbeddedSignup] Customer can complete onboarding manually"
+            );
+          }
+        } else {
+          console.warn(
+            "⚠️ [EmbeddedSignup] Missing data for onboarding, skipping automated setup",
+            {
+              hasWabaId: !!wabaId,
+              hasPhoneNumberId: !!phoneNumberId,
+              hasCode: !!authCode,
+            }
+          );
+        }
+
+        // Success - redirect to dashboard
+        console.log("[EmbeddedSignup] Redirecting to dashboard...");
         onSuccess?.();
-        // Redirect to dashboard
         window.location.href = "/dashboard?connection=success";
       } else {
         const errorMsg = data.error || "Failed to complete setup";
-        console.error("[EmbeddedSignup] Backend error:", errorMsg);
+        console.error("❌ [EmbeddedSignup] Backend error:", errorMsg);
         setError(errorMsg);
         onError?.(errorMsg);
       }
@@ -194,6 +352,9 @@ export default function EmbeddedSignupButton({
     } finally {
       setIsLoading(false);
       setIsProcessing(false);
+      // Clear message event data after processing
+      facebookSDK.clearEmbeddedSignupData();
+      setMessageEventData(null);
     }
   };
 
