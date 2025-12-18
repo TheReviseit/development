@@ -19,6 +19,41 @@ export interface FacebookLoginStatusResponse {
   };
 }
 
+/**
+ * WhatsApp Embedded Signup Message Event Data
+ * Sent via window.postMessage when user completes/abandons/reports error in Embedded Signup
+ */
+export interface EmbeddedSignupMessageEvent {
+  type: "WA_EMBEDDED_SIGNUP";
+  event:
+    | "FINISH"
+    | "FINISH_ONLY_WABA"
+    | "FINISH_WHATSAPP_BUSINESS_APP_ONBOARDING"
+    | "CANCEL";
+  data: {
+    // Success fields (when event = FINISH)
+    phone_number_id?: string;
+    waba_id?: string;
+    business_id?: string;
+    ad_account_ids?: string[];
+    page_ids?: string[];
+    dataset_ids?: string[];
+
+    // Abandonment field (when event = CANCEL and no error)
+    current_step?: string;
+
+    // Error fields (when event = CANCEL and user reported error)
+    error_message?: string;
+    error_id?: string;
+    session_id?: string;
+    timestamp?: number;
+  };
+}
+
+export type EmbeddedSignupMessageEventHandler = (
+  event: EmbeddedSignupMessageEvent
+) => void;
+
 declare global {
   interface Window {
     fbAsyncInit: () => void;
@@ -77,6 +112,9 @@ class FacebookSDK {
   private isInitialized = false;
   private initPromise: Promise<void> | null = null;
   private initialLoginStatus: FacebookLoginStatusResponse | null = null;
+  private messageEventListener: ((event: MessageEvent) => void) | null = null;
+  private embeddedSignupEventHandlers: EmbeddedSignupMessageEventHandler[] = [];
+  private lastEmbeddedSignupData: EmbeddedSignupMessageEvent | null = null;
 
   private constructor() {}
 
@@ -216,7 +254,128 @@ class FacebookSDK {
       }
     });
 
+    // Set up message event listener for Embedded Signup session logging
+    this.setupMessageEventListener();
+
     return this.initPromise;
+  }
+
+  /**
+   * Set up message event listener for WhatsApp Embedded Signup session logging
+   * Captures: flow completion, abandonment, and user-reported errors
+   *
+   * Per WhatsApp docs: https://developers.facebook.com/docs/whatsapp/embedded-signup/implementation
+   */
+  private setupMessageEventListener(): void {
+    // Remove existing listener if any
+    if (this.messageEventListener) {
+      window.removeEventListener("message", this.messageEventListener);
+    }
+
+    // Create new listener
+    this.messageEventListener = (event: MessageEvent) => {
+      // Security: Only accept messages from Facebook
+      if (!event.origin.endsWith("facebook.com")) {
+        return;
+      }
+
+      try {
+        // Try to parse as JSON
+        const data = JSON.parse(event.data);
+
+        // Check if this is a WhatsApp Embedded Signup event
+        if (data.type === "WA_EMBEDDED_SIGNUP") {
+          console.log(
+            "📨 [Facebook SDK] WA_EMBEDDED_SIGNUP message event:",
+            data
+          );
+
+          // Store the latest data
+          this.lastEmbeddedSignupData = data as EmbeddedSignupMessageEvent;
+
+          // Log details based on event type
+          if (
+            data.event === "FINISH" ||
+            data.event === "FINISH_ONLY_WABA" ||
+            data.event === "FINISH_WHATSAPP_BUSINESS_APP_ONBOARDING"
+          ) {
+            console.log("✅ [Facebook SDK] Flow completed successfully:", {
+              phone_number_id: data.data?.phone_number_id || "N/A",
+              waba_id: data.data?.waba_id || "N/A",
+              business_id: data.data?.business_id || "N/A",
+              event_type: data.event,
+            });
+          } else if (data.event === "CANCEL") {
+            if (data.data?.error_message) {
+              console.error("❌ [Facebook SDK] User reported error:", {
+                error_message: data.data.error_message,
+                error_id: data.data.error_id,
+                session_id: data.data.session_id,
+              });
+            } else if (data.data?.current_step) {
+              console.warn(
+                "⚠️ [Facebook SDK] Flow abandoned at:",
+                data.data.current_step
+              );
+            }
+          }
+
+          // Notify all registered handlers
+          this.embeddedSignupEventHandlers.forEach((handler) => {
+            try {
+              handler(data as EmbeddedSignupMessageEvent);
+            } catch (err) {
+              console.error(
+                "[Facebook SDK] Error in message event handler:",
+                err
+              );
+            }
+          });
+        }
+      } catch (parseError) {
+        // Not JSON or not our event - ignore
+        // (Facebook sends various message events, we only care about WA_EMBEDDED_SIGNUP)
+      }
+    };
+
+    // Register the listener
+    window.addEventListener("message", this.messageEventListener);
+    console.log(
+      "[Facebook SDK] Message event listener registered for WA_EMBEDDED_SIGNUP"
+    );
+  }
+
+  /**
+   * Register a handler for Embedded Signup message events
+   * Useful for components that need to react to flow completion/abandonment
+   */
+  public onEmbeddedSignupEvent(
+    handler: EmbeddedSignupMessageEventHandler
+  ): () => void {
+    this.embeddedSignupEventHandlers.push(handler);
+
+    // Return unsubscribe function
+    return () => {
+      const index = this.embeddedSignupEventHandlers.indexOf(handler);
+      if (index > -1) {
+        this.embeddedSignupEventHandlers.splice(index, 1);
+      }
+    };
+  }
+
+  /**
+   * Get the last captured Embedded Signup message event data
+   * Useful for retrieving WABA ID, phone number ID after flow completes
+   */
+  public getLastEmbeddedSignupData(): EmbeddedSignupMessageEvent | null {
+    return this.lastEmbeddedSignupData;
+  }
+
+  /**
+   * Clear the stored Embedded Signup message event data
+   */
+  public clearEmbeddedSignupData(): void {
+    this.lastEmbeddedSignupData = null;
   }
 
   /**
