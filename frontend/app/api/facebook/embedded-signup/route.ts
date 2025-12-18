@@ -84,22 +84,26 @@ export async function POST(request: NextRequest) {
       );
 
       try {
-        const tokenUrl = new URL(
-          "https://graph.facebook.com/v24.0/oauth/access_token"
-        );
-        tokenUrl.searchParams.append(
-          "client_id",
-          process.env.NEXT_PUBLIC_FACEBOOK_APP_ID || ""
-        );
-        tokenUrl.searchParams.append(
-          "client_secret",
-          process.env.FACEBOOK_APP_SECRET || ""
-        );
-        tokenUrl.searchParams.append("code", authorizationCode);
+        // CRITICAL: Validate required environment variables
+        const appId = process.env.NEXT_PUBLIC_FACEBOOK_APP_ID;
+        const appSecret = process.env.FACEBOOK_APP_SECRET;
+
+        if (!appId || !appSecret) {
+          console.error(
+            "❌ [Embedded Signup API] Missing Facebook App credentials"
+          );
+          return NextResponse.json(
+            {
+              error: "Server configuration error",
+              hint: "Facebook App ID or Secret not configured. Please contact support.",
+            },
+            { status: 500 }
+          );
+        }
 
         // CRITICAL: Use EXACT redirect_uri from frontend
         // Authorization codes are SINGLE-USE and tied to the exact redirect_uri
-        // Trying multiple URIs will invalidate the code on first failure
+        // Meta requires character-by-character exact match
         const redirectUri = body.redirectUri;
 
         if (!redirectUri) {
@@ -109,20 +113,59 @@ export async function POST(request: NextRequest) {
           return NextResponse.json(
             {
               error: "redirect_uri is required for Authorization Code Flow",
-              hint: "Ensure the frontend sends 'redirectUri' in the request body",
+              hint: "Ensure the frontend sends 'redirectUri' in the request body. This must match exactly what was used in FB.login().",
+              troubleshooting: [
+                "Check that EmbeddedSignupButton sends redirectUri in the request",
+                "Verify the redirect_uri matches what's registered in Meta App Settings",
+                "Ensure no trailing slash differences (e.g., / vs /)",
+              ],
+            },
+            { status: 400 }
+          );
+        }
+
+        // Validate redirect_uri format (must be valid URL)
+        try {
+          new URL(redirectUri);
+        } catch {
+          return NextResponse.json(
+            {
+              error: "Invalid redirect_uri format",
+              hint: "redirect_uri must be a valid URL (e.g., https://yourdomain.com/)",
+              received: redirectUri,
             },
             { status: 400 }
           );
         }
 
         console.log(
-          "🔄 [Embedded Signup API] Exchanging code with redirect_uri:",
-          redirectUri
+          "🔄 [Embedded Signup API] Token exchange request:",
+          {
+            endpoint: "https://graph.facebook.com/v24.0/oauth/access_token",
+            hasCode: !!authorizationCode,
+            codeLength: authorizationCode.length,
+            redirectUri: redirectUri,
+            appId: appId.substring(0, 6) + "...",
+          }
         );
+
+        // Build token exchange URL
+        const tokenUrl = new URL(
+          "https://graph.facebook.com/v24.0/oauth/access_token"
+        );
+        tokenUrl.searchParams.append("client_id", appId);
+        tokenUrl.searchParams.append("client_secret", appSecret);
+        tokenUrl.searchParams.append("code", authorizationCode);
         tokenUrl.searchParams.append("redirect_uri", redirectUri);
 
         // Make ONE token exchange request (authorization codes are single-use)
-        const response = await fetch(tokenUrl.toString(), { method: "GET" });
+        // Use GET method as per Meta documentation
+        const response = await fetch(tokenUrl.toString(), {
+          method: "GET",
+          headers: {
+            "Content-Type": "application/json",
+          },
+        });
 
         if (!response.ok) {
           const errorData = await response.json();
@@ -131,43 +174,85 @@ export async function POST(request: NextRequest) {
             JSON.stringify(errorData, null, 2)
           );
 
-          // Provide helpful error messages
-          if (
-            errorData?.error?.code === 100 &&
-            (errorData?.error?.message?.includes("code") ||
-              errorData?.error?.error_subcode === 36008)
-          ) {
-            let hint = "The authorization code could not be exchanged.";
-            if (errorData?.error?.error_subcode === 36008) {
-              hint = `The redirect_uri doesn't match. Make sure your Facebook App's Valid OAuth Redirect URIs includes: ${redirectUri}`;
-            } else {
-              hint =
-                "The authorization code may have expired or already been used. Please try the OAuth flow again.";
-            }
+          // Provide detailed error messages based on Meta error codes
+          const errorCode = errorData?.error?.code;
+          const errorSubcode = errorData?.error?.error_subcode;
+          const errorMessage = errorData?.error?.message || "";
 
-            return NextResponse.json(
-              {
-                error: "Failed to exchange authorization code",
-                hint,
-                details: errorData,
-              },
-              { status: 400 }
-            );
+          let hint = "The authorization code could not be exchanged.";
+          let troubleshooting: string[] = [];
+
+          if (errorSubcode === 36008 || errorMessage.includes("redirect_uri")) {
+            hint = `The redirect_uri doesn't match. The redirect_uri used in the token exchange must EXACTLY match the one used in FB.login().`;
+            troubleshooting = [
+              `Current redirect_uri: ${redirectUri}`,
+              "1. Go to Meta App Dashboard → Settings → Basic",
+              "2. Add this exact redirect_uri to 'Valid OAuth Redirect URIs'",
+              "3. Ensure the frontend uses the same redirect_uri in FB.login()",
+              "4. Check for trailing slash differences (e.g., / vs /)",
+              "5. Verify protocol matches (http vs https)",
+            ];
+          } else if (
+            errorCode === 100 &&
+            (errorMessage.includes("code") || errorMessage.includes("expired"))
+          ) {
+            hint =
+              "The authorization code may have expired or already been used. Authorization codes are single-use and expire in ~10 minutes.";
+            troubleshooting = [
+              "1. Get a new authorization code by restarting the OAuth flow",
+              "2. Complete the flow within 10 minutes",
+              "3. Don't retry with the same code - it can only be used once",
+            ];
+          } else if (errorCode === 190) {
+            hint = "Invalid access token or app credentials.";
+            troubleshooting = [
+              "1. Verify FACEBOOK_APP_SECRET is correct",
+              "2. Check NEXT_PUBLIC_FACEBOOK_APP_ID matches your app",
+              "3. Ensure app is not in restricted mode",
+            ];
           }
 
           return NextResponse.json(
             {
               error: "Failed to exchange authorization code",
-              details: errorData,
+              hint,
+              troubleshooting,
+              metaError: {
+                code: errorCode,
+                subcode: errorSubcode,
+                message: errorMessage,
+                type: errorData?.error?.type,
+              },
             },
             { status: 400 }
           );
         }
 
         const tokenData = await response.json();
+
+        // Validate response contains access_token
+        if (!tokenData.access_token) {
+          console.error(
+            "❌ [Embedded Signup API] No access_token in response:",
+            tokenData
+          );
+          return NextResponse.json(
+            {
+              error: "Invalid token exchange response",
+              hint: "Meta did not return an access_token. Check app configuration.",
+              response: tokenData,
+            },
+            { status: 500 }
+          );
+        }
+
         console.log(
-          "✅ [Embedded Signup API] Code exchange succeeded with redirect_uri:",
-          redirectUri
+          "✅ [Embedded Signup API] Code exchange succeeded",
+          {
+            redirectUri: redirectUri,
+            tokenType: tokenData.token_type || "Bearer",
+            expiresIn: tokenData.expires_in || "unknown",
+          }
         );
 
         accessToken = tokenData.access_token;
@@ -175,12 +260,28 @@ export async function POST(request: NextRequest) {
 
         // Get user ID if not provided
         if (!userID) {
-          const meResponse = await fetch(
-            `https://graph.facebook.com/v24.0/me?access_token=${accessToken}`
-          );
-          if (meResponse.ok) {
-            const meData = await meResponse.json();
-            userID = meData.id;
+          try {
+            const meResponse = await fetch(
+              `https://graph.facebook.com/v24.0/me?access_token=${accessToken}`
+            );
+            if (meResponse.ok) {
+              const meData = await meResponse.json();
+              userID = meData.id;
+              console.log(
+                "✅ [Embedded Signup API] Retrieved user ID:",
+                userID
+              );
+            } else {
+              console.warn(
+                "⚠️ [Embedded Signup API] Failed to get user ID from /me endpoint"
+              );
+            }
+          } catch (meError) {
+            console.warn(
+              "⚠️ [Embedded Signup API] Error getting user ID:",
+              meError
+            );
+            // Continue without userID - it may be provided in the request
           }
         }
       } catch (error: any) {
@@ -189,6 +290,7 @@ export async function POST(request: NextRequest) {
           {
             error: "Failed to process authorization code",
             message: error.message,
+            hint: "An unexpected error occurred during token exchange. Please try again.",
           },
           { status: 500 }
         );
