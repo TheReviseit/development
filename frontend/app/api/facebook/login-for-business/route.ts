@@ -72,9 +72,6 @@ export async function POST(request: NextRequest) {
       );
 
       try {
-        // IMPORTANT: When using Facebook JS SDK popup flow (FB.login), use empty string
-        // for redirect_uri. The SDK handles OAuth internally without a real redirect.
-        // See: https://github.com/keppelen/react-facebook-login/issues/520
         const redirectUri = "";
 
         console.log(
