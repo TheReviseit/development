@@ -638,7 +638,6 @@ class FacebookSDK {
     userID?: string;
     expiresIn?: number;
     grantedPermissions?: string[] | null;
-    redirectUri?: string; // Return the exact redirect_uri used
     error?: string;
   }> {
     await this.init();
@@ -655,17 +654,11 @@ class FacebookSDK {
         "🔵 [Facebook SDK] loginForBusiness - Requesting permissions:",
         scope
       );
-      console.log("🔵 [Facebook SDK] NOTE: No config_id used for this flow");
-
-      // CRITICAL: Use a hardcoded redirect_uri to ensure exact match
-      // The FB.login() SDK internally uses this URI, and token exchange MUST use the identical value
-      const redirectUri =
-        process.env.NEXT_PUBLIC_FACEBOOK_REDIRECT_URI ||
-        "https://www.reviseit.in/onboarding";
-
-      console.log("🔵 [Facebook SDK] Using EXACT redirect_uri:", redirectUri);
       console.log(
-        "🔵 [Facebook SDK] IMPORTANT: This MUST match token exchange request"
+        "🔵 [Facebook SDK] NOTE: No config_id or redirect_uri used for this flow"
+      );
+      console.log(
+        "🔵 [Facebook SDK] Using SDK default popup flow (requires empty string redirect_uri on backend)"
       );
 
       window.FB.login(
@@ -688,10 +681,6 @@ class FacebookSDK {
               !!accessToken
             );
             console.log("🔍 [Facebook SDK] User ID:", userID);
-            console.log(
-              "🔍 [Facebook SDK] Returning redirect_uri:",
-              redirectUri
-            );
 
             if (authCode) {
               console.log("✅ [Facebook SDK] Using Authorization Code Flow");
@@ -700,7 +689,6 @@ class FacebookSDK {
                 code: authCode,
                 userID,
                 grantedPermissions: null,
-                redirectUri, // Return the exact URI used for FB.login()
               });
               return;
             }
@@ -715,7 +703,6 @@ class FacebookSDK {
                     userID,
                     expiresIn,
                     grantedPermissions,
-                    redirectUri,
                   });
                 })
                 .catch(() => {
@@ -725,7 +712,6 @@ class FacebookSDK {
                     userID,
                     expiresIn,
                     grantedPermissions: null,
-                    redirectUri,
                   });
                 });
               return;
@@ -756,7 +742,9 @@ class FacebookSDK {
           scope,
           auth_type: "rerequest",
           return_scopes: true,
-          redirect_uri: redirectUri,
+          // NOTE: Do NOT specify redirect_uri here!
+          // When using FB SDK popup flow without redirect_uri, the authorization code
+          // is not bound to any redirect, and backend must use empty string "" for exchange.
         }
       );
     });
