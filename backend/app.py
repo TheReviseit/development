@@ -4,10 +4,28 @@ Provides API endpoints for sending WhatsApp messages
 """
 
 import os
+import time
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 from dotenv import load_dotenv
 from whatsapp_service import WhatsAppService
+
+# Supabase client for multi-tenant credential lookup
+try:
+    from supabase_client import (
+        get_credentials_by_phone_number_id, 
+        get_business_data_for_user,
+        store_message,
+        update_message_status
+    )
+    SUPABASE_AVAILABLE = True
+except ImportError as e:
+    print(f"⚠️ Supabase client not available: {e}")
+    SUPABASE_AVAILABLE = False
+    get_credentials_by_phone_number_id = None
+    get_business_data_for_user = None
+    store_message = None
+    update_message_status = None
 
 # AI Brain import (optional, graceful fallback if not available)
 try:
@@ -175,52 +193,174 @@ def webhook():
         changes = entry.get('changes', [{}])[0]
         value = changes.get('value', {})
         messages = value.get('messages', [])
+        statuses = value.get('statuses', [])
+        
+        # Extract phone_number_id from webhook metadata (identifies which customer this is for)
+        metadata = value.get('metadata', {})
+        phone_number_id = metadata.get('phone_number_id')
+        display_phone = metadata.get('display_phone_number', 'Unknown')
+        
+        print(f"📞 Webhook for phone: {display_phone} (ID: {phone_number_id})")
+        
+        # Handle status updates (sent, delivered, read)
+        if statuses and SUPABASE_AVAILABLE and update_message_status:
+            for status_update in statuses:
+                status_msg_id = status_update.get('id')
+                status = status_update.get('status')
+                timestamp = status_update.get('timestamp')
+                
+                if status_msg_id and status:
+                    # Convert timestamp to ISO format
+                    from datetime import datetime
+                    iso_timestamp = None
+                    if timestamp:
+                        try:
+                            iso_timestamp = datetime.fromtimestamp(int(timestamp)).isoformat()
+                        except:
+                            pass
+                    
+                    update_message_status(status_msg_id, status, iso_timestamp)
         
         if not messages:
-            # No messages - might be a status update
+            # No messages - was a status update
             return jsonify({'status': 'ok'}), 200
         
         message = messages[0]
         from_number = message.get('from')
         message_type = message.get('type')
+        msg_id = message.get('id')
         
-        # Only handle text messages for now
-        if message_type != 'text':
-            print(f"⏭️ Skipping non-text message type: {message_type}")
-            return jsonify({'status': 'ok'}), 200
+        # Get contact name from contacts array
+        contacts = value.get('contacts', [])
+        contact_name = None
+        if contacts:
+            contact_name = contacts[0].get('profile', {}).get('name')
         
-        message_text = message.get('text', {}).get('body', '')
+        # Extract message content based on type
+        message_text = ''
+        media_id = None
+        if message_type == 'text':
+            message_text = message.get('text', {}).get('body', '')
+        elif message_type in ['image', 'video', 'audio', 'document']:
+            media_data = message.get(message_type, {})
+            media_id = media_data.get('id')
+            message_text = media_data.get('caption', '')
         
-        print(f"💬 Message from {from_number}: {message_text}")
+        print(f"💬 Message from {from_number}: {message_text or f'[{message_type}]'}")
         
-        # Generate AI response
-        if AI_BRAIN_AVAILABLE and ai_brain:
-            # Get business data (use cached or default)
-            business_data = BUSINESS_DATA_CACHE.get('current', DEFAULT_BUSINESS_DATA)
-            
-            # Generate AI reply
-            result = ai_brain.generate_reply(
-                business_data=business_data,
-                user_message=message_text,
-                history=[]  # Could store conversation history per user
+        # 1. Fetch credentials (needed for read receipts, typing, and sending)
+        credentials = None
+        business_data = None
+        user_id = None
+        
+        if SUPABASE_AVAILABLE and phone_number_id:
+            credentials = get_credentials_by_phone_number_id(phone_number_id)
+            if credentials:
+                user_id = credentials.get('user_id')
+                # Get business-specific data for AI context
+                try:
+                    business_data = get_business_data_for_user(user_id) or DEFAULT_BUSINESS_DATA
+                    business_data['business_name'] = credentials.get('business_name', 'Our Business')
+                except Exception as e:
+                    print(f"⚠️ Error fetching business data: {e}")
+                    business_data = BUSINESS_DATA_CACHE.get('current', DEFAULT_BUSINESS_DATA)
+        
+        if not business_data:
+             business_data = BUSINESS_DATA_CACHE.get('current', DEFAULT_BUSINESS_DATA)
+
+        # 2. Store the incoming message in the database
+        if SUPABASE_AVAILABLE and store_message and user_id:
+            store_message(
+                user_id=user_id,
+                phone_number_id=phone_number_id,
+                message_id=msg_id,
+                direction='inbound',
+                from_number=from_number,
+                to_number=display_phone,
+                message_type=message_type,
+                message_body=message_text if message_text else None,
+                status='delivered',
+                contact_name=contact_name,
+                wamid=msg_id,
+                media_id=media_id,
+                conversation_origin='user_initiated'
             )
-            
-            reply_text = result.get('reply', "I'll connect you with our team shortly.")
-            intent = result.get('intent', 'unknown')
-            needs_human = result.get('needs_human', False)
-            
-            print(f"🤖 AI Response (intent: {intent}, needs_human: {needs_human}): {reply_text}")
-        else:
-            # Fallback if AI not available
-            reply_text = "Thank you for your message! Our team will respond shortly."
+
+        # 3. Mark as Read & Send Typing Indicator
+        # We need the specific access_token and phone_number_id for this business
+        wa_id = credentials.get('phone_number_id') if credentials else None
+        token = credentials.get('access_token') if credentials else None
         
-        # Send the reply
-        send_result = whatsapp_service.send_text_message(from_number, reply_text)
+        # Mark as read
+        if msg_id:
+            whatsapp_service.mark_message_as_read(wa_id, token, msg_id)
+            
+        # Show typing indicator
+        whatsapp_service.send_typing_indicator(wa_id, token, from_number)
+        
+        # Humanize the response with a small delay
+        time.sleep(2)  # Wait 2 seconds so user sees "typing..."
+        
+        # 4. Generate AI response (only for text messages)
+        if message_type == 'text':
+            if AI_BRAIN_AVAILABLE and ai_brain:
+                # Generate AI reply
+                result = ai_brain.generate_reply(
+                    business_data=business_data,
+                    user_message=message_text,
+                    history=[]  # Could store conversation history per user
+                )
+                
+                reply_text = result.get('reply', "I'll connect you with our team shortly.")
+                intent = result.get('intent', 'unknown')
+                needs_human = result.get('needs_human', False)
+                
+                print(f"🤖 AI Response (intent: {intent}, needs_human: {needs_human}): {reply_text}")
+            else:
+                # Fallback if AI not available
+                reply_text = "Thank you for your message! Our team will respond shortly."
+        else:
+            # For non-text messages
+            reply_text = f"Thank you for sending a {message_type}! Our team will review it shortly."
+        
+        # 5. Send the reply using dynamic credentials (multi-tenant) or fallback to .env
+        if credentials and credentials.get('access_token'):
+            print(f"🏢 Using credentials for: {credentials.get('business_name')}")
+            send_result = whatsapp_service.send_message_with_credentials(
+                phone_number_id=credentials['phone_number_id'],
+                access_token=credentials['access_token'],
+                to=from_number,
+                message=reply_text
+            )
+        else:
+            # Fallback to .env credentials
+            print(f"⚠️ Using fallback .env credentials")
+            send_result = whatsapp_service.send_text_message(from_number, reply_text)
         
         if send_result['success']:
+            reply_message_id = send_result.get('message_id', 'N/A')
             print(f"✅ Reply sent successfully to {from_number}")
+            print(f"   📋 Message ID: {reply_message_id}")
+            print(f"   📦 Full Response: {send_result.get('data', {})}")
+            
+            # 6. Store the outgoing message in the database
+            if SUPABASE_AVAILABLE and store_message and user_id and reply_message_id != 'N/A':
+                store_message(
+                    user_id=user_id,
+                    phone_number_id=phone_number_id,
+                    message_id=reply_message_id,
+                    direction='outbound',
+                    from_number=display_phone,
+                    to_number=from_number,
+                    message_type='text',
+                    message_body=reply_text,
+                    status='sent',
+                    wamid=reply_message_id,
+                    conversation_origin='business_initiated'
+                )
         else:
             print(f"❌ Failed to send reply: {send_result.get('error')}")
+            print(f"   📦 Full Response: {send_result.get('data', {})}")
         
         return jsonify({'status': 'ok'}), 200
         
