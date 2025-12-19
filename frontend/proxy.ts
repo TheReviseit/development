@@ -19,6 +19,7 @@ export async function proxy(request: NextRequest) {
     "/api/auth/login",
     "/api/auth/logout",
     "/api/auth/create-user",
+    "/api/auth/check-user-exists",
     "/privacy",
     "/terms",
     "/data-deletion",
