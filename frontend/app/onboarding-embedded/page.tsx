@@ -30,8 +30,12 @@ export default function OnboardingPageEmbedded() {
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
       if (currentUser) {
         setUser(currentUser);
-        await checkOnboardingStatus();
-        setLoading(false);
+        // Check onboarding status before showing the page
+        const shouldRedirect = await checkOnboardingStatus();
+        // Only stop loading if we're not redirecting
+        if (!shouldRedirect) {
+          setLoading(false);
+        }
       } else {
         router.push("/login");
       }
@@ -40,16 +44,19 @@ export default function OnboardingPageEmbedded() {
     return () => unsubscribe();
   }, [router]);
 
-  const checkOnboardingStatus = async () => {
+  const checkOnboardingStatus = async (): Promise<boolean> => {
     try {
       const onboardingResponse = await fetch("/api/onboarding/check");
       const onboardingData = await onboardingResponse.json();
 
       if (onboardingData.onboardingCompleted) {
         router.push("/dashboard");
+        return true; // Indicate that we're redirecting
       }
+      return false; // Not redirecting, show onboarding
     } catch (error) {
       console.error("Error checking onboarding status:", error);
+      return false; // On error, show onboarding page
     }
   };
 
