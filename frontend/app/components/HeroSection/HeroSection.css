@@ -1,13 +1,13 @@
 /* Hero Section Styles */
 .hero-section {
   position: relative;
-  padding: 2rem 0;
+  padding: 4rem 0 2rem 0;
   overflow: hidden;
 }
 
 @media (min-width: 768px) {
   .hero-section {
-    padding: 3rem 0;
+    padding: 6rem 0 3rem 0;
   }
 }
 

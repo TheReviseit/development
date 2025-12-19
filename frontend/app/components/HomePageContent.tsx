@@ -29,7 +29,9 @@ export default function HomePageContent() {
       <Header />
 
       {/* Hero Section */}
-      <HeroSection />
+      <div className="pt-16 md:pt-20">
+        <HeroSection />
+      </div>
 
       {/* Trust Section */}
       <TrustedBy />

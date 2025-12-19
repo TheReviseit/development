@@ -28,7 +28,6 @@ body {
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  padding-top: 75px; /* Account for fixed header */
 }
 
 /* ============================================
@@ -90,10 +89,6 @@ h3,
 
 /* Responsive Typography */
 @media (max-width: 768px) {
-  body {
-    padding-top: 70px; /* Adjust for mobile header height */
-  }
-
   h1,
   .h1 {
     font-size: 36px;
