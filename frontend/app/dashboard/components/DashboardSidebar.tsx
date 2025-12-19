@@ -140,6 +140,31 @@ const SettingsIcon = () => (
   </svg>
 );
 
+const BotIcon = () => (
+  <svg
+    width="20"
+    height="20"
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2"
+  >
+    <rect
+      x="3"
+      y="11"
+      width="18"
+      height="10"
+      rx="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+    <circle cx="12" cy="5" r="2" strokeLinecap="round" strokeLinejoin="round" />
+    <path d="M12 7v4" strokeLinecap="round" strokeLinejoin="round" />
+    <circle cx="8" cy="16" r="1" fill="currentColor" />
+    <circle cx="16" cy="16" r="1" fill="currentColor" />
+  </svg>
+);
+
 const CollapseIcon = ({ collapsed }: { collapsed: boolean }) => (
   <svg
     width="18"
@@ -179,6 +204,7 @@ export default function DashboardSidebar({
     { id: "templates", label: "Templates", icon: <TemplatesIcon /> },
     { id: "contacts", label: "Contacts", icon: <ContactsIcon /> },
     { id: "campaigns", label: "Campaigns", icon: <CampaignsIcon /> },
+    { id: "bot-settings", label: "AI Settings", icon: <BotIcon /> },
   ];
 
   const displayName = userName || userEmail?.split("@")[0] || "User";

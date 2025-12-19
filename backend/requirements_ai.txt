@@ -1,0 +1,20 @@
+# AI Brain dependencies
+# Add these to your existing requirements.txt or install separately
+
+# Core LLM support
+openai>=1.0.0
+
+# Data validation
+pydantic>=2.0.0
+
+# Token counting for budget management
+tiktoken>=0.5.0
+
+# Optional: Database loaders (uncomment as needed)
+# pymongo>=4.0.0          # For MongoDB
+# sqlalchemy>=2.0.0       # For PostgreSQL/MySQL
+# psycopg2-binary>=2.9.0  # PostgreSQL driver
+# redis>=4.0.0            # For caching
+
+# Optional: Additional features
+# langdetect>=1.0.9       # Language detection for multi-language support

@@ -11,6 +11,7 @@ import MessagesView from "./components/MessagesView";
 import TemplatesView from "./components/TemplatesView";
 import ContactsView from "./components/ContactsView";
 import CampaignsView from "./components/CampaignsView";
+import BotSettingsView from "./components/BotSettingsView";
 import styles from "./dashboard.module.css";
 
 type Section =
@@ -19,6 +20,7 @@ type Section =
   | "templates"
   | "contacts"
   | "campaigns"
+  | "bot-settings"
   | "settings";
 
 export default function Dashboard() {
@@ -85,6 +87,8 @@ export default function Dashboard() {
         return <ContactsView />;
       case "campaigns":
         return <CampaignsView />;
+      case "bot-settings":
+        return <BotSettingsView />;
       case "settings":
         return (
           <div className={styles.settingsView}>
