@@ -1,147 +1,462 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
+import { supabase } from "@/lib/supabase/client";
 import styles from "../dashboard.module.css";
 
-// Mock conversation data
-const mockConversations = [
-  {
-    id: "1",
-    name: "Leslie Alexander",
-    avatar: null,
-    lastMessage: "Thank you! I will see you tomorrow...",
-    time: "11h",
-    unread: 2,
-    online: true,
-  },
-  {
-    id: "2",
-    name: "Savannah Nguyen",
-    avatar: null,
-    lastMessage: "Fringilla leo sem cursus ut pulvina...",
-    time: "1h",
-    unread: 0,
-    online: false,
-  },
-  {
-    id: "3",
-    name: "Kristin Watson",
-    avatar: null,
-    lastMessage: "Could you send me a link to join...",
-    time: "1h",
-    unread: 3,
-    online: true,
-  },
-  {
-    id: "4",
-    name: "Cameron Williamson",
-    avatar: null,
-    lastMessage: "Fringilla leo sem cursus ut pulvina...",
-    time: "1h",
-    unread: 0,
-    online: false,
-  },
-  {
-    id: "5",
-    name: "Jane Cooper",
-    avatar: null,
-    lastMessage: "Fringilla leo sem cursus ut pulvina...",
-    time: "2h",
-    unread: 0,
-    online: true,
-  },
-];
+interface Conversation {
+  id: string;
+  name: string;
+  phone: string;
+  lastMessage: string;
+  time: string;
+  timestamp: string;
+  unread: number;
+  online: boolean;
+}
 
-const mockMessages = [
-  {
-    id: "1",
-    sender: "contact",
-    content:
-      "Hi, Brandon! I am looking forward to meeting you! Does tomorrow 9?",
-    time: "10:33 am",
-    type: "text",
-  },
-  {
-    id: "2",
-    sender: "user",
-    content: "What about 2:30 PM?",
-    time: "11:20 am",
-    type: "text",
-  },
-  {
-    id: "3",
-    sender: "contact",
-    content: "",
-    time: "11:21 am",
-    type: "audio",
-    duration: "00:12",
-  },
-  {
-    id: "4",
-    sender: "contact",
-    content: "",
-    time: "11:23 am",
-    type: "image",
-    imageUrl: "/placeholder-image.jpg",
-  },
-  {
-    id: "5",
-    sender: "user",
-    content:
-      "Of course! Here is the link:\nhttps://us01web.zoom.us/rec/share/Ap.lr-1hmje-uUUw2ViHSaRDFXyg8h1rS4XYUTFXbWU90V3XVl",
-    time: "13:11 am",
-    type: "text",
-  },
-];
+interface Message {
+  id: string;
+  messageId: string;
+  sender: "contact" | "user";
+  content: string;
+  time: string;
+  timestamp: string;
+  type: string;
+  status: string;
+  mediaUrl?: string;
+  mediaId?: string;
+}
 
-const mockContact = {
-  name: "Leslie Alexander",
-  role: "Co-Founder at Uxcel",
-  email: "Leslie@example.com",
-  phone: "(+1) 437-123-4567",
-  created: "Sep 24, 2021 10:00 am",
-  campaign: {
-    name: "Schedule Onboarding",
-    assigned: "Sep 24, 2021 10:00 am",
-    start: "Sep 24, 2021",
-  },
-  tags: ["Lead", "VIP"],
-  company: "Ankle",
-  address: "6545 Rodeo Drive",
-  notes: "",
-};
+interface ContactInfo {
+  phone: string;
+  name: string;
+}
+
+// Helper to format time
+function formatTime(dateString: string): string {
+  const date = new Date(dateString);
+  return date
+    .toLocaleTimeString("en-US", {
+      hour: "numeric",
+      minute: "2-digit",
+      hour12: true,
+    })
+    .toLowerCase();
+}
+
+// Helper to format relative time
+function formatRelativeTime(dateString: string): string {
+  const date = new Date(dateString);
+  const now = new Date();
+  const diffMs = now.getTime() - date.getTime();
+  const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
+  const diffDays = Math.floor(diffHours / 24);
+
+  if (diffHours < 1) {
+    const diffMinutes = Math.floor(diffMs / (1000 * 60));
+    return `${diffMinutes}m`;
+  } else if (diffHours < 24) {
+    return `${diffHours}h`;
+  } else if (diffDays < 7) {
+    return `${diffDays}d`;
+  } else {
+    return date.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+  }
+}
+
+// Helper to format phone numbers nicely
+function formatPhoneNumber(phone: string): string {
+  const digits = phone.replace(/\D/g, "");
+  if (digits.length >= 10) {
+    const countryCode = digits.slice(0, digits.length - 10);
+    const areaCode = digits.slice(-10, -7);
+    const prefix = digits.slice(-7, -4);
+    const line = digits.slice(-4);
+    if (countryCode) {
+      return `+${countryCode} ${areaCode} ${prefix} ${line}`;
+    }
+    return `(${areaCode}) ${prefix}-${line}`;
+  }
+  return phone;
+}
 
 export default function MessagesView() {
-  const [selectedConversation, setSelectedConversation] = useState(
-    mockConversations[0]
-  );
+  const [conversations, setConversations] = useState<Conversation[]>([]);
+  const [selectedConversation, setSelectedConversation] = useState<Conversation | null>(null);
+  const [messages, setMessages] = useState<Message[]>([]);
+  const [contactInfo, setContactInfo] = useState<ContactInfo | null>(null);
   const [messageInput, setMessageInput] = useState("");
   const [showContactPanel, setShowContactPanel] = useState(true);
   const [filter, setFilter] = useState("all");
+  const [searchQuery, setSearchQuery] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [messagesLoading, setMessagesLoading] = useState(false);
+  const [sending, setSending] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const selectedConversationRef = useRef<Conversation | null>(null);
+  const conversationsRef = useRef<Conversation[]>([]);
 
+  // Keep refs in sync with state for use in realtime callback
+  useEffect(() => {
+    selectedConversationRef.current = selectedConversation;
+  }, [selectedConversation]);
+
+  useEffect(() => {
+    conversationsRef.current = conversations;
+  }, [conversations]);
+
+  // Fetch conversations on mount
+  const fetchConversations = useCallback(async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      const response = await fetch(`/api/whatsapp/conversations?filter=${filter}`);
+      const data = await response.json();
+
+      if (data.success) {
+        setConversations(data.data);
+        if (data.data.length > 0 && !selectedConversationRef.current) {
+          setSelectedConversation(data.data[0]);
+        }
+      } else {
+        setError(data.error || "Failed to load conversations");
+      }
+    } catch (err) {
+      console.error("Error fetching conversations:", err);
+      setError("Failed to load conversations");
+    } finally {
+      setLoading(false);
+    }
+  }, [filter]);
+
+  useEffect(() => {
+    fetchConversations();
+  }, [filter]);
+
+  // Fetch messages when conversation is selected
+  const fetchMessages = useCallback(async (contactPhone: string) => {
+    try {
+      setMessagesLoading(true);
+      const response = await fetch(`/api/whatsapp/messages?contactPhone=${encodeURIComponent(contactPhone)}`);
+      const data = await response.json();
+
+      if (data.success) {
+        setMessages(data.data.messages);
+        setContactInfo(data.data.contact);
+      } else {
+        console.error("Failed to load messages:", data.error);
+      }
+    } catch (err) {
+      console.error("Error fetching messages:", err);
+    } finally {
+      setMessagesLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (selectedConversation) {
+      fetchMessages(selectedConversation.phone);
+    }
+  }, [selectedConversation, fetchMessages]);
+
+  // Scroll to bottom when messages change
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages]);
+
+  // Real-time subscription to whatsapp_messages table
+  useEffect(() => {
+    console.log("🔌 Setting up Supabase realtime subscription...");
+    
+    const channel = supabase
+      .channel('whatsapp-messages-realtime')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'whatsapp_messages',
+        },
+        (payload) => {
+          console.log('📨 Realtime update:', payload.eventType, payload.new);
+          
+          const newMsg = payload.new as any;
+          if (!newMsg) return;
+
+          // Determine contact phone from the message
+          const contactPhone = newMsg.direction === 'inbound' ? newMsg.from_number : newMsg.to_number;
+          const contactName = newMsg.metadata?.contact_name || formatPhoneNumber(contactPhone);
+
+          if (payload.eventType === 'INSERT') {
+            // Format the new message
+            const formattedMsg: Message = {
+              id: newMsg.id,
+              messageId: newMsg.message_id,
+              sender: newMsg.direction === 'inbound' ? 'contact' : 'user',
+              content: newMsg.message_body || '',
+              time: formatTime(newMsg.created_at),
+              timestamp: newMsg.created_at,
+              type: newMsg.message_type,
+              status: newMsg.status,
+              mediaUrl: newMsg.media_url,
+              mediaId: newMsg.media_id,
+            };
+
+            // Update messages if this is for the selected conversation
+            const currentConv = selectedConversationRef.current;
+            if (currentConv && (currentConv.phone === contactPhone || 
+                newMsg.from_number === currentConv.phone || 
+                newMsg.to_number === currentConv.phone)) {
+              setMessages((prev) => {
+                // Check if message already exists
+                if (prev.some(m => m.messageId === formattedMsg.messageId)) {
+                  return prev;
+                }
+                return [...prev, formattedMsg];
+              });
+            }
+
+            // Update conversations list - add or update the conversation
+            setConversations((prev) => {
+              const existingIndex = prev.findIndex(c => c.phone === contactPhone);
+              
+              const updatedConv: Conversation = {
+                id: contactPhone,
+                name: contactName,
+                phone: contactPhone,
+                lastMessage: newMsg.message_body || `[${newMsg.message_type}]`,
+                time: formatRelativeTime(newMsg.created_at),
+                timestamp: newMsg.created_at,
+                unread: newMsg.direction === 'inbound' && newMsg.status !== 'read' ? 1 : 0,
+                online: false,
+              };
+
+              if (existingIndex >= 0) {
+                // Update existing conversation
+                const updated = [...prev];
+                const existing = updated[existingIndex];
+                updated[existingIndex] = {
+                  ...updatedConv,
+                  name: existing.name || updatedConv.name, // Keep existing name if available
+                  unread: existing.unread + (newMsg.direction === 'inbound' && newMsg.status !== 'read' ? 1 : 0),
+                };
+                // Move to top
+                const [moved] = updated.splice(existingIndex, 1);
+                return [moved, ...updated];
+              } else {
+                // Add new conversation at top
+                return [updatedConv, ...prev];
+              }
+            });
+
+          } else if (payload.eventType === 'UPDATE') {
+            // Update message status
+            setMessages((prev) =>
+              prev.map((msg) =>
+                msg.messageId === newMsg.message_id
+                  ? { ...msg, status: newMsg.status }
+                  : msg
+              )
+            );
+
+            // Update conversation unread count if message marked as read
+            if (newMsg.status === 'read') {
+              setConversations((prev) =>
+                prev.map((conv) =>
+                  conv.phone === contactPhone
+                    ? { ...conv, unread: Math.max(0, conv.unread - 1) }
+                    : conv
+                )
+              );
+            }
+          }
+        }
+      )
+      .subscribe((status) => {
+        console.log('🔌 Realtime subscription status:', status);
+      });
+
+    return () => {
+      console.log('🔌 Cleaning up realtime subscription...');
+      supabase.removeChannel(channel);
+    };
+  }, []);
+
+  // Send message
+  const handleSendMessage = async () => {
+    if (!messageInput.trim() || !selectedConversation || sending) return;
+
+    const messageText = messageInput.trim();
+    setMessageInput("");
+    setSending(true);
+
+    // Optimistic update - add message to UI immediately
+    const optimisticMessage: Message = {
+      id: `temp-${Date.now()}`,
+      messageId: `temp-${Date.now()}`,
+      sender: "user",
+      content: messageText,
+      time: new Date().toLocaleTimeString("en-US", {
+        hour: "numeric",
+        minute: "2-digit",
+        hour12: true,
+      }).toLowerCase(),
+      timestamp: new Date().toISOString(),
+      type: "text",
+      status: "sending",
+    };
+    setMessages((prev) => [...prev, optimisticMessage]);
+
+    try {
+      const response = await fetch("/api/whatsapp/send-message", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          to: selectedConversation.phone,
+          message: messageText,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
+        // Update the optimistic message with real data
+        setMessages((prev) =>
+          prev.map((msg) =>
+            msg.id === optimisticMessage.id
+              ? { ...msg, id: data.data.messageId, messageId: data.data.messageId, status: "sent" }
+              : msg
+          )
+        );
+      } else {
+        // Remove optimistic message on failure
+        setMessages((prev) => prev.filter((msg) => msg.id !== optimisticMessage.id));
+        alert(data.message || "Failed to send message");
+      }
+    } catch (err) {
+      console.error("Error sending message:", err);
+      setMessages((prev) => prev.filter((msg) => msg.id !== optimisticMessage.id));
+      alert("Failed to send message. Please try again.");
+    } finally {
+      setSending(false);
+    }
+  };
+
+  // Handle Enter key press
+  const handleKeyPress = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      handleSendMessage();
+    }
+  };
+
+  // Mark conversation as read
+  const handleMarkAsRead = async () => {
+    if (!selectedConversation) return;
+    setConversations((prev) =>
+      prev.map((conv) =>
+        conv.id === selectedConversation.id ? { ...conv, unread: 0 } : conv
+      )
+    );
+  };
+
+  // Get initials from name
   const getInitials = (name: string) => {
     return name
       .split(" ")
       .map((n) => n[0])
       .join("")
-      .toUpperCase();
+      .toUpperCase()
+      .slice(0, 2);
   };
+
+  // Filter conversations by search
+  const filteredConversations = conversations.filter((conv) =>
+    conv.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    conv.phone.includes(searchQuery) ||
+    conv.lastMessage.toLowerCase().includes(searchQuery.toLowerCase())
+  );
+
+  // Group messages by date
+  const groupMessagesByDate = (msgs: Message[]) => {
+    const groups: { date: string; messages: Message[] }[] = [];
+    let currentDate = "";
+
+    for (const msg of msgs) {
+      const msgDate = new Date(msg.timestamp).toLocaleDateString("en-US", {
+        month: "long",
+        day: "numeric",
+      });
+
+      if (msgDate !== currentDate) {
+        currentDate = msgDate;
+        groups.push({ date: msgDate, messages: [msg] });
+      } else {
+        groups[groups.length - 1].messages.push(msg);
+      }
+    }
+
+    return groups;
+  };
+
+  const messageGroups = groupMessagesByDate(messages);
+
+  if (loading) {
+    return (
+      <div className={styles.messagesView}>
+        <div className={styles.conversationList}>
+          <div className={styles.conversationListHeader}>
+            <h2 className={styles.panelTitle}>Conversations</h2>
+          </div>
+          <div style={{ padding: "2rem", textAlign: "center", color: "var(--dash-text-secondary)" }}>
+            Loading conversations...
+          </div>
+        </div>
+        <div className={styles.chatArea}>
+          <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", color: "var(--dash-text-secondary)" }}>
+            Loading...
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className={styles.messagesView}>
+        <div className={styles.conversationList}>
+          <div className={styles.conversationListHeader}>
+            <h2 className={styles.panelTitle}>Conversations</h2>
+          </div>
+          <div style={{ padding: "2rem", textAlign: "center", color: "var(--dash-danger)" }}>
+            {error}
+            <br />
+            <button onClick={fetchConversations} style={{ marginTop: "1rem", color: "var(--dash-accent)", cursor: "pointer", background: "none", border: "none" }}>
+              Try again
+            </button>
+          </div>
+        </div>
+        <div className={styles.chatArea}>
+          <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", color: "var(--dash-text-secondary)" }}>
+            Select a conversation to view messages
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className={styles.messagesView}>
       {/* Conversation List Panel */}
       <div className={styles.conversationList}>
         <div className={styles.conversationListHeader}>
-          <h2 className={styles.panelTitle}>Conversation</h2>
+          <h2 className={styles.panelTitle}>Conversations</h2>
           <div className={styles.conversationFilters}>
-            <select
-              className={styles.filterSelect}
-              value={filter}
-              onChange={(e) => setFilter(e.target.value)}
-            >
-              <option value="all">5 Open</option>
+            <select className={styles.filterSelect} value={filter} onChange={(e) => setFilter(e.target.value)}>
+              <option value="all">{conversations.length} All</option>
               <option value="unread">Unread</option>
-              <option value="open">Open</option>
             </select>
             <select className={styles.sortSelect}>
               <option value="newest">Newest</option>
@@ -151,14 +466,7 @@ export default function MessagesView() {
         </div>
 
         <div className={styles.conversationSearch}>
-          <svg
-            width="16"
-            height="16"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-          >
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
             <circle cx="11" cy="11" r="8" />
             <line x1="21" y1="21" x2="16.65" y2="16.65" />
           </svg>
@@ -166,254 +474,214 @@ export default function MessagesView() {
             type="text"
             placeholder="Search conversations..."
             className={styles.searchInput}
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
           />
         </div>
 
         <div className={styles.conversationItems}>
-          {mockConversations.map((conv) => (
-            <div
-              key={conv.id}
-              className={`${styles.conversationItem} ${
-                selectedConversation.id === conv.id
-                  ? styles.conversationActive
-                  : ""
-              }`}
-              onClick={() => setSelectedConversation(conv)}
-            >
-              <div className={styles.conversationAvatar}>
-                {getInitials(conv.name)}
-                {conv.online && <span className={styles.onlineIndicator} />}
-              </div>
-              <div className={styles.conversationInfo}>
-                <div className={styles.conversationTop}>
-                  <span className={styles.conversationName}>{conv.name}</span>
-                  <span className={styles.conversationTime}>{conv.time}</span>
-                </div>
-                <div className={styles.conversationBottom}>
-                  <span className={styles.conversationPreview}>
-                    {conv.lastMessage}
-                  </span>
-                  {conv.unread > 0 && (
-                    <span className={styles.unreadBadge}>{conv.unread}</span>
-                  )}
-                </div>
-              </div>
+          {filteredConversations.length === 0 ? (
+            <div style={{ padding: "2rem", textAlign: "center", color: "var(--dash-text-secondary)" }}>
+              {searchQuery ? "No conversations found" : "No conversations yet"}
             </div>
-          ))}
+          ) : (
+            filteredConversations.map((conv) => (
+              <div
+                key={conv.id}
+                className={`${styles.conversationItem} ${selectedConversation?.id === conv.id ? styles.conversationActive : ""}`}
+                onClick={() => setSelectedConversation(conv)}
+              >
+                <div className={styles.conversationAvatar}>
+                  {getInitials(conv.name)}
+                  {conv.online && <span className={styles.onlineIndicator} />}
+                </div>
+                <div className={styles.conversationInfo}>
+                  <div className={styles.conversationTop}>
+                    <span className={styles.conversationName}>{conv.name}</span>
+                    <span className={styles.conversationTime}>{conv.time}</span>
+                  </div>
+                  <div className={styles.conversationBottom}>
+                    <span className={styles.conversationPreview}>{conv.lastMessage}</span>
+                    {conv.unread > 0 && <span className={styles.unreadBadge}>{conv.unread}</span>}
+                  </div>
+                </div>
+              </div>
+            ))
+          )}
         </div>
       </div>
 
       {/* Chat Area Panel */}
       <div className={styles.chatArea}>
-        <div className={styles.chatHeader}>
-          <div className={styles.chatHeaderLeft}>
-            <div className={styles.chatAvatar}>
-              {getInitials(selectedConversation.name)}
-            </div>
-            <span className={styles.chatName}>{selectedConversation.name}</span>
-          </div>
-          <div className={styles.chatHeaderActions}>
-            <button className={styles.markReadBtn}>
-              <svg
-                width="16"
-                height="16"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-              >
-                <polyline points="20 6 9 17 4 12" />
-              </svg>
-              Mark As Read
-            </button>
-            <button
-              className={styles.togglePanelBtn}
-              onClick={() => setShowContactPanel(!showContactPanel)}
-            >
-              <svg
-                width="18"
-                height="18"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-              >
-                <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
-                <line x1="15" y1="3" x2="15" y2="21" />
-              </svg>
-            </button>
-            <button className={styles.moreBtn}>
-              <svg
-                width="18"
-                height="18"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-              >
-                <circle cx="12" cy="12" r="1" />
-                <circle cx="19" cy="12" r="1" />
-                <circle cx="5" cy="12" r="1" />
-              </svg>
-            </button>
-          </div>
-        </div>
-
-        <div className={styles.chatMessages}>
-          <div className={styles.dateSeparator}>
-            <span>August 17</span>
-          </div>
-
-          {mockMessages.map((msg) => (
-            <div
-              key={msg.id}
-              className={`${styles.messageWrapper} ${
-                msg.sender === "user" ? styles.messageOut : styles.messageIn
-              }`}
-            >
-              <div className={styles.messageBubble}>
-                {msg.type === "text" && (
-                  <p className={styles.messageText}>{msg.content}</p>
-                )}
-                {msg.type === "audio" && (
-                  <div className={styles.audioMessage}>
-                    <button className={styles.playBtn}>▶</button>
-                    <div className={styles.audioWave}>
-                      {[...Array(20)].map((_, i) => (
-                        <span
-                          key={i}
-                          className={styles.audioBar}
-                          style={{ height: `${Math.random() * 100}%` }}
-                        />
-                      ))}
-                    </div>
-                    <span className={styles.audioDuration}>{msg.duration}</span>
-                  </div>
-                )}
-                {msg.type === "image" && (
-                  <div className={styles.imageMessage}>
-                    <div className={styles.imagePlaceholder}>
-                      <svg
-                        width="48"
-                        height="48"
-                        viewBox="0 0 24 24"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth="1"
-                      >
-                        <rect
-                          x="3"
-                          y="3"
-                          width="18"
-                          height="18"
-                          rx="2"
-                          ry="2"
-                        />
-                        <circle cx="8.5" cy="8.5" r="1.5" />
-                        <polyline points="21 15 16 10 5 21" />
-                      </svg>
-                    </div>
-                  </div>
-                )}
-                <span className={styles.messageTime}>{msg.time}</span>
+        {selectedConversation ? (
+          <>
+            <div className={styles.chatHeader}>
+              <div className={styles.chatHeaderLeft}>
+                <div className={styles.chatAvatar}>{getInitials(selectedConversation.name)}</div>
+                <div>
+                  <span className={styles.chatName}>{selectedConversation.name}</span>
+                  <div style={{ fontSize: "0.75rem", color: "var(--dash-text-muted)" }}>{selectedConversation.phone}</div>
+                </div>
+              </div>
+              <div className={styles.chatHeaderActions}>
+                <button className={styles.markReadBtn} onClick={handleMarkAsRead}>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <polyline points="20 6 9 17 4 12" />
+                  </svg>
+                  Mark As Read
+                </button>
+                <button className={styles.togglePanelBtn} onClick={() => setShowContactPanel(!showContactPanel)}>
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
+                    <line x1="15" y1="3" x2="15" y2="21" />
+                  </svg>
+                </button>
+                <button className={styles.moreBtn}>
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <circle cx="12" cy="12" r="1" />
+                    <circle cx="19" cy="12" r="1" />
+                    <circle cx="5" cy="12" r="1" />
+                  </svg>
+                </button>
               </div>
             </div>
-          ))}
-        </div>
 
-        <div className={styles.chatInput}>
-          <div className={styles.inputTypeSelect}>
-            <select className={styles.messageTypeSelect}>
-              <option value="sms">SMS</option>
-              <option value="whatsapp">WhatsApp</option>
-            </select>
-          </div>
-          <div className={styles.inputWrapper}>
-            <input
-              type="text"
-              placeholder="Write your SMS message here..."
-              value={messageInput}
-              onChange={(e) => setMessageInput(e.target.value)}
-              className={styles.messageInput}
-            />
-            <div className={styles.inputActions}>
-              <button className={styles.attachBtn}>
-                <svg
-                  width="18"
-                  height="18"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                >
-                  <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
-                  <circle cx="8.5" cy="8.5" r="1.5" />
-                  <polyline points="21 15 16 10 5 21" />
-                </svg>
-              </button>
-              <button className={styles.attachBtn}>
-                <svg
-                  width="18"
-                  height="18"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                >
-                  <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48" />
-                </svg>
-              </button>
-              <button className={styles.attachBtn}>
-                <svg
-                  width="18"
-                  height="18"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                >
-                  <circle cx="12" cy="12" r="10" />
-                  <path d="M8 14s1.5 2 4 2 4-2 4-2" />
-                  <line x1="9" y1="9" x2="9.01" y2="9" />
-                  <line x1="15" y1="9" x2="15.01" y2="9" />
+            <div className={styles.chatMessages}>
+              {messagesLoading ? (
+                <div style={{ textAlign: "center", padding: "2rem", color: "var(--dash-text-secondary)" }}>Loading messages...</div>
+              ) : messages.length === 0 ? (
+                <div style={{ textAlign: "center", padding: "2rem", color: "var(--dash-text-secondary)" }}>
+                  No messages yet. Send a message to start the conversation.
+                </div>
+              ) : (
+                messageGroups.map((group, groupIndex) => (
+                  <div key={groupIndex}>
+                    <div className={styles.dateSeparator}>
+                      <span>{group.date}</span>
+                    </div>
+                    {group.messages.map((msg) => (
+                      <div key={msg.id} className={`${styles.messageWrapper} ${msg.sender === "user" ? styles.messageOut : styles.messageIn}`}>
+                        <div className={styles.messageBubble}>
+                          {msg.type === "text" && <p className={styles.messageText}>{msg.content}</p>}
+                          {msg.type === "audio" && (
+                            <div className={styles.audioMessage}>
+                              <button className={styles.playBtn}>▶</button>
+                              <div className={styles.audioWave}>
+                                {[...Array(20)].map((_, i) => (
+                                  <span key={i} className={styles.audioBar} style={{ height: `${Math.random() * 100}%` }} />
+                                ))}
+                              </div>
+                              <span className={styles.audioDuration}>0:00</span>
+                            </div>
+                          )}
+                          {msg.type === "image" && (
+                            <div className={styles.imageMessage}>
+                              {msg.mediaUrl ? (
+                                <img src={msg.mediaUrl} alt="Image" style={{ maxWidth: "200px", borderRadius: "12px" }} />
+                              ) : (
+                                <div className={styles.imagePlaceholder}>
+                                  <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1">
+                                    <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
+                                    <circle cx="8.5" cy="8.5" r="1.5" />
+                                    <polyline points="21 15 16 10 5 21" />
+                                  </svg>
+                                </div>
+                              )}
+                            </div>
+                          )}
+                          {(msg.type === "document" || msg.type === "video") && (
+                            <div className={styles.imageMessage}>
+                              <div className={styles.imagePlaceholder}>
+                                <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1">
+                                  <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                                  <polyline points="14 2 14 8 20 8" />
+                                </svg>
+                                <span style={{ fontSize: "0.75rem", marginTop: "0.5rem" }}>{msg.type === "video" ? "Video" : "Document"}</span>
+                              </div>
+                            </div>
+                          )}
+                          <div style={{ display: "flex", alignItems: "center", gap: "0.25rem", justifyContent: "flex-end" }}>
+                            <span className={styles.messageTime}>{msg.time}</span>
+                            {msg.sender === "user" && (
+                              <span style={{ fontSize: "0.7rem", color: msg.status === "read" ? "var(--dash-accent)" : "var(--dash-text-muted)" }}>
+                                {msg.status === "sending" ? "○" : msg.status === "sent" ? "✓" : msg.status === "delivered" ? "✓✓" : msg.status === "read" ? "✓✓" : ""}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ))
+              )}
+              <div ref={messagesEndRef} />
+            </div>
+
+            <div className={styles.chatInput}>
+              <div className={styles.inputTypeSelect}>
+                <select className={styles.messageTypeSelect}>
+                  <option value="whatsapp">WhatsApp</option>
+                </select>
+              </div>
+              <div className={styles.inputWrapper}>
+                <input
+                  type="text"
+                  placeholder="Write your message here..."
+                  value={messageInput}
+                  onChange={(e) => setMessageInput(e.target.value)}
+                  onKeyPress={handleKeyPress}
+                  className={styles.messageInput}
+                  disabled={sending}
+                />
+                <div className={styles.inputActions}>
+                  <button className={styles.attachBtn}>
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
+                      <circle cx="8.5" cy="8.5" r="1.5" />
+                      <polyline points="21 15 16 10 5 21" />
+                    </svg>
+                  </button>
+                  <button className={styles.attachBtn}>
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48" />
+                    </svg>
+                  </button>
+                  <button className={styles.attachBtn}>
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <circle cx="12" cy="12" r="10" />
+                      <path d="M8 14s1.5 2 4 2 4-2 4-2" />
+                      <line x1="9" y1="9" x2="9.01" y2="9" />
+                      <line x1="15" y1="9" x2="15.01" y2="9" />
+                    </svg>
+                  </button>
+                </div>
+              </div>
+              <button className={styles.sendBtn} onClick={handleSendMessage} disabled={!messageInput.trim() || sending} style={{ opacity: !messageInput.trim() || sending ? 0.5 : 1 }}>
+                {sending ? "Sending..." : "Send"}
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <line x1="22" y1="2" x2="11" y2="13" />
+                  <polygon points="22 2 15 22 11 13 2 9 22 2" />
                 </svg>
               </button>
             </div>
-          </div>
-          <button className={styles.sendBtn}>
-            Send
-            <svg
-              width="16"
-              height="16"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-            >
-              <line x1="22" y1="2" x2="11" y2="13" />
-              <polygon points="22 2 15 22 11 13 2 9 22 2" />
+          </>
+        ) : (
+          <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", color: "var(--dash-text-secondary)", gap: "1rem" }}>
+            <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1" style={{ opacity: 0.5 }}>
+              <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
             </svg>
-          </button>
-        </div>
+            <p>Select a conversation to view messages</p>
+          </div>
+        )}
       </div>
 
       {/* Contact Details Panel */}
-      {showContactPanel && (
+      {showContactPanel && selectedConversation && (
         <div className={styles.contactPanel}>
           <div className={styles.contactHeader}>
             <h3 className={styles.panelTitle}>Details</h3>
-            <button
-              className={styles.closeBtn}
-              onClick={() => setShowContactPanel(false)}
-            >
-              <svg
-                width="18"
-                height="18"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-              >
+            <button className={styles.closeBtn} onClick={() => setShowContactPanel(false)}>
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                 <line x1="18" y1="6" x2="6" y2="18" />
                 <line x1="6" y1="6" x2="18" y2="18" />
               </svg>
@@ -421,50 +689,33 @@ export default function MessagesView() {
           </div>
 
           <div className={styles.contactProfile}>
-            <div className={styles.contactAvatarLarge}>
-              {getInitials(mockContact.name)}
-            </div>
-            <h4 className={styles.contactName}>{mockContact.name}</h4>
-            <span className={styles.contactRole}>{mockContact.role}</span>
+            <div className={styles.contactAvatarLarge}>{getInitials(selectedConversation.name)}</div>
+            <h4 className={styles.contactName}>{selectedConversation.name}</h4>
+            <span className={styles.contactRole}>WhatsApp Contact</span>
           </div>
 
           <div className={styles.contactSections}>
             <div className={styles.contactSection}>
               <h5 className={styles.sectionTitle}>Contact</h5>
               <div className={styles.contactField}>
-                <span className={styles.fieldIcon}>✉️</span>
-                <div className={styles.fieldContent}>
-                  <span className={styles.fieldLabel}>Email</span>
-                  <span className={styles.fieldValue}>{mockContact.email}</span>
-                </div>
-              </div>
-              <div className={styles.contactField}>
                 <span className={styles.fieldIcon}>📞</span>
                 <div className={styles.fieldContent}>
                   <span className={styles.fieldLabel}>Phone</span>
-                  <span className={styles.fieldValue}>{mockContact.phone}</span>
+                  <span className={styles.fieldValue}>{selectedConversation.phone}</span>
+                </div>
+              </div>
+              <div className={styles.contactField}>
+                <span className={styles.fieldIcon}>💬</span>
+                <div className={styles.fieldContent}>
+                  <span className={styles.fieldLabel}>Messages</span>
+                  <span className={styles.fieldValue}>{messages.length} messages</span>
                 </div>
               </div>
               <div className={styles.contactField}>
                 <span className={styles.fieldIcon}>📅</span>
                 <div className={styles.fieldContent}>
-                  <span className={styles.fieldLabel}>Created</span>
-                  <span className={styles.fieldValue}>
-                    {mockContact.created}
-                  </span>
-                </div>
-              </div>
-            </div>
-
-            <div className={styles.contactSection}>
-              <h5 className={styles.sectionTitle}>Campaign</h5>
-              <div className={styles.contactField}>
-                <span className={styles.fieldIcon}>📋</span>
-                <div className={styles.fieldContent}>
-                  <span className={styles.fieldLabel}>Name</span>
-                  <span className={styles.fieldValue}>
-                    {mockContact.campaign.name}
-                  </span>
+                  <span className={styles.fieldLabel}>Last Active</span>
+                  <span className={styles.fieldValue}>{selectedConversation.time}</span>
                 </div>
               </div>
             </div>
@@ -472,20 +723,14 @@ export default function MessagesView() {
             <div className={styles.contactSection}>
               <h5 className={styles.sectionTitle}>Tags</h5>
               <div className={styles.tagsContainer}>
-                {mockContact.tags.map((tag) => (
-                  <span key={tag} className={styles.tag}>
-                    {tag}
-                  </span>
-                ))}
+                <span className={styles.tag}>WhatsApp</span>
+                {selectedConversation.unread > 0 && <span className={styles.tag}>Unread</span>}
               </div>
             </div>
 
             <div className={styles.contactSection}>
               <h5 className={styles.sectionTitle}>Notes</h5>
-              <textarea
-                className={styles.notesInput}
-                placeholder="Add notes about this contact..."
-              />
+              <textarea className={styles.notesInput} placeholder="Add notes about this contact..." />
             </div>
           </div>
         </div>

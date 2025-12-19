@@ -1479,14 +1479,17 @@
 .messageWrapper {
   display: flex;
   max-width: 70%;
+  width: fit-content;
 }
 
 .messageIn {
   align-self: flex-start;
+  margin-right: auto;
 }
 
 .messageOut {
   align-self: flex-end;
+  margin-left: auto;
 }
 
 .messageBubble {
@@ -1501,7 +1504,7 @@
 }
 
 .messageOut .messageBubble {
-  background: var(--dash-message-out);
+  background: linear-gradient(135deg, #1a5c34 0%, #0d3d22 100%);
   border-bottom-right-radius: 4px;
 }
 

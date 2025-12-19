@@ -1,26 +1,49 @@
 """
-Main AI Brain orchestrator class.
-Coordinates intent detection, response generation, and business data handling.
+Main AI Brain orchestrator class - v2.0 (Refactored).
+Coordinates ChatGPT-powered intent detection, function calling, and response generation.
 """
 
+import time
 from typing import Dict, List, Any, Optional, Union
+from dataclasses import asdict
+
 from .schemas import BusinessData, ConversationMessage, GenerateReplyResponse
 from .intents import IntentType, IntentDetector
-from .response_generator import ResponseGenerator
-from .data_loader import BusinessDataLoader, DictDataLoader
 from .config import AIBrainConfig, default_config
+from .chatgpt_engine import ChatGPTEngine, IntentResult, GenerationResult
+from .conversation_manager import ConversationManager, get_conversation_manager
+from .response_cache import ResponseCache, get_response_cache, get_cache_ttl
+from .whatsapp_formatter import WhatsAppFormatter, get_formatter
+from .language_detector import LanguageDetector, get_language_detector, Language
+from .analytics import (
+    AnalyticsTracker, 
+    get_analytics_tracker, 
+    ResolutionOutcome,
+    RateLimiter,
+    get_rate_limiter
+)
+from .cost_optimizer import CostOptimizer, get_cost_optimizer, CostDecision
+from .business_retriever import BusinessRetriever, get_retriever
 
 
 class AIBrain:
     """
-    Main AI Brain class for WhatsApp business chatbots.
+    Main AI Brain class for WhatsApp business chatbots - v2.0.
     
     This is the primary interface for generating intelligent responses.
-    It coordinates intent detection, business data loading, and response generation.
+    It coordinates:
+    - ChatGPT-powered intent detection
+    - Function calling for actionable intents
+    - Conversation context management
+    - Response caching for cost optimization
+    - Multi-language support
+    - Analytics tracking
     
     Example usage:
         ```python
-        brain = AIBrain()
+        from ai_brain import AIBrain, AIBrainConfig
+        
+        brain = AIBrain(config=AIBrainConfig.from_env())
         
         result = brain.generate_reply(
             business_data={
@@ -30,7 +53,7 @@ class AIBrain:
                 "products_services": [{"name": "Haircut", "price": 300}]
             },
             user_message="What is the price for haircut?",
-            history=[]
+            user_id="user_123"
         )
         
         print(result["reply"])  # WhatsApp-ready response
@@ -40,26 +63,59 @@ class AIBrain:
     def __init__(
         self,
         config: AIBrainConfig = None,
-        data_loader: BusinessDataLoader = None
+        use_legacy_intent: bool = False
     ):
         """
         Initialize AI Brain.
         
         Args:
             config: Configuration object. Uses default if not provided.
-            data_loader: Business data loader. Uses DictDataLoader if not provided.
+            use_legacy_intent: If True, use keyword-based intent detection as fallback
         """
         self.config = config or default_config
-        self.data_loader = data_loader or DictDataLoader()
-        self.intent_detector = IntentDetector()
-        self.response_generator = ResponseGenerator(self.config)
+        self.use_legacy_intent = use_legacy_intent
+        
+        # Core engine
+        self.engine = ChatGPTEngine(self.config)
+        
+        # Context management
+        self.conversation_manager = get_conversation_manager(
+            max_history=self.config.conversation_history_limit,
+            session_ttl=3600  # 1 hour session TTL
+        )
+        
+        # Response caching
+        self.cache = get_response_cache(default_ttl=300)
+        
+        # Formatting
+        self.formatter = get_formatter()
+        
+        # Language detection
+        self.language_detector = get_language_detector()
+        
+        # Analytics
+        self.analytics = get_analytics_tracker()
+        
+        # Rate limiting
+        self.rate_limiter = get_rate_limiter()
+        
+        # Cost optimization (50-80% savings)
+        self.cost_optimizer = get_cost_optimizer()
+        self.retriever = get_retriever(max_tokens=400)
+        
+        # Legacy fallback
+        if use_legacy_intent:
+            self.legacy_intent_detector = IntentDetector()
     
     def generate_reply(
         self,
         business_data: Union[Dict[str, Any], BusinessData] = None,
         user_message: str = "",
         history: List[Dict[str, str]] = None,
-        business_id: str = None
+        business_id: str = None,
+        user_id: str = None,
+        use_cache: bool = True,
+        format_response: bool = True
     ) -> Dict[str, Any]:
         """
         Generate a reply to customer message.
@@ -68,10 +124,12 @@ class AIBrain:
         
         Args:
             business_data: Business profile data (dict or BusinessData object).
-                          If not provided, will attempt to load using business_id.
             user_message: Customer's WhatsApp message
-            history: Conversation history as list of {"role": str, "content": str}
-            business_id: Business ID for loading data (used if business_data not provided)
+            history: Conversation history (optional, uses conversation manager if not provided)
+            business_id: Business ID for caching and analytics
+            user_id: User ID for conversation context (from WhatsApp)
+            use_cache: Whether to use response caching
+            format_response: Whether to format response for WhatsApp
             
         Returns:
             Dictionary containing:
@@ -82,123 +140,251 @@ class AIBrain:
             - suggested_actions: list - Quick reply suggestions
             - metadata: dict - Additional info (generation method, etc.)
         """
+        start_time = time.time()
+        
         # Validate input
         if not user_message or not user_message.strip():
             return self._error_response("Empty message received")
         
         user_message = user_message.strip()
         
-        # Load/validate business data
+        # Get business data
         try:
-            business = self._get_business_data(business_data, business_id)
+            business = self._normalize_business_data(business_data)
         except Exception as e:
             return self._error_response(f"Failed to load business data: {str(e)}")
         
         if not business:
             return self._error_response("Business data not found")
         
-        # Convert history to ConversationMessage objects
-        conversation_history = self._parse_history(history)
+        biz_id = business.get("business_id", business_id or "default")
         
-        # Detect intent
-        intent, confidence = self.intent_detector.detect(
-            user_message, 
-            history or []
+        # Check rate limiting
+        plan = business.get("plan", "starter")
+        if not self.rate_limiter.check_limit(biz_id, plan):
+            return self._rate_limited_response(biz_id, plan)
+        
+        # Record usage
+        self.rate_limiter.record_usage(biz_id)
+        
+        # Detect language
+        lang_result = self.language_detector.detect(user_message)
+        detected_language = lang_result.language.value
+        
+        # Get conversation history
+        if history is None and user_id:
+            history = self.conversation_manager.get_context_window(user_id)
+        
+        # Add user message to conversation
+        if user_id:
+            self.conversation_manager.add_message(user_id, "user", user_message)
+        
+        # Get last intent for follow-up detection
+        last_intent = self.conversation_manager.get_last_intent(user_id) if user_id else None
+        last_messages = history[-1]["content"] if history else None
+        
+        # COST OPTIMIZATION: Analyze query for optimal routing
+        cost_decision = self.cost_optimizer.analyze_query(
+            message=user_message,
+            business_id=biz_id,
+            last_intent=last_intent,
+            last_message=last_messages,
+            plan=plan
         )
         
-        # Check if we need human handoff
-        needs_human = self._should_handoff(intent, confidence)
+        # STRATEGY #8: Use hardcoded reply if applicable (20-40% savings)
+        if cost_decision.skip_llm and cost_decision.hardcoded_reply:
+            response = {
+                "reply": cost_decision.hardcoded_reply,
+                "intent": "hardcoded",
+                "confidence": 1.0,
+                "needs_human": False,
+                "suggested_actions": ["Services", "Prices", "Contact us"],
+                "metadata": {
+                    "generation_method": "hardcoded",
+                    "cost_savings": "100%",
+                    "language": detected_language,
+                    "response_time_ms": int((time.time() - start_time) * 1000)
+                }
+            }
+            if user_id:
+                self.conversation_manager.add_message(user_id, "assistant", response["reply"])
+            self._track_interaction(biz_id, user_id, response, start_time, is_cached=False)
+            return response
         
-        # Generate response
-        if needs_human and self.config.fallback_to_human:
-            reply = self.response_generator.generate_handoff_message(
-                business,
-                query_summary=user_message[:100]
-            )
-            metadata = {"generation_method": "handoff", "reason": "low_confidence"}
-        else:
-            reply, metadata = self.response_generator.generate(
-                business,
-                user_message,
-                intent,
-                confidence,
-                conversation_history
-            )
+        # Try cache first (40-70% savings)
+        if use_cache and self.config.enable_caching and cost_decision.use_cache:
+            cached = self._try_cache(biz_id, user_message, history)
+            if cached:
+                # Track analytics for cached response
+                self._track_interaction(
+                    biz_id, user_id, cached, start_time, is_cached=True
+                )
+                return cached
         
-        # Get suggested quick replies
-        suggested_actions = self._get_suggested_actions(intent, business)
+        # STRATEGY #5: Trim history based on confidence/complexity
+        optimized_history = history[-cost_decision.history_depth:] if history else None
+        
+        # STRATEGY #3: Use retrieval instead of full business data (25-45% savings)
+        if cost_decision.use_retrieval:
+            # Pre-detect intent for better retrieval (using legacy quick method)
+            quick_intent = "general_enquiry"
+            if self.use_legacy_intent and hasattr(self, 'legacy_intent_detector'):
+                intent_result, _ = self.legacy_intent_detector.detect(user_message, [])
+                quick_intent = intent_result.value
+            
+            retrieval_result = self.retriever.retrieve(
+                business_data=business,
+                intent=quick_intent,
+                message=user_message
+            )
+            # Replace full business data with retrieved context
+            # (The engine will use this optimized context)
+            business["_optimized_context"] = retrieval_result.context
+            business["_token_savings"] = retrieval_result.savings_percent
+        
+        # Process message with ChatGPT engine
+        try:
+            result = self.engine.process_message(
+                message=user_message,
+                business_data=business,
+                conversation_history=optimized_history,
+                user_id=user_id
+            )
+            
+            # Format response
+            reply = result.reply
+            if format_response:
+                reply = self.formatter.format(reply)
+            
+            # Get suggested actions
+            suggested_actions = self._get_suggested_actions(result.intent, business)
+            
+            # Determine outcome
+            if result.needs_human:
+                outcome = ResolutionOutcome.ESCALATED
+            elif result.tool_called:
+                outcome = ResolutionOutcome.RESOLVED
+            else:
+                outcome = ResolutionOutcome.RESOLVED
+            
+            # Build response
+            response = {
+                "reply": reply,
+                "intent": result.intent.value,
+                "confidence": round(result.confidence, 2),
+                "needs_human": result.needs_human,
+                "suggested_actions": suggested_actions,
+                "metadata": {
+                    **result.metadata,
+                    "language": detected_language,
+                    "tool_called": result.tool_called,
+                    "response_time_ms": int((time.time() - start_time) * 1000)
+                }
+            }
+            
+            # Add assistant message to conversation
+            if user_id:
+                self.conversation_manager.add_message(user_id, "assistant", reply)
+                self.conversation_manager.set_last_intent(user_id, result.intent.value)
+            
+            # Cache response if appropriate
+            if use_cache and self.config.enable_caching:
+                self._cache_response(biz_id, result.intent.value, user_message, response)
+            
+            # Track analytics
+            self._track_interaction(
+                biz_id, user_id, response, start_time, 
+                is_cached=False, outcome=outcome
+            )
+            
+            return response
+            
+        except Exception as e:
+            return self._error_response(str(e))
+    
+    def detect_intent(self, message: str, history: List[Dict] = None) -> Dict[str, Any]:
+        """
+        Standalone intent detection (useful for analytics).
+        
+        Args:
+            message: User message
+            history: Optional conversation history
+            
+        Returns:
+            Dict with intent, confidence, language, and entities
+        """
+        # Detect language
+        lang_result = self.language_detector.detect(message)
+        
+        # Classify intent
+        intent_result = self.engine.classify_intent(message, history)
         
         return {
-            "reply": reply,
-            "intent": intent.value,
-            "confidence": round(confidence, 2),
-            "needs_human": needs_human,
-            "suggested_actions": suggested_actions,
-            "metadata": metadata
+            "intent": intent_result.intent.value,
+            "confidence": round(intent_result.confidence, 2),
+            "language": lang_result.language.value,
+            "entities": intent_result.entities,
+            "needs_clarification": intent_result.needs_clarification,
+            "clarification_question": intent_result.clarification_question
         }
     
-    def _get_business_data(
+    def _normalize_business_data(
         self,
-        data: Union[Dict[str, Any], BusinessData, None],
-        business_id: str = None
-    ) -> Optional[BusinessData]:
-        """Get and validate business data."""
-        
-        # If already a BusinessData object, return it
+        data: Union[Dict[str, Any], BusinessData, None]
+    ) -> Optional[Dict[str, Any]]:
+        """Normalize business data to dictionary format."""
         if isinstance(data, BusinessData):
-            return data
-        
-        # If dict provided, convert to BusinessData
+            return data.model_dump()
         if isinstance(data, dict) and data:
-            return BusinessData(**data)
-        
-        # Try to load using data_loader
-        if business_id:
-            loaded = self.data_loader.load(business_id)
-            if loaded:
-                return BusinessData(**loaded)
-        
+            return data
         return None
     
-    def _parse_history(self, history: List[Dict[str, str]] = None) -> List[ConversationMessage]:
-        """Parse history dicts to ConversationMessage objects."""
-        if not history:
-            return []
-        
-        return [
-            ConversationMessage(
-                role=msg.get("role", "user"),
-                content=msg.get("content", ""),
-                timestamp=msg.get("timestamp")
-            )
-            for msg in history
-            if msg.get("content")
-        ]
+    def _try_cache(
+        self,
+        business_id: str,
+        message: str,
+        history: List[Dict] = None
+    ) -> Optional[Dict[str, Any]]:
+        """Try to get response from cache."""
+        # Use legacy intent detector for quick cache key
+        if self.use_legacy_intent and hasattr(self, 'legacy_intent_detector'):
+            intent, confidence = self.legacy_intent_detector.detect(message, history or [])
+            if confidence >= 0.7:
+                cached = self.cache.get(
+                    business_id=business_id,
+                    intent=intent.value,
+                    query=message
+                )
+                if cached:
+                    cached["metadata"]["from_cache"] = True
+                    return cached
+        return None
     
-    def _should_handoff(self, intent: IntentType, confidence: float) -> bool:
-        """Determine if query should be handed off to human."""
-        
-        # Always handoff complaints
-        if intent == IntentType.COMPLAINT:
-            return True
-        
-        # Handoff unknown intents with low confidence
-        if intent == IntentType.UNKNOWN and confidence < self.config.confidence_human_approval:
-            return True
-        
-        # Handoff any low confidence intent
-        if confidence < self.config.confidence_human_approval:
-            return True
-        
-        return False
+    def _cache_response(
+        self,
+        business_id: str,
+        intent: str,
+        query: str,
+        response: Dict[str, Any]
+    ):
+        """Cache a response for future use."""
+        ttl = get_cache_ttl(intent)
+        if ttl > 0:  # Only cache if TTL > 0
+            self.cache.set(
+                business_id=business_id,
+                intent=intent,
+                query=query,
+                response=response,
+                ttl=ttl
+            )
     
     def _get_suggested_actions(
         self,
         intent: IntentType,
-        data: BusinessData
+        data: Dict[str, Any]
     ) -> List[str]:
         """Get contextual quick reply suggestions."""
-        
         base_actions = {
             IntentType.GREETING: ["View services", "Check prices", "Book appointment"],
             IntentType.PRICING: ["Book now", "View all services", "Our location"],
@@ -208,8 +394,37 @@ class AIBrain:
             IntentType.GENERAL_ENQUIRY: ["Prices", "Timing", "Location"],
             IntentType.UNKNOWN: ["Services", "Prices", "Talk to human"],
         }
-        
         return base_actions.get(intent, ["Services", "Prices", "Contact us"])
+    
+    def _track_interaction(
+        self,
+        business_id: str,
+        user_id: str,
+        response: Dict[str, Any],
+        start_time: float,
+        is_cached: bool = False,
+        outcome: ResolutionOutcome = ResolutionOutcome.RESOLVED
+    ):
+        """Track interaction for analytics."""
+        try:
+            response_time_ms = int((time.time() - start_time) * 1000)
+            
+            self.analytics.track_interaction(
+                business_id=business_id,
+                user_id=user_id or "anonymous",
+                intent=response.get("intent", "unknown"),
+                confidence=response.get("confidence", 0),
+                user_message="",  # Don't store for privacy
+                ai_response="",   # Don't store for privacy
+                response_time_ms=response_time_ms,
+                tokens_used=response.get("metadata", {}).get("tokens", 0),
+                outcome=outcome,
+                tool_called=response.get("metadata", {}).get("tool_called"),
+                language=response.get("metadata", {}).get("language", "en"),
+                is_cached=is_cached
+            )
+        except Exception:
+            pass  # Don't fail on analytics errors
     
     def _error_response(self, error: str) -> Dict[str, Any]:
         """Generate error response."""
@@ -222,47 +437,62 @@ class AIBrain:
             "metadata": {"error": error, "generation_method": "error"}
         }
     
-    def detect_intent(self, message: str, history: List[Dict] = None) -> Dict[str, Any]:
-        """
-        Standalone intent detection (useful for analytics).
-        
-        Args:
-            message: User message
-            history: Optional conversation history
-            
-        Returns:
-            Dict with intent, confidence, and description
-        """
-        intent, confidence = self.intent_detector.detect(message, history or [])
+    def _rate_limited_response(self, business_id: str, plan: str) -> Dict[str, Any]:
+        """Generate rate limited response."""
+        remaining = self.rate_limiter.get_remaining(business_id, plan)
         return {
-            "intent": intent.value,
-            "confidence": round(confidence, 2),
-            "description": self.intent_detector.get_intent_description(intent)
+            "reply": "We're experiencing high volume. Please try again in a moment. 🙏",
+            "intent": IntentType.UNKNOWN.value,
+            "confidence": 0.0,
+            "needs_human": False,
+            "suggested_actions": ["Try again"],
+            "metadata": {
+                "rate_limited": True,
+                "remaining": remaining,
+                "generation_method": "rate_limit"
+            }
         }
     
-    def refresh_business_data(self, business_id: str) -> bool:
-        """
-        Force refresh of cached business data.
-        
-        Args:
-            business_id: Business ID to refresh
-            
-        Returns:
-            True if refresh succeeded
-        """
-        try:
-            self.data_loader.refresh(business_id)
-            return True
-        except Exception:
-            return False
+    # =========================================================================
+    # UTILITY METHODS
+    # =========================================================================
+    
+    def get_conversation_context(self, user_id: str) -> Dict[str, Any]:
+        """Get stored context for a user."""
+        return {
+            "history": self.conversation_manager.get_history(user_id),
+            "context": self.conversation_manager.get_context(user_id),
+            "last_intent": self.conversation_manager.get_last_intent(user_id)
+        }
+    
+    def clear_conversation(self, user_id: str):
+        """Clear conversation history for a user."""
+        self.conversation_manager.clear_session(user_id)
+    
+    def get_cache_stats(self) -> Dict[str, Any]:
+        """Get cache statistics."""
+        return self.cache.get_stats()
+    
+    def get_analytics(self, business_id: str, hours: int = 24) -> Dict[str, Any]:
+        """Get analytics for a business."""
+        analytics = self.analytics.get_business_analytics(business_id, hours)
+        return asdict(analytics)
+    
+    def invalidate_cache(self, business_id: str, intent: str = None):
+        """Invalidate cache entries for a business."""
+        self.cache.invalidate(business_id, intent)
 
 
-# Convenience function for simple usage
+# =============================================================================
+# CONVENIENCE FUNCTION
+# =============================================================================
+
 def generate_reply(
     business_data: Dict[str, Any],
     user_message: str,
     history: List[Dict[str, str]] = None,
-    config: AIBrainConfig = None
+    config: AIBrainConfig = None,
+    user_id: str = None
 ) -> Dict[str, Any]:
     """
     Convenience function for generating replies without instantiating AIBrain.
@@ -272,6 +502,7 @@ def generate_reply(
         user_message: Customer's message
         history: Conversation history
         config: Optional configuration
+        user_id: Optional user identifier
         
     Returns:
         Response dictionary with reply, intent, confidence, etc.
@@ -280,5 +511,6 @@ def generate_reply(
     return brain.generate_reply(
         business_data=business_data,
         user_message=user_message,
-        history=history
+        history=history,
+        user_id=user_id
     )

@@ -79,6 +79,37 @@ class AIBrainConfig:
     enable_lead_capture: bool = True
     fallback_to_human: bool = True
     
+    # =========================================================================
+    # NEW v2.0 SETTINGS
+    # =========================================================================
+    
+    # ChatGPT-powered features
+    use_llm_intent_detection: bool = True      # Use ChatGPT for intent (vs keyword)
+    enable_function_calling: bool = True       # Enable tool/function use
+    enable_safety_filter: bool = True          # Run safety checks on messages
+    
+    # Conversation management
+    conversation_history_limit: int = 10       # Max messages to keep in context
+    session_timeout_seconds: int = 3600        # Session TTL (1 hour)
+    
+    # Caching
+    enable_caching: bool = True                # Enable response caching
+    cache_ttl_default: int = 300               # Default cache TTL (5 minutes)
+    
+    # Language support
+    enable_language_detection: bool = True     # Auto-detect message language
+    default_language: str = "en"               # Fallback language
+    supported_languages: tuple = (
+        "en", "hi", "hinglish", "ta", "te", "kn", "ml", "mr", "bn", "gu", "pa"
+    )
+    
+    # Analytics
+    enable_analytics: bool = True              # Track interactions for analytics
+    store_messages_in_analytics: bool = False  # Store message content (privacy)
+    
+    # Rate limiting
+    enable_rate_limiting: bool = True          # Enforce rate limits
+    
     @classmethod
     def from_env(cls) -> "AIBrainConfig":
         """Create config from environment variables."""
@@ -88,7 +119,13 @@ class AIBrainConfig:
                 model=os.getenv("AI_BRAIN_LLM_MODEL", "gpt-4o-mini"),
                 api_key=os.getenv("OPENAI_API_KEY"),
                 temperature=float(os.getenv("AI_BRAIN_TEMPERATURE", "0.7")),
-            )
+            ),
+            # Feature toggles from env
+            use_llm_intent_detection=os.getenv("AI_BRAIN_LLM_INTENT", "true").lower() == "true",
+            enable_function_calling=os.getenv("AI_BRAIN_FUNCTION_CALLING", "true").lower() == "true",
+            enable_caching=os.getenv("AI_BRAIN_CACHING", "true").lower() == "true",
+            enable_analytics=os.getenv("AI_BRAIN_ANALYTICS", "true").lower() == "true",
+            conversation_history_limit=int(os.getenv("AI_BRAIN_HISTORY_LIMIT", "10")),
         )
     
     def get_rate_limits_for_plan(self, plan: str) -> RateLimits:
@@ -98,3 +135,38 @@ class AIBrainConfig:
 
 # Default configuration instance
 default_config = AIBrainConfig.from_env()
+
+
+# =============================================================================
+# CONFIG VALIDATION
+# =============================================================================
+
+def validate_config(config: AIBrainConfig) -> list:
+    """
+    Validate configuration and return list of issues.
+    
+    Returns:
+        List of validation error strings (empty if valid)
+    """
+    issues = []
+    
+    # Check API key
+    if not config.llm.api_key:
+        issues.append("OPENAI_API_KEY not set. AI features will not work.")
+    
+    # Check model
+    valid_models = ["gpt-4o", "gpt-4o-mini", "gpt-4-turbo", "gpt-4", "gpt-3.5-turbo"]
+    if config.llm.model not in valid_models:
+        issues.append(f"Unknown model '{config.llm.model}'. Recommended: {valid_models}")
+    
+    # Check temperature
+    if not 0.0 <= config.llm.temperature <= 2.0:
+        issues.append(f"Temperature {config.llm.temperature} out of range [0.0, 2.0]")
+    
+    # Check history limit
+    if config.conversation_history_limit < 1:
+        issues.append("conversation_history_limit must be at least 1")
+    elif config.conversation_history_limit > 50:
+        issues.append("conversation_history_limit > 50 may cause high token usage")
+    
+    return issues
