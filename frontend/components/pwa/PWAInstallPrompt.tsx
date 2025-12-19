@@ -177,7 +177,13 @@ export function PWAInstallPrompt() {
 
         <div className="pwa-content">
           <div className="pwa-icon">
-            <SmartphoneIcon />
+            <img
+              src="/logo.svg"
+              alt="ReviseIt Logo"
+              width="50"
+              height="50"
+              style={{ borderRadius: "12px" }}
+            />
           </div>
 
           <div className="pwa-text">
@@ -196,7 +202,7 @@ export function PWAInstallPrompt() {
               <ol>
                 <li>
                   Tap the <strong>Share</strong> button{" "}
-                  <span className="share-icon">⬆️</span>
+                  <span className="share-icon"></span>
                 </li>
                 <li>
                   Scroll down and tap{" "}
@@ -245,7 +251,7 @@ export function PWAInstallPrompt() {
 
         .pwa-install-prompt {
           position: relative;
-          background: linear-gradient(135deg, #ffffff 0%, #f8fffe 100%);
+          background: #000000;
           border-radius: 20px;
           padding: 24px;
           box-shadow: 0 -4px 30px rgba(34, 193, 90, 0.15),
@@ -259,7 +265,7 @@ export function PWAInstallPrompt() {
           position: absolute;
           top: 12px;
           right: 12px;
-          background: rgba(0, 0, 0, 0.05);
+          background: rgba(255, 255, 255, 0.1);
           border: none;
           border-radius: 50%;
           width: 32px;
@@ -268,13 +274,13 @@ export function PWAInstallPrompt() {
           align-items: center;
           justify-content: center;
           cursor: pointer;
-          color: #666;
+          color: #cccccc;
           transition: all 0.2s ease;
         }
 
         .pwa-close-btn:hover {
-          background: rgba(0, 0, 0, 0.1);
-          color: #333;
+          background: rgba(255, 255, 255, 0.2);
+          color: #ffffff;
         }
 
         .pwa-content {
@@ -288,26 +294,25 @@ export function PWAInstallPrompt() {
         .pwa-icon {
           width: 70px;
           height: 70px;
-          background: linear-gradient(135deg, #22c15a 0%, #1da14c 100%);
+          background: transparent;
           border-radius: 16px;
           display: flex;
           align-items: center;
           justify-content: center;
           color: white;
-          box-shadow: 0 4px 15px rgba(34, 193, 90, 0.3);
         }
 
         .pwa-text h3 {
           margin: 0;
           font-size: 1.25rem;
           font-weight: 700;
-          color: #1a1a2e;
+          color: #ffffff;
         }
 
         .pwa-text p {
           margin: 8px 0 0;
           font-size: 0.9rem;
-          color: #666;
+          color: #cccccc;
           line-height: 1.5;
         }
 
@@ -348,8 +353,8 @@ export function PWAInstallPrompt() {
         .pwa-later-btn {
           padding: 14px 20px;
           background: transparent;
-          color: #666;
-          border: 1px solid #e0e0e0;
+          color: #cccccc;
+          border: 1px solid rgba(255, 255, 255, 0.2);
           border-radius: 12px;
           font-size: 0.9rem;
           font-weight: 500;
@@ -358,13 +363,13 @@ export function PWAInstallPrompt() {
         }
 
         .pwa-later-btn:hover {
-          background: #f5f5f5;
-          border-color: #ccc;
+          background: rgba(255, 255, 255, 0.1);
+          border-color: rgba(255, 255, 255, 0.3);
         }
 
         .pwa-ios-instructions {
           text-align: left;
-          background: #f8f9fa;
+          background: rgba(255, 255, 255, 0.05);
           padding: 16px;
           border-radius: 12px;
           width: 100%;
@@ -373,7 +378,7 @@ export function PWAInstallPrompt() {
         .pwa-ios-instructions p {
           margin: 0 0 12px;
           font-size: 0.9rem;
-          color: #333;
+          color: #ffffff;
         }
 
         .pwa-ios-instructions ol {
@@ -384,7 +389,7 @@ export function PWAInstallPrompt() {
         .pwa-ios-instructions li {
           margin-bottom: 8px;
           font-size: 0.85rem;
-          color: #555;
+          color: #cccccc;
           line-height: 1.5;
         }
 
@@ -407,53 +412,6 @@ export function PWAInstallPrompt() {
 
           .pwa-later-btn {
             order: 1;
-          }
-        }
-
-        @media (prefers-color-scheme: dark) {
-          .pwa-install-prompt {
-            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
-            border-color: rgba(34, 193, 90, 0.3);
-          }
-
-          .pwa-close-btn {
-            background: rgba(255, 255, 255, 0.1);
-            color: #aaa;
-          }
-
-          .pwa-close-btn:hover {
-            background: rgba(255, 255, 255, 0.15);
-            color: #fff;
-          }
-
-          .pwa-text h3 {
-            color: #ffffff;
-          }
-
-          .pwa-text p {
-            color: #aaa;
-          }
-
-          .pwa-later-btn {
-            color: #aaa;
-            border-color: #333;
-          }
-
-          .pwa-later-btn:hover {
-            background: rgba(255, 255, 255, 0.05);
-            border-color: #444;
-          }
-
-          .pwa-ios-instructions {
-            background: rgba(255, 255, 255, 0.05);
-          }
-
-          .pwa-ios-instructions p {
-            color: #ddd;
-          }
-
-          .pwa-ios-instructions li {
-            color: #bbb;
           }
         }
       `}</style>
