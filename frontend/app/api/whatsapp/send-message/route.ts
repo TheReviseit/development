@@ -3,40 +3,107 @@
  * Sends messages using the customer's own WhatsApp Business Account
  */
 
-import { NextRequest, NextResponse } from 'next/server';
-import { cookies } from 'next/headers';
-import { adminAuth } from '@/lib/firebase-admin';
-import { getUserByFirebaseUID } from '@/lib/supabase/queries';
+import { NextRequest, NextResponse } from "next/server";
+import { cookies } from "next/headers";
+import { adminAuth } from "@/lib/firebase-admin";
+import { getUserByFirebaseUID } from "@/lib/supabase/queries";
 import {
   getFacebookAccountByUserId,
   getPrimaryPhoneNumber,
   createMessage,
-} from '@/lib/supabase/facebook-whatsapp-queries';
-import { createGraphAPIClient } from '@/lib/facebook/graph-api-client';
-import { decryptToken } from '@/lib/encryption/crypto';
+} from "@/lib/supabase/facebook-whatsapp-queries";
+import { createGraphAPIClient } from "@/lib/facebook/graph-api-client";
+import { decryptToken } from "@/lib/encryption/crypto";
+import { supabaseAdmin } from "@/lib/supabase/server";
+
+// Helper to get or create conversation
+async function getOrCreateConversation(
+  businessId: string,
+  customerPhone: string
+): Promise<string | null> {
+  // Try to find existing conversation
+  const { data: existingConv, error: findError } = await supabaseAdmin
+    .from("whatsapp_conversations")
+    .select("id")
+    .eq("business_id", businessId)
+    .eq("customer_phone", customerPhone)
+    .single();
+
+  if (existingConv) {
+    return existingConv.id;
+  }
+
+  // Create new conversation
+  const { data: newConv, error: createError } = await supabaseAdmin
+    .from("whatsapp_conversations")
+    .insert({
+      business_id: businessId,
+      customer_phone: customerPhone,
+      total_messages: 0,
+      unread_count: 0,
+      status: "active",
+    })
+    .select("id")
+    .single();
+
+  if (createError) {
+    console.error("Error creating conversation:", createError);
+    return null;
+  }
+
+  return newConv?.id || null;
+}
+
+// Helper to update conversation stats after sending
+async function updateConversationAfterSend(
+  conversationId: string,
+  messagePreview: string
+) {
+  try {
+    // First get current stats
+    const { data: current } = await supabaseAdmin
+      .from("whatsapp_conversations")
+      .select("total_messages, human_replies_count")
+      .eq("id", conversationId)
+      .single();
+
+    if (current) {
+      await supabaseAdmin
+        .from("whatsapp_conversations")
+        .update({
+          total_messages: (current.total_messages || 0) + 1,
+          last_message_at: new Date().toISOString(),
+          last_message_direction: "outbound",
+          last_message_preview: messagePreview.slice(0, 100),
+          human_replies_count: (current.human_replies_count || 0) + 1,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", conversationId);
+    }
+  } catch (error) {
+    console.error("Error updating conversation stats:", error);
+  }
+}
 
 export async function POST(request: NextRequest) {
   try {
     // Verify user session
     const cookieStore = await cookies();
-    const sessionCookie = cookieStore.get('session')?.value;
+    const sessionCookie = cookieStore.get("session")?.value;
 
     if (!sessionCookie) {
-      return NextResponse.json(
-        { error: 'Unauthorized' },
-        { status: 401 }
-      );
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const decodedClaims = await adminAuth.verifySessionCookie(sessionCookie, true);
+    const decodedClaims = await adminAuth.verifySessionCookie(
+      sessionCookie,
+      true
+    );
     const firebaseUID = decodedClaims.uid;
 
     const user = await getUserByFirebaseUID(firebaseUID);
     if (!user) {
-      return NextResponse.json(
-        { error: 'User not found' },
-        { status: 404 }
-      );
+      return NextResponse.json({ error: "User not found" }, { status: 404 });
     }
 
     // Parse request body
@@ -45,7 +112,7 @@ export async function POST(request: NextRequest) {
 
     if (!to || !message) {
       return NextResponse.json(
-        { error: 'Missing required fields: to, message' },
+        { error: "Missing required fields: to, message" },
         { status: 400 }
       );
     }
@@ -54,9 +121,9 @@ export async function POST(request: NextRequest) {
     const facebookAccount = await getFacebookAccountByUserId(user.id);
     if (!facebookAccount) {
       return NextResponse.json(
-        { 
-          error: 'WhatsApp not connected',
-          message: 'Please connect your WhatsApp Business Account first'
+        {
+          error: "WhatsApp not connected",
+          message: "Please connect your WhatsApp Business Account first",
         },
         { status: 400 }
       );
@@ -65,16 +132,18 @@ export async function POST(request: NextRequest) {
     // Get phone number to use
     const phoneNumber = phoneNumberId
       ? await (async () => {
-          const { getPhoneNumberByPhoneNumberId } = await import('@/lib/supabase/facebook-whatsapp-queries');
+          const { getPhoneNumberByPhoneNumberId } = await import(
+            "@/lib/supabase/facebook-whatsapp-queries"
+          );
           return getPhoneNumberByPhoneNumberId(phoneNumberId);
         })()
       : await getPrimaryPhoneNumber(user.id);
 
     if (!phoneNumber) {
       return NextResponse.json(
-        { 
-          error: 'No phone number available',
-          message: 'Please connect a WhatsApp Business phone number'
+        {
+          error: "No phone number available",
+          message: "Please connect a WhatsApp Business phone number",
         },
         { status: 400 }
       );
@@ -83,7 +152,7 @@ export async function POST(request: NextRequest) {
     // Verify user owns this phone number
     if (phoneNumber.user_id !== user.id) {
       return NextResponse.json(
-        { error: 'Unauthorized - phone number belongs to another user' },
+        { error: "Unauthorized - phone number belongs to another user" },
         { status: 403 }
       );
     }
@@ -91,11 +160,37 @@ export async function POST(request: NextRequest) {
     // Check if phone number can send messages
     if (!phoneNumber.can_send_messages || !phoneNumber.is_active) {
       return NextResponse.json(
-        { 
-          error: 'Phone number not active',
-          message: 'This phone number cannot send messages'
+        {
+          error: "Phone number not active",
+          message: "This phone number cannot send messages",
         },
         { status: 400 }
+      );
+    }
+
+    // Get business_id for this user
+    const { data: businessManager } = await supabaseAdmin
+      .from("connected_business_managers")
+      .select("id")
+      .eq("user_id", user.id)
+      .eq("is_active", true)
+      .single();
+
+    if (!businessManager) {
+      return NextResponse.json(
+        { error: "No business account found" },
+        { status: 400 }
+      );
+    }
+
+    const businessId = businessManager.id;
+
+    // Get or create conversation
+    const conversationId = await getOrCreateConversation(businessId, to);
+    if (!conversationId) {
+      return NextResponse.json(
+        { error: "Failed to create conversation" },
+        { status: 500 }
       );
     }
 
@@ -110,21 +205,20 @@ export async function POST(request: NextRequest) {
       message
     );
 
-    // Store message in database
+    // Store message in database using correct schema
     const messageRecord = await createMessage({
-      phone_number_id: phoneNumber.id,
-      user_id: user.id,
-      message_id: response.messages[0].id,
+      conversation_id: conversationId,
+      business_id: businessId,
       wamid: response.messages[0].id,
-      direction: 'outbound',
-      from_number: phoneNumber.display_phone_number,
-      to_number: to,
-      message_type: 'text',
-      message_body: message,
-      status: 'sent',
-      sent_at: new Date().toISOString(),
-      conversation_origin: 'business_initiated',
+      direction: "outbound",
+      message_type: "text",
+      content: message, // Schema uses 'content' not 'message_body'
+      status: "sent",
+      is_ai_generated: false, // User-sent message
     });
+
+    // Update conversation stats
+    await updateConversationAfterSend(conversationId, message);
 
     return NextResponse.json({
       success: true,
@@ -136,21 +230,20 @@ export async function POST(request: NextRequest) {
       },
     });
   } catch (error: any) {
-    console.error('Error sending WhatsApp message:', error);
-    
+    console.error("Error sending WhatsApp message:", error);
+
     // Parse Meta API errors
-    let errorMessage = error.message || 'Failed to send message';
-    if (error.message?.includes('[')) {
+    let errorMessage = error.message || "Failed to send message";
+    if (error.message?.includes("[")) {
       errorMessage = error.message;
     }
 
     return NextResponse.json(
       {
-        error: 'Failed to send message',
+        error: "Failed to send message",
         message: errorMessage,
       },
       { status: 500 }
     );
   }
 }
-

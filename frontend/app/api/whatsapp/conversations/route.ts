@@ -153,6 +153,8 @@ export async function GET(request: NextRequest) {
 }
 
 // Fallback to old method (fetching from whatsapp_messages directly)
+// NOTE: This fallback uses columns that may not exist in the new schema
+// It's kept for backwards compatibility but should be deprecated
 async function fallbackToOldMethod(businessId: string, filter: string) {
   const { data: messages, error } = await supabaseAdmin
     .from("whatsapp_messages")
@@ -169,26 +171,26 @@ async function fallbackToOldMethod(businessId: string, filter: string) {
     });
   }
 
-  // Group by contact phone
+  // Group by conversation_id
   const conversationsMap = new Map<string, any>();
 
   for (const msg of messages) {
-    const contactPhone =
-      msg.direction === "inbound" ? msg.from_number : msg.to_number;
+    const convId = msg.conversation_id;
+    if (!convId) continue;
 
-    if (!conversationsMap.has(contactPhone)) {
-      conversationsMap.set(contactPhone, {
-        id: contactPhone,
-        name: msg.metadata?.contact_name || formatPhoneNumber(contactPhone),
-        phone: contactPhone,
-        lastMessage: msg.message_body || `[${msg.message_type}]`,
+    if (!conversationsMap.has(convId)) {
+      conversationsMap.set(convId, {
+        id: convId,
+        name: formatPhoneNumber(convId), // Will be updated from conversation table
+        phone: convId,
+        lastMessage: msg.content || `[${msg.message_type}]`, // Schema uses 'content'
         time: formatRelativeTime(msg.created_at),
         timestamp: msg.created_at,
         unread: msg.direction === "inbound" && msg.status !== "read" ? 1 : 0,
         online: false,
       });
     } else {
-      const existing = conversationsMap.get(contactPhone)!;
+      const existing = conversationsMap.get(convId)!;
       if (msg.direction === "inbound" && msg.status !== "read") {
         existing.unread++;
       }
