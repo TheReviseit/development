@@ -161,3 +161,127 @@ def format_template(template: str, **kwargs) -> str:
         for key, value in kwargs.items():
             result = result.replace(f"{{{key}}}", str(value) if value else "")
         return result
+
+
+# =============================================================================
+# BUSINESS-SPECIFIC TEMPLATES (per industry, per intent)
+# =============================================================================
+
+import random
+
+BUSINESS_TEMPLATES = {
+    "salon": {
+        "greeting": [
+            "Welcome to {business_name}! 💇 Ready for a fresh new look?",
+            "Hi! 👋 Thanks for reaching out to {business_name}. How can we make you look amazing today?",
+            "Hello! ✨ Welcome to {business_name}. Looking for a haircut, styling, or spa treatment?",
+        ],
+        "pricing": [
+            "Here are our prices at {business_name}: 💰\n{product_list}\n\nWould you like to book?",
+            "Our services and rates at {business_name}:\n{product_list}\n\nReady to schedule? 💇",
+        ],
+        "booking": [
+            "Great choice! 💇 To book at {business_name}, please share:\n1. Your name\n2. Phone number\n3. Preferred date & time\n4. Service needed",
+        ],
+        "hours": [
+            "Our timing at {business_name}:\n{timing_details}\n\nWould you like to book an appointment? 💇",
+        ],
+    },
+    "restaurant": {
+        "greeting": [
+            "Namaste! 🍽️ Welcome to {business_name}. Hungry? Check out our menu!",
+            "Hi there! 😋 Welcome to {business_name}. What would you like to order today?",
+        ],
+        "pricing": [
+            "Here's our menu at {business_name}: 🍕\n{product_list}\n\nReady to order?",
+        ],
+        "booking": [
+            "Perfect! 🍽️ To reserve a table at {business_name}, share:\n1. Date & time\n2. Number of guests\n3. Your name & phone",
+        ],
+        "hours": [
+            "We're open at {business_name}:\n{timing_details}\n\nSee you soon! 🍽️",
+        ],
+    },
+    "clinic": {
+        "greeting": [
+            "Hello! 🏥 Welcome to {business_name}. How can we assist with your health needs?",
+            "Hi! Thank you for contacting {business_name}. How may we help you today? 🩺",
+        ],
+        "pricing": [
+            "Our consultation fees at {business_name}:\n{product_list}\n\nWould you like to book an appointment? 🏥",
+        ],
+        "booking": [
+            "To schedule an appointment at {business_name}, please share:\n1. Your name\n2. Phone number\n3. Preferred date & time\n4. Reason for visit",
+        ],
+    },
+    "retail": {
+        "greeting": [
+            "Hello! 🛍️ Welcome to {business_name}. What are you looking for today?",
+            "Hi! 👋 Thanks for visiting {business_name}. How can we help you shop?",
+        ],
+        "pricing": [
+            "Here's what we have at {business_name}: ✨\n{product_list}\n\nNeed more details?",
+        ],
+    },
+    "fitness": {
+        "greeting": [
+            "Hey there! 💪 Welcome to {business_name}. Ready to start your fitness journey?",
+            "Hi! 🏋️ Thanks for reaching out to {business_name}. How can we help you get fit?",
+        ],
+        "booking": [
+            "Awesome! 💪 To book a trial or join at {business_name}, share:\n1. Your name\n2. Phone number\n3. Preferred timing",
+        ],
+    },
+    "other": {
+        "greeting": [
+            "Hello! 👋 Welcome to {business_name}. How can we assist you today?",
+            "Hi there! Thanks for reaching out to {business_name}. How may we help? 😊",
+        ],
+        "pricing": [
+            "Our services at {business_name}:\n{product_list}\n\nWould you like more details?",
+        ],
+        "booking": [
+            "To schedule with {business_name}, please share:\n1. Your name\n2. Phone number\n3. Preferred date & time",
+        ],
+    },
+}
+
+# Fallback templates for any intent not covered above
+FALLBACK_TEMPLATES = {
+    "out_of_scope": [
+        "I can only help with queries about {business_name}. How can I assist you with our services? 😊",
+        "That's outside my expertise! I'm here to help with {business_name}. What can I do for you? 🙏",
+    ],
+    "unknown": [
+        "I'll connect you with someone from {business_name}. They'll respond shortly! 🙏",
+        "Let me get our team at {business_name} to help you with this. One moment! 🙏",
+    ],
+    "human_escalation": [
+        "I'll connect you with someone from {business_name}. 🙏\n\n⏱️ Typical response time: 5-10 minutes",
+    ],
+}
+
+
+def get_business_template(
+    industry: str, 
+    intent: str, 
+    business_name: str = "",
+    **kwargs
+) -> str:
+    """
+    Get a business-specific template with random selection for variety.
+    Falls back to industry 'other' if not found.
+    """
+    # Try industry-specific template first
+    templates = BUSINESS_TEMPLATES.get(industry.lower(), BUSINESS_TEMPLATES["other"])
+    intent_templates = templates.get(intent, FALLBACK_TEMPLATES.get(intent, []))
+    
+    if not intent_templates:
+        intent_templates = FALLBACK_TEMPLATES.get("unknown", ["Thanks for your message! 🙏"])
+    
+    # Random selection for variety
+    template = random.choice(intent_templates)
+    
+    # Format with business data
+    return format_template(template, business_name=business_name, **kwargs)
+

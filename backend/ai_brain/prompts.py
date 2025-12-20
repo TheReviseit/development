@@ -103,6 +103,7 @@ Analyze the user message and classify it into exactly ONE of these intents:
 
 INTENTS:
 - greeting: User is saying hello, hi, namaste, good morning, etc.
+- casual_conversation: User is making casual chat like "how are you", "what's up", "kaise ho"
 - general_enquiry: User wants general information about the business or services
 - pricing: User is asking about prices, costs, rates, or fees
 - booking: User wants to book an appointment, schedule, or reserve

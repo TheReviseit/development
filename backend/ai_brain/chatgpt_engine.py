@@ -97,6 +97,36 @@ class ChatGPTEngine:
         Returns:
             IntentResult with intent, confidence, and entities
         """
+        # ================================================
+        # QUICK PRE-CHECK: Obvious intents without LLM call
+        # ================================================
+        msg_clean = message.strip().lower()
+        
+        # Greetings - very common, handle fast
+        if msg_clean in ['hi', 'hello', 'hey', 'hii', 'hiii', 'namaste', 'namaskar', 'hola', 'yo', 'sup']:
+            return IntentResult(
+                intent=IntentType.GREETING,
+                confidence=0.95,
+                language="en",
+                entities={},
+                needs_clarification=False,
+                clarification_question=None,
+                raw_response={"quick_match": "greeting"}
+            )
+        
+        # Casual conversation - "how are you" etc
+        casual_patterns = ['how are you', "how're you", 'how r u', 'kaise ho', 'kya haal', 'whats up', "what's up", 'wassup']
+        if any(p in msg_clean for p in casual_patterns):
+            return IntentResult(
+                intent=IntentType.CASUAL_CONVERSATION,
+                confidence=0.95,
+                language="en",
+                entities={},
+                needs_clarification=False,
+                clarification_question=None,
+                raw_response={"quick_match": "casual_conversation"}
+            )
+        
         # Build context from history
         messages = [{"role": "system", "content": SYSTEM_PROMPT_INTENT_CLASSIFIER}]
         

@@ -1,6 +1,6 @@
 /**
- * WhatsApp Messages API Route
- * Fetches messages for a specific conversation
+ * WhatsApp Messages API Route - v2.0
+ * Fetches messages for a specific conversation using conversation_id
  */
 
 import { NextRequest, NextResponse } from "next/server";
@@ -37,61 +37,140 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "User not found" }, { status: 404 });
     }
 
-    // Get contact phone from query params
+    // Get query params
     const { searchParams } = new URL(request.url);
+    const conversationId = searchParams.get("conversationId");
     const contactPhone = searchParams.get("contactPhone");
     const limit = parseInt(searchParams.get("limit") || "50");
     const offset = parseInt(searchParams.get("offset") || "0");
+    const markAsRead = searchParams.get("markAsRead") !== "false";
 
-    if (!contactPhone) {
+    if (!conversationId && !contactPhone) {
       return NextResponse.json(
-        { error: "contactPhone is required" },
+        { error: "conversationId or contactPhone is required" },
         { status: 400 }
       );
     }
 
+    // First, get the business_id for this user from connected_business_managers
+    const { data: businessManager, error: bmError } = await supabaseAdmin
+      .from("connected_business_managers")
+      .select("id")
+      .eq("user_id", user.id)
+      .eq("is_active", true)
+      .single();
+
+    if (bmError || !businessManager) {
+      // No business manager found - return empty messages with fallback
+      console.log("No business manager found for user:", user.id);
+      return NextResponse.json({
+        success: true,
+        data: {
+          messages: [],
+          contact: {
+            phone: contactPhone || "",
+            name: formatPhoneNumber(contactPhone || ""),
+          },
+          hasMore: false,
+        },
+        message: "No business account connected. Please complete onboarding.",
+      });
+    }
+
+    const businessId = businessManager.id;
+
+    let actualConversationId = conversationId;
+    let conversation = null;
+
+    // If using contactPhone, get or create conversation
+    if (!conversationId && contactPhone) {
+      // Try to find conversation by phone using business_id
+      const { data: convData, error: convError } = await supabaseAdmin
+        .from("whatsapp_conversations")
+        .select("*")
+        .eq("business_id", businessId)
+        .eq("customer_phone", contactPhone)
+        .single();
+
+      if (convError && convError.code !== "PGRST116") {
+        // PGRST116 = no rows found
+        // If table doesn't exist, fall back to old method
+        if (
+          convError.code === "42P01" ||
+          convError.message?.includes("does not exist")
+        ) {
+          return await fallbackToOldMethod(
+            businessId,
+            contactPhone,
+            limit,
+            offset,
+            markAsRead
+          );
+        }
+      }
+
+      if (convData) {
+        actualConversationId = convData.id;
+        conversation = convData;
+      } else {
+        // Fallback: fetch from messages table
+        return await fallbackToOldMethod(
+          businessId,
+          contactPhone,
+          limit,
+          offset,
+          markAsRead
+        );
+      }
+    } else if (conversationId) {
+      // Get conversation details using business_id for security
+      const { data: convData } = await supabaseAdmin
+        .from("whatsapp_conversations")
+        .select("*")
+        .eq("id", conversationId)
+        .eq("business_id", businessId)
+        .single();
+
+      conversation = convData;
+    }
+
     // Fetch messages for this conversation
-    // Messages where from_number or to_number matches the contact
     const { data: messages, error } = await supabaseAdmin
       .from("whatsapp_messages")
       .select("*")
-      .eq("user_id", user.id)
-      .or(`from_number.eq.${contactPhone},to_number.eq.${contactPhone}`)
+      .eq("conversation_id", actualConversationId)
       .order("created_at", { ascending: true })
       .range(offset, offset + limit - 1);
 
     if (error) {
       console.error("Error fetching messages:", error);
-      // Check if it's a table not found error
-      if (error.code === "42P01" || error.message?.includes("does not exist")) {
-        return NextResponse.json({
-          success: true,
-          data: {
-            messages: [],
-            contact: {
-              phone: contactPhone,
-              name: formatPhoneNumber(contactPhone),
-            },
-            hasMore: false,
-          },
-        });
-      }
       return NextResponse.json(
         { error: "Failed to fetch messages", details: error.message },
         { status: 500 }
       );
     }
 
-    // Mark inbound messages as read
-    const unreadMessageIds = (messages || [])
-      .filter((m) => m.direction === "inbound" && m.status !== "read")
-      .map((m) => m.id);
+    // Mark as read if requested
+    if (markAsRead && actualConversationId) {
+      try {
+        // Try using the database function first
+        await supabaseAdmin.rpc("mark_conversation_read", {
+          p_conversation_id: actualConversationId,
+        });
+      } catch {
+        // Fallback if function doesn't exist
+        await supabaseAdmin
+          .from("whatsapp_messages")
+          .update({ status: "read", read_at: new Date().toISOString() })
+          .eq("conversation_id", actualConversationId)
+          .eq("direction", "inbound")
+          .neq("status", "read");
 
-    if (unreadMessageIds.length > 0) {
-      await supabaseAdmin
-        .from("whatsapp_messages")
-        .update({ status: "read", read_at: new Date().toISOString() })
-        .in("id", unreadMessageIds);
+        await supabaseAdmin
+          .from("whatsapp_conversations")
+          .update({ unread_count: 0 })
+          .eq("id", actualConversationId);
+      }
     }
 
     // Format messages for frontend
@@ -106,24 +185,44 @@ export async function GET(request: NextRequest) {
       status: msg.status,
       mediaUrl: msg.media_url,
       mediaId: msg.media_id,
+      // AI info
+      isAiGenerated: msg.is_ai_generated || false,
+      intent: msg.intent_detected,
+      confidence: msg.confidence_score,
+      tokensUsed: msg.tokens_used,
+      responseTimeMs: msg.response_time_ms,
     }));
 
-    // Get contact details from the first inbound message
-    const firstInbound = (messages || []).find(
-      (m) => m.direction === "inbound"
-    );
-    const contactInfo = {
-      phone: contactPhone,
-      name:
-        firstInbound?.metadata?.contact_name || formatPhoneNumber(contactPhone),
-    };
+    // Build contact info from conversation
+    const contactInfo = conversation
+      ? {
+          phone: conversation.customer_phone,
+          name:
+            conversation.customer_name ||
+            formatPhoneNumber(conversation.customer_phone),
+          profilePic: conversation.customer_profile_pic,
+          totalMessages: conversation.total_messages,
+          aiReplies: conversation.ai_replies_count,
+          humanReplies: conversation.human_replies_count,
+          language: conversation.detected_language,
+          tags: conversation.tags || [],
+          status: conversation.status,
+          firstMessageAt: conversation.first_message_at,
+        }
+      : {
+          phone: contactPhone,
+          name: formatPhoneNumber(contactPhone || ""),
+        };
 
     return NextResponse.json({
       success: true,
       data: {
+        conversationId: actualConversationId,
         messages: formattedMessages,
         contact: contactInfo,
         hasMore: (messages || []).length === limit,
+        totalInConversation:
+          conversation?.total_messages || formattedMessages.length,
       },
     });
   } catch (error: any) {
@@ -133,6 +232,89 @@ export async function GET(request: NextRequest) {
       { status: 500 }
     );
   }
+}
+
+// Fallback to old method (fetching without conversations table)
+async function fallbackToOldMethod(
+  businessId: string,
+  contactPhone: string,
+  limit: number,
+  offset: number,
+  markAsRead: boolean
+) {
+  const { data: messages, error } = await supabaseAdmin
+    .from("whatsapp_messages")
+    .select("*")
+    .eq("business_id", businessId)
+    .or(`from_number.eq.${contactPhone},to_number.eq.${contactPhone}`)
+    .order("created_at", { ascending: true })
+    .range(offset, offset + limit - 1);
+
+  if (error) {
+    console.error("Error fetching messages:", error);
+    if (error.code === "42P01" || error.message?.includes("does not exist")) {
+      return NextResponse.json({
+        success: true,
+        data: {
+          messages: [],
+          contact: {
+            phone: contactPhone,
+            name: formatPhoneNumber(contactPhone),
+          },
+          hasMore: false,
+        },
+      });
+    }
+    return NextResponse.json(
+      { error: "Failed to fetch messages", details: error.message },
+      { status: 500 }
+    );
+  }
+
+  // Mark as read
+  if (markAsRead) {
+    const unreadIds = (messages || [])
+      .filter((m) => m.direction === "inbound" && m.status !== "read")
+      .map((m) => m.id);
+
+    if (unreadIds.length > 0) {
+      await supabaseAdmin
+        .from("whatsapp_messages")
+        .update({ status: "read", read_at: new Date().toISOString() })
+        .in("id", unreadIds);
+    }
+  }
+
+  // Format messages
+  const formattedMessages = (messages || []).map((msg) => ({
+    id: msg.id,
+    messageId: msg.message_id,
+    sender: msg.direction === "inbound" ? "contact" : "user",
+    content: msg.message_body || "",
+    time: formatTime(msg.created_at),
+    timestamp: msg.created_at,
+    type: msg.message_type,
+    status: msg.status,
+    mediaUrl: msg.media_url,
+    mediaId: msg.media_id,
+  }));
+
+  const firstInbound = (messages || []).find((m) => m.direction === "inbound");
+  const contactInfo = {
+    phone: contactPhone,
+    name:
+      firstInbound?.metadata?.contact_name || formatPhoneNumber(contactPhone),
+  };
+
+  return NextResponse.json({
+    success: true,
+    data: {
+      messages: formattedMessages,
+      contact: contactInfo,
+      hasMore: (messages || []).length === limit,
+    },
+    fallback: true,
+  });
 }
 
 // Helper to format time
@@ -147,7 +329,7 @@ function formatTime(dateString: string): string {
     .toLowerCase();
 }
 
-// Helper to format phone numbers nicely
+// Helper to format phone numbers
 function formatPhoneNumber(phone: string): string {
   const digits = phone.replace(/\D/g, "");
 

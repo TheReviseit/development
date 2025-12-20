@@ -11,6 +11,7 @@ import re
 class IntentType(str, Enum):
     """Supported customer intent types."""
     GREETING = "greeting"
+    CASUAL_CONVERSATION = "casual_conversation"  # "how are you", "what's up"
     GENERAL_ENQUIRY = "general_enquiry"
     PRICING = "pricing"
     BOOKING = "booking"
@@ -21,6 +22,9 @@ class IntentType(str, Enum):
     LEAD_CAPTURE = "lead_capture"
     THANK_YOU = "thank_you"
     GOODBYE = "goodbye"
+    OUT_OF_SCOPE = "out_of_scope"  # Weather, news, politics, etc.
+    FOLLOW_UP = "follow_up"  # "and also", "one more thing"
+    CONFIRMATION = "confirmation"  # "yes", "ok", "sure"
     UNKNOWN = "unknown"
 
 
@@ -30,12 +34,17 @@ INTENT_KEYWORDS: Dict[IntentType, List[str]] = {
         r"\b(hi|hello|hey|namaste|namaskar|hola|good morning|good afternoon|good evening)\b",
         r"^(hi|hello|hey)$",
     ],
+    IntentType.CASUAL_CONVERSATION: [
+        r"\b(how are you|how're you|how you doing|what'?s up|wassup|whats up)\b",
+        r"\b(kaise ho|kaisa hai|kya haal|kya chal raha)\b",
+        r"\b(how is it going|how do you do|sup bro|how's everything)\b",
+    ],
     IntentType.GENERAL_ENQUIRY: [
         r"\b(what do you|tell me about|information|details|kya hai|about your)\b",
         r"\b(services|products|offer|provide)\b",
         r"\b(what.*have|what.*offer|do you have|kya milta)\b",
         r"\b(courses|classes|packages|plans|options|items|treatments|menu)\b",
-        r"\b(show me|available|can i get|looking for)\b",
+        r"\b(show me|can i get|looking for)\b",  # Removed 'available' - now in BOOKING
     ],
     IntentType.PRICING: [
         r"\b(price|cost|rate|charge|fee|kitna|kya rate|kitne|paisa|rupees|rs|₹)\b",
@@ -71,12 +80,25 @@ INTENT_KEYWORDS: Dict[IntentType, List[str]] = {
     IntentType.GOODBYE: [
         r"\b(bye|goodbye|see you|alvida|tata|ok bye)\b",
     ],
+    IntentType.OUT_OF_SCOPE: [
+        r"\b(weather|forecast|temperature|rain|news|politics)\b",
+        r"\b(sports? score|match|cricket|football|ipl|stock|crypto)\b",
+    ],
+    IntentType.CONFIRMATION: [
+        r"^(yes|yep|yeah|ok|okay|sure|confirm|done|haan|theek|thik|ji)$",
+        r"^(y|yes please|sure thing|absolutely)$",
+    ],
+    IntentType.FOLLOW_UP: [
+        r"^(and|also|what about|how about|one more|another)\b",
+        r"\b(ek aur|aur bhi|aur kya)\b",
+    ],
 }
 
 
 # Intent descriptions for LLM classification
 INTENT_DESCRIPTIONS = {
     IntentType.GREETING: "Customer is greeting or saying hello",
+    IntentType.CASUAL_CONVERSATION: "Customer is making casual conversation like 'how are you', 'what's up'",
     IntentType.GENERAL_ENQUIRY: "Customer wants general information about the business or services",
     IntentType.PRICING: "Customer is asking about prices, costs, or rates",
     IntentType.BOOKING: "Customer wants to book an appointment or make a reservation",
