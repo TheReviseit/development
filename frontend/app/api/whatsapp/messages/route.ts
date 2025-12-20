@@ -161,7 +161,10 @@ export async function GET(request: NextRequest) {
         // Fallback if function doesn't exist
         await supabaseAdmin
           .from("whatsapp_messages")
-          .update({ status: "read", read_at: new Date().toISOString() })
+          .update({
+            status: "read",
+            status_updated_at: new Date().toISOString(),
+          })
           .eq("conversation_id", actualConversationId)
           .eq("direction", "inbound")
           .neq("status", "read");
@@ -176,9 +179,9 @@ export async function GET(request: NextRequest) {
     // Format messages for frontend
     const formattedMessages = (messages || []).map((msg) => ({
       id: msg.id,
-      messageId: msg.message_id,
+      messageId: msg.wamid, // Schema uses 'wamid' not 'message_id'
       sender: msg.direction === "inbound" ? "contact" : "user",
-      content: msg.message_body || "",
+      content: msg.content || "", // Schema uses 'content' not 'message_body'
       time: formatTime(msg.created_at),
       timestamp: msg.created_at,
       type: msg.message_type,
@@ -188,9 +191,6 @@ export async function GET(request: NextRequest) {
       // AI info
       isAiGenerated: msg.is_ai_generated || false,
       intent: msg.intent_detected,
-      confidence: msg.confidence_score,
-      tokensUsed: msg.tokens_used,
-      responseTimeMs: msg.response_time_ms,
     }));
 
     // Build contact info from conversation
@@ -280,7 +280,7 @@ async function fallbackToOldMethod(
     if (unreadIds.length > 0) {
       await supabaseAdmin
         .from("whatsapp_messages")
-        .update({ status: "read", read_at: new Date().toISOString() })
+        .update({ status: "read", status_updated_at: new Date().toISOString() })
         .in("id", unreadIds);
     }
   }
@@ -288,9 +288,9 @@ async function fallbackToOldMethod(
   // Format messages
   const formattedMessages = (messages || []).map((msg) => ({
     id: msg.id,
-    messageId: msg.message_id,
+    messageId: msg.wamid, // Schema uses 'wamid'
     sender: msg.direction === "inbound" ? "contact" : "user",
-    content: msg.message_body || "",
+    content: msg.content || "", // Schema uses 'content'
     time: formatTime(msg.created_at),
     timestamp: msg.created_at,
     type: msg.message_type,

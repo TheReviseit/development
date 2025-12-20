@@ -313,30 +313,33 @@ export async function updatePhoneNumber(
 // =====================================================
 
 export async function createMessage(data: {
-  phone_number_id: string;
-  user_id: string;
-  message_id: string;
-  wamid?: string;
+  conversation_id: string; // Required - FK to whatsapp_conversations
+  business_id: string; // Required - FK to connected_business_managers
+  wamid: string; // WhatsApp message ID
   direction: "inbound" | "outbound";
-  from_number: string;
-  to_number: string;
   message_type: string;
-  message_body?: string;
+  content?: string; // Schema uses 'content' not 'message_body'
+  status?: string;
   media_url?: string;
   media_id?: string;
-  template_name?: string;
-  template_language?: string;
-  template_parameters?: Record<string, any>;
-  status?: string;
-  conversation_id?: string;
-  conversation_category?: string;
-  conversation_origin?: string;
-  metadata?: Record<string, any>;
-  sent_at?: string;
+  is_ai_generated?: boolean;
+  intent_detected?: string;
 }): Promise<WhatsAppMessage> {
   const { data: message, error } = await supabaseAdmin
     .from("whatsapp_messages")
-    .insert(data)
+    .insert({
+      conversation_id: data.conversation_id,
+      business_id: data.business_id,
+      wamid: data.wamid,
+      direction: data.direction,
+      message_type: data.message_type,
+      content: data.content,
+      status: data.status || "sent",
+      media_url: data.media_url,
+      media_id: data.media_id,
+      is_ai_generated: data.is_ai_generated || false,
+      intent_detected: data.intent_detected,
+    })
     .select()
     .single();
 

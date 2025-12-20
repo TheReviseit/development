@@ -377,7 +377,8 @@ def webhook():
                     message_body=reply_text,
                     status='sent',
                     wamid=reply_message_id,
-                    conversation_origin='business_initiated'
+                    conversation_origin='business_initiated',
+                    is_ai_generated=True  # Mark as AI-generated
                 )
         else:
             print(f"❌ Failed to send reply: {send_result.get('error')}")

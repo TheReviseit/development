@@ -210,6 +210,156 @@ def get_phone_number_uuid(phone_number_id: str) -> Optional[str]:
     return None
 
 
+def get_business_id_for_user(user_id: str) -> Optional[str]:
+    """
+    Get the business_id (connected_business_managers.id) for a user.
+    
+    Args:
+        user_id: The user UUID
+        
+    Returns:
+        The business manager UUID or None
+    """
+    client = get_supabase_client()
+    if not client:
+        return None
+    
+    try:
+        result = client.table('connected_business_managers').select('id').eq(
+            'user_id', user_id
+        ).eq('is_active', True).single().execute()
+        
+        if result.data:
+            return result.data.get('id')
+    except Exception as e:
+        print(f"⚠️ Could not get business ID: {e}")
+    
+    return None
+
+
+def get_or_create_conversation(
+    business_id: str,
+    customer_phone: str,
+    customer_name: Optional[str] = None
+) -> Optional[str]:
+    """
+    Get existing conversation or create new one.
+    
+    Args:
+        business_id: The business manager UUID
+        customer_phone: Customer's phone number
+        customer_name: Optional customer name
+        
+    Returns:
+        The conversation UUID or None
+    """
+    client = get_supabase_client()
+    if not client:
+        return None
+    
+    try:
+        # Try to find existing conversation
+        result = client.table('whatsapp_conversations').select('id').eq(
+            'business_id', business_id
+        ).eq('customer_phone', customer_phone).single().execute()
+        
+        if result.data:
+            return result.data.get('id')
+    except Exception as e:
+        # PGRST116 means no rows found, which is expected for new conversations
+        if 'PGRST116' not in str(e):
+            print(f"⚠️ Error finding conversation: {e}")
+    
+    # Create new conversation
+    try:
+        from datetime import datetime
+        new_conv = {
+            'business_id': business_id,
+            'customer_phone': customer_phone,
+            'customer_name': customer_name,
+            'total_messages': 0,
+            'unread_count': 0,
+            'status': 'active',
+            'created_at': datetime.utcnow().isoformat(),
+            'updated_at': datetime.utcnow().isoformat(),
+        }
+        
+        result = client.table('whatsapp_conversations').insert(new_conv).execute()
+        
+        if result.data:
+            print(f"📝 Created new conversation for {customer_phone}")
+            return result.data[0].get('id')
+    except Exception as e:
+        # Handle race condition - conversation might have been created by another request
+        if 'duplicate' in str(e).lower() or '23505' in str(e):
+            try:
+                result = client.table('whatsapp_conversations').select('id').eq(
+                    'business_id', business_id
+                ).eq('customer_phone', customer_phone).single().execute()
+                if result.data:
+                    return result.data.get('id')
+            except:
+                pass
+        print(f"❌ Error creating conversation: {e}")
+    
+    return None
+
+
+def update_conversation_stats(
+    conversation_id: str,
+    direction: str,
+    message_preview: Optional[str] = None,
+    is_ai_generated: bool = False
+) -> None:
+    """
+    Update conversation statistics after a new message.
+    
+    Args:
+        conversation_id: The conversation UUID
+        direction: 'inbound' or 'outbound'
+        message_preview: Preview text for last message
+        is_ai_generated: Whether the message was AI-generated
+    """
+    client = get_supabase_client()
+    if not client or not conversation_id:
+        return
+    
+    try:
+        from datetime import datetime
+        
+        # Get current stats
+        result = client.table('whatsapp_conversations').select(
+            'total_messages, unread_count, ai_replies_count, human_replies_count'
+        ).eq('id', conversation_id).single().execute()
+        
+        if not result.data:
+            return
+            
+        current = result.data
+        updates = {
+            'total_messages': (current.get('total_messages') or 0) + 1,
+            'last_message_at': datetime.utcnow().isoformat(),
+            'last_message_direction': direction,
+            'updated_at': datetime.utcnow().isoformat(),
+        }
+        
+        if message_preview:
+            updates['last_message_preview'] = message_preview[:100]  # Limit preview length
+        
+        if direction == 'inbound':
+            updates['unread_count'] = (current.get('unread_count') or 0) + 1
+        elif direction == 'outbound':
+            if is_ai_generated:
+                updates['ai_replies_count'] = (current.get('ai_replies_count') or 0) + 1
+            else:
+                updates['human_replies_count'] = (current.get('human_replies_count') or 0) + 1
+        
+        client.table('whatsapp_conversations').update(updates).eq('id', conversation_id).execute()
+        
+    except Exception as e:
+        print(f"⚠️ Could not update conversation stats: {e}")
+
+
 def store_message(
     user_id: str,
     phone_number_id: str,
@@ -224,15 +374,17 @@ def store_message(
     wamid: Optional[str] = None,
     media_url: Optional[str] = None,
     media_id: Optional[str] = None,
-    conversation_origin: Optional[str] = None
+    conversation_origin: Optional[str] = None,
+    is_ai_generated: bool = False
 ) -> Optional[Dict[str, Any]]:
     """
     Store a WhatsApp message in the database.
+    Uses the correct schema with conversation_id, business_id, wamid, content.
     
     Args:
         user_id: The user UUID
         phone_number_id: The Meta phone number ID
-        message_id: The WhatsApp message ID
+        message_id: The WhatsApp message ID (wamid)
         direction: 'inbound' or 'outbound'
         from_number: Sender phone number
         to_number: Recipient phone number
@@ -240,10 +392,11 @@ def store_message(
         message_body: Text content of the message
         status: Message status ('sent', 'delivered', 'read', 'failed')
         contact_name: Name of the contact (from WhatsApp profile)
-        wamid: WhatsApp message ID
+        wamid: WhatsApp message ID (same as message_id)
         media_url: URL for media messages
         media_id: Meta media ID
         conversation_origin: 'user_initiated' or 'business_initiated'
+        is_ai_generated: Whether this is an AI-generated response
         
     Returns:
         The created message record or None on error
@@ -254,26 +407,37 @@ def store_message(
         return None
     
     try:
-        # Get the phone number UUID
-        phone_uuid = get_phone_number_uuid(phone_number_id)
+        # Get business_id from user_id
+        business_id = get_business_id_for_user(user_id)
+        if not business_id:
+            print(f"⚠️ No business found for user {user_id}")
+            return None
         
-        # Build message data
+        # Determine customer phone (the external party)
+        customer_phone = from_number if direction == 'inbound' else to_number
+        
+        # Get or create conversation
+        conversation_id = get_or_create_conversation(
+            business_id=business_id,
+            customer_phone=customer_phone,
+            customer_name=contact_name
+        )
+        
+        if not conversation_id:
+            print(f"⚠️ Could not get/create conversation for {customer_phone}")
+            return None
+        
+        # Build message data using correct schema columns
         message_data = {
-            'user_id': user_id,
-            'message_id': message_id,
+            'conversation_id': conversation_id,
+            'business_id': business_id,
             'wamid': wamid or message_id,
             'direction': direction,
-            'from_number': from_number,
-            'to_number': to_number,
             'message_type': message_type,
-            'message_body': message_body,
+            'content': message_body,  # Schema uses 'content' not 'message_body'
             'status': status,
-            'conversation_origin': conversation_origin,
+            'is_ai_generated': is_ai_generated,
         }
-        
-        # Add optional phone_number_id if we found the UUID
-        if phone_uuid:
-            message_data['phone_number_id'] = phone_uuid
         
         # Add media fields if present
         if media_url:
@@ -281,20 +445,20 @@ def store_message(
         if media_id:
             message_data['media_id'] = media_id
         
-        # Add metadata with contact name
-        if contact_name:
-            message_data['metadata'] = {'contact_name': contact_name}
-        
-        # Add sent_at timestamp for outbound messages
-        if direction == 'outbound':
-            from datetime import datetime
-            message_data['sent_at'] = datetime.utcnow().isoformat()
-        
         # Insert message
         result = client.table('whatsapp_messages').insert(message_data).execute()
         
         if result.data:
-            print(f"💾 Message stored: {message_id[:20]}... ({direction})")
+            print(f"💾 Message stored: {(wamid or message_id)[:20]}... ({direction})")
+            
+            # Update conversation stats
+            update_conversation_stats(
+                conversation_id=conversation_id,
+                direction=direction,
+                message_preview=message_body,
+                is_ai_generated=is_ai_generated
+            )
+            
             return result.data[0]
         else:
             print(f"⚠️ Message insert returned no data")
@@ -303,9 +467,11 @@ def store_message(
     except Exception as e:
         # Check if it's a duplicate message (already exists)
         if 'duplicate' in str(e).lower() or '23505' in str(e):
-            print(f"⏭️ Message already exists: {message_id[:20]}...")
+            print(f"⏭️ Message already exists: {(wamid or message_id)[:20]}...")
             return None
         print(f"❌ Error storing message: {e}")
+        import traceback
+        traceback.print_exc()
         return None
 
 
@@ -316,9 +482,10 @@ def update_message_status(
 ) -> bool:
     """
     Update the status of a message.
+    Uses correct schema: wamid for lookup, status_updated_at for timestamp.
     
     Args:
-        message_id: The WhatsApp message ID
+        message_id: The WhatsApp message ID (wamid)
         status: New status ('sent', 'delivered', 'read', 'failed')
         timestamp: ISO timestamp of the status update
         
@@ -332,17 +499,13 @@ def update_message_status(
     try:
         update_data = {'status': status}
         
-        # Add appropriate timestamp field
+        # Use status_updated_at for all status changes (schema only has this column)
         if timestamp:
-            if status == 'delivered':
-                update_data['delivered_at'] = timestamp
-            elif status == 'read':
-                update_data['read_at'] = timestamp
-            elif status == 'failed':
-                update_data['failed_at'] = timestamp
+            update_data['status_updated_at'] = timestamp
         
+        # Query by wamid (not message_id which doesn't exist)
         result = client.table('whatsapp_messages').update(update_data).eq(
-            'message_id', message_id
+            'wamid', message_id
         ).execute()
         
         if result.data:

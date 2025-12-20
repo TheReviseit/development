@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo, memo } from "react";
 import { supabase } from "@/lib/supabase/client";
 import styles from "../dashboard.module.css";
 
@@ -106,6 +106,148 @@ function formatPhoneNumber(phone: string): string {
   return phone;
 }
 
+// Memoized Message Bubble component to prevent re-rendering on new messages
+interface MessageBubbleProps {
+  msg: Message;
+  styles: Record<string, string>;
+}
+
+const MessageBubble = memo(function MessageBubble({
+  msg,
+  styles,
+}: MessageBubbleProps) {
+  return (
+    <div
+      className={`${styles.messageWrapper} ${
+        msg.sender === "user" ? styles.messageOut : styles.messageIn
+      }`}
+    >
+      <div className={styles.messageBubble}>
+        {msg.type === "text" && (
+          <p className={styles.messageText}>{msg.content}</p>
+        )}
+        {msg.type === "audio" && (
+          <div className={styles.audioMessage}>
+            <button className={styles.playBtn}>▶</button>
+            <div className={styles.audioWave}>
+              {[...Array(20)].map((_, i) => (
+                <span
+                  key={i}
+                  className={styles.audioBar}
+                  style={{
+                    height: `${30 + Math.sin(i * 0.5) * 20}%`,
+                  }}
+                />
+              ))}
+            </div>
+            <span className={styles.audioDuration}>0:00</span>
+          </div>
+        )}
+        {msg.type === "image" && (
+          <div className={styles.imageMessage}>
+            {msg.mediaUrl ? (
+              <img
+                src={msg.mediaUrl}
+                alt="Image"
+                style={{
+                  maxWidth: "200px",
+                  borderRadius: "12px",
+                }}
+              />
+            ) : (
+              <div className={styles.imagePlaceholder}>
+                <svg
+                  width="48"
+                  height="48"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1"
+                >
+                  <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
+                  <circle cx="8.5" cy="8.5" r="1.5" />
+                  <polyline points="21 15 16 10 5 21" />
+                </svg>
+              </div>
+            )}
+          </div>
+        )}
+        {(msg.type === "document" || msg.type === "video") && (
+          <div className={styles.imageMessage}>
+            <div className={styles.imagePlaceholder}>
+              <svg
+                width="48"
+                height="48"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1"
+              >
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                <polyline points="14 2 14 8 20 8" />
+              </svg>
+              <span
+                style={{
+                  fontSize: "0.75rem",
+                  marginTop: "0.5rem",
+                }}
+              >
+                {msg.type === "video" ? "Video" : "Document"}
+              </span>
+            </div>
+          </div>
+        )}
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: "0.25rem",
+            justifyContent: "flex-end",
+          }}
+        >
+          <span className={styles.messageTime}>{msg.time}</span>
+          {msg.sender === "user" && (
+            <span
+              style={{
+                fontSize: "0.7rem",
+                color:
+                  msg.status === "read"
+                    ? "var(--dash-accent)"
+                    : "var(--dash-text-muted)",
+              }}
+            >
+              {msg.status === "sending"
+                ? "○"
+                : msg.status === "sent"
+                ? "✓"
+                : msg.status === "delivered"
+                ? "✓✓"
+                : msg.status === "read"
+                ? "✓✓"
+                : ""}
+            </span>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+});
+
+// Memoized DateSeparator component
+const DateSeparator = memo(function DateSeparator({
+  date,
+  styles,
+}: {
+  date: string;
+  styles: Record<string, string>;
+}) {
+  return (
+    <div className={styles.dateSeparator}>
+      <span>{date}</span>
+    </div>
+  );
+});
+
 export default function MessagesView() {
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [selectedConversation, setSelectedConversation] =
@@ -198,11 +340,12 @@ export default function MessagesView() {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
-  // Real-time subscription to whatsapp_messages table
+  // Real-time subscription to whatsapp_messages and whatsapp_conversations tables
   useEffect(() => {
     console.log("🔌 Setting up Supabase realtime subscription...");
 
-    const channel = supabase
+    // Subscribe to messages table for new messages
+    const messagesChannel = supabase
       .channel("whatsapp-messages-realtime")
       .on(
         "postgres_changes",
@@ -212,42 +355,37 @@ export default function MessagesView() {
           table: "whatsapp_messages",
         },
         (payload) => {
-          console.log("📨 Realtime update:", payload.eventType, payload.new);
+          console.log(
+            "📨 Realtime message update:",
+            payload.eventType,
+            payload.new
+          );
 
           const newMsg = payload.new as any;
           if (!newMsg) return;
 
-          // Determine contact phone from the message
-          const contactPhone =
-            newMsg.direction === "inbound"
-              ? newMsg.from_number
-              : newMsg.to_number;
-          const contactName =
-            newMsg.metadata?.contact_name || formatPhoneNumber(contactPhone);
+          const conversationId = newMsg.conversation_id;
 
           if (payload.eventType === "INSERT") {
-            // Format the new message
+            // Format the new message using correct schema columns
             const formattedMsg: Message = {
               id: newMsg.id,
-              messageId: newMsg.message_id,
+              messageId: newMsg.wamid,
               sender: newMsg.direction === "inbound" ? "contact" : "user",
-              content: newMsg.message_body || "",
+              content: newMsg.content || "",
               time: formatTime(newMsg.created_at),
               timestamp: newMsg.created_at,
               type: newMsg.message_type,
               status: newMsg.status,
               mediaUrl: newMsg.media_url,
               mediaId: newMsg.media_id,
+              isAiGenerated: newMsg.is_ai_generated,
+              intent: newMsg.intent_detected,
             };
 
-            // Update messages if this is for the selected conversation
+            // Update messages if this conversation is currently selected
             const currentConv = selectedConversationRef.current;
-            if (
-              currentConv &&
-              (currentConv.phone === contactPhone ||
-                newMsg.from_number === currentConv.phone ||
-                newMsg.to_number === currentConv.phone)
-            ) {
+            if (currentConv && currentConv.id === conversationId) {
               setMessages((prev) => {
                 // Check if message already exists
                 if (prev.some((m) => m.messageId === formattedMsg.messageId)) {
@@ -256,78 +394,132 @@ export default function MessagesView() {
                 return [...prev, formattedMsg];
               });
             }
-
-            // Update conversations list - add or update the conversation
-            setConversations((prev) => {
-              const existingIndex = prev.findIndex(
-                (c) => c.phone === contactPhone
-              );
-
-              const updatedConv: Conversation = {
-                id: contactPhone,
-                name: contactName,
-                phone: contactPhone,
-                lastMessage: newMsg.message_body || `[${newMsg.message_type}]`,
-                time: formatRelativeTime(newMsg.created_at),
-                timestamp: newMsg.created_at,
-                unread:
-                  newMsg.direction === "inbound" && newMsg.status !== "read"
-                    ? 1
-                    : 0,
-                online: false,
-              };
-
-              if (existingIndex >= 0) {
-                // Update existing conversation
-                const updated = [...prev];
-                const existing = updated[existingIndex];
-                updated[existingIndex] = {
-                  ...updatedConv,
-                  name: existing.name || updatedConv.name, // Keep existing name if available
-                  unread:
-                    existing.unread +
-                    (newMsg.direction === "inbound" && newMsg.status !== "read"
-                      ? 1
-                      : 0),
-                };
-                // Move to top
-                const [moved] = updated.splice(existingIndex, 1);
-                return [moved, ...updated];
-              } else {
-                // Add new conversation at top
-                return [updatedConv, ...prev];
-              }
-            });
           } else if (payload.eventType === "UPDATE") {
             // Update message status
             setMessages((prev) =>
               prev.map((msg) =>
-                msg.messageId === newMsg.message_id
+                msg.messageId === newMsg.wamid
                   ? { ...msg, status: newMsg.status }
                   : msg
               )
             );
+          }
+        }
+      )
+      .subscribe((status) => {
+        console.log("🔌 Messages realtime subscription status:", status);
+      });
 
-            // Update conversation unread count if message marked as read
-            if (newMsg.status === "read") {
-              setConversations((prev) =>
-                prev.map((conv) =>
-                  conv.phone === contactPhone
-                    ? { ...conv, unread: Math.max(0, conv.unread - 1) }
-                    : conv
-                )
+    // Subscribe to conversations table for stats updates (last message, unread count, etc.)
+    const conversationsChannel = supabase
+      .channel("whatsapp-conversations-realtime")
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "whatsapp_conversations",
+        },
+        (payload) => {
+          console.log(
+            "📋 Realtime conversation update:",
+            payload.eventType,
+            payload.new
+          );
+
+          const updatedConv = payload.new as any;
+          if (!updatedConv) return;
+
+          if (payload.eventType === "INSERT") {
+            // New conversation - add to list
+            const newConversation: Conversation = {
+              id: updatedConv.id,
+              name:
+                updatedConv.customer_name ||
+                formatPhoneNumber(updatedConv.customer_phone),
+              phone: updatedConv.customer_phone,
+              lastMessage: updatedConv.last_message_preview || "",
+              time: formatRelativeTime(
+                updatedConv.last_message_at || updatedConv.created_at
+              ),
+              timestamp: updatedConv.last_message_at || updatedConv.created_at,
+              unread: updatedConv.unread_count || 0,
+              totalMessages: updatedConv.total_messages || 0,
+              online: false,
+              aiReplies: updatedConv.ai_replies_count || 0,
+              humanReplies: updatedConv.human_replies_count || 0,
+              status: updatedConv.status,
+            };
+
+            setConversations((prev) => {
+              // Check if already exists
+              if (prev.some((c) => c.id === newConversation.id)) {
+                return prev;
+              }
+              return [newConversation, ...prev];
+            });
+          } else if (payload.eventType === "UPDATE") {
+            // Update existing conversation in place
+            setConversations((prev) => {
+              const index = prev.findIndex((c) => c.id === updatedConv.id);
+              if (index === -1) return prev;
+
+              const updated = [...prev];
+              updated[index] = {
+                ...updated[index],
+                lastMessage:
+                  updatedConv.last_message_preview ||
+                  updated[index].lastMessage,
+                time: formatRelativeTime(
+                  updatedConv.last_message_at || updated[index].timestamp
+                ),
+                timestamp:
+                  updatedConv.last_message_at || updated[index].timestamp,
+                unread: updatedConv.unread_count ?? updated[index].unread,
+                totalMessages:
+                  updatedConv.total_messages ?? updated[index].totalMessages,
+                aiReplies:
+                  updatedConv.ai_replies_count ?? updated[index].aiReplies,
+                humanReplies:
+                  updatedConv.human_replies_count ??
+                  updated[index].humanReplies,
+                status: updatedConv.status || updated[index].status,
+              };
+
+              // Move updated conversation to top if it has a new message
+              if (updatedConv.last_message_at) {
+                const [moved] = updated.splice(index, 1);
+                return [moved, ...updated];
+              }
+
+              return updated;
+            });
+
+            // Also update selected conversation if it's this one
+            const currentConv = selectedConversationRef.current;
+            if (currentConv && currentConv.id === updatedConv.id) {
+              setSelectedConversation((prev) =>
+                prev
+                  ? {
+                      ...prev,
+                      unread: updatedConv.unread_count ?? prev.unread,
+                      totalMessages:
+                        updatedConv.total_messages ?? prev.totalMessages,
+                    }
+                  : prev
               );
             }
           }
         }
       )
       .subscribe((status) => {
-        console.log("🔌 Realtime subscription status:", status);
+        console.log("🔌 Conversations realtime subscription status:", status);
       });
 
     return () => {
-      console.log("🔌 Cleaning up realtime subscription...");
-      supabase.removeChannel(channel);
+      console.log("🔌 Cleaning up realtime subscriptions...");
+      supabase.removeChannel(messagesChannel);
+      supabase.removeChannel(conversationsChannel);
     };
   }, []);
 
@@ -430,20 +622,24 @@ export default function MessagesView() {
       .slice(0, 2);
   };
 
-  // Filter conversations by search
-  const filteredConversations = conversations.filter(
-    (conv) =>
-      conv.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      conv.phone.includes(searchQuery) ||
-      conv.lastMessage.toLowerCase().includes(searchQuery.toLowerCase())
+  // Filter conversations by search - memoized
+  const filteredConversations = useMemo(
+    () =>
+      conversations.filter(
+        (conv) =>
+          conv.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+          conv.phone.includes(searchQuery) ||
+          conv.lastMessage.toLowerCase().includes(searchQuery.toLowerCase())
+      ),
+    [conversations, searchQuery]
   );
 
-  // Group messages by date
-  const groupMessagesByDate = (msgs: Message[]) => {
+  // Group messages by date - memoized to prevent recalculation on every render
+  const messageGroups = useMemo(() => {
     const groups: { date: string; messages: Message[] }[] = [];
     let currentDate = "";
 
-    for (const msg of msgs) {
+    for (const msg of messages) {
       const msgDate = new Date(msg.timestamp).toLocaleDateString("en-US", {
         month: "long",
         day: "numeric",
@@ -458,9 +654,7 @@ export default function MessagesView() {
     }
 
     return groups;
-  };
-
-  const messageGroups = groupMessagesByDate(messages);
+  }, [messages]);
 
   if (loading) {
     return (
@@ -727,138 +921,11 @@ export default function MessagesView() {
                   No messages yet. Send a message to start the conversation.
                 </div>
               ) : (
-                messageGroups.map((group, groupIndex) => (
-                  <div key={groupIndex}>
-                    <div className={styles.dateSeparator}>
-                      <span>{group.date}</span>
-                    </div>
+                messageGroups.map((group) => (
+                  <div key={group.date}>
+                    <DateSeparator date={group.date} styles={styles} />
                     {group.messages.map((msg) => (
-                      <div
-                        key={msg.id}
-                        className={`${styles.messageWrapper} ${
-                          msg.sender === "user"
-                            ? styles.messageOut
-                            : styles.messageIn
-                        }`}
-                      >
-                        <div className={styles.messageBubble}>
-                          {msg.type === "text" && (
-                            <p className={styles.messageText}>{msg.content}</p>
-                          )}
-                          {msg.type === "audio" && (
-                            <div className={styles.audioMessage}>
-                              <button className={styles.playBtn}>▶</button>
-                              <div className={styles.audioWave}>
-                                {[...Array(20)].map((_, i) => (
-                                  <span
-                                    key={i}
-                                    className={styles.audioBar}
-                                    style={{
-                                      height: `${Math.random() * 100}%`,
-                                    }}
-                                  />
-                                ))}
-                              </div>
-                              <span className={styles.audioDuration}>0:00</span>
-                            </div>
-                          )}
-                          {msg.type === "image" && (
-                            <div className={styles.imageMessage}>
-                              {msg.mediaUrl ? (
-                                <img
-                                  src={msg.mediaUrl}
-                                  alt="Image"
-                                  style={{
-                                    maxWidth: "200px",
-                                    borderRadius: "12px",
-                                  }}
-                                />
-                              ) : (
-                                <div className={styles.imagePlaceholder}>
-                                  <svg
-                                    width="48"
-                                    height="48"
-                                    viewBox="0 0 24 24"
-                                    fill="none"
-                                    stroke="currentColor"
-                                    strokeWidth="1"
-                                  >
-                                    <rect
-                                      x="3"
-                                      y="3"
-                                      width="18"
-                                      height="18"
-                                      rx="2"
-                                      ry="2"
-                                    />
-                                    <circle cx="8.5" cy="8.5" r="1.5" />
-                                    <polyline points="21 15 16 10 5 21" />
-                                  </svg>
-                                </div>
-                              )}
-                            </div>
-                          )}
-                          {(msg.type === "document" ||
-                            msg.type === "video") && (
-                            <div className={styles.imageMessage}>
-                              <div className={styles.imagePlaceholder}>
-                                <svg
-                                  width="48"
-                                  height="48"
-                                  viewBox="0 0 24 24"
-                                  fill="none"
-                                  stroke="currentColor"
-                                  strokeWidth="1"
-                                >
-                                  <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-                                  <polyline points="14 2 14 8 20 8" />
-                                </svg>
-                                <span
-                                  style={{
-                                    fontSize: "0.75rem",
-                                    marginTop: "0.5rem",
-                                  }}
-                                >
-                                  {msg.type === "video" ? "Video" : "Document"}
-                                </span>
-                              </div>
-                            </div>
-                          )}
-                          <div
-                            style={{
-                              display: "flex",
-                              alignItems: "center",
-                              gap: "0.25rem",
-                              justifyContent: "flex-end",
-                            }}
-                          >
-                            <span className={styles.messageTime}>
-                              {msg.time}
-                            </span>
-                            {msg.sender === "user" && (
-                              <span
-                                style={{
-                                  fontSize: "0.7rem",
-                                  color:
-                                    msg.status === "read"
-                                      ? "var(--dash-accent)"
-                                      : "var(--dash-text-muted)",
-                                }}
-                              >
-                                {msg.status === "sending"
-                                  ? "○"
-                                  : msg.status === "sent"
-                                  ? "✓"
-                                  : msg.status === "delivered"
-                                  ? "✓✓"
-                                  : msg.status === "read"
-                                  ? "✓✓"
-                                  : ""}
-                              </span>
-                            )}
-                          </div>
-                        </div>
-                      </div>
+                      <MessageBubble key={msg.id} msg={msg} styles={styles} />
                     ))}
                   </div>
                 ))
