@@ -30,8 +30,16 @@ except ImportError as e:
 # AI Brain import (optional, graceful fallback if not available)
 try:
     from ai_brain import AIBrain, AIBrainConfig
-    ai_brain = AIBrain(config=AIBrainConfig.from_env())
+    from supabase_client import get_supabase_client
+    
+    # Initialize with Supabase client for LLM usage tracking
+    supabase_client = get_supabase_client() if SUPABASE_AVAILABLE else None
+    ai_brain = AIBrain(
+        config=AIBrainConfig.from_env(),
+        supabase_client=supabase_client
+    )
     AI_BRAIN_AVAILABLE = True
+    print("🧠 AI Brain initialized with usage tracking")
 except ImportError as e:
     print(f"⚠️ AI Brain not available: {e}")
     ai_brain = None
@@ -295,27 +303,40 @@ def webhook():
         if msg_id:
             whatsapp_service.mark_message_as_read(wa_id, token, msg_id)
             
-        # Show typing indicator
-        whatsapp_service.send_typing_indicator(wa_id, token, from_number)
+        # NOTE: Typing indicator disabled - WhatsApp API v18.0 doesn't support sender_action
+        # whatsapp_service.send_typing_indicator(wa_id, token, from_number)
         
-        # Humanize the response with a small delay
-        time.sleep(2)  # Wait 2 seconds so user sees "typing..."
+        # Generate response immediately (typing indicator no longer used)
         
         # 4. Generate AI response (only for text messages)
         if message_type == 'text':
             if AI_BRAIN_AVAILABLE and ai_brain:
                 # Generate AI reply
-                result = ai_brain.generate_reply(
-                    business_data=business_data,
-                    user_message=message_text,
-                    history=[]  # Could store conversation history per user
-                )
-                
-                reply_text = result.get('reply', "I'll connect you with our team shortly.")
-                intent = result.get('intent', 'unknown')
-                needs_human = result.get('needs_human', False)
-                
-                print(f"🤖 AI Response (intent: {intent}, needs_human: {needs_human}): {reply_text}")
+                try:
+                    result = ai_brain.generate_reply(
+                        business_data=business_data,
+                        user_message=message_text,
+                        history=[]  # Could store conversation history per user
+                    )
+                    
+                    reply_text = result.get('reply', "I'll connect you with our team shortly.")
+                    intent = result.get('intent', 'unknown')
+                    needs_human = result.get('needs_human', False)
+                    
+                    print(f"🤖 AI Response (intent: {intent}, needs_human: {needs_human}): {reply_text}")
+                    
+                    # Log metadata for debugging
+                    metadata = result.get('metadata', {})
+                    if 'error' in metadata:
+                        print(f"⚠️ AI Error in metadata: {metadata['error']}")
+                    if metadata.get('generation_method') == 'error':
+                        print(f"⚠️ Error generation method detected")
+                        
+                except Exception as e:
+                    print(f"❌ Exception in AI generation: {str(e)}")
+                    import traceback
+                    traceback.print_exc()
+                    reply_text = "Thank you for your message! Our team will respond shortly."
             else:
                 # Fallback if AI not available
                 reply_text = "Thank you for your message! Our team will respond shortly."

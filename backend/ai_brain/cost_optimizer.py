@@ -44,24 +44,13 @@ class CostDecision:
 
 # =============================================================================
 # STRATEGY #8: HARDCODED REPLIES FOR UNIVERSAL INTENTS
+# Skip LLM only for very simple messages (thanks, bye, confirmations)
+# Greetings go to LLM for natural, conversational responses
 # =============================================================================
 
-# Universal patterns that don't need LLM
+# Universal patterns that don't need LLM (NOT greetings - they go to LLM)
 HARDCODED_PATTERNS = {
-    # Greetings - high frequency, no context needed
-    "greeting": {
-        "patterns": [
-            r"^(hi|hello|hey|hii+|hola|namaste|namaskar)[\s!.?]*$",
-            r"^good\s+(morning|afternoon|evening|night)[\s!.?]*$",
-            r"^(sup|yo|hiya)[\s!.?]*$",
-        ],
-        "replies": [
-            "Hello! 👋 How can I help you today?",
-            "Hi there! 😊 What can I do for you?",
-            "Namaste! 🙏 How may I assist you?",
-        ],
-        "ttl": 3600,
-    },
+    # NOTE: Greetings REMOVED - let LLM handle "hi", "hello" for natural responses
     
     # Thank you - no processing needed
     "thank_you": {

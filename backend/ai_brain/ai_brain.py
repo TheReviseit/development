@@ -1,11 +1,17 @@
 """
 Main AI Brain orchestrator class - v2.0 (Refactored).
 Coordinates ChatGPT-powered intent detection, function calling, and response generation.
+Now with LLM usage tracking for per-business budgets.
 """
 
 import time
+import re
+import random
+import logging
 from typing import Dict, List, Any, Optional, Union
 from dataclasses import asdict
+
+logger = logging.getLogger('reviseit.brain')
 
 from .schemas import BusinessData, ConversationMessage, GenerateReplyResponse
 from .intents import IntentType, IntentDetector
@@ -24,6 +30,14 @@ from .analytics import (
 )
 from .cost_optimizer import CostOptimizer, get_cost_optimizer, CostDecision
 from .business_retriever import BusinessRetriever, get_retriever
+
+# LLM Usage tracking for per-business budgets
+try:
+    from llm_usage_tracker import get_usage_tracker, LLMUsageTracker
+    USAGE_TRACKER_AVAILABLE = True
+except ImportError:
+    USAGE_TRACKER_AVAILABLE = False
+    get_usage_tracker = None
 
 
 class AIBrain:
@@ -63,7 +77,8 @@ class AIBrain:
     def __init__(
         self,
         config: AIBrainConfig = None,
-        use_legacy_intent: bool = False
+        use_legacy_intent: bool = True,  # Enable by default for template fallback
+        supabase_client = None
     ):
         """
         Initialize AI Brain.
@@ -71,6 +86,7 @@ class AIBrain:
         Args:
             config: Configuration object. Uses default if not provided.
             use_legacy_intent: If True, use keyword-based intent detection as fallback
+            supabase_client: Supabase client for usage tracking
         """
         self.config = config or default_config
         self.use_legacy_intent = use_legacy_intent
@@ -103,9 +119,13 @@ class AIBrain:
         self.cost_optimizer = get_cost_optimizer()
         self.retriever = get_retriever(max_tokens=400)
         
-        # Legacy fallback
-        if use_legacy_intent:
-            self.legacy_intent_detector = IntentDetector()
+        # LLM Usage tracking (for per-business budgets)
+        self.usage_tracker = None
+        if USAGE_TRACKER_AVAILABLE and get_usage_tracker:
+            self.usage_tracker = get_usage_tracker(supabase_client)
+        
+        # Legacy fallback (always enabled for template mode)
+        self.legacy_intent_detector = IntentDetector()
     
     def generate_reply(
         self,
@@ -171,6 +191,14 @@ class AIBrain:
         lang_result = self.language_detector.detect(user_message)
         detected_language = lang_result.language.value
         
+        # =====================================================
+        # OUT-OF-SCOPE CHECK - Reject irrelevant queries early
+        # =====================================================
+        if not self._is_in_scope(user_message, business):
+            business_name = business.get('business_name', 'our business')
+            return self._out_of_scope_response(business_name)
+        
+        
         # Get conversation history
         if history is None and user_id:
             history = self.conversation_manager.get_context_window(user_id)
@@ -229,7 +257,7 @@ class AIBrain:
         if cost_decision.use_retrieval:
             # Pre-detect intent for better retrieval (using legacy quick method)
             quick_intent = "general_enquiry"
-            if self.use_legacy_intent and hasattr(self, 'legacy_intent_detector'):
+            if hasattr(self, 'legacy_intent_detector'):
                 intent_result, _ = self.legacy_intent_detector.detect(user_message, [])
                 quick_intent = intent_result.value
             
@@ -243,6 +271,26 @@ class AIBrain:
             business["_optimized_context"] = retrieval_result.context
             business["_token_savings"] = retrieval_result.savings_percent
         
+        # =====================================================
+        # LLM BUDGET CHECK - Use template fallback if exceeded
+        # (Graceful fallback if usage tracker fails)
+        # =====================================================
+        try:
+            if self.usage_tracker:
+                usage_status = self.usage_tracker.can_use_llm(biz_id, plan)
+                if not usage_status.can_use:
+                    # FALLBACK TO TEMPLATE MODE (no LLM call)
+                    return self._template_fallback_reply(
+                        business_data=business,
+                        user_message=user_message,
+                        user_id=user_id,
+                        detected_language=detected_language,
+                        reason=usage_status.reason,
+                        start_time=start_time
+                    )
+        except Exception as e:
+            print(f"⚠️ Usage tracking failed, proceeding without: {e}")
+        
         # Process message with ChatGPT engine
         try:
             result = self.engine.process_message(
@@ -251,6 +299,15 @@ class AIBrain:
                 conversation_history=optimized_history,
                 user_id=user_id
             )
+            
+            # TRACK LLM USAGE after successful call (non-blocking)
+            try:
+                if self.usage_tracker:
+                    input_tokens = result.metadata.get('prompt_tokens', 150)
+                    output_tokens = result.metadata.get('completion_tokens', 50)
+                    self.usage_tracker.track_usage(biz_id, input_tokens, output_tokens)
+            except Exception as e:
+                print(f"⚠️ Usage tracking skipped: {e}")
             
             # Format response
             reply = result.reply
@@ -450,6 +507,139 @@ class AIBrain:
                 "rate_limited": True,
                 "remaining": remaining,
                 "generation_method": "rate_limit"
+            }
+        }
+    
+    def _template_fallback_reply(
+        self,
+        business_data: Dict[str, Any],
+        user_message: str,
+        user_id: str,
+        detected_language: str,
+        reason: str,
+        start_time: float
+    ) -> Dict[str, Any]:
+        """
+        Generate reply using templates only (no LLM) when budget exceeded.
+        Fast O(1) keyword-based intent detection + static templates.
+        """
+        # Quick intent detection using keywords
+        intent, confidence = self.legacy_intent_detector.detect(user_message, [])
+        
+        # Get template response based on intent
+        business_name = business_data.get('business_name', 'our team')
+        
+        # Fast template lookup (O(1) hash map)
+        TEMPLATES = {
+            IntentType.GREETING: f"Hello! 👋 Welcome to {business_name}. How can I help you today?",
+            IntentType.CASUAL_CONVERSATION: "I'm doing great, thanks for asking! 😊 How can I help you today?",
+            IntentType.PRICING: f"For pricing details, please message us directly or check our website. Our team at {business_name} will help you! 💰",
+            IntentType.HOURS: "Our business hours are available on our website. Feel free to reach out! 🕐",
+            IntentType.LOCATION: f"You can find us on Google Maps. Contact {business_name} for directions! 📍",
+            IntentType.BOOKING: f"To book an appointment with {business_name}, please share your preferred date and time. We'll confirm shortly! 📅",
+            IntentType.THANK_YOU: "You're welcome! Happy to help. 😊",
+            IntentType.GOODBYE: "Goodbye! Have a great day! 👋",
+            IntentType.GENERAL_ENQUIRY: f"Thanks for reaching out to {business_name}! Our team will assist you shortly. 🙏",
+        }
+        
+        # Get template or default
+        reply = TEMPLATES.get(intent, f"Thanks for your message! Someone from {business_name} will respond shortly. 🙏")
+        
+        # For unknown/low confidence, offer human handoff
+        if confidence < 0.5 or intent == IntentType.UNKNOWN:
+            reply = f"I'll connect you with someone from {business_name}. They'll respond shortly! 🙏"
+        
+        response = {
+            "reply": reply,
+            "intent": intent.value,
+            "confidence": round(confidence, 2),
+            "needs_human": confidence < 0.5,
+            "suggested_actions": ["Services", "Prices", "Contact"],
+            "metadata": {
+                "generation_method": "template_fallback",
+                "fallback_reason": reason,
+                "llm_budget_exceeded": True,
+                "language": detected_language,
+                "response_time_ms": int((time.time() - start_time) * 1000)
+            }
+        }
+        
+        # Add to conversation
+        if user_id:
+            self.conversation_manager.add_message(user_id, "assistant", reply)
+        
+        # Track analytics
+        self._track_interaction(
+            business_data.get('business_id', 'default'),
+            user_id, response, start_time, is_cached=False
+        )
+        
+        return response
+    
+    def _is_in_scope(self, message: str, business: Dict[str, Any]) -> bool:
+        """
+        Check if query is relevant to the business.
+        Returns False for weather, news, politics, sports, stocks, etc.
+        """
+        OUT_OF_SCOPE_PATTERNS = [
+            r'\b(weather|forecast|temperature|rain|humidity|sunny|cloudy)\b',
+            r'\b(news|politics|election|government|minister|parliament)\b',
+            r'\b(sports? score|match|cricket|football|ipl|fifa|world cup)\b',
+            r'\b(stock|share|crypto|bitcoin|nifty|sensex|trading)\b',
+            r'\b(who is the|what is the capital|when did|history of)\b(?!.*(?:your|business|service|product))',
+            r'\b(joke|sing|poem|story tell|riddle)\b',
+        ]
+        
+        msg_lower = message.lower()
+        for pattern in OUT_OF_SCOPE_PATTERNS:
+            if re.search(pattern, msg_lower):
+                return False
+        return True
+    
+    def _out_of_scope_response(self, business_name: str) -> Dict[str, Any]:
+        """Response for queries outside business scope."""
+        return {
+            "reply": f"I can only help with queries about {business_name}. How can I assist you with our services today? 😊",
+            "intent": "out_of_scope",
+            "confidence": 1.0,
+            "needs_human": False,
+            "suggested_actions": ["Services", "Prices", "Book Appointment"],
+            "metadata": {"generation_method": "out_of_scope_filter"}
+        }
+    
+    def _human_escalation_response(
+        self, 
+        business: Dict[str, Any], 
+        reason: str = "low_confidence"
+    ) -> Dict[str, Any]:
+        """Generate a smooth human escalation response with contact options."""
+        business_name = business.get('business_name', 'our team')
+        contact = business.get('contact', {})
+        
+        # Build contact options
+        contact_options = []
+        if contact.get('phone'):
+            contact_options.append(f"📞 Call: {contact['phone']}")
+        if contact.get('whatsapp') and contact['whatsapp'] != contact.get('phone'):
+            contact_options.append(f"💬 WhatsApp: {contact['whatsapp']}")
+        
+        contact_str = "\n".join(contact_options) if contact_options else ""
+        
+        # Build response with wait time estimate
+        reply = f"I'll connect you with someone from {business_name}. 🙏\n\n"
+        reply += "⏱️ Typical response time: 5-10 minutes\n\n"
+        if contact_str:
+            reply += f"Or reach us directly:\n{contact_str}"
+        
+        return {
+            "reply": reply,
+            "intent": "human_escalation",
+            "confidence": 1.0,
+            "needs_human": True,
+            "suggested_actions": ["Wait for response", "Call now"],
+            "metadata": {
+                "generation_method": "human_escalation",
+                "escalation_reason": reason
             }
         }
     

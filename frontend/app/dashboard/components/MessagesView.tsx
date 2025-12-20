@@ -8,11 +8,22 @@ interface Conversation {
   id: string;
   name: string;
   phone: string;
+  profilePic?: string;
   lastMessage: string;
+  lastMessageType?: string;
   time: string;
   timestamp: string;
   unread: number;
+  totalMessages?: number;
   online: boolean;
+  // AI stats
+  aiReplies?: number;
+  humanReplies?: number;
+  language?: string;
+  // Status
+  status?: string;
+  priority?: string;
+  tags?: string[];
 }
 
 interface Message {
@@ -26,11 +37,25 @@ interface Message {
   status: string;
   mediaUrl?: string;
   mediaId?: string;
+  // AI metadata
+  isAiGenerated?: boolean;
+  intent?: string;
+  confidence?: number;
+  tokensUsed?: number;
+  responseTimeMs?: number;
 }
 
 interface ContactInfo {
   phone: string;
   name: string;
+  profilePic?: string;
+  totalMessages?: number;
+  aiReplies?: number;
+  humanReplies?: number;
+  language?: string;
+  tags?: string[];
+  status?: string;
+  firstMessageAt?: string;
 }
 
 // Helper to format time
@@ -83,7 +108,8 @@ function formatPhoneNumber(phone: string): string {
 
 export default function MessagesView() {
   const [conversations, setConversations] = useState<Conversation[]>([]);
-  const [selectedConversation, setSelectedConversation] = useState<Conversation | null>(null);
+  const [selectedConversation, setSelectedConversation] =
+    useState<Conversation | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
   const [contactInfo, setContactInfo] = useState<ContactInfo | null>(null);
   const [messageInput, setMessageInput] = useState("");
@@ -112,7 +138,9 @@ export default function MessagesView() {
     try {
       setLoading(true);
       setError(null);
-      const response = await fetch(`/api/whatsapp/conversations?filter=${filter}`);
+      const response = await fetch(
+        `/api/whatsapp/conversations?filter=${filter}`
+      );
       const data = await response.json();
 
       if (data.success) {
@@ -139,7 +167,11 @@ export default function MessagesView() {
   const fetchMessages = useCallback(async (contactPhone: string) => {
     try {
       setMessagesLoading(true);
-      const response = await fetch(`/api/whatsapp/messages?contactPhone=${encodeURIComponent(contactPhone)}`);
+      const response = await fetch(
+        `/api/whatsapp/messages?contactPhone=${encodeURIComponent(
+          contactPhone
+        )}`
+      );
       const data = await response.json();
 
       if (data.success) {
@@ -169,33 +201,37 @@ export default function MessagesView() {
   // Real-time subscription to whatsapp_messages table
   useEffect(() => {
     console.log("🔌 Setting up Supabase realtime subscription...");
-    
+
     const channel = supabase
-      .channel('whatsapp-messages-realtime')
+      .channel("whatsapp-messages-realtime")
       .on(
-        'postgres_changes',
+        "postgres_changes",
         {
-          event: '*',
-          schema: 'public',
-          table: 'whatsapp_messages',
+          event: "*",
+          schema: "public",
+          table: "whatsapp_messages",
         },
         (payload) => {
-          console.log('📨 Realtime update:', payload.eventType, payload.new);
-          
+          console.log("📨 Realtime update:", payload.eventType, payload.new);
+
           const newMsg = payload.new as any;
           if (!newMsg) return;
 
           // Determine contact phone from the message
-          const contactPhone = newMsg.direction === 'inbound' ? newMsg.from_number : newMsg.to_number;
-          const contactName = newMsg.metadata?.contact_name || formatPhoneNumber(contactPhone);
+          const contactPhone =
+            newMsg.direction === "inbound"
+              ? newMsg.from_number
+              : newMsg.to_number;
+          const contactName =
+            newMsg.metadata?.contact_name || formatPhoneNumber(contactPhone);
 
-          if (payload.eventType === 'INSERT') {
+          if (payload.eventType === "INSERT") {
             // Format the new message
             const formattedMsg: Message = {
               id: newMsg.id,
               messageId: newMsg.message_id,
-              sender: newMsg.direction === 'inbound' ? 'contact' : 'user',
-              content: newMsg.message_body || '',
+              sender: newMsg.direction === "inbound" ? "contact" : "user",
+              content: newMsg.message_body || "",
               time: formatTime(newMsg.created_at),
               timestamp: newMsg.created_at,
               type: newMsg.message_type,
@@ -206,12 +242,15 @@ export default function MessagesView() {
 
             // Update messages if this is for the selected conversation
             const currentConv = selectedConversationRef.current;
-            if (currentConv && (currentConv.phone === contactPhone || 
-                newMsg.from_number === currentConv.phone || 
-                newMsg.to_number === currentConv.phone)) {
+            if (
+              currentConv &&
+              (currentConv.phone === contactPhone ||
+                newMsg.from_number === currentConv.phone ||
+                newMsg.to_number === currentConv.phone)
+            ) {
               setMessages((prev) => {
                 // Check if message already exists
-                if (prev.some(m => m.messageId === formattedMsg.messageId)) {
+                if (prev.some((m) => m.messageId === formattedMsg.messageId)) {
                   return prev;
                 }
                 return [...prev, formattedMsg];
@@ -220,8 +259,10 @@ export default function MessagesView() {
 
             // Update conversations list - add or update the conversation
             setConversations((prev) => {
-              const existingIndex = prev.findIndex(c => c.phone === contactPhone);
-              
+              const existingIndex = prev.findIndex(
+                (c) => c.phone === contactPhone
+              );
+
               const updatedConv: Conversation = {
                 id: contactPhone,
                 name: contactName,
@@ -229,7 +270,10 @@ export default function MessagesView() {
                 lastMessage: newMsg.message_body || `[${newMsg.message_type}]`,
                 time: formatRelativeTime(newMsg.created_at),
                 timestamp: newMsg.created_at,
-                unread: newMsg.direction === 'inbound' && newMsg.status !== 'read' ? 1 : 0,
+                unread:
+                  newMsg.direction === "inbound" && newMsg.status !== "read"
+                    ? 1
+                    : 0,
                 online: false,
               };
 
@@ -240,7 +284,11 @@ export default function MessagesView() {
                 updated[existingIndex] = {
                   ...updatedConv,
                   name: existing.name || updatedConv.name, // Keep existing name if available
-                  unread: existing.unread + (newMsg.direction === 'inbound' && newMsg.status !== 'read' ? 1 : 0),
+                  unread:
+                    existing.unread +
+                    (newMsg.direction === "inbound" && newMsg.status !== "read"
+                      ? 1
+                      : 0),
                 };
                 // Move to top
                 const [moved] = updated.splice(existingIndex, 1);
@@ -250,8 +298,7 @@ export default function MessagesView() {
                 return [updatedConv, ...prev];
               }
             });
-
-          } else if (payload.eventType === 'UPDATE') {
+          } else if (payload.eventType === "UPDATE") {
             // Update message status
             setMessages((prev) =>
               prev.map((msg) =>
@@ -262,7 +309,7 @@ export default function MessagesView() {
             );
 
             // Update conversation unread count if message marked as read
-            if (newMsg.status === 'read') {
+            if (newMsg.status === "read") {
               setConversations((prev) =>
                 prev.map((conv) =>
                   conv.phone === contactPhone
@@ -275,11 +322,11 @@ export default function MessagesView() {
         }
       )
       .subscribe((status) => {
-        console.log('🔌 Realtime subscription status:', status);
+        console.log("🔌 Realtime subscription status:", status);
       });
 
     return () => {
-      console.log('🔌 Cleaning up realtime subscription...');
+      console.log("🔌 Cleaning up realtime subscription...");
       supabase.removeChannel(channel);
     };
   }, []);
@@ -298,11 +345,13 @@ export default function MessagesView() {
       messageId: `temp-${Date.now()}`,
       sender: "user",
       content: messageText,
-      time: new Date().toLocaleTimeString("en-US", {
-        hour: "numeric",
-        minute: "2-digit",
-        hour12: true,
-      }).toLowerCase(),
+      time: new Date()
+        .toLocaleTimeString("en-US", {
+          hour: "numeric",
+          minute: "2-digit",
+          hour12: true,
+        })
+        .toLowerCase(),
       timestamp: new Date().toISOString(),
       type: "text",
       status: "sending",
@@ -326,18 +375,27 @@ export default function MessagesView() {
         setMessages((prev) =>
           prev.map((msg) =>
             msg.id === optimisticMessage.id
-              ? { ...msg, id: data.data.messageId, messageId: data.data.messageId, status: "sent" }
+              ? {
+                  ...msg,
+                  id: data.data.messageId,
+                  messageId: data.data.messageId,
+                  status: "sent",
+                }
               : msg
           )
         );
       } else {
         // Remove optimistic message on failure
-        setMessages((prev) => prev.filter((msg) => msg.id !== optimisticMessage.id));
+        setMessages((prev) =>
+          prev.filter((msg) => msg.id !== optimisticMessage.id)
+        );
         alert(data.message || "Failed to send message");
       }
     } catch (err) {
       console.error("Error sending message:", err);
-      setMessages((prev) => prev.filter((msg) => msg.id !== optimisticMessage.id));
+      setMessages((prev) =>
+        prev.filter((msg) => msg.id !== optimisticMessage.id)
+      );
       alert("Failed to send message. Please try again.");
     } finally {
       setSending(false);
@@ -373,10 +431,11 @@ export default function MessagesView() {
   };
 
   // Filter conversations by search
-  const filteredConversations = conversations.filter((conv) =>
-    conv.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    conv.phone.includes(searchQuery) ||
-    conv.lastMessage.toLowerCase().includes(searchQuery.toLowerCase())
+  const filteredConversations = conversations.filter(
+    (conv) =>
+      conv.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      conv.phone.includes(searchQuery) ||
+      conv.lastMessage.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
   // Group messages by date
@@ -410,12 +469,26 @@ export default function MessagesView() {
           <div className={styles.conversationListHeader}>
             <h2 className={styles.panelTitle}>Conversations</h2>
           </div>
-          <div style={{ padding: "2rem", textAlign: "center", color: "var(--dash-text-secondary)" }}>
+          <div
+            style={{
+              padding: "2rem",
+              textAlign: "center",
+              color: "var(--dash-text-secondary)",
+            }}
+          >
             Loading conversations...
           </div>
         </div>
         <div className={styles.chatArea}>
-          <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", color: "var(--dash-text-secondary)" }}>
+          <div
+            style={{
+              flex: 1,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              color: "var(--dash-text-secondary)",
+            }}
+          >
             Loading...
           </div>
         </div>
@@ -430,16 +503,39 @@ export default function MessagesView() {
           <div className={styles.conversationListHeader}>
             <h2 className={styles.panelTitle}>Conversations</h2>
           </div>
-          <div style={{ padding: "2rem", textAlign: "center", color: "var(--dash-danger)" }}>
+          <div
+            style={{
+              padding: "2rem",
+              textAlign: "center",
+              color: "var(--dash-danger)",
+            }}
+          >
             {error}
             <br />
-            <button onClick={fetchConversations} style={{ marginTop: "1rem", color: "var(--dash-accent)", cursor: "pointer", background: "none", border: "none" }}>
+            <button
+              onClick={fetchConversations}
+              style={{
+                marginTop: "1rem",
+                color: "var(--dash-accent)",
+                cursor: "pointer",
+                background: "none",
+                border: "none",
+              }}
+            >
               Try again
             </button>
           </div>
         </div>
         <div className={styles.chatArea}>
-          <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", color: "var(--dash-text-secondary)" }}>
+          <div
+            style={{
+              flex: 1,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              color: "var(--dash-text-secondary)",
+            }}
+          >
             Select a conversation to view messages
           </div>
         </div>
@@ -454,7 +550,11 @@ export default function MessagesView() {
         <div className={styles.conversationListHeader}>
           <h2 className={styles.panelTitle}>Conversations</h2>
           <div className={styles.conversationFilters}>
-            <select className={styles.filterSelect} value={filter} onChange={(e) => setFilter(e.target.value)}>
+            <select
+              className={styles.filterSelect}
+              value={filter}
+              onChange={(e) => setFilter(e.target.value)}
+            >
               <option value="all">{conversations.length} All</option>
               <option value="unread">Unread</option>
             </select>
@@ -466,7 +566,14 @@ export default function MessagesView() {
         </div>
 
         <div className={styles.conversationSearch}>
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+          <svg
+            width="16"
+            height="16"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+          >
             <circle cx="11" cy="11" r="8" />
             <line x1="21" y1="21" x2="16.65" y2="16.65" />
           </svg>
@@ -481,14 +588,24 @@ export default function MessagesView() {
 
         <div className={styles.conversationItems}>
           {filteredConversations.length === 0 ? (
-            <div style={{ padding: "2rem", textAlign: "center", color: "var(--dash-text-secondary)" }}>
+            <div
+              style={{
+                padding: "2rem",
+                textAlign: "center",
+                color: "var(--dash-text-secondary)",
+              }}
+            >
               {searchQuery ? "No conversations found" : "No conversations yet"}
             </div>
           ) : (
             filteredConversations.map((conv) => (
               <div
                 key={conv.id}
-                className={`${styles.conversationItem} ${selectedConversation?.id === conv.id ? styles.conversationActive : ""}`}
+                className={`${styles.conversationItem} ${
+                  selectedConversation?.id === conv.id
+                    ? styles.conversationActive
+                    : ""
+                }`}
                 onClick={() => setSelectedConversation(conv)}
               >
                 <div className={styles.conversationAvatar}>
@@ -501,8 +618,12 @@ export default function MessagesView() {
                     <span className={styles.conversationTime}>{conv.time}</span>
                   </div>
                   <div className={styles.conversationBottom}>
-                    <span className={styles.conversationPreview}>{conv.lastMessage}</span>
-                    {conv.unread > 0 && <span className={styles.unreadBadge}>{conv.unread}</span>}
+                    <span className={styles.conversationPreview}>
+                      {conv.lastMessage}
+                    </span>
+                    {conv.unread > 0 && (
+                      <span className={styles.unreadBadge}>{conv.unread}</span>
+                    )}
                   </div>
                 </div>
               </div>
@@ -517,27 +638,65 @@ export default function MessagesView() {
           <>
             <div className={styles.chatHeader}>
               <div className={styles.chatHeaderLeft}>
-                <div className={styles.chatAvatar}>{getInitials(selectedConversation.name)}</div>
+                <div className={styles.chatAvatar}>
+                  {getInitials(selectedConversation.name)}
+                </div>
                 <div>
-                  <span className={styles.chatName}>{selectedConversation.name}</span>
-                  <div style={{ fontSize: "0.75rem", color: "var(--dash-text-muted)" }}>{selectedConversation.phone}</div>
+                  <span className={styles.chatName}>
+                    {selectedConversation.name}
+                  </span>
+                  <div
+                    style={{
+                      fontSize: "0.75rem",
+                      color: "var(--dash-text-muted)",
+                    }}
+                  >
+                    {selectedConversation.phone}
+                  </div>
                 </div>
               </div>
               <div className={styles.chatHeaderActions}>
-                <button className={styles.markReadBtn} onClick={handleMarkAsRead}>
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <button
+                  className={styles.markReadBtn}
+                  onClick={handleMarkAsRead}
+                >
+                  <svg
+                    width="16"
+                    height="16"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                  >
                     <polyline points="20 6 9 17 4 12" />
                   </svg>
                   Mark As Read
                 </button>
-                <button className={styles.togglePanelBtn} onClick={() => setShowContactPanel(!showContactPanel)}>
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <button
+                  className={styles.togglePanelBtn}
+                  onClick={() => setShowContactPanel(!showContactPanel)}
+                >
+                  <svg
+                    width="18"
+                    height="18"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                  >
                     <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
                     <line x1="15" y1="3" x2="15" y2="21" />
                   </svg>
                 </button>
                 <button className={styles.moreBtn}>
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <svg
+                    width="18"
+                    height="18"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                  >
                     <circle cx="12" cy="12" r="1" />
                     <circle cx="19" cy="12" r="1" />
                     <circle cx="5" cy="12" r="1" />
@@ -548,9 +707,23 @@ export default function MessagesView() {
 
             <div className={styles.chatMessages}>
               {messagesLoading ? (
-                <div style={{ textAlign: "center", padding: "2rem", color: "var(--dash-text-secondary)" }}>Loading messages...</div>
+                <div
+                  style={{
+                    textAlign: "center",
+                    padding: "2rem",
+                    color: "var(--dash-text-secondary)",
+                  }}
+                >
+                  Loading messages...
+                </div>
               ) : messages.length === 0 ? (
-                <div style={{ textAlign: "center", padding: "2rem", color: "var(--dash-text-secondary)" }}>
+                <div
+                  style={{
+                    textAlign: "center",
+                    padding: "2rem",
+                    color: "var(--dash-text-secondary)",
+                  }}
+                >
                   No messages yet. Send a message to start the conversation.
                 </div>
               ) : (
@@ -560,15 +733,30 @@ export default function MessagesView() {
                       <span>{group.date}</span>
                     </div>
                     {group.messages.map((msg) => (
-                      <div key={msg.id} className={`${styles.messageWrapper} ${msg.sender === "user" ? styles.messageOut : styles.messageIn}`}>
+                      <div
+                        key={msg.id}
+                        className={`${styles.messageWrapper} ${
+                          msg.sender === "user"
+                            ? styles.messageOut
+                            : styles.messageIn
+                        }`}
+                      >
                         <div className={styles.messageBubble}>
-                          {msg.type === "text" && <p className={styles.messageText}>{msg.content}</p>}
+                          {msg.type === "text" && (
+                            <p className={styles.messageText}>{msg.content}</p>
+                          )}
                           {msg.type === "audio" && (
                             <div className={styles.audioMessage}>
                               <button className={styles.playBtn}>▶</button>
                               <div className={styles.audioWave}>
                                 {[...Array(20)].map((_, i) => (
-                                  <span key={i} className={styles.audioBar} style={{ height: `${Math.random() * 100}%` }} />
+                                  <span
+                                    key={i}
+                                    className={styles.audioBar}
+                                    style={{
+                                      height: `${Math.random() * 100}%`,
+                                    }}
+                                  />
                                 ))}
                               </div>
                               <span className={styles.audioDuration}>0:00</span>
@@ -577,11 +765,32 @@ export default function MessagesView() {
                           {msg.type === "image" && (
                             <div className={styles.imageMessage}>
                               {msg.mediaUrl ? (
-                                <img src={msg.mediaUrl} alt="Image" style={{ maxWidth: "200px", borderRadius: "12px" }} />
+                                <img
+                                  src={msg.mediaUrl}
+                                  alt="Image"
+                                  style={{
+                                    maxWidth: "200px",
+                                    borderRadius: "12px",
+                                  }}
+                                />
                               ) : (
                                 <div className={styles.imagePlaceholder}>
-                                  <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1">
-                                    <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
+                                  <svg
+                                    width="48"
+                                    height="48"
+                                    viewBox="0 0 24 24"
+                                    fill="none"
+                                    stroke="currentColor"
+                                    strokeWidth="1"
+                                  >
+                                    <rect
+                                      x="3"
+                                      y="3"
+                                      width="18"
+                                      height="18"
+                                      rx="2"
+                                      ry="2"
+                                    />
                                     <circle cx="8.5" cy="8.5" r="1.5" />
                                     <polyline points="21 15 16 10 5 21" />
                                   </svg>
@@ -589,22 +798,62 @@ export default function MessagesView() {
                               )}
                             </div>
                           )}
-                          {(msg.type === "document" || msg.type === "video") && (
+                          {(msg.type === "document" ||
+                            msg.type === "video") && (
                             <div className={styles.imageMessage}>
                               <div className={styles.imagePlaceholder}>
-                                <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1">
+                                <svg
+                                  width="48"
+                                  height="48"
+                                  viewBox="0 0 24 24"
+                                  fill="none"
+                                  stroke="currentColor"
+                                  strokeWidth="1"
+                                >
                                   <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
                                   <polyline points="14 2 14 8 20 8" />
                                 </svg>
-                                <span style={{ fontSize: "0.75rem", marginTop: "0.5rem" }}>{msg.type === "video" ? "Video" : "Document"}</span>
+                                <span
+                                  style={{
+                                    fontSize: "0.75rem",
+                                    marginTop: "0.5rem",
+                                  }}
+                                >
+                                  {msg.type === "video" ? "Video" : "Document"}
+                                </span>
                               </div>
                             </div>
                           )}
-                          <div style={{ display: "flex", alignItems: "center", gap: "0.25rem", justifyContent: "flex-end" }}>
-                            <span className={styles.messageTime}>{msg.time}</span>
+                          <div
+                            style={{
+                              display: "flex",
+                              alignItems: "center",
+                              gap: "0.25rem",
+                              justifyContent: "flex-end",
+                            }}
+                          >
+                            <span className={styles.messageTime}>
+                              {msg.time}
+                            </span>
                             {msg.sender === "user" && (
-                              <span style={{ fontSize: "0.7rem", color: msg.status === "read" ? "var(--dash-accent)" : "var(--dash-text-muted)" }}>
-                                {msg.status === "sending" ? "○" : msg.status === "sent" ? "✓" : msg.status === "delivered" ? "✓✓" : msg.status === "read" ? "✓✓" : ""}
+                              <span
+                                style={{
+                                  fontSize: "0.7rem",
+                                  color:
+                                    msg.status === "read"
+                                      ? "var(--dash-accent)"
+                                      : "var(--dash-text-muted)",
+                                }}
+                              >
+                                {msg.status === "sending"
+                                  ? "○"
+                                  : msg.status === "sent"
+                                  ? "✓"
+                                  : msg.status === "delivered"
+                                  ? "✓✓"
+                                  : msg.status === "read"
+                                  ? "✓✓"
+                                  : ""}
                               </span>
                             )}
                           </div>
@@ -635,19 +884,40 @@ export default function MessagesView() {
                 />
                 <div className={styles.inputActions}>
                   <button className={styles.attachBtn}>
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <svg
+                      width="18"
+                      height="18"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                    >
                       <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
                       <circle cx="8.5" cy="8.5" r="1.5" />
                       <polyline points="21 15 16 10 5 21" />
                     </svg>
                   </button>
                   <button className={styles.attachBtn}>
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <svg
+                      width="18"
+                      height="18"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                    >
                       <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48" />
                     </svg>
                   </button>
                   <button className={styles.attachBtn}>
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <svg
+                      width="18"
+                      height="18"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                    >
                       <circle cx="12" cy="12" r="10" />
                       <path d="M8 14s1.5 2 4 2 4-2 4-2" />
                       <line x1="9" y1="9" x2="9.01" y2="9" />
@@ -656,9 +926,21 @@ export default function MessagesView() {
                   </button>
                 </div>
               </div>
-              <button className={styles.sendBtn} onClick={handleSendMessage} disabled={!messageInput.trim() || sending} style={{ opacity: !messageInput.trim() || sending ? 0.5 : 1 }}>
+              <button
+                className={styles.sendBtn}
+                onClick={handleSendMessage}
+                disabled={!messageInput.trim() || sending}
+                style={{ opacity: !messageInput.trim() || sending ? 0.5 : 1 }}
+              >
                 {sending ? "Sending..." : "Send"}
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <svg
+                  width="16"
+                  height="16"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                >
                   <line x1="22" y1="2" x2="11" y2="13" />
                   <polygon points="22 2 15 22 11 13 2 9 22 2" />
                 </svg>
@@ -666,8 +948,26 @@ export default function MessagesView() {
             </div>
           </>
         ) : (
-          <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", color: "var(--dash-text-secondary)", gap: "1rem" }}>
-            <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1" style={{ opacity: 0.5 }}>
+          <div
+            style={{
+              flex: 1,
+              display: "flex",
+              flexDirection: "column",
+              alignItems: "center",
+              justifyContent: "center",
+              color: "var(--dash-text-secondary)",
+              gap: "1rem",
+            }}
+          >
+            <svg
+              width="64"
+              height="64"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1"
+              style={{ opacity: 0.5 }}
+            >
               <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
             </svg>
             <p>Select a conversation to view messages</p>
@@ -680,8 +980,18 @@ export default function MessagesView() {
         <div className={styles.contactPanel}>
           <div className={styles.contactHeader}>
             <h3 className={styles.panelTitle}>Details</h3>
-            <button className={styles.closeBtn} onClick={() => setShowContactPanel(false)}>
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <button
+              className={styles.closeBtn}
+              onClick={() => setShowContactPanel(false)}
+            >
+              <svg
+                width="18"
+                height="18"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+              >
                 <line x1="18" y1="6" x2="6" y2="18" />
                 <line x1="6" y1="6" x2="18" y2="18" />
               </svg>
@@ -689,7 +999,9 @@ export default function MessagesView() {
           </div>
 
           <div className={styles.contactProfile}>
-            <div className={styles.contactAvatarLarge}>{getInitials(selectedConversation.name)}</div>
+            <div className={styles.contactAvatarLarge}>
+              {getInitials(selectedConversation.name)}
+            </div>
             <h4 className={styles.contactName}>{selectedConversation.name}</h4>
             <span className={styles.contactRole}>WhatsApp Contact</span>
           </div>
@@ -701,36 +1013,137 @@ export default function MessagesView() {
                 <span className={styles.fieldIcon}>📞</span>
                 <div className={styles.fieldContent}>
                   <span className={styles.fieldLabel}>Phone</span>
-                  <span className={styles.fieldValue}>{selectedConversation.phone}</span>
+                  <span className={styles.fieldValue}>
+                    {selectedConversation.phone}
+                  </span>
                 </div>
               </div>
               <div className={styles.contactField}>
                 <span className={styles.fieldIcon}>💬</span>
                 <div className={styles.fieldContent}>
-                  <span className={styles.fieldLabel}>Messages</span>
-                  <span className={styles.fieldValue}>{messages.length} messages</span>
+                  <span className={styles.fieldLabel}>Total Messages</span>
+                  <span className={styles.fieldValue}>
+                    {selectedConversation.totalMessages || messages.length}{" "}
+                    messages
+                  </span>
+                </div>
+              </div>
+              <div className={styles.contactField}>
+                <span className={styles.fieldIcon}>🌐</span>
+                <div className={styles.fieldContent}>
+                  <span className={styles.fieldLabel}>Language</span>
+                  <span className={styles.fieldValue}>
+                    {selectedConversation.language === "hi"
+                      ? "Hindi"
+                      : selectedConversation.language === "hinglish"
+                      ? "Hinglish"
+                      : selectedConversation.language || "English"}
+                  </span>
                 </div>
               </div>
               <div className={styles.contactField}>
                 <span className={styles.fieldIcon}>📅</span>
                 <div className={styles.fieldContent}>
                   <span className={styles.fieldLabel}>Last Active</span>
-                  <span className={styles.fieldValue}>{selectedConversation.time}</span>
+                  <span className={styles.fieldValue}>
+                    {selectedConversation.time}
+                  </span>
                 </div>
               </div>
             </div>
 
+            {/* AI Stats Section */}
             <div className={styles.contactSection}>
-              <h5 className={styles.sectionTitle}>Tags</h5>
+              <h5 className={styles.sectionTitle}>🤖 AI Stats</h5>
+              <div className={styles.contactField}>
+                <span className={styles.fieldIcon}>🤖</span>
+                <div className={styles.fieldContent}>
+                  <span className={styles.fieldLabel}>AI Replies</span>
+                  <span className={styles.fieldValue}>
+                    {selectedConversation.aiReplies || 0}
+                  </span>
+                </div>
+              </div>
+              <div className={styles.contactField}>
+                <span className={styles.fieldIcon}>👤</span>
+                <div className={styles.fieldContent}>
+                  <span className={styles.fieldLabel}>Human Replies</span>
+                  <span className={styles.fieldValue}>
+                    {selectedConversation.humanReplies || 0}
+                  </span>
+                </div>
+              </div>
+              {(selectedConversation.aiReplies || 0) > 0 && (
+                <div className={styles.contactField}>
+                  <span className={styles.fieldIcon}>📊</span>
+                  <div className={styles.fieldContent}>
+                    <span className={styles.fieldLabel}>
+                      AI Automation Rate
+                    </span>
+                    <span className={styles.fieldValue}>
+                      {Math.round(
+                        ((selectedConversation.aiReplies || 0) /
+                          ((selectedConversation.aiReplies || 0) +
+                            (selectedConversation.humanReplies || 0))) *
+                          100
+                      )}
+                      %
+                    </span>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className={styles.contactSection}>
+              <h5 className={styles.sectionTitle}>Tags & Status</h5>
               <div className={styles.tagsContainer}>
                 <span className={styles.tag}>WhatsApp</span>
-                {selectedConversation.unread > 0 && <span className={styles.tag}>Unread</span>}
+                {selectedConversation.unread > 0 && (
+                  <span
+                    className={styles.tag}
+                    style={{ background: "var(--dash-warning)", color: "#000" }}
+                  >
+                    {selectedConversation.unread} Unread
+                  </span>
+                )}
+                {selectedConversation.priority === "high" && (
+                  <span
+                    className={styles.tag}
+                    style={{ background: "var(--dash-danger)" }}
+                  >
+                    High Priority
+                  </span>
+                )}
+                {selectedConversation.priority === "urgent" && (
+                  <span
+                    className={styles.tag}
+                    style={{ background: "#ff0000" }}
+                  >
+                    🚨 Urgent
+                  </span>
+                )}
+                {selectedConversation.status === "resolved" && (
+                  <span
+                    className={styles.tag}
+                    style={{ background: "var(--dash-success)" }}
+                  >
+                    ✓ Resolved
+                  </span>
+                )}
+                {selectedConversation.tags?.map((tag) => (
+                  <span key={tag} className={styles.tag}>
+                    {tag}
+                  </span>
+                ))}
               </div>
             </div>
 
             <div className={styles.contactSection}>
               <h5 className={styles.sectionTitle}>Notes</h5>
-              <textarea className={styles.notesInput} placeholder="Add notes about this contact..." />
+              <textarea
+                className={styles.notesInput}
+                placeholder="Add notes about this contact..."
+              />
             </div>
           </div>
         </div>
