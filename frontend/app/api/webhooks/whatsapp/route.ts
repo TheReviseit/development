@@ -162,9 +162,6 @@ export async function POST(request: NextRequest) {
           if (value.messages) {
             for (const message of value.messages) {
               try {
-                // Store message in database
-                // Note: This requires a conversation_id and business_id from the new schema
-                // For now, we'll need to get or create a conversation first
                 const { supabaseAdmin } = await import("@/lib/supabase/server");
 
                 // Get or create conversation for this contact

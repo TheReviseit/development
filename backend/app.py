@@ -63,12 +63,24 @@ load_dotenv()
 app = Flask(__name__)
 
 # Configure CORS to allow requests from frontend
+# Supports both localhost (development) and production URL (Vercel)
 frontend_url = os.getenv('FRONTEND_URL', 'http://localhost:3000')
+
+# Build list of allowed origins
+allowed_origins = [
+    'http://localhost:3000',  # Local development
+    'http://localhost:3001',  # Alternative local port
+]
+
+# Add production frontend URL if set
+if frontend_url and frontend_url not in allowed_origins:
+    allowed_origins.append(frontend_url)
+
 CORS(app, resources={
     r"/api/*": {
-        "origins": [frontend_url],
+        "origins": allowed_origins,
         "methods": ["GET", "POST", "OPTIONS"],
-        "allow_headers": ["Content-Type"]
+        "allow_headers": ["Content-Type", "Authorization"]
     }
 })
 
@@ -577,7 +589,8 @@ def internal_error(error):
 
 
 if __name__ == '__main__':
-    port = int(os.getenv('FLASK_PORT', 5000))
+    # PORT is set by Render, FLASK_PORT is for local development
+    port = int(os.getenv('PORT', os.getenv('FLASK_PORT', 5000)))
     debug = os.getenv('FLASK_ENV') == 'development'
     
     print(f'\n🚀 WhatsApp Admin API Server')
