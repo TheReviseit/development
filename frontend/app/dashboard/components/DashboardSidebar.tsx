@@ -1,6 +1,8 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import Link from "next/link";
+import { usePathname } from "next/navigation";
 import styles from "../dashboard.module.css";
 
 interface NavItem {
@@ -8,6 +10,7 @@ interface NavItem {
   label: string;
   icon: React.ReactNode;
   badge?: number;
+  href: string;
 }
 
 interface DashboardSidebarProps {
@@ -218,17 +221,43 @@ export default function DashboardSidebar({
   }, []);
 
   const navItems: NavItem[] = [
-    { id: "analytics", label: "Analytics", icon: <AnalyticsIcon /> },
+    {
+      id: "analytics",
+      label: "Analytics",
+      icon: <AnalyticsIcon />,
+      href: "/dashboard",
+    },
     {
       id: "messages",
       label: "Messages",
       icon: <MessagesIcon />,
       badge: userCount > 0 ? userCount : undefined,
+      href: "/dashboard/messages",
     },
-    { id: "templates", label: "Templates", icon: <TemplatesIcon /> },
-    { id: "contacts", label: "Contacts", icon: <ContactsIcon /> },
-    { id: "campaigns", label: "Campaigns", icon: <CampaignsIcon /> },
-    { id: "bot-settings", label: "AI Settings", icon: <BotIcon /> },
+    {
+      id: "templates",
+      label: "Templates",
+      icon: <TemplatesIcon />,
+      href: "/dashboard/templates",
+    },
+    {
+      id: "contacts",
+      label: "Contacts",
+      icon: <ContactsIcon />,
+      href: "/dashboard/contacts",
+    },
+    {
+      id: "campaigns",
+      label: "Campaigns",
+      icon: <CampaignsIcon />,
+      href: "/dashboard/campaigns",
+    },
+    {
+      id: "bot-settings",
+      label: "AI Settings",
+      icon: <BotIcon />,
+      href: "/dashboard/bot-settings",
+    },
   ];
 
   const displayName = userName || userEmail?.split("@")[0] || "User";
@@ -264,12 +293,12 @@ export default function DashboardSidebar({
       {/* Navigation */}
       <nav className={styles.sidebarNav}>
         {navItems.map((item) => (
-          <button
+          <Link
             key={item.id}
+            href={item.href}
             className={`${styles.navItem} ${
               activeSection === item.id ? styles.navItemActive : ""
             }`}
-            onClick={() => onSectionChange(item.id)}
             title={isCollapsed ? item.label : undefined}
           >
             <span className={styles.navIcon}>{item.icon}</span>
@@ -284,24 +313,24 @@ export default function DashboardSidebar({
             {isCollapsed && item.badge && (
               <span className={styles.navBadgeCollapsed}>{item.badge}</span>
             )}
-          </button>
+          </Link>
         ))}
       </nav>
 
       {/* Bottom Section */}
       <div className={styles.sidebarFooter}>
-        <button
+        <Link
+          href="/dashboard/settings"
           className={`${styles.navItem} ${
             activeSection === "settings" ? styles.navItemActive : ""
           }`}
-          onClick={() => onSectionChange("settings")}
           title={isCollapsed ? "Settings" : undefined}
         >
           <span className={styles.navIcon}>
             <SettingsIcon />
           </span>
           {!isCollapsed && <span className={styles.navLabel}>Settings</span>}
-        </button>
+        </Link>
 
         {/* User Profile */}
         <div className={styles.userProfile}>
