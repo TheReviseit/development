@@ -15,6 +15,7 @@ try:
     from supabase_client import (
         get_credentials_by_phone_number_id, 
         get_business_data_for_user,
+        get_firebase_uid_from_user_id,
         store_message,
         update_message_status
     )
@@ -24,6 +25,7 @@ except ImportError as e:
     SUPABASE_AVAILABLE = False
     get_credentials_by_phone_number_id = None
     get_business_data_for_user = None
+    get_firebase_uid_from_user_id = None
     store_message = None
     update_message_status = None
 
@@ -276,18 +278,22 @@ def webhook():
                 user_id = credentials.get('user_id')
                 
                 # Get business-specific data for AI context
-                # Priority: 1. Firestore, 2. Supabase, 3. Cache, 4. Default
+                # Priority: 1. Firestore (AI Settings), 2. Cache, 3. Default
                 try:
-                    # Try Firestore first (has complete business profile)
-                    if FIREBASE_AVAILABLE and get_business_data_from_firestore:
-                        business_data = get_business_data_from_firestore(user_id)
+                    # Convert Supabase UUID to Firebase UID for Firestore lookup
+                    firebase_uid = None
+                    if get_firebase_uid_from_user_id:
+                        firebase_uid = get_firebase_uid_from_user_id(user_id)
                     
-                    # Fallback to Supabase if Firestore didn't have data
-                    if not business_data and get_business_data_for_user:
-                        business_data = get_business_data_for_user(user_id)
+                    # Try Firestore first (has complete business profile from AI Settings)
+                    if firebase_uid and FIREBASE_AVAILABLE and get_business_data_from_firestore:
+                        business_data = get_business_data_from_firestore(firebase_uid)
                     
-                    # Use default if still no data
+                    # Use cache or default if Firestore doesn't have data
+                    # NOTE: We intentionally skip Supabase fallback as it returns
+                    # Facebook Business Manager metadata, not AI Settings data
                     if not business_data:
+                        print(f"⚠️ No AI Settings found in Firestore for Firebase UID: {firebase_uid}")
                         business_data = BUSINESS_DATA_CACHE.get('current', DEFAULT_BUSINESS_DATA)
                     
                     # Ensure business_name is set

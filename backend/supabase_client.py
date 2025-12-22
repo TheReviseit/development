@@ -148,6 +148,36 @@ def get_credentials_by_phone_number_id(phone_number_id: str) -> Optional[Dict[st
         return None
 
 
+def get_firebase_uid_from_user_id(user_id: str) -> Optional[str]:
+    """
+    Get Firebase UID from Supabase internal user_id.
+    
+    The connected_phone_numbers table stores Supabase's internal UUID as user_id,
+    but Firestore stores business data under Firebase Auth UID.
+    
+    Args:
+        user_id: Supabase internal user UUID
+        
+    Returns:
+        Firebase UID string or None if not found
+    """
+    client = get_supabase_client()
+    if not client:
+        return None
+    
+    try:
+        result = client.table('users').select('firebase_uid').eq('id', user_id).single().execute()
+        
+        if result.data:
+            firebase_uid = result.data.get('firebase_uid')
+            print(f"🔗 Mapped Supabase user {user_id[:8]}... → Firebase UID {firebase_uid[:10] if firebase_uid else 'None'}...")
+            return firebase_uid
+    except Exception as e:
+        print(f"⚠️ Could not get Firebase UID for user {user_id}: {e}")
+    
+    return None
+
+
 def get_business_data_for_user(user_id: str) -> Optional[Dict[str, Any]]:
     """
     Fetch business data for AI context based on user_id.
