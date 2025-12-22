@@ -143,10 +143,20 @@ class BusinessData(BaseModel):
         if self.description:
             parts.append(f"About: {self.description}")
         
-        # Contact info
-        if self.contact.phone or self.contact.whatsapp:
-            contact = self.contact.phone or self.contact.whatsapp
-            parts.append(f"Contact: {contact}")
+        # Contact info - include all available contact methods
+        contact_parts = []
+        if self.contact.phone:
+            contact_parts.append(f"Phone: {self.contact.phone}")
+        if self.contact.whatsapp and self.contact.whatsapp != self.contact.phone:
+            contact_parts.append(f"WhatsApp: {self.contact.whatsapp}")
+        if self.contact.email:
+            contact_parts.append(f"Email: {self.contact.email}")
+        if self.contact.website:
+            contact_parts.append(f"Website: {self.contact.website}")
+        
+        if contact_parts:
+            parts.append("\nContact Information:")
+            parts.extend(contact_parts)
         
         # Location
         if self.location.address:

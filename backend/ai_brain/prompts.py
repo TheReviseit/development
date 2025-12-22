@@ -358,12 +358,16 @@ def format_business_data_for_prompt(data: Dict[str, Any], max_chars: int = 2000)
     if data.get("description"):
         parts.append(f"About: {data['description'][:200]}")
     
-    # Contact
+    # Contact - include all available methods
     contact = data.get("contact", {})
     if contact.get("phone"):
         parts.append(f"Phone: {contact['phone']}")
-    if contact.get("whatsapp"):
+    if contact.get("whatsapp") and contact.get("whatsapp") != contact.get("phone"):
         parts.append(f"WhatsApp: {contact['whatsapp']}")
+    if contact.get("email"):
+        parts.append(f"Email: {contact['email']}")
+    if contact.get("website"):
+        parts.append(f"Website: {contact['website']}")
     
     # Location
     location = data.get("location", {})
