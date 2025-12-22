@@ -78,6 +78,12 @@ INDUSTRY_TONES = {
         "emoji_set": "🎓📚✨🌟📖",
         "greeting_style": "welcoming and supportive",
     },
+    "ecommerce": {
+        "personality": "helpful, knowledgeable, and sales-oriented",
+        "style": "informative with product expertise",
+        "emoji_set": "🛒📦✨🎁💳",
+        "greeting_style": "welcoming online shopper experience",
+    },
     "other": {
         "personality": "friendly, professional, and helpful",
         "style": "balanced and adaptable",
@@ -347,7 +353,7 @@ Generate a helpful, accurate response following all the rules above. Remember - 
     return system_prompt, user_prompt
 
 
-def format_business_data_for_prompt(data: Dict[str, Any], max_chars: int = 2000) -> str:
+def format_business_data_for_prompt(data: Dict[str, Any], max_chars: int = 2500) -> str:
     """Format business data into a concise prompt-friendly string."""
     parts = []
     
@@ -357,6 +363,15 @@ def format_business_data_for_prompt(data: Dict[str, Any], max_chars: int = 2000)
     
     if data.get("description"):
         parts.append(f"About: {data['description'][:200]}")
+    
+    # Brand Voice - tagline and USPs
+    brand_voice = data.get("brand_voice", {})
+    if brand_voice.get("tagline"):
+        parts.append(f"Tagline: {brand_voice['tagline']}")
+    if brand_voice.get("unique_selling_points"):
+        usps = brand_voice["unique_selling_points"]
+        if usps:
+            parts.append(f"USPs: {', '.join(usps[:5])}")
     
     # Contact - include all available methods
     contact = data.get("contact", {})
@@ -368,6 +383,19 @@ def format_business_data_for_prompt(data: Dict[str, Any], max_chars: int = 2000)
         parts.append(f"Email: {contact['email']}")
     if contact.get("website"):
         parts.append(f"Website: {contact['website']}")
+    
+    # Social Media
+    social = data.get("social_media", {})
+    social_links = []
+    if social.get("instagram"):
+        social_links.append(f"Instagram: {social['instagram']}")
+    if social.get("facebook"):
+        social_links.append(f"Facebook: {social['facebook']}")
+    if social.get("youtube"):
+        social_links.append(f"YouTube: {social['youtube']}")
+    if social_links:
+        parts.append("\nSOCIAL MEDIA:")
+        parts.extend(social_links)
     
     # Location
     location = data.get("location", {})
@@ -387,8 +415,10 @@ def format_business_data_for_prompt(data: Dict[str, Any], max_chars: int = 2000)
             name = p.get("name", "")
             price = p.get("price")
             price_str = f"₹{price}" if price else "Price on request"
+            stock = p.get("stock_status", "")
+            stock_str = f" [{stock}]" if stock else ""
             desc = p.get("description", "")[:50] if p.get("description") else ""
-            line = f"- {name}: {price_str}"
+            line = f"- {name}: {price_str}{stock_str}"
             if desc:
                 line += f" ({desc}...)"
             parts.append(line)
@@ -416,6 +446,29 @@ def format_business_data_for_prompt(data: Dict[str, Any], max_chars: int = 2000)
             parts.append(f"- Cancellation: {policies['cancellation'][:100]}")
         if policies.get("payment_methods"):
             parts.append(f"- Payment: {', '.join(policies['payment_methods'])}")
+    
+    # E-commerce Policies (for ecommerce/retail)
+    industry = data.get("industry", "")
+    if industry in ["ecommerce", "retail"]:
+        ecom = data.get("ecommerce_policies", {})
+        if any([ecom.get("shipping_policy"), ecom.get("return_policy"), ecom.get("cod_available")]):
+            parts.append("\nE-COMMERCE POLICIES:")
+            if ecom.get("shipping_policy"):
+                parts.append(f"- Shipping: {ecom['shipping_policy'][:100]}")
+            if ecom.get("shipping_charges"):
+                parts.append(f"- Shipping Charges: {ecom['shipping_charges']}")
+            if ecom.get("estimated_delivery"):
+                parts.append(f"- Delivery Time: {ecom['estimated_delivery']}")
+            if ecom.get("cod_available"):
+                parts.append("- COD: Available")
+            if ecom.get("return_policy"):
+                parts.append(f"- Returns: {ecom['return_policy'][:100]}")
+            if ecom.get("return_window"):
+                parts.append(f"- Return Window: {ecom['return_window']} days")
+            if ecom.get("warranty_policy"):
+                parts.append(f"- Warranty: {ecom['warranty_policy'][:100]}")
+            if ecom.get("international_shipping"):
+                parts.append("- International Shipping: Available")
     
     # FAQs
     faqs = data.get("faqs", [])
