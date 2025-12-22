@@ -163,24 +163,53 @@ export async function POST(request: NextRequest) {
             for (const message of value.messages) {
               try {
                 // Store message in database
+                // Note: This requires a conversation_id and business_id from the new schema
+                // For now, we'll need to get or create a conversation first
+                const { supabaseAdmin } = await import("@/lib/supabase/server");
+
+                // Get or create conversation for this contact
+                const contactNumber = message.from;
+                const { data: existingConversation } = await supabaseAdmin
+                  .from("whatsapp_conversations")
+                  .select("id")
+                  .eq("phone_number_id", phoneNumber.id)
+                  .eq("contact_phone", contactNumber)
+                  .single();
+
+                let conversationId: string;
+                if (existingConversation) {
+                  conversationId = existingConversation.id;
+                } else {
+                  // Create new conversation
+                  const { data: newConversation, error: convError } =
+                    await supabaseAdmin
+                      .from("whatsapp_conversations")
+                      .insert({
+                        phone_number_id: phoneNumber.id,
+                        business_id: phoneNumber.business_manager_id,
+                        contact_phone: contactNumber,
+                        contact_name:
+                          value.contacts?.[0]?.profile?.name || null,
+                        status: "active",
+                      })
+                      .select("id")
+                      .single();
+
+                  if (convError || !newConversation) {
+                    console.error("Failed to create conversation:", convError);
+                    continue;
+                  }
+                  conversationId = newConversation.id;
+                }
+
                 await createMessage({
-                  phone_number_id: phoneNumber.id,
-                  user_id: phoneNumber.user_id,
-                  message_id: message.id,
+                  conversation_id: conversationId,
+                  business_id: phoneNumber.business_manager_id,
                   wamid: message.id,
                   direction: "inbound",
-                  from_number: message.from,
-                  to_number: value.metadata.display_phone_number,
                   message_type: message.type,
-                  message_body: message.text?.body ?? undefined,
+                  content: message.text?.body ?? undefined,
                   status: "delivered",
-                  sent_at: new Date(
-                    parseInt(message.timestamp) * 1000
-                  ).toISOString(),
-                  conversation_origin: "user_initiated",
-                  metadata: {
-                    contact_name: value.contacts?.[0]?.profile?.name || null,
-                  },
                 });
 
                 console.log(`Stored incoming message ${message.id}`);
