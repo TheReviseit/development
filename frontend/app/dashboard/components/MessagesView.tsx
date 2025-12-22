@@ -265,6 +265,9 @@ export default function MessagesView() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const selectedConversationRef = useRef<Conversation | null>(null);
   const conversationsRef = useRef<Conversation[]>([]);
+  const messagesRef = useRef<Message[]>([]);
+  // Track previous conversation ID to avoid fetching on object updates
+  const prevSelectedConversationIdRef = useRef<string | null>(null);
 
   // Keep refs in sync with state for use in realtime callback
   useEffect(() => {
@@ -274,6 +277,10 @@ export default function MessagesView() {
   useEffect(() => {
     conversationsRef.current = conversations;
   }, [conversations]);
+
+  useEffect(() => {
+    messagesRef.current = messages;
+  }, [messages]);
 
   // Fetch conversations on mount
   const fetchConversations = useCallback(async () => {
@@ -329,11 +336,18 @@ export default function MessagesView() {
     }
   }, []);
 
+  // Only fetch messages when the conversation ID changes, not when the object updates
   useEffect(() => {
-    if (selectedConversation) {
+    const currentId = selectedConversation?.id || null;
+    const previousId = prevSelectedConversationIdRef.current;
+
+    // Only fetch if the conversation ID actually changed
+    if (currentId && currentId !== previousId && selectedConversation) {
+      prevSelectedConversationIdRef.current = currentId;
       fetchMessages(selectedConversation.phone);
     }
-  }, [selectedConversation, fetchMessages]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedConversation?.id]);
 
   // Scroll to bottom when messages change
   useEffect(() => {

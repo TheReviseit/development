@@ -203,15 +203,21 @@ class WhatsAppService:
         self,
         phone_number_id: str = None,
         access_token: str = None,
-        message_id: str = None
+        message_id: str = None,
+        show_typing: bool = False
     ) -> Dict[str, Any]:
         """
-        Mark a received message as read.
+        Mark a received message as read, optionally showing typing indicator.
+        
+        Per Meta's Oct 2025 API update, typing indicator can be included in the
+        read receipt request. The typing indicator dismisses when you respond
+        or after 25 seconds, whichever comes first.
         
         Args:
             phone_number_id: Sender's phone number ID (uses env if None)
             access_token: Access token (uses env if None)
             message_id: ID of the message to mark as read
+            show_typing: If True, also show typing indicator to the user
             
         Returns:
             Success status and response
@@ -238,9 +244,19 @@ class WhatsAppService:
             'message_id': message_id
         }
         
+        # Add typing indicator per Meta's Oct 2025 API
+        # https://developers.facebook.com/docs/whatsapp/cloud-api/guides/send-messages#typing-indicators
+        if show_typing:
+            payload['typing_indicator'] = {
+                'type': 'text'
+            }
+        
         try:
-            print(f"👀 Marking message {message_id} as read...")
+            typing_msg = " (with typing indicator)" if show_typing else ""
+            print(f"👀 Marking message {message_id} as read{typing_msg}...")
             response = requests.post(url, json=payload, headers=headers, timeout=5)
+            if response.status_code != 200:
+                print(f"⚠️ Read receipt response: {response.text}")
             return {'success': response.status_code == 200}
         except Exception as e:
             print(f"❌ Failed to mark as read: {e}")
