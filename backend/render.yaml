@@ -1,0 +1,41 @@
+# Render Blueprint - Backend Service Configuration
+# This file defines how your backend will be deployed on Render
+# https://render.com/docs/blueprint-spec
+
+services:
+  - type: web
+    name: reviseit-backend
+    runtime: python
+    region: singapore # Choose region closest to your users (oregon, frankfurt, singapore, ohio)
+
+    # Build & Deploy Settings
+    rootDir: backend
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn app:app --bind 0.0.0.0:$PORT --workers 2 --threads 4 --timeout 120
+
+    # Instance Type (free tier available)
+    plan: free # Options: free, starter, standard, pro
+
+    # Health Check
+    healthCheckPath: /api/health
+
+    # Environment Variables (set these in Render Dashboard)
+    envVars:
+      - key: FLASK_ENV
+        value: production
+      - key: FRONTEND_URL
+        sync: false # Set in dashboard (your Vercel frontend URL)
+      - key: WHATSAPP_PHONE_NUMBER_ID
+        sync: false
+      - key: WHATSAPP_ACCESS_TOKEN
+        sync: false
+      - key: WHATSAPP_VERIFY_TOKEN
+        sync: false
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: FIREBASE_PROJECT_ID
+        sync: false
