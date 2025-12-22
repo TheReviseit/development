@@ -27,6 +27,15 @@ except ImportError as e:
     store_message = None
     update_message_status = None
 
+# Firebase client for business data (Firestore)
+try:
+    from firebase_client import get_business_data_from_firestore, initialize_firebase
+    FIREBASE_AVAILABLE = initialize_firebase()
+except ImportError as e:
+    print(f"⚠️ Firebase client not available: {e}")
+    FIREBASE_AVAILABLE = False
+    get_business_data_from_firestore = None
+
 # AI Brain import (optional, graceful fallback if not available)
 try:
     from ai_brain import AIBrain, AIBrainConfig
@@ -265,10 +274,26 @@ def webhook():
             credentials = get_credentials_by_phone_number_id(phone_number_id)
             if credentials:
                 user_id = credentials.get('user_id')
+                
                 # Get business-specific data for AI context
+                # Priority: 1. Firestore, 2. Supabase, 3. Cache, 4. Default
                 try:
-                    business_data = get_business_data_for_user(user_id) or DEFAULT_BUSINESS_DATA
-                    business_data['business_name'] = credentials.get('business_name', 'Our Business')
+                    # Try Firestore first (has complete business profile)
+                    if FIREBASE_AVAILABLE and get_business_data_from_firestore:
+                        business_data = get_business_data_from_firestore(user_id)
+                    
+                    # Fallback to Supabase if Firestore didn't have data
+                    if not business_data and get_business_data_for_user:
+                        business_data = get_business_data_for_user(user_id)
+                    
+                    # Use default if still no data
+                    if not business_data:
+                        business_data = BUSINESS_DATA_CACHE.get('current', DEFAULT_BUSINESS_DATA)
+                    
+                    # Ensure business_name is set
+                    if 'business_name' not in business_data or not business_data['business_name']:
+                        business_data['business_name'] = credentials.get('business_name', 'Our Business')
+                        
                 except Exception as e:
                     print(f"⚠️ Error fetching business data: {e}")
                     business_data = BUSINESS_DATA_CACHE.get('current', DEFAULT_BUSINESS_DATA)
@@ -299,16 +324,12 @@ def webhook():
         wa_id = credentials.get('phone_number_id') if credentials else None
         token = credentials.get('access_token') if credentials else None
         
-        # Mark as read
+        # Mark as read and show typing indicator
+        # Per Meta's Oct 2025 API, this combines read receipt + typing in one call
         if msg_id:
-            whatsapp_service.mark_message_as_read(wa_id, token, msg_id)
-            
-        # NOTE: Typing indicator disabled - WhatsApp API v18.0 doesn't support sender_action
-        # whatsapp_service.send_typing_indicator(wa_id, token, from_number)
+            whatsapp_service.mark_message_as_read(wa_id, token, msg_id, show_typing=True)
         
-        # Generate response immediately (typing indicator no longer used)
-        
-        # 4. Generate AI response (only for text messages)
+        # Generate AI response
         if message_type == 'text':
             if AI_BRAIN_AVAILABLE and ai_brain:
                 # Generate AI reply
