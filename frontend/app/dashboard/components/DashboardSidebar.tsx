@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import styles from "../dashboard.module.css";
 
 interface NavItem {
@@ -15,6 +15,7 @@ interface DashboardSidebarProps {
   onSectionChange: (section: string) => void;
   userEmail?: string;
   userName?: string;
+  isSidebarOpen?: boolean;
 }
 
 // SVG Icons as components
@@ -195,12 +196,35 @@ export default function DashboardSidebar({
   onSectionChange,
   userEmail,
   userName,
+  isSidebarOpen,
 }: DashboardSidebarProps) {
   const [isCollapsed, setIsCollapsed] = useState(false);
+  const [userCount, setUserCount] = useState<number>(0);
+
+  // Fetch the actual user/conversation count
+  useEffect(() => {
+    const fetchUserCount = async () => {
+      try {
+        const response = await fetch("/api/whatsapp/conversations?filter=all");
+        const data = await response.json();
+        if (data.success) {
+          setUserCount(data.data.length);
+        }
+      } catch (error) {
+        console.error("Error fetching user count:", error);
+      }
+    };
+    fetchUserCount();
+  }, []);
 
   const navItems: NavItem[] = [
     { id: "analytics", label: "Analytics", icon: <AnalyticsIcon /> },
-    { id: "messages", label: "Messages", icon: <MessagesIcon />, badge: 12 },
+    {
+      id: "messages",
+      label: "Messages",
+      icon: <MessagesIcon />,
+      badge: userCount > 0 ? userCount : undefined,
+    },
     { id: "templates", label: "Templates", icon: <TemplatesIcon /> },
     { id: "contacts", label: "Contacts", icon: <ContactsIcon /> },
     { id: "campaigns", label: "Campaigns", icon: <CampaignsIcon /> },
@@ -214,7 +238,7 @@ export default function DashboardSidebar({
     <aside
       className={`${styles.sidebar} ${
         isCollapsed ? styles.sidebarCollapsed : ""
-      }`}
+      } ${isSidebarOpen ? styles.sidebarOpen : ""}`}
     >
       {/* Logo Section */}
       <div className={styles.sidebarHeader}>

@@ -27,7 +27,19 @@ export default function Dashboard() {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
   const [activeSection, setActiveSection] = useState<Section>("analytics");
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [isMobile, setIsMobile] = useState(false);
   const router = useRouter();
+
+  // Detect mobile screen
+  useEffect(() => {
+    const checkMobile = () => {
+      setIsMobile(window.innerWidth <= 768);
+    };
+    checkMobile();
+    window.addEventListener("resize", checkMobile);
+    return () => window.removeEventListener("resize", checkMobile);
+  }, []);
 
   const handleLogout = async () => {
     try {
@@ -106,11 +118,46 @@ export default function Dashboard() {
 
   return (
     <div className={styles.dashboardContainer}>
+      {/* Mobile Menu Button */}
+      {isMobile && (
+        <button
+          className={styles.mobileMenuBtn}
+          onClick={() => setIsSidebarOpen(true)}
+        >
+          <svg
+            width="24"
+            height="24"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+          >
+            <line x1="3" y1="12" x2="21" y2="12" />
+            <line x1="3" y1="6" x2="21" y2="6" />
+            <line x1="3" y1="18" x2="21" y2="18" />
+          </svg>
+        </button>
+      )}
+
+      {/* Mobile Overlay */}
+      {isMobile && (
+        <div
+          className={`${styles.sidebarOverlay} ${
+            isSidebarOpen ? styles.sidebarOverlayVisible : ""
+          }`}
+          onClick={() => setIsSidebarOpen(false)}
+        />
+      )}
+
       <DashboardSidebar
         activeSection={activeSection}
-        onSectionChange={(section) => setActiveSection(section as Section)}
+        onSectionChange={(section) => {
+          setActiveSection(section as Section);
+          if (isMobile) setIsSidebarOpen(false);
+        }}
         userEmail={user?.email || undefined}
         userName={user?.displayName || undefined}
+        isSidebarOpen={isSidebarOpen}
       />
       <main className={styles.mainContent}>{renderContent()}</main>
     </div>

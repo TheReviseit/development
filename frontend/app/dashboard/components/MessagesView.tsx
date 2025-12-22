@@ -262,12 +262,24 @@ export default function MessagesView() {
   const [messagesLoading, setMessagesLoading] = useState(false);
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [showMobileChat, setShowMobileChat] = useState(false);
+  const [isMobile, setIsMobile] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const selectedConversationRef = useRef<Conversation | null>(null);
   const conversationsRef = useRef<Conversation[]>([]);
   const messagesRef = useRef<Message[]>([]);
   // Track previous conversation ID to avoid fetching on object updates
   const prevSelectedConversationIdRef = useRef<string | null>(null);
+
+  // Detect mobile screen
+  useEffect(() => {
+    const checkMobile = () => {
+      setIsMobile(window.innerWidth <= 768);
+    };
+    checkMobile();
+    window.addEventListener("resize", checkMobile);
+    return () => window.removeEventListener("resize", checkMobile);
+  }, []);
 
   // Keep refs in sync with state for use in realtime callback
   useEffect(() => {
@@ -754,7 +766,11 @@ export default function MessagesView() {
   return (
     <div className={styles.messagesView}>
       {/* Conversation List Panel */}
-      <div className={styles.conversationList}>
+      <div
+        className={`${styles.conversationList} ${
+          isMobile && showMobileChat ? styles.conversationListHidden : ""
+        }`}
+      >
         <div className={styles.conversationListHeader}>
           <h2 className={styles.panelTitle}>Conversations</h2>
           <div className={styles.conversationFilters}>
@@ -814,7 +830,10 @@ export default function MessagesView() {
                     ? styles.conversationActive
                     : ""
                 }`}
-                onClick={() => setSelectedConversation(conv)}
+                onClick={() => {
+                  setSelectedConversation(conv);
+                  if (isMobile) setShowMobileChat(true);
+                }}
               >
                 <div className={styles.conversationAvatar}>
                   {getInitials(conv.name)}
@@ -829,9 +848,9 @@ export default function MessagesView() {
                     <span className={styles.conversationPreview}>
                       {conv.lastMessage}
                     </span>
-                    {conv.unread > 0 && (
+                    {/* {conv.unread > 0 && (
                       <span className={styles.unreadBadge}>{conv.unread}</span>
-                    )}
+                    )} */}
                   </div>
                 </div>
               </div>
@@ -841,11 +860,33 @@ export default function MessagesView() {
       </div>
 
       {/* Chat Area Panel */}
-      <div className={styles.chatArea}>
+      <div
+        className={`${styles.chatArea} ${
+          isMobile && showMobileChat ? styles.chatAreaVisible : ""
+        }`}
+      >
         {selectedConversation ? (
           <>
             <div className={styles.chatHeader}>
               <div className={styles.chatHeaderLeft}>
+                {/* Mobile Back Button */}
+                {isMobile && (
+                  <button
+                    className={styles.mobileBackBtn}
+                    onClick={() => setShowMobileChat(false)}
+                  >
+                    <svg
+                      width="24"
+                      height="24"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                    >
+                      <polyline points="15 18 9 12 15 6" />
+                    </svg>
+                  </button>
+                )}
                 <div className={styles.chatAvatar}>
                   {getInitials(selectedConversation.name)}
                 </div>
@@ -864,7 +905,7 @@ export default function MessagesView() {
                 </div>
               </div>
               <div className={styles.chatHeaderActions}>
-                <button
+                {/* <button
                   className={styles.markReadBtn}
                   onClick={handleMarkAsRead}
                 >
@@ -879,7 +920,7 @@ export default function MessagesView() {
                     <polyline points="20 6 9 17 4 12" />
                   </svg>
                   Mark As Read
-                </button>
+                </button> */}
                 <button
                   className={styles.togglePanelBtn}
                   onClick={() => setShowContactPanel(!showContactPanel)}
