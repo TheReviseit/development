@@ -101,6 +101,7 @@ def get_business_data_from_firestore(user_id: str) -> Optional[Dict[str, Any]]:
         Business data dict with products, timings, FAQs, etc.
         Returns None if not found or Firebase not available.
     """
+    print(f"🔍 Looking up Firestore: businesses/{user_id}")
     db = get_firestore_client()
     if not db:
         return None
