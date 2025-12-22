@@ -20,6 +20,7 @@ class Industry(str, Enum):
     FITNESS = "fitness"
     EDUCATION = "education"
     HEALTHCARE = "healthcare"
+    ECOMMERCE = "ecommerce"
     OTHER = "other"
 
 
@@ -29,6 +30,15 @@ class ContactInfo(BaseModel):
     email: Optional[str] = None
     whatsapp: Optional[str] = None
     website: Optional[str] = None
+
+
+class SocialMediaLinks(BaseModel):
+    """Business social media presence."""
+    instagram: Optional[str] = None
+    facebook: Optional[str] = None
+    twitter: Optional[str] = None
+    linkedin: Optional[str] = None
+    youtube: Optional[str] = None
 
 
 class LocationInfo(BaseModel):
@@ -70,6 +80,12 @@ class ProductService(BaseModel):
     price_unit: Optional[str] = None  # "per session", "per kg", etc.
     duration: Optional[str] = None  # For services
     available: bool = True
+    sku: Optional[str] = None  # Stock Keeping Unit
+    stock_status: Optional[str] = "in_stock"  # in_stock, low_stock, out_of_stock
+    image_url: Optional[str] = None
+    variants: List[str] = Field(default_factory=list)  # e.g., ["Small", "Medium", "Large"]
+    min_order_qty: Optional[int] = None
+    max_order_qty: Optional[int] = None
 
 
 class BusinessPolicies(BaseModel):
@@ -79,6 +95,19 @@ class BusinessPolicies(BaseModel):
     delivery: Optional[str] = None
     payment_methods: List[str] = Field(default_factory=list)
     booking_advance_days: Optional[int] = None
+
+
+class EcommercePolicies(BaseModel):
+    """E-commerce specific policies."""
+    shipping_policy: Optional[str] = None
+    shipping_zones: List[str] = Field(default_factory=list)  # e.g., ["Pan India", "Local only"]
+    shipping_charges: Optional[str] = None  # e.g., "Free above ₹500"
+    estimated_delivery: Optional[str] = None  # e.g., "3-5 business days"
+    return_policy: Optional[str] = None
+    return_window: Optional[int] = None  # Days
+    warranty_policy: Optional[str] = None
+    cod_available: bool = False
+    international_shipping: bool = False
 
 
 class FAQ(BaseModel):
@@ -92,6 +121,10 @@ class BrandVoice(BaseModel):
     tone: str = "friendly"  # friendly, professional, casual
     language_preference: str = "en"  # en, hi, hinglish
     greeting_style: Optional[str] = None
+    tagline: Optional[str] = None  # Company tagline/slogan
+    unique_selling_points: List[str] = Field(default_factory=list)  # USPs
+    avoid_topics: List[str] = Field(default_factory=list)  # Topics AI should avoid
+    custom_greeting: Optional[str] = None  # Custom welcome message
 
 
 class BusinessData(BaseModel):
@@ -107,11 +140,13 @@ class BusinessData(BaseModel):
     description: Optional[str] = None
     
     contact: ContactInfo = Field(default_factory=ContactInfo)
+    social_media: SocialMediaLinks = Field(default_factory=SocialMediaLinks)
     location: LocationInfo = Field(default_factory=LocationInfo)
     timings: BusinessTimings = Field(default_factory=BusinessTimings)
     
     products_services: List[ProductService] = Field(default_factory=list)
     policies: BusinessPolicies = Field(default_factory=BusinessPolicies)
+    ecommerce_policies: EcommercePolicies = Field(default_factory=EcommercePolicies)
     faqs: List[FAQ] = Field(default_factory=list)
     
     custom_fields: Dict[str, Any] = Field(default_factory=dict)
@@ -143,6 +178,12 @@ class BusinessData(BaseModel):
         if self.description:
             parts.append(f"About: {self.description}")
         
+        # Brand tagline and USPs
+        if self.brand_voice.tagline:
+            parts.append(f"Tagline: {self.brand_voice.tagline}")
+        if self.brand_voice.unique_selling_points:
+            parts.append(f"USPs: {', '.join(self.brand_voice.unique_selling_points)}")
+        
         # Contact info - include all available contact methods
         contact_parts = []
         if self.contact.phone:
@@ -157,6 +198,20 @@ class BusinessData(BaseModel):
         if contact_parts:
             parts.append("\nContact Information:")
             parts.extend(contact_parts)
+        
+        # Social Media
+        social_parts = []
+        if self.social_media.instagram:
+            social_parts.append(f"Instagram: {self.social_media.instagram}")
+        if self.social_media.facebook:
+            social_parts.append(f"Facebook: {self.social_media.facebook}")
+        if self.social_media.twitter:
+            social_parts.append(f"Twitter: {self.social_media.twitter}")
+        if self.social_media.youtube:
+            social_parts.append(f"YouTube: {self.social_media.youtube}")
+        if social_parts:
+            parts.append("\nSocial Media:")
+            parts.extend(social_parts)
         
         # Location
         if self.location.address:
@@ -174,7 +229,8 @@ class BusinessData(BaseModel):
                 price_str = f"₹{p.price}" if p.price else "Price on request"
                 if p.price_unit:
                     price_str += f" {p.price_unit}"
-                parts.append(f"- {p.name}: {price_str}")
+                stock_info = f" [{p.stock_status}]" if p.stock_status else ""
+                parts.append(f"- {p.name}: {price_str}{stock_info}")
         
         # Timings summary
         parts.append("\nTimings:")
@@ -192,6 +248,26 @@ class BusinessData(BaseModel):
             parts.append(f"Refund: {self.policies.refund}")
         if self.policies.cancellation:
             parts.append(f"Cancellation: {self.policies.cancellation}")
+        
+        # E-commerce Policies (for ecommerce/retail businesses)
+        if self.industry in ["ecommerce", "retail"]:
+            ecom = self.ecommerce_policies
+            if ecom.shipping_policy:
+                parts.append(f"\nShipping: {ecom.shipping_policy}")
+            if ecom.shipping_charges:
+                parts.append(f"Shipping Charges: {ecom.shipping_charges}")
+            if ecom.estimated_delivery:
+                parts.append(f"Delivery Time: {ecom.estimated_delivery}")
+            if ecom.cod_available:
+                parts.append("COD: Available")
+            if ecom.return_policy:
+                parts.append(f"Returns: {ecom.return_policy}")
+            if ecom.return_window:
+                parts.append(f"Return Window: {ecom.return_window} days")
+            if ecom.warranty_policy:
+                parts.append(f"Warranty: {ecom.warranty_policy}")
+            if ecom.international_shipping:
+                parts.append("International Shipping: Available")
         
         # FAQs
         if self.faqs:

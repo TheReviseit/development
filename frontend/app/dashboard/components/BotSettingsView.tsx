@@ -12,6 +12,11 @@ interface ProductService {
   priceUnit: string;
   duration: string;
   available: boolean;
+  description: string;
+  sku: string;
+  stockStatus: string;
+  imageUrl: string;
+  variants: string[];
 }
 
 interface DayTiming {
@@ -26,6 +31,36 @@ interface FAQ {
   answer: string;
 }
 
+interface SocialMediaLinks {
+  instagram: string;
+  facebook: string;
+  twitter: string;
+  linkedin: string;
+  youtube: string;
+}
+
+interface EcommercePolicies {
+  shippingPolicy: string;
+  shippingZones: string[];
+  shippingCharges: string;
+  estimatedDelivery: string;
+  returnPolicy: string;
+  returnWindow: number;
+  warrantyPolicy: string;
+  codAvailable: boolean;
+  internationalShipping: boolean;
+}
+
+interface BrandVoice {
+  tone: string;
+  languagePreference: string;
+  greetingStyle: string;
+  tagline: string;
+  uniqueSellingPoints: string[];
+  avoidTopics: string[];
+  customGreeting: string;
+}
+
 interface BusinessData {
   businessId: string;
   businessName: string;
@@ -37,6 +72,7 @@ interface BusinessData {
     whatsapp: string;
     website: string;
   };
+  socialMedia: SocialMediaLinks;
   location: {
     address: string;
     city: string;
@@ -61,7 +97,9 @@ interface BusinessData {
     delivery: string;
     paymentMethods: string[];
   };
+  ecommercePolicies: EcommercePolicies;
   faqs: FAQ[];
+  brandVoice: BrandVoice;
 }
 
 const INDUSTRIES = [
@@ -73,6 +111,7 @@ const INDUSTRIES = [
   { value: "fitness", label: "💪 Gym / Fitness" },
   { value: "retail", label: "🛍️ Retail / Shop" },
   { value: "education", label: "🎓 Education" },
+  { value: "ecommerce", label: "🛒 E-commerce / Online Store" },
   { value: "other", label: "🏢 Other" },
 ];
 
@@ -88,6 +127,13 @@ const INITIAL_DATA: BusinessData = {
   industry: "other",
   description: "",
   contact: { phone: "", email: "", whatsapp: "", website: "" },
+  socialMedia: {
+    instagram: "",
+    facebook: "",
+    twitter: "",
+    linkedin: "",
+    youtube: "",
+  },
   location: {
     address: "",
     city: "",
@@ -107,14 +153,36 @@ const INITIAL_DATA: BusinessData = {
   },
   products: [],
   policies: { refund: "", cancellation: "", delivery: "", paymentMethods: [] },
+  ecommercePolicies: {
+    shippingPolicy: "",
+    shippingZones: [],
+    shippingCharges: "",
+    estimatedDelivery: "",
+    returnPolicy: "",
+    returnWindow: 7,
+    warrantyPolicy: "",
+    codAvailable: false,
+    internationalShipping: false,
+  },
   faqs: [],
+  brandVoice: {
+    tone: "friendly",
+    languagePreference: "en",
+    greetingStyle: "",
+    tagline: "",
+    uniqueSellingPoints: [],
+    avoidTopics: [],
+    customGreeting: "",
+  },
 };
 
 type TabType =
   | "profile"
+  | "brand"
   | "services"
   | "timings"
   | "policies"
+  | "ecommerce"
   | "faqs"
   | "preview";
 
@@ -216,6 +284,7 @@ export default function BotSettingsView() {
     industry: d.industry,
     description: d.description,
     contact: d.contact,
+    social_media: d.socialMedia,
     location: {
       ...d.location,
       google_maps_link: d.location.googleMapsLink,
@@ -229,10 +298,15 @@ export default function BotSettingsView() {
     products_services: d.products.map((p) => ({
       name: p.name,
       category: p.category,
+      description: p.description,
       price: p.price,
       price_unit: p.priceUnit,
       duration: p.duration,
       available: p.available,
+      sku: p.sku,
+      stock_status: p.stockStatus,
+      image_url: p.imageUrl,
+      variants: p.variants,
     })),
     policies: {
       refund: d.policies.refund,
@@ -240,7 +314,27 @@ export default function BotSettingsView() {
       delivery: d.policies.delivery,
       payment_methods: d.policies.paymentMethods,
     },
+    ecommerce_policies: {
+      shipping_policy: d.ecommercePolicies.shippingPolicy,
+      shipping_zones: d.ecommercePolicies.shippingZones,
+      shipping_charges: d.ecommercePolicies.shippingCharges,
+      estimated_delivery: d.ecommercePolicies.estimatedDelivery,
+      return_policy: d.ecommercePolicies.returnPolicy,
+      return_window: d.ecommercePolicies.returnWindow,
+      warranty_policy: d.ecommercePolicies.warrantyPolicy,
+      cod_available: d.ecommercePolicies.codAvailable,
+      international_shipping: d.ecommercePolicies.internationalShipping,
+    },
     faqs: d.faqs.map((f) => ({ question: f.question, answer: f.answer })),
+    brand_voice: {
+      tone: d.brandVoice.tone,
+      language_preference: d.brandVoice.languagePreference,
+      greeting_style: d.brandVoice.greetingStyle,
+      tagline: d.brandVoice.tagline,
+      unique_selling_points: d.brandVoice.uniqueSellingPoints,
+      avoid_topics: d.brandVoice.avoidTopics,
+      custom_greeting: d.brandVoice.customGreeting,
+    },
   });
 
   // Product management
@@ -253,10 +347,15 @@ export default function BotSettingsView() {
           id: Date.now().toString(),
           name: "",
           category: "",
+          description: "",
           price: 0,
           priceUnit: "",
           duration: "",
           available: true,
+          sku: "",
+          stockStatus: "in_stock",
+          imageUrl: "",
+          variants: [],
         },
       ],
     });
@@ -307,9 +406,11 @@ export default function BotSettingsView() {
 
   const tabs: { id: TabType; label: string; icon: string }[] = [
     { id: "profile", label: "Profile", icon: "🏢" },
+    { id: "brand", label: "Brand Voice", icon: "✨" },
     { id: "services", label: "Services", icon: "🛒" },
     { id: "timings", label: "Timings", icon: "🕐" },
     { id: "policies", label: "Policies", icon: "📋" },
+    { id: "ecommerce", label: "E-commerce", icon: "📦" },
     { id: "faqs", label: "FAQs", icon: "❓" },
     { id: "preview", label: "Preview", icon: "🤖" },
   ];
@@ -455,6 +556,78 @@ export default function BotSettingsView() {
               </div>
             </div>
 
+            <h3 className={styles.subTitle}>Social Media</h3>
+            <div className={styles.formGrid}>
+              <div className={styles.formGroup}>
+                <label>Instagram</label>
+                <input
+                  type="url"
+                  value={data.socialMedia.instagram}
+                  onChange={(e) =>
+                    setData({
+                      ...data,
+                      socialMedia: {
+                        ...data.socialMedia,
+                        instagram: e.target.value,
+                      },
+                    })
+                  }
+                  placeholder="e.g., https://instagram.com/yourbusiness"
+                />
+              </div>
+              <div className={styles.formGroup}>
+                <label>Facebook</label>
+                <input
+                  type="url"
+                  value={data.socialMedia.facebook}
+                  onChange={(e) =>
+                    setData({
+                      ...data,
+                      socialMedia: {
+                        ...data.socialMedia,
+                        facebook: e.target.value,
+                      },
+                    })
+                  }
+                  placeholder="e.g., https://facebook.com/yourbusiness"
+                />
+              </div>
+              <div className={styles.formGroup}>
+                <label>Twitter / X</label>
+                <input
+                  type="url"
+                  value={data.socialMedia.twitter}
+                  onChange={(e) =>
+                    setData({
+                      ...data,
+                      socialMedia: {
+                        ...data.socialMedia,
+                        twitter: e.target.value,
+                      },
+                    })
+                  }
+                  placeholder="e.g., https://twitter.com/yourbusiness"
+                />
+              </div>
+              <div className={styles.formGroup}>
+                <label>YouTube</label>
+                <input
+                  type="url"
+                  value={data.socialMedia.youtube}
+                  onChange={(e) =>
+                    setData({
+                      ...data,
+                      socialMedia: {
+                        ...data.socialMedia,
+                        youtube: e.target.value,
+                      },
+                    })
+                  }
+                  placeholder="e.g., https://youtube.com/@yourbusiness"
+                />
+              </div>
+            </div>
+
             <h3 className={styles.subTitle}>Location</h3>
             <div className={styles.formGroup}>
               <label>Address</label>
@@ -529,6 +702,108 @@ export default function BotSettingsView() {
                   })
                 }
                 placeholder="e.g., https://maps.google.com/?q=..."
+              />
+            </div>
+          </div>
+        )}
+
+        {activeTab === "brand" && (
+          <div className={styles.section}>
+            <h2 className={styles.sectionTitle}>Brand Voice & Identity</h2>
+            <p className={styles.previewHint}>
+              Define your brand personality to help the AI communicate in your
+              unique voice.
+            </p>
+
+            <div className={styles.formGroup}>
+              <label>Tagline / Slogan</label>
+              <input
+                type="text"
+                value={data.brandVoice.tagline}
+                onChange={(e) =>
+                  setData({
+                    ...data,
+                    brandVoice: { ...data.brandVoice, tagline: e.target.value },
+                  })
+                }
+                placeholder="e.g., 'Quality you can trust'"
+              />
+            </div>
+
+            <div className={styles.formGroup}>
+              <label>AI Tone</label>
+              <select
+                value={data.brandVoice.tone}
+                onChange={(e) =>
+                  setData({
+                    ...data,
+                    brandVoice: { ...data.brandVoice, tone: e.target.value },
+                  })
+                }
+              >
+                <option value="friendly">😊 Friendly & Casual</option>
+                <option value="professional">💼 Professional & Formal</option>
+                <option value="casual">🎉 Fun & Playful</option>
+              </select>
+            </div>
+
+            <div className={styles.formGroup}>
+              <label>Custom Greeting Message</label>
+              <textarea
+                value={data.brandVoice.customGreeting}
+                onChange={(e) =>
+                  setData({
+                    ...data,
+                    brandVoice: {
+                      ...data.brandVoice,
+                      customGreeting: e.target.value,
+                    },
+                  })
+                }
+                placeholder="e.g., 'Welcome to our store! I'm here to help you find exactly what you need.'"
+                rows={2}
+              />
+            </div>
+
+            <div className={styles.formGroup}>
+              <label>Unique Selling Points (comma separated)</label>
+              <input
+                type="text"
+                value={data.brandVoice.uniqueSellingPoints.join(", ")}
+                onChange={(e) =>
+                  setData({
+                    ...data,
+                    brandVoice: {
+                      ...data.brandVoice,
+                      uniqueSellingPoints: e.target.value
+                        .split(",")
+                        .map((s) => s.trim())
+                        .filter(Boolean),
+                    },
+                  })
+                }
+                placeholder="e.g., Free shipping, 24/7 support, 100% organic"
+              />
+            </div>
+
+            <div className={styles.formGroup}>
+              <label>Topics AI Should Avoid (comma separated)</label>
+              <input
+                type="text"
+                value={data.brandVoice.avoidTopics.join(", ")}
+                onChange={(e) =>
+                  setData({
+                    ...data,
+                    brandVoice: {
+                      ...data.brandVoice,
+                      avoidTopics: e.target.value
+                        .split(",")
+                        .map((s) => s.trim())
+                        .filter(Boolean),
+                    },
+                  })
+                }
+                placeholder="e.g., Competitor names, pricing negotiations"
               />
             </div>
           </div>
@@ -776,6 +1051,163 @@ export default function BotSettingsView() {
                   })
                 }
                 placeholder="e.g., Cash, UPI, Card"
+              />
+            </div>
+          </div>
+        )}
+
+        {activeTab === "ecommerce" && (
+          <div className={styles.section}>
+            <h2 className={styles.sectionTitle}>E-commerce Policies</h2>
+            <p className={styles.previewHint}>
+              Configure shipping, returns, and warranty policies for your online
+              store.
+            </p>
+
+            <h3 className={styles.subTitle}>Shipping</h3>
+            <div className={styles.formGroup}>
+              <label>Shipping Policy</label>
+              <textarea
+                value={data.ecommercePolicies.shippingPolicy}
+                onChange={(e) =>
+                  setData({
+                    ...data,
+                    ecommercePolicies: {
+                      ...data.ecommercePolicies,
+                      shippingPolicy: e.target.value,
+                    },
+                  })
+                }
+                placeholder="e.g., We ship via trusted courier partners with package tracking..."
+                rows={2}
+              />
+            </div>
+            <div className={styles.formGrid}>
+              <div className={styles.formGroup}>
+                <label>Shipping Charges</label>
+                <input
+                  type="text"
+                  value={data.ecommercePolicies.shippingCharges}
+                  onChange={(e) =>
+                    setData({
+                      ...data,
+                      ecommercePolicies: {
+                        ...data.ecommercePolicies,
+                        shippingCharges: e.target.value,
+                      },
+                    })
+                  }
+                  placeholder="e.g., Free above ₹500, else ₹50"
+                />
+              </div>
+              <div className={styles.formGroup}>
+                <label>Estimated Delivery Time</label>
+                <input
+                  type="text"
+                  value={data.ecommercePolicies.estimatedDelivery}
+                  onChange={(e) =>
+                    setData({
+                      ...data,
+                      ecommercePolicies: {
+                        ...data.ecommercePolicies,
+                        estimatedDelivery: e.target.value,
+                      },
+                    })
+                  }
+                  placeholder="e.g., 3-5 business days"
+                />
+              </div>
+            </div>
+            <div className={styles.formGrid}>
+              <div className={styles.formGroup}>
+                <label className={styles.closedToggle}>
+                  <input
+                    type="checkbox"
+                    checked={data.ecommercePolicies.codAvailable}
+                    onChange={(e) =>
+                      setData({
+                        ...data,
+                        ecommercePolicies: {
+                          ...data.ecommercePolicies,
+                          codAvailable: e.target.checked,
+                        },
+                      })
+                    }
+                  />
+                  <span>Cash on Delivery (COD) Available</span>
+                </label>
+              </div>
+              <div className={styles.formGroup}>
+                <label className={styles.closedToggle}>
+                  <input
+                    type="checkbox"
+                    checked={data.ecommercePolicies.internationalShipping}
+                    onChange={(e) =>
+                      setData({
+                        ...data,
+                        ecommercePolicies: {
+                          ...data.ecommercePolicies,
+                          internationalShipping: e.target.checked,
+                        },
+                      })
+                    }
+                  />
+                  <span>International Shipping Available</span>
+                </label>
+              </div>
+            </div>
+
+            <h3 className={styles.subTitle}>Returns & Warranty</h3>
+            <div className={styles.formGroup}>
+              <label>Return Policy</label>
+              <textarea
+                value={data.ecommercePolicies.returnPolicy}
+                onChange={(e) =>
+                  setData({
+                    ...data,
+                    ecommercePolicies: {
+                      ...data.ecommercePolicies,
+                      returnPolicy: e.target.value,
+                    },
+                  })
+                }
+                placeholder="e.g., Easy returns within 7 days of delivery..."
+                rows={2}
+              />
+            </div>
+            <div className={styles.formGroup}>
+              <label>Return Window (days)</label>
+              <input
+                type="number"
+                value={data.ecommercePolicies.returnWindow}
+                onChange={(e) =>
+                  setData({
+                    ...data,
+                    ecommercePolicies: {
+                      ...data.ecommercePolicies,
+                      returnWindow: parseInt(e.target.value) || 0,
+                    },
+                  })
+                }
+                placeholder="e.g., 7"
+                min={0}
+              />
+            </div>
+            <div className={styles.formGroup}>
+              <label>Warranty Policy</label>
+              <textarea
+                value={data.ecommercePolicies.warrantyPolicy}
+                onChange={(e) =>
+                  setData({
+                    ...data,
+                    ecommercePolicies: {
+                      ...data.ecommercePolicies,
+                      warrantyPolicy: e.target.value,
+                    },
+                  })
+                }
+                placeholder="e.g., 1 year manufacturer warranty on all electronics..."
+                rows={2}
               />
             </div>
           </div>
