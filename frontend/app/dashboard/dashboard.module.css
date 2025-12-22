@@ -1221,11 +1221,134 @@
   border-bottom: 1px solid var(--dash-border);
 }
 
+.conversationTitleRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 1rem;
+}
+
+.logoWithTitle {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.headerLogo {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  object-fit: contain;
+}
+
 .panelTitle {
   font-size: 1.125rem;
   font-weight: 600;
   color: var(--dash-text-primary);
-  margin-bottom: 1rem;
+  margin: 0;
+}
+
+.mobileMenuBtn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border-radius: 8px;
+  border: 1px solid var(--dash-border);
+  background: var(--dash-bg-tertiary);
+  cursor: pointer;
+  transition: all 0.3s ease;
+  color: var(--dash-text-primary);
+}
+
+.mobileMenuBtn:hover {
+  background: var(--dash-bg-hover);
+  border-color: var(--dash-accent);
+}
+
+.mobileMenuDropdown {
+  position: absolute;
+  top: 70px;
+  right: 1rem;
+  width: 250px;
+  background: var(--dash-bg-secondary);
+  border: 1px solid var(--dash-border);
+  border-radius: 12px;
+  padding: 0.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  z-index: 100;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
+}
+
+.mobileNavLink {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.875rem 1rem;
+  border-radius: 8px;
+  color: var(--dash-text-primary);
+  text-decoration: none;
+  font-size: 0.9375rem;
+  font-weight: 600;
+  transition: all 0.2s ease;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  width: 100%;
+  text-align: left;
+}
+
+.mobileNavLink:hover {
+  background: var(--dash-bg-hover);
+  color: var(--dash-accent);
+}
+
+.mobileNavLinkActive {
+  background: var(--dash-accent-muted);
+  color: var(--dash-accent);
+}
+
+.mobileNavLink svg {
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
+}
+
+/* Mobile Header for Dashboard Views */
+.mobileHeader {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  padding: 1rem;
+  background: var(--dash-bg-secondary);
+  border-bottom: 1px solid var(--dash-border);
+  z-index: 50;
+}
+
+.mobileHeaderRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.mobileHeaderTitle {
+  font-size: 1.125rem;
+  font-weight: 600;
+  color: var(--dash-text-primary);
+  margin: 0;
+}
+
+/* Mobile Content Area - scrollable content below fixed header */
+.mobileContent {
+  flex: 1;
+  overflow-y: auto;
+  padding: 1rem;
+  margin-top: 70px; /* Height of mobile header */
 }
 
 .conversationFilters {
@@ -2545,7 +2668,11 @@
 
   .mainContent {
     margin-left: 0;
-    padding: 1rem;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+    overflow: hidden;
   }
 
   .messagesView {
