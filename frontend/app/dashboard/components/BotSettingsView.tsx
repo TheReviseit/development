@@ -216,6 +216,16 @@ export default function BotSettingsView() {
     loadData();
   }, []);
 
+  // Auto-dismiss toast notification after 5 seconds
+  useEffect(() => {
+    if (message) {
+      const timer = setTimeout(() => {
+        setMessage(null);
+      }, 5000);
+      return () => clearTimeout(timer);
+    }
+  }, [message]);
+
   const handleSave = async () => {
     setSaving(true);
     setMessage(null);
@@ -424,13 +434,31 @@ export default function BotSettingsView() {
         </p>
       </div>
 
+      {/* Toast Notification */}
       {message && (
-        <div
-          className={`${styles.message} ${
-            message.type === "success" ? styles.success : styles.error
-          }`}
-        >
-          {message.text}
+        <div className={styles.toastContainer}>
+          <div
+            className={`${styles.toast} ${
+              message.type === "success" ? styles.success : styles.error
+            }`}
+          >
+            <div className={styles.toastIcon}>
+              {message.type === "success" ? "✓" : "✕"}
+            </div>
+            <div className={styles.toastContent}>
+              <div className={styles.toastTitle}>
+                {message.type === "success" ? "Success" : "Error"}
+              </div>
+              <div className={styles.toastMessage}>{message.text}</div>
+            </div>
+            <button
+              className={styles.toastClose}
+              onClick={() => setMessage(null)}
+              aria-label="Close notification"
+            >
+              ✕
+            </button>
+          </div>
         </div>
       )}
 
