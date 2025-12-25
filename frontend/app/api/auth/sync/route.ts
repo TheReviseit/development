@@ -89,14 +89,11 @@ export async function POST(request: NextRequest) {
     let userData: Partial<SupabaseUser>;
 
     if (existingUser) {
-      // Update existing user
+      // Update existing user - only update columns that exist in public.users table
       userData = {
         full_name: fullName,
         email: email,
         phone: phoneNumber || undefined,
-        phone_verified: phoneVerified,
-        provider: provider,
-        last_sign_in_at: new Date().toISOString(),
       };
 
       const { data: updatedUser, error: updateError } = await supabase
@@ -107,29 +104,38 @@ export async function POST(request: NextRequest) {
         .single();
 
       if (updateError) {
-        console.error("Error updating user:", updateError);
+        console.error("Error updating user - Full error:", updateError);
+        console.error("Update error details:", {
+          code: updateError.code,
+          message: updateError.message,
+          details: updateError.details,
+          hint: updateError.hint,
+        });
         return NextResponse.json(
-          { success: false, error: "Failed to update user record" },
+          {
+            success: false,
+            error: "Failed to update user record",
+            details: updateError.message,
+            code: updateError.code,
+          },
           { status: 500 }
         );
       }
 
+      console.log("✅ User synced successfully to Supabase");
       return NextResponse.json<SyncUserResponse>({
         success: true,
         user: updatedUser as SupabaseUser,
       });
     } else {
-      // Insert new user
+      // Insert new user - only use columns that exist in public.users table
       userData = {
         firebase_uid: firebaseUid,
         full_name: fullName,
         email: email,
         phone: phoneNumber || undefined,
-        phone_verified: phoneVerified,
-        provider: provider,
         role: "user",
         onboarding_completed: false,
-        last_sign_in_at: new Date().toISOString(),
       };
 
       console.log("Attempting to insert user with data:", {
@@ -156,7 +162,7 @@ export async function POST(request: NextRequest) {
           {
             success: false,
             error: "Failed to create user record",
-            details: insertError.message, // Include error details for debugging
+            details: insertError.message,
           },
           { status: 500 }
         );

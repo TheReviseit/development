@@ -78,7 +78,7 @@ const nextConfig: NextConfig = {
               "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://accounts.google.com",
               "img-src 'self' data: https: blob:",
               "font-src 'self' https://fonts.gstatic.com",
-              "connect-src 'self' https://*.supabase.co https://*.firebase.googleapis.com https://identitytoolkit.googleapis.com https://securetoken.googleapis.com https://api.cloudinary.com https://firebaseinstallations.googleapis.com https://accounts.google.com https://*.firebaseapp.com wss://*.supabase.co https://connect.facebook.net https://graph.facebook.com https://*.facebook.com",
+              "connect-src 'self' http://localhost:5000 http://127.0.0.1:5000 https://*.supabase.co https://*.firebase.googleapis.com https://identitytoolkit.googleapis.com https://securetoken.googleapis.com https://api.cloudinary.com https://firebaseinstallations.googleapis.com https://accounts.google.com https://*.firebaseapp.com wss://*.supabase.co https://connect.facebook.net https://graph.facebook.com https://*.facebook.com https://fonts.googleapis.com https://fonts.gstatic.com https://va.vercel-scripts.com",
               "frame-src 'self' https://vercel.live https://accounts.google.com https://*.firebaseapp.com https://www.facebook.com https://web.facebook.com",
               "frame-ancestors 'self'",
               "base-uri 'self'",

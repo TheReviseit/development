@@ -41,7 +41,24 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       });
 
       if (!response.ok) {
-        throw new Error("Failed to sync user");
+        // Try to get the actual error message from the response
+        let errorMessage = "Failed to sync user";
+        try {
+          const errorData = await response.json();
+          errorMessage =
+            errorData.error ||
+            errorData.message ||
+            `Sync failed with status ${response.status}`;
+          if (errorData.details) {
+            console.error("Sync error details:", errorData.details);
+          }
+          if (errorData.code) {
+            console.error("Sync error code:", errorData.code);
+          }
+        } catch {
+          errorMessage = `Sync failed with status ${response.status}: ${response.statusText}`;
+        }
+        throw new Error(errorMessage);
       }
 
       const data: SyncUserResponse = await response.json();
@@ -53,7 +70,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         throw new Error(data.error || "Sync failed");
       }
     } catch (err: any) {
-      console.error("Sync error:", err);
+      // Check if it's a network error (backend not reachable)
+      if (err.name === "TypeError" && err.message === "Failed to fetch") {
+        console.error(
+          "❌ Sync error: Could not reach the auth API. Check if the server is running."
+        );
+      } else {
+        console.error("❌ Sync error:", err.message || err);
+      }
       setError(err);
       throw err;
     }

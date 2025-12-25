@@ -314,20 +314,30 @@ class LLMUsageTracker:
             print(f"⚠️ Could not load usage for {business_id}: {e}")
         return None
     
-    def _sync_to_db(self, business_id: str):
+    def _sync_to_db(self, business_id: str, model_name: str = None):
         """Sync usage to Supabase (background, non-blocking)."""
         if not self.client or business_id not in self._cache:
             return
         
         usage = self._cache[business_id]
         try:
-            # Only sync columns that exist in the DB
+            # Calculate cost before syncing
+            usage.calculate_cost()
+            
+            # Sync all fields including token breakdown
             self.client.table('business_llm_usage').upsert({
                 'business_id': business_id,
                 'monthly_tokens_used': usage.tokens_used,
                 'monthly_llm_replies': usage.replies_used,
                 'billing_cycle_start': datetime.fromtimestamp(usage.cycle_start).isoformat(),
-                'billing_cycle_end': datetime.fromtimestamp(usage.cycle_end).isoformat()
+                'billing_cycle_end': datetime.fromtimestamp(usage.cycle_end).isoformat(),
+                # New fields for accurate dashboard/billing
+                'input_tokens': usage.input_tokens,
+                'output_tokens': usage.output_tokens,
+                'cached_tokens': usage.cached_tokens,
+                'cost_usd': usage.cost_usd,
+                'cost_inr': usage.cost_inr,
+                'model_name': model_name or 'gpt-4o-mini'
             }, on_conflict='business_id').execute()
             
             usage.last_sync = time.time()
