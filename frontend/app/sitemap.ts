@@ -95,6 +95,12 @@ export default function sitemap(): MetadataRoute.Sitemap {
       changeFrequency: "yearly",
       priority: 0.4,
     },
+    {
+      url: `${baseUrl}/data-handling-policy`,
+      lastModified: lastModified,
+      changeFrequency: "yearly",
+      priority: 0.4,
+    },
 
     // ==========================================
     // FUTURE PAGES - Uncomment when ready

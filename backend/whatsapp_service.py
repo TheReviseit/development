@@ -199,6 +199,113 @@ class WhatsAppService:
                 'error': f'Unexpected error: {str(e)}'
             }
 
+    def send_template_message(
+        self,
+        phone_number_id: str,
+        access_token: str,
+        to: str,
+        template_name: str,
+        language_code: str,
+        components: list = None
+    ) -> Dict[str, Any]:
+        """
+        Send a template message via WhatsApp.
+        
+        Args:
+            phone_number_id: The sender's WhatsApp phone number ID
+            access_token: The Facebook/WhatsApp access token
+            to: Recipient phone number (with country code, no + sign)
+            template_name: Name of the approved template
+            language_code: Language code (e.g., 'en_US', 'en')
+            components: List of component objects for variable substitution
+                Format: [{"type": "body", "parameters": [{"type": "text", "text": "value"}]}]
+            
+        Returns:
+            Dict containing success status and response data
+        """
+        if not phone_number_id or not access_token:
+            return {
+                'success': False,
+                'error': 'Missing phone_number_id or access_token'
+            }
+        
+        if not to or not template_name:
+            return {
+                'success': False,
+                'error': 'Missing recipient phone number or template name'
+            }
+        
+        url = f'{self.base_url}/{phone_number_id}/messages'
+        
+        print(f"   📤 Sending template '{template_name}' to {to}")
+        print(f"   🔧 Using Phone Number ID: {phone_number_id}")
+        
+        headers = {
+            'Authorization': f'Bearer {access_token}',
+            'Content-Type': 'application/json'
+        }
+        
+        # Build template payload
+        template_payload = {
+            'name': template_name,
+            'language': {
+                'code': language_code
+            }
+        }
+        
+        # Add components if provided (for variable substitution)
+        if components:
+            template_payload['components'] = components
+        
+        payload = {
+            'messaging_product': 'whatsapp',
+            'recipient_type': 'individual',
+            'to': to,
+            'type': 'template',
+            'template': template_payload
+        }
+        
+        print(f"   📦 Payload: {payload}")
+        
+        try:
+            response = requests.post(url, json=payload, headers=headers, timeout=15)
+            response_data = response.json()
+            
+            if response.status_code == 200:
+                print(f"   ✅ Template message sent successfully!")
+                return {
+                    'success': True,
+                    'message_id': response_data.get('messages', [{}])[0].get('id'),
+                    'data': response_data
+                }
+            else:
+                error_message = response_data.get('error', {}).get('message', 'Unknown error')
+                error_code = response_data.get('error', {}).get('code', 'N/A')
+                print(f"   ❌ Error: {error_message} (Code: {error_code})")
+                return {
+                    'success': False,
+                    'error': error_message,
+                    'error_code': error_code,
+                    'status_code': response.status_code,
+                    'data': response_data
+                }
+                
+        except requests.exceptions.Timeout:
+            return {
+                'success': False,
+                'error': 'Request timed out. Please try again.'
+            }
+        except requests.exceptions.RequestException as e:
+            return {
+                'success': False,
+                'error': f'Network error: {str(e)}'
+            }
+        except Exception as e:
+            return {
+                'success': False,
+                'error': f'Unexpected error: {str(e)}'
+            }
+
     def mark_message_as_read(
         self,
         phone_number_id: str = None,
