@@ -303,11 +303,23 @@ class AIBrain:
             # TRACK LLM USAGE after successful call (non-blocking)
             try:
                 if self.usage_tracker:
-                    input_tokens = result.metadata.get('prompt_tokens', 150)
-                    output_tokens = result.metadata.get('completion_tokens', 50)
-                    self.usage_tracker.track_usage(biz_id, input_tokens, output_tokens)
+                    input_tokens = result.metadata.get('prompt_tokens', 0)
+                    output_tokens = result.metadata.get('completion_tokens', 0)
+                    model_name = result.metadata.get('model', 'unknown')
+                    
+                    usage_result = self.usage_tracker.track_usage(biz_id, input_tokens, output_tokens)
+                    
+                    # Log for debugging (recommended by user)
+                    logger.info(
+                        f"Tracked LLM usage | biz={biz_id} | model={model_name} | "
+                        f"in={input_tokens} | out={output_tokens} | "
+                        f"intent_in={result.metadata.get('intent_prompt_tokens', 0)} | "
+                        f"intent_out={result.metadata.get('intent_completion_tokens', 0)} | "
+                        f"gen_in={result.metadata.get('generation_prompt_tokens', 0)} | "
+                        f"gen_out={result.metadata.get('generation_completion_tokens', 0)}"
+                    )
             except Exception as e:
-                print(f"⚠️ Usage tracking skipped: {e}")
+                logger.warning(f"Usage tracking skipped: {e}")
             
             # Format response
             reply = result.reply

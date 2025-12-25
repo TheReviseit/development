@@ -10,12 +10,32 @@ from flask_cors import CORS
 from dotenv import load_dotenv
 from whatsapp_service import WhatsAppService
 
+# New modular routes
+try:
+    from routes import register_routes
+    ROUTES_AVAILABLE = True
+except ImportError as e:
+    print(f"⚠️ Routes module not available: {e}")
+    ROUTES_AVAILABLE = False
+    register_routes = None
+
+# Rate limiting middleware
+try:
+    from middleware import rate_limit, get_webhook_security
+    RATE_LIMIT_AVAILABLE = True
+except ImportError as e:
+    print(f"⚠️ Rate limiting not available: {e}")
+    RATE_LIMIT_AVAILABLE = False
+    rate_limit = None
+    get_webhook_security = None
+
 # Supabase client for multi-tenant credential lookup
 try:
     from supabase_client import (
         get_credentials_by_phone_number_id, 
         get_business_data_for_user,
         get_firebase_uid_from_user_id,
+        get_business_id_for_user,
         store_message,
         update_message_status
     )
@@ -79,13 +99,23 @@ if frontend_url and frontend_url not in allowed_origins:
 CORS(app, resources={
     r"/api/*": {
         "origins": allowed_origins,
-        "methods": ["GET", "POST", "OPTIONS"],
-        "allow_headers": ["Content-Type", "Authorization"]
+        "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+        "allow_headers": ["Content-Type", "Authorization", "X-User-ID"]
     }
 })
 
 # Initialize WhatsApp service
 whatsapp_service = WhatsAppService()
+
+# Register modular routes (templates, contacts, analytics, campaigns)
+if ROUTES_AVAILABLE and register_routes:
+    register_routes(app)
+
+# Initialize webhook security
+webhook_security = None
+if RATE_LIMIT_AVAILABLE and get_webhook_security:
+    webhook_security = get_webhook_security()
+    print("🔒 Webhook security initialized")
 
 
 @app.route('/api/health', methods=['GET'])
@@ -318,6 +348,16 @@ def webhook():
         
         if not business_data:
              business_data = BUSINESS_DATA_CACHE.get('current', DEFAULT_BUSINESS_DATA)
+
+        # IMPORTANT: Override business_id with Supabase ID for consistent token tracking
+        # The LLM usage tracker and analytics both use connected_business_managers.id,
+        # not the Firebase UID from Firestore. This ensures tokens are tracked correctly.
+        if SUPABASE_AVAILABLE and user_id:
+            supabase_business_id = get_business_id_for_user(user_id)
+            if supabase_business_id:
+                business_data['business_id'] = supabase_business_id
+                print(f"🔑 Using Supabase business_id for tracking: {supabase_business_id[:8]}...")
+
 
         # 2. Store the incoming message in the database
         if SUPABASE_AVAILABLE and store_message and user_id:

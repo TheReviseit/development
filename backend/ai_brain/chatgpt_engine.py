@@ -155,6 +155,11 @@ class ChatGPTEngine:
                 response_format={"type": "json_object"}
             )
             
+            # Safely extract token usage (handles streaming/tool-only responses)
+            usage = getattr(response, "usage", None) or type('obj', (object,), {'prompt_tokens': 0, 'completion_tokens': 0})()
+            intent_prompt_tokens = getattr(usage, "prompt_tokens", 0) or 0
+            intent_completion_tokens = getattr(usage, "completion_tokens", 0) or 0
+            
             result = json.loads(response.choices[0].message.content)
             
             # Parse intent
@@ -163,6 +168,10 @@ class ChatGPTEngine:
                 intent = IntentType(intent_str)
             except ValueError:
                 intent = IntentType.UNKNOWN
+            
+            # Store token counts in raw_response for aggregation in process_message()
+            result["_intent_prompt_tokens"] = intent_prompt_tokens
+            result["_intent_completion_tokens"] = intent_completion_tokens
             
             return IntentResult(
                 intent=intent,
@@ -260,6 +269,11 @@ class ChatGPTEngine:
             
             choice = response.choices[0]
             
+            # Safely extract token usage (handles streaming/tool-only responses)
+            usage = getattr(response, "usage", None) or type('obj', (object,), {'prompt_tokens': 0, 'completion_tokens': 0})()
+            gen_prompt_tokens = getattr(usage, "prompt_tokens", 0) or 0
+            gen_completion_tokens = getattr(usage, "completion_tokens", 0) or 0
+            
             # Check if a tool was called
             tool_called = None
             tool_result = None
@@ -305,7 +319,11 @@ class ChatGPTEngine:
                 metadata={
                     "generation_method": "tool" if tool_called else "llm",
                     "confidence_action": confidence_action["action"],
-                    "model": self.config.llm.model
+                    "model": self.config.llm.model,
+                    "prompt_tokens": gen_prompt_tokens,
+                    "completion_tokens": gen_completion_tokens,
+                    "generation_prompt_tokens": gen_prompt_tokens,
+                    "generation_completion_tokens": gen_completion_tokens
                 }
             )
             
@@ -489,10 +507,14 @@ class ChatGPTEngine:
             user_id: Optional user identifier
             
         Returns:
-            GenerationResult with complete response
+            GenerationResult with complete response including aggregated token usage
         """
         # Step 1: Classify intent
         intent_result = self.classify_intent(message, conversation_history)
+        
+        # Extract intent classification tokens from raw_response
+        intent_prompt_tokens = intent_result.raw_response.get("_intent_prompt_tokens", 0)
+        intent_completion_tokens = intent_result.raw_response.get("_intent_completion_tokens", 0)
         
         # Step 2: Generate response
         generation_result = self.generate_response(
@@ -503,4 +525,25 @@ class ChatGPTEngine:
             use_tools=self.config.enable_function_calling
         )
         
+        # Get generation tokens from metadata
+        gen_prompt_tokens = generation_result.metadata.get("generation_prompt_tokens", 0)
+        gen_completion_tokens = generation_result.metadata.get("generation_completion_tokens", 0)
+        
+        # Calculate totals (intent + generation)
+        total_prompt_tokens = intent_prompt_tokens + gen_prompt_tokens
+        total_completion_tokens = intent_completion_tokens + gen_completion_tokens
+        
+        # Update metadata with complete token breakdown
+        generation_result.metadata.update({
+            # Total tokens for tracking (combines both API calls)
+            "prompt_tokens": total_prompt_tokens,
+            "completion_tokens": total_completion_tokens,
+            # Separate breakdown for analytics/optimization
+            "intent_prompt_tokens": intent_prompt_tokens,
+            "intent_completion_tokens": intent_completion_tokens,
+            "generation_prompt_tokens": gen_prompt_tokens,
+            "generation_completion_tokens": gen_completion_tokens,
+        })
+        
         return generation_result
+

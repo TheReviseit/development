@@ -489,6 +489,13 @@ def store_message(
                 is_ai_generated=is_ai_generated
             )
             
+            # Update daily analytics in real-time
+            update_analytics_daily(
+                user_id=user_id,
+                direction=direction,
+                is_ai_generated=is_ai_generated
+            )
+            
             return result.data[0]
         else:
             print(f"⚠️ Message insert returned no data")
@@ -505,6 +512,78 @@ def store_message(
         return None
 
 
+def update_analytics_daily(
+    user_id: str,
+    direction: str,
+    is_ai_generated: bool = False,
+    status: str = None
+) -> None:
+    """
+    Update analytics_daily counters in real-time when a message is processed.
+    
+    Args:
+        user_id: The user UUID
+        direction: 'inbound' or 'outbound'
+        is_ai_generated: Whether this is an AI-generated response
+        status: Message status for updating delivery/read counts
+    """
+    client = get_supabase_client()
+    if not client:
+        return
+    
+    try:
+        from datetime import datetime, date
+        today = date.today().isoformat()
+        
+        # Build increment fields based on message type
+        increments = {}
+        if direction == 'inbound':
+            increments['messages_received'] = 1
+        elif direction == 'outbound':
+            increments['messages_sent'] = 1
+            if is_ai_generated:
+                increments['ai_replies_generated'] = 1
+        
+        # Handle status updates (delivered, read, failed)
+        if status == 'delivered':
+            increments['messages_delivered'] = 1
+        elif status == 'read':
+            increments['messages_read'] = 1
+        elif status == 'failed':
+            increments['messages_failed'] = 1
+        
+        if not increments:
+            return
+        
+        # Try to get existing record for today
+        result = client.table('analytics_daily').select('*').eq(
+            'user_id', user_id
+        ).eq('date', today).execute()
+        
+        if result.data:
+            # Update existing record
+            existing = result.data[0]
+            updates = {}
+            for key, val in increments.items():
+                updates[key] = (existing.get(key, 0) or 0) + val
+            updates['updated_at'] = datetime.utcnow().isoformat()
+            client.table('analytics_daily').update(updates).eq('id', existing['id']).execute()
+            print(f"📊 Analytics updated: {increments}")
+        else:
+            # Insert new row for today
+            new_row = {
+                'user_id': user_id,
+                'date': today,
+                **{k: v for k, v in increments.items()},
+            }
+            client.table('analytics_daily').insert(new_row).execute()
+            print(f"📊 Analytics created for {today}: {increments}")
+            
+    except Exception as e:
+        # Don't fail the main operation if analytics update fails
+        print(f"⚠️ Could not update analytics: {e}")
+
+
 def update_message_status(
     message_id: str,
     status: str,
@@ -513,6 +592,7 @@ def update_message_status(
     """
     Update the status of a message.
     Uses correct schema: wamid for lookup, status_updated_at for timestamp.
+    Also updates analytics for delivered/read/failed statuses.
     
     Args:
         message_id: The WhatsApp message ID (wamid)
@@ -534,15 +614,42 @@ def update_message_status(
             update_data['status_updated_at'] = timestamp
         
         # Query by wamid (not message_id which doesn't exist)
+        # Also select business_id for analytics update
         result = client.table('whatsapp_messages').update(update_data).eq(
             'wamid', message_id
         ).execute()
         
         if result.data:
             print(f"📊 Message status updated: {message_id[:20]}... -> {status}")
+            
+            # Update analytics for delivered/read/failed statuses
+            if status in ('delivered', 'read', 'failed'):
+                # Get the message to find related user
+                msg_result = client.table('whatsapp_messages').select(
+                    'business_id'
+                ).eq('wamid', message_id).execute()
+                
+                if msg_result.data:
+                    business_id = msg_result.data[0].get('business_id')
+                    if business_id:
+                        # Get user_id from business
+                        bm_result = client.table('connected_business_managers').select(
+                            'user_id'
+                        ).eq('id', business_id).execute()
+                        
+                        if bm_result.data:
+                            user_id = bm_result.data[0].get('user_id')
+                            if user_id:
+                                update_analytics_daily(
+                                    user_id=str(user_id),
+                                    direction='outbound',
+                                    status=status
+                                )
+            
             return True
         return False
         
     except Exception as e:
         print(f"⚠️ Could not update message status: {e}")
         return False
+
