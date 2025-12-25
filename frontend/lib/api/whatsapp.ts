@@ -191,6 +191,61 @@ export async function deleteTemplate(
   });
 }
 
+export interface CreateTemplateData {
+  name: string;
+  category: "MARKETING" | "UTILITY" | "AUTHENTICATION";
+  language: string;
+  header?: {
+    type: "TEXT" | "IMAGE" | "VIDEO" | "DOCUMENT";
+    text?: string;
+  };
+  body: string;
+  body_examples?: string[];
+  footer?: string;
+  buttons?: Array<{
+    type: "URL" | "PHONE_NUMBER" | "QUICK_REPLY";
+    text: string;
+    url?: string;
+    phone_number?: string;
+  }>;
+}
+
+export async function createTemplate(
+  userId: string,
+  template: CreateTemplateData
+): Promise<{ template_id: string; message: string }> {
+  const response = await apiRequest<{
+    template_id: string;
+    message: string;
+    data: Template;
+  }>("/api/templates", userId, {
+    method: "POST",
+    body: JSON.stringify(template),
+  });
+  return response;
+}
+
+export interface SendTemplateData {
+  template_id: string;
+  phone_number: string;
+  variables?: string[];
+}
+
+export async function sendTemplateMessage(
+  userId: string,
+  data: SendTemplateData
+): Promise<{ success: boolean; message_id?: string; message?: string }> {
+  const response = await apiRequest<{
+    success: boolean;
+    message_id?: string;
+    message?: string;
+  }>("/api/templates/send", userId, {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+  return response;
+}
+
 // =====================================================
 // CONTACTS API
 // =====================================================

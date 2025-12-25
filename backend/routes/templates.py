@@ -291,6 +291,8 @@ def create_template():
         var_matches = re.findall(r'\{\{(\d+)\}\}', body_text)
         if var_matches:
             examples = data.get('body_examples', [f'example{i}' for i in var_matches])
+            # Meta API expects body_text to be a NESTED array: [[value1, value2, ...]]
+            # Per Meta docs: "example": { "body_text": [["Pablo", "860198-230332"]] }
             body_component['example'] = {'body_text': [examples]}
         
         components.append(body_component)
@@ -300,10 +302,30 @@ def create_template():
         if footer:
             components.append({'type': 'FOOTER', 'text': footer})
         
-        # Buttons
+        # Buttons - format properly for Meta API
         buttons = data.get('buttons', [])
         if buttons:
-            components.append({'type': 'BUTTONS', 'buttons': buttons})
+            formatted_buttons = []
+            for btn in buttons:
+                btn_type = btn.get('type')
+                formatted_btn = {
+                    'type': btn_type,
+                    'text': btn.get('text', '')
+                }
+                
+                if btn_type == 'URL':
+                    url_value = btn.get('url', '')
+                    formatted_btn['url'] = url_value
+                    # Add example if URL contains variables
+                    if '{{' in url_value:
+                        formatted_btn['example'] = [url_value.replace('{{1}}', 'example')]
+                
+                elif btn_type == 'PHONE_NUMBER':
+                    formatted_btn['phone_number'] = btn.get('phone_number', '')
+                
+                formatted_buttons.append(formatted_btn)
+            
+            components.append({'type': 'BUTTONS', 'buttons': formatted_buttons})
         
         # Create template via Meta API
         url = f"{GRAPH_API_BASE}/{waba_id}/message_templates"
@@ -314,17 +336,31 @@ def create_template():
             'components': components
         }
         
+        # Log the request for debugging
+        print(f"📤 Sending template to Meta API:")
+        print(f"   URL: {url}")
+        print(f"   Payload: {payload}")
+        
         response = requests.post(
             url,
             params={'access_token': access_token},
             json=payload
         )
         
+        # Log the response for debugging
+        print(f"📥 Meta API response: {response.status_code}")
+        print(f"   Body: {response.text}")
+        
         if response.status_code not in [200, 201]:
             error = response.json().get('error', {})
+            error_message = error.get('message', 'Failed to create template')
+            error_details = error.get('error_user_msg', '') or error.get('error_subcode', '')
+            print(f"❌ Meta API Error: {error_message}")
+            if error_details:
+                print(f"   Details: {error_details}")
             return jsonify({
                 'success': False,
-                'error': error.get('message', 'Failed to create template')
+                'error': f"{error_message}{f' - {error_details}' if error_details else ''}"
             }), response.status_code
         
         meta_response = response.json()
@@ -450,3 +486,143 @@ def get_template(template_id: str):
     
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
+
+
+def get_user_phone_credentials(user_id: str) -> Optional[Dict[str, Any]]:
+    """
+    Get the user's phone_number_id and access token for sending messages.
+    Returns dict with 'phone_number_id', 'access_token', 'waba_id' or None.
+    """
+    if not SUPABASE_AVAILABLE:
+        return None
+    
+    try:
+        client = get_supabase_client()
+        
+        # Get user's connected phone number with full credentials chain
+        result = client.table('connected_phone_numbers').select(
+            'id, phone_number_id, whatsapp_account_id, connected_whatsapp_accounts!inner(waba_id, business_manager_id, connected_business_managers!inner(facebook_account_id, connected_facebook_accounts!inner(access_token)))'
+        ).eq('user_id', user_id).eq('is_active', True).eq('is_primary', True).limit(1).execute()
+        
+        if result.data and len(result.data) > 0:
+            phone = result.data[0]
+            waba = phone.get('connected_whatsapp_accounts', {})
+            bm = waba.get('connected_business_managers', {})
+            fb = bm.get('connected_facebook_accounts', {})
+            
+            # Import decrypt function
+            from crypto_utils import decrypt_token
+            access_token = decrypt_token(fb.get('access_token', ''))
+            
+            return {
+                'phone_number_id': phone.get('phone_number_id'),
+                'waba_id': waba.get('waba_id'),
+                'access_token': access_token
+            }
+    except Exception as e:
+        print(f"❌ Error getting phone credentials: {e}")
+    
+    return None
+
+
+@templates_bp.route('/send', methods=['POST'])
+@require_auth
+def send_template_message():
+    """
+    Send a message using an approved template.
+    
+    Request body:
+    {
+        "template_id": "uuid",
+        "phone_number": "919876543210",
+        "variables": ["John", "ORD123", "25 Dec 2025"]  // values for {{1}}, {{2}}, {{3}}
+    }
+    """
+    if not SUPABASE_AVAILABLE:
+        return jsonify({'success': False, 'error': 'Database not available'}), 503
+    
+    try:
+        user_id = request.user_id
+        data = request.get_json()
+        
+        template_id = data.get('template_id')
+        phone_number = data.get('phone_number', '').strip()
+        variables = data.get('variables', [])
+        
+        # Validation
+        if not template_id:
+            return jsonify({'success': False, 'error': 'template_id is required'}), 400
+        
+        if not phone_number:
+            return jsonify({'success': False, 'error': 'phone_number is required'}), 400
+        
+        # Clean phone number (remove +, spaces, dashes)
+        phone_number = ''.join(c for c in phone_number if c.isdigit())
+        
+        # Get template from database
+        client = get_supabase_client()
+        template_result = client.table('whatsapp_message_templates').select('*').eq(
+            'id', template_id
+        ).eq('user_id', user_id).limit(1).execute()
+        
+        if not template_result.data:
+            return jsonify({'success': False, 'error': 'Template not found'}), 404
+        
+        template = template_result.data[0]
+        
+        # Check if template is approved
+        if template.get('status') != 'APPROVED':
+            return jsonify({
+                'success': False, 
+                'error': f"Template is not approved. Current status: {template.get('status')}"
+            }), 400
+        
+        # Get phone credentials
+        creds = get_user_phone_credentials(user_id)
+        if not creds or not creds.get('access_token'):
+            return jsonify({
+                'success': False,
+                'error': 'WhatsApp credentials not found. Please reconnect your WhatsApp Business Account.'
+            }), 400
+        
+        # Build components for variable substitution
+        components = []
+        if variables and len(variables) > 0:
+            parameters = [{"type": "text", "text": str(v)} for v in variables]
+            components.append({
+                "type": "body",
+                "parameters": parameters
+            })
+        
+        # Import WhatsApp service
+        from whatsapp_service import WhatsAppService
+        whatsapp = WhatsAppService()
+        
+        # Send the template message
+        result = whatsapp.send_template_message(
+            phone_number_id=creds['phone_number_id'],
+            access_token=creds['access_token'],
+            to=phone_number,
+            template_name=template['template_name'],
+            language_code=template['language'],
+            components=components if components else None
+        )
+        
+        if result.get('success'):
+            return jsonify({
+                'success': True,
+                'message_id': result.get('message_id'),
+                'message': f"Template message sent to {phone_number}"
+            })
+        else:
+            return jsonify({
+                'success': False,
+                'error': result.get('error', 'Failed to send message')
+            }), 400
+    
+    except Exception as e:
+        print(f"❌ Error sending template message: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'success': False, 'error': str(e)}), 500
+

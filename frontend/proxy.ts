@@ -27,6 +27,7 @@ export async function proxy(request: NextRequest) {
     "/api/webhooks",
     "/api/facebook/deauthorize",
     "/api/facebook/data-deletion",
+    "/data-handling-policy",
   ];
 
   const isPublicPath =
