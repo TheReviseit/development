@@ -131,6 +131,9 @@ def convert_firestore_to_ai_format(data: Dict[str, Any]) -> Dict[str, Any]:
     
     Firestore uses camelCase, AI Brain expects snake_case.
     """
+    # Get socialMedia from Firestore (camelCase)
+    social_media_data = data.get('socialMedia', {})
+    
     return {
         'business_id': data.get('businessId') or data.get('userId', 'unknown'),
         'business_name': data.get('businessName', 'Our Business'),
@@ -161,6 +164,13 @@ def convert_firestore_to_ai_format(data: Dict[str, Any]) -> Dict[str, Any]:
             {'question': faq.get('question', ''), 'answer': faq.get('answer', '')}
             for faq in data.get('faqs', [])
         ],
+        # Social media links for AI context
+        'social_media': {
+            'instagram': social_media_data.get('instagram', ''),
+            'facebook': social_media_data.get('facebook', ''),
+            'twitter': social_media_data.get('twitter', ''),
+            'youtube': social_media_data.get('youtube', ''),
+        },
     }
 
 

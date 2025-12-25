@@ -439,12 +439,12 @@
   display: flex;
   align-items: center;
   gap: 16px;
-  padding: 16px;
+  padding: 16px 20px;
   background: rgba(255, 255, 255, 0.03);
   border: 1px solid rgba(255, 255, 255, 0.06);
   border-radius: 12px;
-  flex-wrap: wrap;
   transition: all 0.2s ease;
+  width: 100%;
 }
 
 .timingRow:hover {
@@ -462,38 +462,106 @@
 .closedToggle {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
   font-size: 13px;
   cursor: pointer;
   color: rgba(255, 255, 255, 0.6);
   user-select: none;
+  transition: color 0.2s ease;
 }
 
-.closedToggle input {
+.closedToggle:hover {
+  color: rgba(255, 255, 255, 0.8);
+}
+
+/* Custom checkbox styling */
+.closedToggle input[type="checkbox"] {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 18px;
+  height: 18px;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  border-radius: 5px;
+  background: rgba(255, 255, 255, 0.05);
   cursor: pointer;
-  width: 16px;
-  height: 16px;
-  accent-color: #22c15a;
+  transition: all 0.2s ease;
+  position: relative;
 }
 
+.closedToggle input[type="checkbox"]:hover {
+  border-color: rgba(255, 255, 255, 0.5);
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.closedToggle input[type="checkbox"]:checked {
+  background: #22c15a;
+  border-color: #22c15a;
+}
+
+.closedToggle input[type="checkbox"]:checked::after {
+  content: "✓";
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  color: white;
+  font-size: 12px;
+  font-weight: bold;
+}
+
+.closedToggle input[type="checkbox"]:focus {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(34, 193, 90, 0.3);
+}
+
+/* Time input styling */
 .timeInput {
-  padding: 10px 14px;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 8px;
+  padding: 12px 16px;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 10px;
   font-size: 14px;
-  background: rgba(255, 255, 255, 0.03);
+  font-weight: 500;
+  background: rgba(255, 255, 255, 0.06);
   color: white;
   cursor: pointer;
+  color-scheme: dark;
+  transition: all 0.2s ease;
+  min-width: 130px;
+  flex: 1;
+  max-width: 180px;
+}
+
+.timeInput:hover {
+  border-color: rgba(255, 255, 255, 0.3);
+  background: rgba(255, 255, 255, 0.1);
 }
 
 .timeInput:focus {
   outline: none;
-  border-color: rgba(255, 255, 255, 0.4);
+  border-color: rgba(255, 255, 255, 0.5);
+  background: rgba(255, 255, 255, 0.1);
+  box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.1);
+}
+
+/* Style the time picker icon - make it white */
+.timeInput::-webkit-calendar-picker-indicator {
+  filter: invert(1) brightness(2);
+  opacity: 1;
+  cursor: pointer;
+  transition: opacity 0.2s ease;
+  width: 18px;
+  height: 18px;
+}
+
+.timeInput::-webkit-calendar-picker-indicator:hover {
+  opacity: 0.8;
 }
 
 .timeSeparator {
-  color: rgba(255, 255, 255, 0.3);
-  font-size: 13px;
+  color: rgba(255, 255, 255, 0.5);
+  font-size: 14px;
+  font-weight: 500;
+  padding: 0 4px;
 }
 
 /* FAQ cards */
