@@ -632,42 +632,6 @@ export default function CreateTemplateModal({
                 </div>
               )}
 
-              {/* Preview */}
-              <div className={styles.previewSection}>
-                <h3 className={styles.previewTitle}>Template Preview</h3>
-                <div className={styles.phonePreview}>
-                  <div className={styles.messageBubble}>
-                    {hasHeader && headerType === "TEXT" && headerText && (
-                      <div className={styles.previewHeader}>{headerText}</div>
-                    )}
-                    {hasHeader && headerType !== "TEXT" && (
-                      <div className={styles.previewMedia}>
-                        📎 {headerType.toLowerCase()}
-                      </div>
-                    )}
-                    <div className={styles.previewBody}>
-                      {body || "Your message body will appear here..."}
-                    </div>
-                    {hasFooter && footer && (
-                      <div className={styles.previewFooter}>{footer}</div>
-                    )}
-                    {hasButtons && buttons.length > 0 && (
-                      <div className={styles.previewButtons}>
-                        {buttons
-                          .filter((b) => b.text)
-                          .map((btn, idx) => (
-                            <button key={idx} className={styles.previewButton}>
-                              {btn.type === "URL" && "🔗 "}
-                              {btn.type === "PHONE_NUMBER" && "📞 "}
-                              {btn.text}
-                            </button>
-                          ))}
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </div>
-
               <div className={styles.infoBox}>
                 <strong>⏱️ Approval Time:</strong> Templates typically take
                 24-48 hours for Meta to review and approve.
