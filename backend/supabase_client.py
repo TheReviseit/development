@@ -653,3 +653,54 @@ def update_message_status(
         print(f"⚠️ Could not update message status: {e}")
         return False
 
+def get_user_push_tokens(user_id: str) -> list[str]:
+    """
+    Fetch all active FCM push tokens for a user.
+    
+    Args:
+        user_id: The Supabase user UUID
+        
+    Returns:
+        List of FCM token strings
+    """
+    client = get_supabase_client()
+    if not client:
+        return []
+    
+    try:
+        # Fetch tokens from push_subscriptions table
+        result = client.table('push_subscriptions').select('fcm_token').eq(
+            'user_id', user_id
+        ).execute()
+        
+        if result.data:
+            tokens = [row.get('fcm_token') for row in result.data if row.get('fcm_token')]
+            print(f"🔑 Found {len(tokens)} push tokens for user {user_id[:8]}...")
+            return tokens
+    except Exception as e:
+        print(f"⚠️ Error fetching push tokens for user {user_id}: {e}")
+        
+    return []
+
+def delete_push_token(token: str) -> bool:
+    """
+    Remove an invalid or expired push token from the database.
+    
+    Args:
+        token: The FCM token to remove
+        
+    Returns:
+        True if deleted, False otherwise
+    """
+    client = get_supabase_client()
+    if not client:
+        return False
+    
+    try:
+        client.table('push_subscriptions').delete().eq('fcm_token', token).execute()
+        print(f"🗑️ Deleted push token {token[:10]}...")
+        return True
+    except Exception as e:
+        print(f"⚠️ Error deleting push token: {e}")
+        return False
+

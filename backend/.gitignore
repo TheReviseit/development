@@ -36,3 +36,9 @@ wheels/
 # OS
 .DS_Store
 Thumbs.db
+
+# Firebase Credentials - NEVER COMMIT!
+credentials/
+serviceAccountKey.json
+*-firebase-adminsdk-*.json
+

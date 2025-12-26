@@ -1,5 +1,94 @@
 // Service Worker for ReviseIt PWA
-// Enhanced caching with separate strategies for different asset types
+// Enhanced caching with Firebase Cloud Messaging support
+
+// ============================================
+// Firebase Cloud Messaging (FCM) Setup
+// ============================================
+
+// Import Firebase SDKs for service worker
+importScripts(
+  "https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"
+);
+importScripts(
+  "https://www.gstatic.com/firebasejs/10.7.1/firebase-messaging-compat.js"
+);
+
+// Firebase will be initialized when config is received from the client
+let firebaseApp = null;
+let messaging = null;
+
+// Listen for Firebase config from the client
+self.addEventListener("message", (event) => {
+  if (event.data && event.data.type === "FIREBASE_CONFIG") {
+    try {
+      // Initialize Firebase if not already initialized
+      if (!firebaseApp) {
+        firebaseApp = firebase.initializeApp(event.data.config);
+        messaging = firebase.messaging(firebaseApp);
+        console.log("✅ Firebase initialized in service worker");
+
+        // Set up background message handler
+        setupBackgroundMessageHandler();
+      }
+    } catch (error) {
+      console.error("❌ Failed to initialize Firebase in SW:", error);
+    }
+  }
+
+  // Handle skip waiting message
+  if (event.data && event.data.type === "SKIP_WAITING") {
+    self.skipWaiting();
+  }
+});
+
+// Setup background message handler
+function setupBackgroundMessageHandler() {
+  if (!messaging) return;
+
+  messaging.onBackgroundMessage((payload) => {
+    console.log("📬 Background message received:", payload);
+
+    // Extract notification data
+    const notificationTitle =
+      payload.notification?.title || payload.data?.title || "New Message";
+    const notificationBody =
+      payload.notification?.body ||
+      payload.data?.body ||
+      "You have a new message";
+    const notificationIcon =
+      payload.notification?.icon || payload.data?.icon || "/icon-192.png";
+    const conversationId = payload.data?.conversationId;
+    const url = payload.data?.url || payload.fcmOptions?.link || "/dashboard";
+
+    // Show notification
+    const notificationOptions = {
+      body: notificationBody,
+      icon: notificationIcon,
+      badge: "/icon-192.png",
+      tag: conversationId || "message",
+      data: {
+        url: url,
+        conversationId: conversationId,
+        ...payload.data,
+      },
+      vibrate: [200, 100, 200],
+      requireInteraction: false,
+      actions: [
+        { action: "open", title: "Open" },
+        { action: "dismiss", title: "Dismiss" },
+      ],
+    };
+
+    return self.registration.showNotification(
+      notificationTitle,
+      notificationOptions
+    );
+  });
+}
+
+// ============================================
+// PWA Caching Configuration
+// ============================================
 
 const CACHE_VERSION = "v3";
 const STATIC_CACHE = `reviseit-static-${CACHE_VERSION}`;
@@ -182,9 +271,54 @@ self.addEventListener("fetch", (event) => {
   }
 });
 
-// Handle messages from the client
-self.addEventListener("message", (event) => {
-  if (event.data && event.data.type === "SKIP_WAITING") {
-    self.skipWaiting();
+// ============================================
+// Notification Click Handler
+// ============================================
+
+self.addEventListener("notificationclick", (event) => {
+  console.log("🔔 Notification clicked:", event);
+
+  event.notification.close();
+
+  // Handle action buttons
+  if (event.action === "dismiss") {
+    return;
   }
+
+  // Get the URL to open
+  const data = event.notification.data || {};
+  const urlToOpen = data.url || "/dashboard";
+
+  // Focus existing window or open new one
+  const promiseChain = clients
+    .matchAll({
+      type: "window",
+      includeUncontrolled: true,
+    })
+    .then((windowClients) => {
+      // Check if there's already a window open
+      for (const client of windowClients) {
+        if (client.url.includes("/dashboard") && "focus" in client) {
+          // If we have a conversation ID, post a message to navigate
+          if (data.conversationId) {
+            client.postMessage({
+              type: "NOTIFICATION_CLICK",
+              conversationId: data.conversationId,
+            });
+          }
+          return client.focus();
+        }
+      }
+      // No window open, open a new one
+      if (clients.openWindow) {
+        return clients.openWindow(urlToOpen);
+      }
+    });
+
+  event.waitUntil(promiseChain);
+});
+
+// Handle notification close (for analytics if needed)
+self.addEventListener("notificationclose", (event) => {
+  console.log("🔔 Notification closed:", event.notification.tag);
 });

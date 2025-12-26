@@ -16,13 +16,13 @@ export default function PricingCards() {
 
         {/* Pricing Cards Grid */}
         <div className={styles.cardsGrid}>
-          {/* Starter Plan */}
+          {/* Starter Plan - Basic Automation Only */}
           <div className={styles.card}>
             <div className={styles.cardHeader}>
               <h3 className={styles.planName}>Starter</h3>
               <p className={styles.planDescription}>
-                Perfect for solo entrepreneurs and small businesses starting
-                with AI automation.
+                Perfect for solo entrepreneurs just starting with WhatsApp
+                automation.
               </p>
             </div>
 
@@ -62,7 +62,7 @@ export default function PricingCards() {
                     clipRule="evenodd"
                   />
                 </svg>
-                <span>3,000 WhatsApp Messages</span>
+                <span>1 WhatsApp Number</span>
               </li>
               <li className={styles.feature}>
                 <svg
@@ -76,7 +76,7 @@ export default function PricingCards() {
                     clipRule="evenodd"
                   />
                 </svg>
-                <span>Up to 75 FAQs Training</span>
+                <span>Up to 50 FAQs Training</span>
               </li>
               <li className={styles.feature}>
                 <svg
@@ -90,7 +90,7 @@ export default function PricingCards() {
                     clipRule="evenodd"
                   />
                 </svg>
-                <span>Basic Chatbot Flows</span>
+                <span>Basic Auto-Replies</span>
               </li>
               <li className={styles.feature}>
                 <svg
@@ -104,22 +104,35 @@ export default function PricingCards() {
                     clipRule="evenodd"
                   />
                 </svg>
-                <span>Lead Capture Forms</span>
+                <span>Live Chat Dashboard</span>
+              </li>
+              <li className={styles.feature}>
+                <svg
+                  className={styles.checkIcon}
+                  viewBox="0 0 20 20"
+                  fill="currentColor"
+                >
+                  <path
+                    fillRule="evenodd"
+                    d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
+                    clipRule="evenodd"
+                  />
+                </svg>
+                <span>Email Support</span>
               </li>
             </ul>
 
             <button className={styles.ctaButton}>Get Started</button>
           </div>
 
-          {/* Business Plan - Featured */}
+          {/* Business Plan - 60% Features */}
           <div className={`${styles.card} ${styles.featured}`}>
             <div className={styles.badge}>Most Popular</div>
 
             <div className={styles.cardHeader}>
               <h3 className={styles.planName}>Business</h3>
               <p className={styles.planDescription}>
-                Perfect for SMBs with steady customer engagement and marketing
-                needs.
+                For growing businesses with marketing and broadcast needs.
               </p>
             </div>
 
@@ -159,7 +172,7 @@ export default function PricingCards() {
                     clipRule="evenodd"
                   />
                 </svg>
-                <span>15,000 WhatsApp Messages</span>
+                <span>Up to 2 WhatsApp Numbers</span>
               </li>
               <li className={styles.feature}>
                 <svg
@@ -173,7 +186,7 @@ export default function PricingCards() {
                     clipRule="evenodd"
                   />
                 </svg>
-                <span>Up to 250 FAQs Training</span>
+                <span>Up to 200 FAQs Training</span>
               </li>
               <li className={styles.feature}>
                 <svg
@@ -187,7 +200,7 @@ export default function PricingCards() {
                     clipRule="evenodd"
                   />
                 </svg>
-                <span>Advanced Workflows & Automation</span>
+                <span>Broadcast Campaigns</span>
               </li>
               <li className={styles.feature}>
                 <svg
@@ -201,7 +214,7 @@ export default function PricingCards() {
                     clipRule="evenodd"
                   />
                 </svg>
-                <span>CRM Integration</span>
+                <span>Template Message Builder</span>
               </li>
               <li className={styles.feature}>
                 <svg
@@ -215,7 +228,35 @@ export default function PricingCards() {
                     clipRule="evenodd"
                   />
                 </svg>
-                <span>Analytics Dashboard</span>
+                <span>Contact Management</span>
+              </li>
+              <li className={styles.feature}>
+                <svg
+                  className={styles.checkIcon}
+                  viewBox="0 0 20 20"
+                  fill="currentColor"
+                >
+                  <path
+                    fillRule="evenodd"
+                    d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
+                    clipRule="evenodd"
+                  />
+                </svg>
+                <span>Basic Analytics Dashboard</span>
+              </li>
+              <li className={styles.feature}>
+                <svg
+                  className={styles.checkIcon}
+                  viewBox="0 0 20 20"
+                  fill="currentColor"
+                >
+                  <path
+                    fillRule="evenodd"
+                    d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
+                    clipRule="evenodd"
+                  />
+                </svg>
+                <span>Chat Support</span>
               </li>
             </ul>
 
@@ -226,13 +267,12 @@ export default function PricingCards() {
             </button>
           </div>
 
-          {/* Pro Plan */}
+          {/* Pro Plan - All Features */}
           <div className={styles.card}>
             <div className={styles.cardHeader}>
               <h3 className={styles.planName}>Pro</h3>
               <p className={styles.planDescription}>
-                For established businesses with high-volume customer
-                conversations.
+                For established businesses needing full automation power.
               </p>
             </div>
 
@@ -258,7 +298,7 @@ export default function PricingCards() {
                     clipRule="evenodd"
                   />
                 </svg>
-                <span>20,000 AI Responses / month</span>
+                <span>25,000 AI Responses / month</span>
               </li>
               <li className={styles.feature}>
                 <svg
@@ -272,7 +312,7 @@ export default function PricingCards() {
                     clipRule="evenodd"
                   />
                 </svg>
-                <span>40,000 WhatsApp Messages</span>
+                <span>Unlimited WhatsApp Numbers</span>
               </li>
               <li className={styles.feature}>
                 <svg
@@ -300,7 +340,7 @@ export default function PricingCards() {
                     clipRule="evenodd"
                   />
                 </svg>
-                <span>Custom AI Training</span>
+                <span>Custom AI Personality Training</span>
               </li>
               <li className={styles.feature}>
                 <svg
@@ -314,7 +354,7 @@ export default function PricingCards() {
                     clipRule="evenodd"
                   />
                 </svg>
-                <span>Multi-Agent Team Support</span>
+                <span>Multi-Agent Team Inbox</span>
               </li>
               <li className={styles.feature}>
                 <svg
@@ -328,7 +368,7 @@ export default function PricingCards() {
                     clipRule="evenodd"
                   />
                 </svg>
-                <span>Advanced Analytics & Reporting</span>
+                <span>Advanced Workflow Automation</span>
               </li>
               <li className={styles.feature}>
                 <svg
@@ -342,7 +382,35 @@ export default function PricingCards() {
                     clipRule="evenodd"
                   />
                 </svg>
-                <span>Priority Support</span>
+                <span>API Access & Webhooks</span>
+              </li>
+              <li className={styles.feature}>
+                <svg
+                  className={styles.checkIcon}
+                  viewBox="0 0 20 20"
+                  fill="currentColor"
+                >
+                  <path
+                    fillRule="evenodd"
+                    d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
+                    clipRule="evenodd"
+                  />
+                </svg>
+                <span>Advanced Analytics & Reports</span>
+              </li>
+              <li className={styles.feature}>
+                <svg
+                  className={styles.checkIcon}
+                  viewBox="0 0 20 20"
+                  fill="currentColor"
+                >
+                  <path
+                    fillRule="evenodd"
+                    d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
+                    clipRule="evenodd"
+                  />
+                </svg>
+                <span>Priority Support + Onboarding</span>
               </li>
             </ul>
 
