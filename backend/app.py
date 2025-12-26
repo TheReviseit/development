@@ -37,7 +37,8 @@ try:
         get_firebase_uid_from_user_id,
         get_business_id_for_user,
         store_message,
-        update_message_status
+        update_message_status,
+        get_or_create_conversation  # ADDED: Fix for push notification
     )
     SUPABASE_AVAILABLE = True
 except ImportError as e:
@@ -48,15 +49,19 @@ except ImportError as e:
     get_firebase_uid_from_user_id = None
     store_message = None
     update_message_status = None
+    get_or_create_conversation = None  # ADDED
 
 # Firebase client for business data (Firestore)
 try:
     from firebase_client import get_business_data_from_firestore, initialize_firebase
     FIREBASE_AVAILABLE = initialize_firebase()
+    # Import push notification utility
+    from push_notification import send_push_to_user
 except ImportError as e:
-    print(f"⚠️ Firebase client not available: {e}")
+    print(f"⚠️ Firebase client or push utility not available: {e}")
     FIREBASE_AVAILABLE = False
     get_business_data_from_firestore = None
+    send_push_to_user = None
 
 # AI Brain import (optional, graceful fallback if not available)
 try:
@@ -376,6 +381,33 @@ def webhook():
                 media_id=media_id,
                 conversation_origin='user_initiated'
             )
+
+        # 2.5 Send push notification for incoming message
+        if FIREBASE_AVAILABLE and send_push_to_user and user_id:
+            try:
+                # Get the actual conversation UUID from database
+                conversation_id = None
+                if get_or_create_conversation and get_business_id_for_user:
+                    business_id = get_business_id_for_user(user_id)
+                    if business_id:
+                        conversation_id = get_or_create_conversation(
+                            business_id=business_id,
+                            customer_phone=from_number,
+                            customer_name=contact_name
+                        )
+                
+                push_title = f"New message from {contact_name or from_number}"
+                push_body = message_text if message_type == 'text' else f"Sent a {message_type}"
+                push_data = {
+                    'conversationId': str(conversation_id) if conversation_id else from_number,
+                    'type': 'new_message',
+                    'senderPhone': from_number,
+                    'senderName': contact_name or from_number
+                }
+                send_push_to_user(user_id, push_title, push_body, push_data)
+                print(f"📬 Push notification triggered for conversation: {conversation_id or from_number}")
+            except Exception as push_err:
+                print(f"⚠️ Failed to trigger push notification: {push_err}")
 
         # 3. Mark as Read & Send Typing Indicator
         # We need the specific access_token and phone_number_id for this business

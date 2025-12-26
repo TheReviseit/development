@@ -2,6 +2,9 @@
 
 import { useState, useEffect, useRef, useCallback, useMemo, memo } from "react";
 import { supabase } from "@/lib/supabase/client";
+import { useNotification } from "@/app/hooks/useNotification";
+import { usePushNotification } from "@/app/hooks/usePushNotification";
+import NotificationBanner from "./NotificationBanner";
 import styles from "../dashboard.module.css";
 
 interface Conversation {
@@ -58,14 +61,15 @@ interface ContactInfo {
   firstMessageAt?: string;
 }
 
-// Helper to format time
+// Helper to format time in IST
 function formatTime(dateString: string): string {
   const date = new Date(dateString);
   return date
-    .toLocaleTimeString("en-US", {
+    .toLocaleTimeString("en-IN", {
       hour: "numeric",
       minute: "2-digit",
       hour12: true,
+      timeZone: "Asia/Kolkata",
     })
     .toLowerCase();
 }
@@ -201,7 +205,7 @@ const MessageBubble = memo(function MessageBubble({
           style={{
             display: "flex",
             alignItems: "center",
-            gap: "0.25rem",
+            gap: "0.35rem",
             justifyContent: "flex-end",
           }}
         >
@@ -209,22 +213,66 @@ const MessageBubble = memo(function MessageBubble({
           {msg.sender === "user" && (
             <span
               style={{
-                fontSize: "0.7rem",
-                color:
-                  msg.status === "read"
-                    ? "var(--dash-accent)"
-                    : "var(--dash-text-muted)",
+                display: "inline-flex",
+                alignItems: "center",
               }}
             >
-              {msg.status === "sending"
-                ? "○"
-                : msg.status === "sent"
-                ? "✓"
-                : msg.status === "delivered"
-                ? "✓✓"
-                : msg.status === "read"
-                ? "✓✓"
-                : ""}
+              {msg.status === "sending" ? (
+                <svg width="16" height="11" viewBox="0 0 16 11" fill="none">
+                  <circle
+                    cx="8"
+                    cy="5.5"
+                    r="4"
+                    stroke="rgba(255,255,255,0.5)"
+                    strokeWidth="1.5"
+                    fill="none"
+                  />
+                </svg>
+              ) : msg.status === "sent" ? (
+                <svg width="16" height="11" viewBox="0 0 16 11" fill="none">
+                  <path
+                    d="M4 5.5L7 8.5L12 2.5"
+                    stroke="rgba(255,255,255,0.5)"
+                    strokeWidth="1.5"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                </svg>
+              ) : msg.status === "delivered" ? (
+                <svg width="18" height="11" viewBox="0 0 18 11" fill="none">
+                  <path
+                    d="M1 5.5L4 8.5L9 2.5"
+                    stroke="rgba(255,255,255,0.5)"
+                    strokeWidth="1.5"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                  <path
+                    d="M6 5.5L9 8.5L14 2.5"
+                    stroke="rgba(255,255,255,0.5)"
+                    strokeWidth="1.5"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                </svg>
+              ) : msg.status === "read" ? (
+                <svg width="18" height="11" viewBox="0 0 18 11" fill="none">
+                  <path
+                    d="M1 5.5L4 8.5L9 2.5"
+                    stroke="#53bdeb"
+                    strokeWidth="1.5"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                  <path
+                    d="M6 5.5L9 8.5L14 2.5"
+                    stroke="#53bdeb"
+                    strokeWidth="1.5"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                </svg>
+              ) : null}
             </span>
           )}
         </div>
@@ -255,7 +303,7 @@ export default function MessagesView() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [contactInfo, setContactInfo] = useState<ContactInfo | null>(null);
   const [messageInput, setMessageInput] = useState("");
-  const [showContactPanel, setShowContactPanel] = useState(true);
+  const [showContactPanel, setShowContactPanel] = useState(false);
   const [filter, setFilter] = useState("all");
   const [searchQuery, setSearchQuery] = useState("");
   const [loading, setLoading] = useState(true);
@@ -264,12 +312,26 @@ export default function MessagesView() {
   const [error, setError] = useState<string | null>(null);
   const [showMobileChat, setShowMobileChat] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
+  const [showMoreMenu, setShowMoreMenu] = useState(false);
+  const moreMenuRef = useRef<HTMLDivElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const selectedConversationRef = useRef<Conversation | null>(null);
   const conversationsRef = useRef<Conversation[]>([]);
   const messagesRef = useRef<Message[]>([]);
   // Track previous conversation ID to avoid fetching on object updates
   const prevSelectedConversationIdRef = useRef<string | null>(null);
+
+  // Notification hooks
+  const { playSound, showNotification, permissionStatus, requestPermission } =
+    useNotification();
+  const { isSubscribed, subscribe, foregroundMessage, clearForegroundMessage } =
+    usePushNotification();
+
+  // Keep showNotification in a ref to avoid stale closure in useEffect
+  const showNotificationRef = useRef(showNotification);
+  useEffect(() => {
+    showNotificationRef.current = showNotification;
+  }, [showNotification]);
 
   // Detect mobile screen
   useEffect(() => {
@@ -278,8 +340,53 @@ export default function MessagesView() {
     };
     checkMobile();
     window.addEventListener("resize", checkMobile);
+
+    // Listen for messages from Service Worker (Notification clicks)
+    if ("serviceWorker" in navigator) {
+      const handleSWMessage = (event: MessageEvent) => {
+        if (event.data && event.data.type === "NOTIFICATION_CLICK") {
+          const conversationId = event.data.conversationId;
+          if (conversationId) {
+            console.log(
+              "🖱️ Notification click detected via postMessage:",
+              conversationId
+            );
+            const conv = conversationsRef.current.find(
+              (c) => c.id === conversationId
+            );
+            if (conv) {
+              setSelectedConversation(conv);
+              if (window.innerWidth <= 768) setShowMobileChat(true);
+            }
+          }
+        }
+      };
+
+      navigator.serviceWorker.addEventListener("message", handleSWMessage);
+      return () => {
+        window.removeEventListener("resize", checkMobile);
+        navigator.serviceWorker.removeEventListener("message", handleSWMessage);
+      };
+    }
+
     return () => window.removeEventListener("resize", checkMobile);
   }, []);
+
+  // Close more menu when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (
+        moreMenuRef.current &&
+        !moreMenuRef.current.contains(event.target as Node)
+      ) {
+        setShowMoreMenu(false);
+      }
+    };
+    if (showMoreMenu) {
+      document.addEventListener("mousedown", handleClickOutside);
+    }
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [showMoreMenu]);
 
   // Keep refs in sync with state for use in realtime callback
   useEffect(() => {
@@ -419,6 +526,51 @@ export default function MessagesView() {
                 }
                 return [...prev, formattedMsg];
               });
+            }
+
+            // Show browser notification for inbound messages (from contacts)
+            if (newMsg.direction === "inbound") {
+              // Find the conversation to get sender name
+              const senderConv = conversationsRef.current.find(
+                (c) => c.id === conversationId
+              );
+              const senderName =
+                senderConv?.name ||
+                formatPhoneNumber(newMsg.sender_phone || "Unknown");
+
+              // Only notify if viewing a different conversation or page is not focused
+              const currentConvForNotify = selectedConversationRef.current;
+              const isViewingDifferentConv =
+                !currentConvForNotify ||
+                currentConvForNotify.id !== conversationId;
+
+              console.log("🔔 Notification check:", {
+                isViewingDifferentConv,
+                documentHidden: document.hidden,
+                senderName,
+                messageContent: formattedMsg.content,
+              });
+
+              if (isViewingDifferentConv || document.hidden) {
+                console.log("🔔 Triggering notification...");
+                showNotificationRef.current({
+                  title: `💬 ${senderName}`,
+                  body:
+                    formattedMsg.type === "text"
+                      ? formattedMsg.content
+                      : `📎 ${
+                          formattedMsg.type.charAt(0).toUpperCase() +
+                          formattedMsg.type.slice(1)
+                        }`,
+                  tag: conversationId, // Prevents duplicate notifications
+                  onClick: () => {
+                    // Select this conversation when notification is clicked
+                    if (senderConv) {
+                      setSelectedConversation(senderConv);
+                    }
+                  },
+                });
+              }
             }
           } else if (payload.eventType === "UPDATE") {
             // Update message status
@@ -564,10 +716,11 @@ export default function MessagesView() {
       sender: "user",
       content: messageText,
       time: new Date()
-        .toLocaleTimeString("en-US", {
+        .toLocaleTimeString("en-IN", {
           hour: "numeric",
           minute: "2-digit",
           hour12: true,
+          timeZone: "Asia/Kolkata",
         })
         .toLowerCase(),
       timestamp: new Date().toISOString(),
@@ -765,6 +918,21 @@ export default function MessagesView() {
 
   return (
     <div className={styles.messagesView}>
+      {/* Push Notification Permission Banner */}
+      <div
+        style={{
+          position: "absolute",
+          top: "1rem",
+          left: "50%",
+          transform: "translateX(-50%)",
+          zIndex: 1000,
+          width: "90%",
+          maxWidth: "800px",
+        }}
+      >
+        <NotificationBanner />
+      </div>
+
       {/* Conversation List Panel */}
       <div
         className={`${styles.conversationList} ${
@@ -890,7 +1058,11 @@ export default function MessagesView() {
                 <div className={styles.chatAvatar}>
                   {getInitials(selectedConversation.name)}
                 </div>
-                <div>
+                <div
+                  style={{ cursor: "pointer" }}
+                  onClick={() => setShowContactPanel(!showContactPanel)}
+                  title="Click to view details"
+                >
                   <span className={styles.chatName}>
                     {selectedConversation.name}
                   </span>
@@ -905,6 +1077,87 @@ export default function MessagesView() {
                 </div>
               </div>
               <div className={styles.chatHeaderActions}>
+                {/* Notification Permission Button */}
+                {!isSubscribed && (
+                  <button
+                    onClick={subscribe}
+                    title={
+                      permissionStatus === "denied"
+                        ? "Notifications blocked. Enable in browser settings."
+                        : "Enable notifications"
+                    }
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "0.5rem",
+                      padding: "0.5rem 0.75rem",
+                      background:
+                        permissionStatus === "denied"
+                          ? "rgba(248, 81, 73, 0.15)"
+                          : "rgba(34, 193, 90, 0.15)",
+                      border: `1px solid ${
+                        permissionStatus === "denied"
+                          ? "var(--dash-danger)"
+                          : "var(--dash-accent)"
+                      }`,
+                      borderRadius: "8px",
+                      color:
+                        permissionStatus === "denied"
+                          ? "var(--dash-danger)"
+                          : "var(--dash-accent)",
+                      fontSize: "0.8125rem",
+                      fontWeight: 500,
+                      cursor:
+                        permissionStatus === "denied"
+                          ? "not-allowed"
+                          : "pointer",
+                      transition: "all 0.2s ease",
+                    }}
+                  >
+                    <svg
+                      width="16"
+                      height="16"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                    >
+                      <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
+                      <path d="M13.73 21a2 2 0 0 1-3.46 0" />
+                    </svg>
+                    {permissionStatus === "denied"
+                      ? "Blocked"
+                      : "Enable Alerts"}
+                  </button>
+                )}
+                {permissionStatus === "granted" && (
+                  <div
+                    title="Notifications enabled"
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "0.375rem",
+                      padding: "0.5rem 0.75rem",
+                      background: "rgba(34, 193, 90, 0.1)",
+                      borderRadius: "8px",
+                      color: "var(--dash-accent)",
+                      fontSize: "0.75rem",
+                    }}
+                  >
+                    <svg
+                      width="14"
+                      height="14"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                    >
+                      <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
+                      <path d="M13.73 21a2 2 0 0 1-3.46 0" />
+                    </svg>
+                    ✓
+                  </div>
+                )}
                 {/* <button
                   className={styles.markReadBtn}
                   onClick={handleMarkAsRead}
@@ -921,36 +1174,199 @@ export default function MessagesView() {
                   </svg>
                   Mark As Read
                 </button> */}
-                <button
-                  className={styles.togglePanelBtn}
-                  onClick={() => setShowContactPanel(!showContactPanel)}
-                >
-                  <svg
-                    width="18"
-                    height="18"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2"
+                <div ref={moreMenuRef} style={{ position: "relative" }}>
+                  <button
+                    className={styles.moreBtn}
+                    onClick={() => setShowMoreMenu(!showMoreMenu)}
                   >
-                    <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
-                    <line x1="15" y1="3" x2="15" y2="21" />
-                  </svg>
-                </button>
-                <button className={styles.moreBtn}>
-                  <svg
-                    width="18"
-                    height="18"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                  >
-                    <circle cx="12" cy="12" r="1" />
-                    <circle cx="19" cy="12" r="1" />
-                    <circle cx="5" cy="12" r="1" />
-                  </svg>
-                </button>
+                    <svg
+                      width="18"
+                      height="18"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                    >
+                      <circle cx="12" cy="5" r="1" />
+                      <circle cx="12" cy="12" r="1" />
+                      <circle cx="12" cy="19" r="1" />
+                    </svg>
+                  </button>
+                  {showMoreMenu && (
+                    <div
+                      style={{
+                        position: "absolute",
+                        top: "100%",
+                        right: 0,
+                        marginTop: "0.5rem",
+                        backgroundColor: "#1a1a1a",
+                        border: "1px solid #333",
+                        borderRadius: "8px",
+                        boxShadow: "0 4px 12px rgba(0,0,0,0.4)",
+                        minWidth: "180px",
+                        zIndex: 100,
+                        overflow: "hidden",
+                      }}
+                    >
+                      <button
+                        onClick={() => {
+                          alert("Mute feature coming soon!");
+                          setShowMoreMenu(false);
+                        }}
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          gap: "0.75rem",
+                          width: "100%",
+                          padding: "0.75rem 1rem",
+                          background: "none",
+                          border: "none",
+                          color: "#fff",
+                          cursor: "pointer",
+                          fontSize: "0.875rem",
+                          textAlign: "left",
+                        }}
+                        onMouseEnter={(e) =>
+                          (e.currentTarget.style.backgroundColor = "#333")
+                        }
+                        onMouseLeave={(e) =>
+                          (e.currentTarget.style.backgroundColor =
+                            "transparent")
+                        }
+                      >
+                        <img
+                          src="/icons/message_3_dots/notification.svg"
+                          alt=""
+                          width="18"
+                          height="18"
+                          style={{ filter: "invert(1)" }}
+                        />
+                        Mute Notifications
+                      </button>
+                      <button
+                        onClick={() => {
+                          alert("Tags feature coming soon!");
+                          setShowMoreMenu(false);
+                        }}
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          gap: "0.75rem",
+                          width: "100%",
+                          padding: "0.75rem 1rem",
+                          background: "none",
+                          border: "none",
+                          color: "#fff",
+                          cursor: "pointer",
+                          fontSize: "0.875rem",
+                          textAlign: "left",
+                        }}
+                        onMouseEnter={(e) =>
+                          (e.currentTarget.style.backgroundColor = "#333")
+                        }
+                        onMouseLeave={(e) =>
+                          (e.currentTarget.style.backgroundColor =
+                            "transparent")
+                        }
+                      >
+                        <img
+                          src="/icons/message_3_dots/tag.svg"
+                          alt=""
+                          width="18"
+                          height="18"
+                          style={{ filter: "invert(1)" }}
+                        />
+                        Add Tags
+                      </button>
+                      <button
+                        onClick={() => {
+                          alert("Archive feature coming soon!");
+                          setShowMoreMenu(false);
+                        }}
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          gap: "0.75rem",
+                          width: "100%",
+                          padding: "0.75rem 1rem",
+                          background: "none",
+                          border: "none",
+                          color: "#fff",
+                          cursor: "pointer",
+                          fontSize: "0.875rem",
+                          textAlign: "left",
+                        }}
+                        onMouseEnter={(e) =>
+                          (e.currentTarget.style.backgroundColor = "#333")
+                        }
+                        onMouseLeave={(e) =>
+                          (e.currentTarget.style.backgroundColor =
+                            "transparent")
+                        }
+                      >
+                        <img
+                          src="/icons/message_3_dots/archive.svg"
+                          alt=""
+                          width="18"
+                          height="18"
+                          style={{ filter: "invert(1)" }}
+                        />
+                        Archive Chat
+                      </button>
+                      <div
+                        style={{
+                          height: "1px",
+                          backgroundColor: "#333",
+                          margin: "0.25rem 0",
+                        }}
+                      />
+                      <button
+                        onClick={() => {
+                          if (
+                            confirm(
+                              "Are you sure you want to block this contact?"
+                            )
+                          ) {
+                            alert("Block feature coming soon!");
+                          }
+                          setShowMoreMenu(false);
+                        }}
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          gap: "0.75rem",
+                          width: "100%",
+                          padding: "0.75rem 1rem",
+                          background: "none",
+                          border: "none",
+                          color: "#ef4444",
+                          cursor: "pointer",
+                          fontSize: "0.875rem",
+                          textAlign: "left",
+                        }}
+                        onMouseEnter={(e) =>
+                          (e.currentTarget.style.backgroundColor = "#333")
+                        }
+                        onMouseLeave={(e) =>
+                          (e.currentTarget.style.backgroundColor =
+                            "transparent")
+                        }
+                      >
+                        <img
+                          src="/icons/message_3_dots/block.svg"
+                          alt=""
+                          width="18"
+                          height="18"
+                          style={{
+                            filter:
+                              "invert(48%) sepia(79%) saturate(2476%) hue-rotate(335deg) brightness(97%) contrast(95%)",
+                          }}
+                        />
+                        Block Contact
+                      </button>
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
 
@@ -989,11 +1405,11 @@ export default function MessagesView() {
             </div>
 
             <div className={styles.chatInput}>
-              <div className={styles.inputTypeSelect}>
+              {/* <div className={styles.inputTypeSelect}>
                 <select className={styles.messageTypeSelect}>
                   <option value="whatsapp">WhatsApp</option>
                 </select>
-              </div>
+              </div> */}
               <div className={styles.inputWrapper}>
                 <input
                   type="text"
