@@ -288,3 +288,42 @@
     opacity: 0;
   }
 }
+
+/* Mobile Responsive Styles */
+@media (max-width: 768px) {
+  .spaceship-body {
+    transform: scale(0.7);
+    margin-right: 25px;
+    margin-top: -2px;
+  }
+
+  .spaceship-text {
+    font-size: 12px;
+    top: 58%;
+    letter-spacing: 1.5px;
+  }
+
+  .spaceship-longfazers span {
+    height: 1px;
+    width: 15%;
+  }
+}
+
+@media (max-width: 480px) {
+  .spaceship-body {
+    transform: scale(0.6);
+    margin-left: -30px;
+    margin-top: -3px;
+  }
+
+  .spaceship-text {
+    font-size: 10px;
+    top: 56%;
+    letter-spacing: 1px;
+  }
+
+  .spaceship-longfazers span {
+    height: 1px;
+    width: 10%;
+  }
+}

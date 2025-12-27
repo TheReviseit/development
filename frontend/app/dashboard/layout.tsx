@@ -12,6 +12,7 @@ import styles from "./dashboard.module.css";
 type Section =
   | "analytics"
   | "messages"
+  | "bulk-messages"
   | "templates"
   | "contacts"
   | "campaigns"
@@ -21,6 +22,7 @@ type Section =
 const sectionLabels: Record<Section, string> = {
   analytics: "Analytics",
   messages: "Messages",
+  "bulk-messages": "Bulk Messages",
   templates: "Templates",
   contacts: "Contacts",
   campaigns: "Campaigns",
@@ -30,6 +32,7 @@ const sectionLabels: Record<Section, string> = {
 
 // Map pathname to section
 const getActiveSection = (pathname: string): Section => {
+  if (pathname.includes("/bulk-messages")) return "bulk-messages";
   if (pathname.includes("/messages")) return "messages";
   if (pathname.includes("/templates")) return "templates";
   if (pathname.includes("/contacts")) return "contacts";
@@ -235,6 +238,33 @@ export default function DashboardLayout({
                       />
                     </svg>
                     <span>Messages</span>
+                  </button>
+                  <button
+                    className={`${styles.mobileNavLink} ${
+                      activeSection === "bulk-messages"
+                        ? styles.mobileNavLinkActive
+                        : ""
+                    }`}
+                    onClick={() => handleSectionChange("bulk-messages")}
+                  >
+                    <svg
+                      width="20"
+                      height="20"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"
+                      />
+                      <path d="M8 12h8" strokeLinecap="round" strokeWidth={2} />
+                      <path d="M8 8h8" strokeLinecap="round" strokeWidth={2} />
+                      <path d="M8 16h4" strokeLinecap="round" strokeWidth={2} />
+                    </svg>
+                    <span>Bulk Messages</span>
                   </button>
                   <button
                     className={`${styles.mobileNavLink} ${

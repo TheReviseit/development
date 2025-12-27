@@ -1196,9 +1196,10 @@
 }
 
 /* ============================================
-   Messages View (3-Panel Layout)
+   MESSAGES VIEW - START
    ============================================ */
 
+/* --- Messages View: Layout --- */
 .messagesView {
   display: flex;
   height: 100vh;
@@ -1206,7 +1207,7 @@
   background: var(--dash-bg-primary);
 }
 
-/* Conversation List Panel */
+/* --- Messages View: Conversation List Panel --- */
 .conversationList {
   width: 320px;
   background: var(--dash-bg-secondary);
@@ -1216,6 +1217,7 @@
   flex-shrink: 0;
 }
 
+/* --- Messages View: Conversation List Header --- */
 .conversationListHeader {
   padding: 1.25rem;
   border-bottom: 1px solid var(--dash-border);
@@ -1351,6 +1353,7 @@
   margin-top: 70px; /* Height of mobile header */
 }
 
+/* --- Messages View: Conversation Filters & Search --- */
 .conversationFilters {
   display: flex;
   gap: 0.5rem;
@@ -1390,6 +1393,7 @@
   color: var(--dash-text-muted);
 }
 
+/* --- Messages View: Conversation Items --- */
 .conversationItems {
   flex: 1;
   overflow-y: auto;
@@ -1488,7 +1492,7 @@
   text-align: center;
 }
 
-/* Chat Area Panel */
+/* --- Messages View: Chat Area Panel --- */
 .chatArea {
   flex: 1;
   display: flex;
@@ -1497,6 +1501,7 @@
   min-width: 0;
 }
 
+/* --- Messages View: Chat Header --- */
 .chatHeader {
   padding: 1rem 1.5rem;
   background: var(--dash-bg-secondary);
@@ -1577,6 +1582,7 @@
   color: var(--dash-text-primary);
 }
 
+/* --- Messages View: Chat Messages Container --- */
 .chatMessages {
   flex: 1;
   padding: 1.5rem 1.5rem 0.5rem 1.5rem;
@@ -1603,6 +1609,7 @@
   color: var(--dash-text-muted);
 }
 
+/* --- Messages View: Message Bubbles --- */
 .messageWrapper {
   display: flex;
   max-width: 70%;
@@ -1652,6 +1659,7 @@
   text-align: right;
 }
 
+/* --- Messages View: Audio Messages --- */
 .audioMessage {
   display: flex;
   align-items: center;
@@ -1693,6 +1701,7 @@
   color: var(--dash-text-muted);
 }
 
+/* --- Messages View: Image Messages --- */
 .imageMessage {
   width: 200px;
 }
@@ -1708,7 +1717,7 @@
   color: var(--dash-text-muted);
 }
 
-/* Chat Input */
+/* --- Messages View: Chat Input --- */
 .chatInput {
   padding: 1rem 1.5rem;
   background: var(--dash-bg-secondary);
@@ -1802,7 +1811,7 @@
   box-shadow: 0 4px 12px rgba(34, 193, 90, 0.4);
 } */
 
-/* Contact Panel */
+/* --- Messages View: Contact Panel --- */
 .contactPanel {
   width: 320px;
   background: var(--dash-bg-secondary);
@@ -1844,6 +1853,7 @@
   color: var(--dash-text-primary);
 }
 
+/* --- Messages View: Contact Profile --- */
 .contactProfile {
   padding: 1.5rem;
   text-align: center;
@@ -1883,6 +1893,7 @@
   margin-bottom: 1.5rem;
 }
 
+/* --- Messages View: Contact Fields --- */
 .sectionTitle {
   font-size: 0.75rem;
   font-weight: 600;
@@ -1991,6 +2002,9 @@
   color: var(--dash-text-muted);
 }
 
+/* ============================================
+   MESSAGES VIEW - END
+   ============================================ */
 /* ============================================
    Templates View
    ============================================ */
@@ -3552,432 +3566,4 @@
     width: 100%;
     justify-content: flex-end;
   }
-}
-
-/* ============================================
-   Bulk Messages Styles
-   ============================================ */
-
-.bulkMessagesContainer {
-  padding: 2rem;
-  max-width: 1200px;
-  margin: 0 auto;
-}
-
-.bulkMessagesHeader {
-  margin-bottom: 2rem;
-}
-
-.pageTitle {
-  font-size: 1.75rem;
-  font-weight: 700;
-  color: var(--dash-text-primary);
-  margin-bottom: 0.5rem;
-}
-
-.pageDescription {
-  font-size: 0.9375rem;
-  color: var(--dash-text-secondary);
-}
-
-.uploadSection {
-  margin-bottom: 2rem;
-}
-
-.dropZone {
-  border: 2px dashed var(--dash-border);
-  border-radius: 16px;
-  padding: 3rem;
-  text-align: center;
-  cursor: pointer;
-  transition: all 0.3s ease;
-  background: var(--dash-bg-secondary);
-}
-
-.dropZone:hover {
-  border-color: var(--dash-cyan);
-  background: var(--dash-bg-tertiary);
-}
-
-.dropZoneActive {
-  border-color: var(--dash-cyan);
-  background: rgba(0, 188, 212, 0.1);
-}
-
-.dropZoneContent {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 0.75rem;
-  color: var(--dash-text-secondary);
-}
-
-.dropZoneContent svg {
-  color: var(--dash-cyan);
-  margin-bottom: 0.5rem;
-}
-
-.dropZoneContent h3 {
-  font-size: 1.125rem;
-  font-weight: 600;
-  color: var(--dash-text-primary);
-  margin: 0;
-}
-
-.dropZoneContent p {
-  font-size: 0.875rem;
-  margin: 0;
-  color: var(--dash-text-muted);
-}
-
-.fileFormats {
-  font-size: 0.75rem;
-  color: var(--dash-text-muted);
-  margin-top: 0.5rem;
-}
-
-.loadingState {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 1rem;
-  padding: 2rem;
-  color: var(--dash-text-secondary);
-}
-
-.spinner {
-  width: 40px;
-  height: 40px;
-  border: 3px solid var(--dash-border);
-  border-top-color: var(--dash-cyan);
-  border-radius: 50%;
-  animation: spin 1s linear infinite;
-}
-
-@keyframes spin {
-  to {
-    transform: rotate(360deg);
-  }
-}
-
-.errorState {
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-  padding: 1rem 1.5rem;
-  background: rgba(255, 68, 68, 0.1);
-  border: 1px solid var(--dash-danger);
-  border-radius: 8px;
-  color: var(--dash-danger);
-  margin-bottom: 1.5rem;
-}
-
-.contactsSection {
-  background: var(--dash-bg-secondary);
-  border-radius: 16px;
-  border: 1px solid var(--dash-border);
-  overflow: hidden;
-}
-
-.contactsHeader {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 1.25rem 1.5rem;
-  border-bottom: 1px solid var(--dash-border);
-  flex-wrap: wrap;
-  gap: 1rem;
-}
-
-.contactsInfo h2 {
-  font-size: 1.125rem;
-  font-weight: 600;
-  color: var(--dash-text-primary);
-  margin: 0 0 0.25rem 0;
-}
-
-.contactsCount {
-  font-size: 0.8125rem;
-  color: var(--dash-text-muted);
-}
-
-.contactsActions {
-  display: flex;
-  gap: 0.75rem;
-}
-
-.clearBtn {
-  padding: 0.625rem 1.25rem;
-  background: transparent;
-  border: 1px solid var(--dash-border);
-  border-radius: 8px;
-  color: var(--dash-text-secondary);
-  font-size: 0.875rem;
-  font-weight: 500;
-  cursor: pointer;
-  transition: all 0.2s ease;
-}
-
-.clearBtn:hover {
-  background: var(--dash-bg-hover);
-  border-color: var(--dash-danger);
-  color: var(--dash-danger);
-}
-
-.sendBulkBtn {
-  padding: 0.625rem 1.5rem;
-  background: var(--dash-cyan);
-  border: none;
-  border-radius: 8px;
-  color: #000;
-  font-size: 0.875rem;
-  font-weight: 600;
-  cursor: pointer;
-  transition: all 0.2s ease;
-}
-
-.sendBulkBtn:hover {
-  opacity: 0.9;
-  transform: translateY(-1px);
-}
-
-.contactsList {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-  gap: 1rem;
-  padding: 1.5rem;
-  max-height: 500px;
-  overflow-y: auto;
-}
-
-.contactCard {
-  display: flex;
-  align-items: center;
-  gap: 1rem;
-  padding: 1rem;
-  background: var(--dash-bg-tertiary);
-  border-radius: 12px;
-  border: 1px solid var(--dash-border-light);
-  transition: all 0.2s ease;
-}
-
-.contactCard:hover {
-  background: var(--dash-bg-hover);
-  border-color: var(--dash-border);
-}
-
-.contactCard .contactAvatar {
-  width: 44px;
-  height: 44px;
-  border-radius: 50%;
-  background: var(--dash-cyan);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-weight: 600;
-  font-size: 0.875rem;
-  color: #000;
-  flex-shrink: 0;
-}
-
-.contactDetails {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 0.125rem;
-}
-
-.contactName {
-  font-size: 0.9375rem;
-  font-weight: 600;
-  color: var(--dash-text-primary);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.contactPhone {
-  font-size: 0.8125rem;
-  color: var(--dash-text-secondary);
-}
-
-.contactEmail {
-  font-size: 0.75rem;
-  color: var(--dash-text-muted);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.removeContactBtn {
-  width: 32px;
-  height: 32px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: transparent;
-  border: none;
-  border-radius: 8px;
-  color: var(--dash-text-muted);
-  cursor: pointer;
-  transition: all 0.2s ease;
-  flex-shrink: 0;
-}
-
-.removeContactBtn:hover {
-  background: rgba(255, 68, 68, 0.1);
-  color: var(--dash-danger);
-}
-
-@media (max-width: 768px) {
-  .bulkMessagesContainer {
-    padding: 1rem;
-  }
-
-  .dropZone {
-    padding: 2rem 1rem;
-  }
-
-  .contactsHeader {
-    flex-direction: column;
-    align-items: flex-start;
-  }
-
-  .contactsActions {
-    width: 100%;
-  }
-
-  .clearBtn,
-  .sendBulkBtn {
-    flex: 1;
-  }
-
-  .contactsList {
-    grid-template-columns: 1fr;
-  }
-
-  .contactsTableWrapper {
-    overflow-x: auto;
-  }
-}
-
-/* Contacts Table Styles */
-.contactsTableWrapper {
-  overflow-x: auto;
-  padding: 0;
-}
-
-.contactsTable {
-  width: 100%;
-  border-collapse: collapse;
-  min-width: 600px;
-}
-
-.tableHeaderCell {
-  text-align: left;
-  padding: 1rem 1.25rem;
-  font-size: 0.75rem;
-  font-weight: 600;
-  color: var(--dash-text-muted);
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  background: var(--dash-bg-tertiary);
-  border-bottom: 1px solid var(--dash-border);
-}
-
-/* Column 1: # (index) */
-.tableHeaderCell:nth-child(1) {
-  width: 60px;
-  text-align: center;
-}
-
-/* Column 2: Name */
-.tableHeaderCell:nth-child(2) {
-  width: 200px;
-}
-
-/* Column 3: Phone */
-.tableHeaderCell:nth-child(3) {
-  width: 150px;
-}
-
-/* Column 4: Email - flexible width */
-.tableHeaderCell:nth-child(4) {
-  min-width: 180px;
-}
-
-/* Column 5: Action */
-.tableHeaderCell:nth-child(5) {
-  width: 80px;
-  text-align: center;
-}
-
-.tableRow {
-  transition: background 0.2s ease;
-  border-bottom: 1px solid var(--dash-border-light);
-}
-
-.tableRow:hover {
-  background: var(--dash-bg-hover);
-}
-
-.tableRow:last-child {
-  border-bottom: none;
-}
-
-.tableCell {
-  padding: 1rem 1.25rem;
-  font-size: 0.875rem;
-  color: var(--dash-text-primary);
-  vertical-align: middle;
-}
-
-/* Column 1: # (index) */
-.tableCell:nth-child(1) {
-  width: 60px;
-  text-align: center;
-  color: var(--dash-text-muted);
-  font-weight: 500;
-}
-
-/* Column 2: Name */
-.tableCell:nth-child(2) {
-  width: 200px;
-}
-
-/* Column 3: Phone */
-.tableCell:nth-child(3) {
-  width: 150px;
-}
-
-/* Column 4: Email */
-.tableCell:nth-child(4) {
-  min-width: 180px;
-}
-
-/* Column 5: Action */
-.tableCell:nth-child(5) {
-  width: 80px;
-  text-align: center;
-}
-
-.tableCellName {
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-}
-
-.tableAvatar {
-  width: 36px;
-  height: 36px;
-  border-radius: 50%;
-  background: var(--dash-cyan);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-weight: 600;
-  font-size: 0.75rem;
-  color: #000;
-  flex-shrink: 0;
 }
