@@ -4,6 +4,10 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
+
+// Force dynamic rendering to prevent caching of API responses
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
 import { cookies } from "next/headers";
 import { adminAuth } from "@/lib/firebase-admin";
 import { getUserByFirebaseUID } from "@/lib/supabase/queries";
@@ -134,13 +138,29 @@ export async function GET(request: NextRequest) {
       conversation = convData;
     }
 
-    // Fetch messages for this conversation
-    const { data: messages, error } = await supabaseAdmin
+    console.log(
+      `🔍 Fetching messages for conversation: ${actualConversationId}`
+    );
+
+    // For initial load (offset=0), fetch all messages; otherwise use pagination
+    let messagesQuery = supabaseAdmin
       .from("whatsapp_messages")
       .select("*")
       .eq("conversation_id", actualConversationId)
-      .order("created_at", { ascending: true })
-      .range(offset, offset + limit - 1);
+      .order("created_at", { ascending: true });
+
+    // Only apply range if explicitly paginating (offset > 0)
+    if (offset > 0) {
+      messagesQuery = messagesQuery.range(offset, offset + limit - 1);
+    }
+
+    const { data: messages, error } = await messagesQuery;
+
+    console.log(
+      `📬 Fetched ${
+        messages?.length || 0
+      } messages for conversation ${actualConversationId}`
+    );
 
     if (error) {
       console.error("Error fetching messages:", error);
@@ -214,17 +234,26 @@ export async function GET(request: NextRequest) {
           name: formatPhoneNumber(contactPhone || ""),
         };
 
-    return NextResponse.json({
-      success: true,
-      data: {
-        conversationId: actualConversationId,
-        messages: formattedMessages,
-        contact: contactInfo,
-        hasMore: (messages || []).length === limit,
-        totalInConversation:
-          conversation?.total_messages || formattedMessages.length,
+    return NextResponse.json(
+      {
+        success: true,
+        data: {
+          conversationId: actualConversationId,
+          messages: formattedMessages,
+          contact: contactInfo,
+          hasMore: (messages || []).length === limit,
+          totalInConversation:
+            conversation?.total_messages || formattedMessages.length,
+        },
       },
-    });
+      {
+        headers: {
+          "Cache-Control": "no-cache, no-store, must-revalidate",
+          Pragma: "no-cache",
+          Expires: "0",
+        },
+      }
+    );
   } catch (error: any) {
     console.error("Error fetching messages:", error);
     return NextResponse.json(
@@ -317,14 +346,14 @@ async function fallbackToOldMethod(
   });
 }
 
-// Helper to format time
 function formatTime(dateString: string): string {
   const date = new Date(dateString);
   return date
-    .toLocaleTimeString("en-US", {
+    .toLocaleTimeString("en-IN", {
       hour: "numeric",
       minute: "2-digit",
       hour12: true,
+      timeZone: "Asia/Kolkata",
     })
     .toLowerCase();
 }

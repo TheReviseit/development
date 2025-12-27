@@ -4,6 +4,10 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
+
+// Force dynamic rendering to prevent caching of API responses
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
 import { cookies } from "next/headers";
 import { adminAuth } from "@/lib/firebase-admin";
 import { getUserByFirebaseUID } from "@/lib/supabase/queries";
@@ -133,16 +137,27 @@ export async function GET(request: NextRequest) {
       aiReplies: conv.ai_replies_count || 0,
       humanReplies: conv.human_replies_count || 0,
       language: conv.detected_language,
+      // AI enabled toggle (default to true if not set)
+      aiEnabled: conv.ai_enabled ?? true,
       // Online status (not available from WhatsApp API)
       online: false,
     }));
 
-    return NextResponse.json({
-      success: true,
-      data: formattedConversations,
-      total: formattedConversations.length,
-      hasMore: conversations.length === limit,
-    });
+    return NextResponse.json(
+      {
+        success: true,
+        data: formattedConversations,
+        total: formattedConversations.length,
+        hasMore: conversations.length === limit,
+      },
+      {
+        headers: {
+          "Cache-Control": "no-cache, no-store, must-revalidate",
+          Pragma: "no-cache",
+          Expires: "0",
+        },
+      }
+    );
   } catch (error: any) {
     console.error("Error fetching conversations:", error);
     return NextResponse.json(

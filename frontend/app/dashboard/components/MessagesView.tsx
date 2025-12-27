@@ -27,6 +27,8 @@ interface Conversation {
   status?: string;
   priority?: string;
   tags?: string[];
+  // AI enabled toggle
+  aiEnabled?: boolean;
 }
 
 interface Message {
@@ -431,15 +433,15 @@ export default function MessagesView() {
       setLoading(true);
       setError(null);
       const response = await fetch(
-        `/api/whatsapp/conversations?filter=${filter}`
+        `/api/whatsapp/conversations?filter=${filter}`,
+        { cache: "no-store" }
       );
       const data = await response.json();
 
       if (data.success) {
         setConversations(data.data);
-        if (data.data.length > 0 && !selectedConversationRef.current) {
-          setSelectedConversation(data.data[0]);
-        }
+        // Removed: auto-selection of first conversation
+        // Users should explicitly click a conversation to view it
       } else {
         setError(data.error || "Failed to load conversations");
       }
@@ -453,7 +455,7 @@ export default function MessagesView() {
 
   useEffect(() => {
     fetchConversations();
-  }, [filter]);
+  }, [filter, fetchConversations]);
 
   // Fetch messages when conversation is selected
   const fetchMessages = useCallback(async (contactPhone: string) => {
@@ -462,7 +464,8 @@ export default function MessagesView() {
       const response = await fetch(
         `/api/whatsapp/messages?contactPhone=${encodeURIComponent(
           contactPhone
-        )}`
+        )}`,
+        { cache: "no-store" }
       );
       const data = await response.json();
 
@@ -965,6 +968,7 @@ export default function MessagesView() {
       >
         <div className={styles.conversationListHeader}>
           <h2 className={styles.panelTitle}>Conversations</h2>
+          {/* Commented out filter dropdowns
           <div className={styles.conversationFilters}>
             <select
               className={styles.filterSelect}
@@ -979,6 +983,7 @@ export default function MessagesView() {
               <option value="oldest">Oldest</option>
             </select>
           </div>
+          */}
         </div>
 
         <div className={styles.conversationSearch}>
@@ -1189,6 +1194,112 @@ export default function MessagesView() {
                         />
                         Mute Notifications
                       </button>
+                      {/* AI Reply Toggle */}
+                      <div
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "space-between",
+                          width: "100%",
+                          padding: "0.75rem 1rem",
+                          cursor: "pointer",
+                        }}
+                        onClick={async () => {
+                          const newState = !(
+                            selectedConversation?.aiEnabled ?? true
+                          );
+                          // Update local state optimistically
+                          setSelectedConversation((prev) =>
+                            prev ? { ...prev, aiEnabled: newState } : null
+                          );
+                          setConversations((prev) =>
+                            prev.map((c) =>
+                              c.id === selectedConversation?.id
+                                ? { ...c, aiEnabled: newState }
+                                : c
+                            )
+                          );
+                          // TODO: Call API to persist this setting
+                          try {
+                            await fetch(
+                              `/api/whatsapp/conversations/${selectedConversation?.id}/ai-toggle`,
+                              {
+                                method: "POST",
+                                headers: { "Content-Type": "application/json" },
+                                body: JSON.stringify({ aiEnabled: newState }),
+                              }
+                            );
+                          } catch (err) {
+                            console.error("Failed to toggle AI:", err);
+                          }
+                        }}
+                        onMouseEnter={(e) =>
+                          (e.currentTarget.style.backgroundColor = "#333")
+                        }
+                        onMouseLeave={(e) =>
+                          (e.currentTarget.style.backgroundColor =
+                            "transparent")
+                        }
+                      >
+                        <div
+                          style={{
+                            display: "flex",
+                            alignItems: "center",
+                            gap: "0.75rem",
+                          }}
+                        >
+                          <img
+                            src="/icons/message_3_dots/ai.svg"
+                            alt=""
+                            width="18"
+                            height="18"
+                            style={{ filter: "invert(1)" }}
+                          />
+                          <span style={{ color: "#fff", fontSize: "0.875rem" }}>
+                            AI Reply
+                          </span>
+                        </div>
+                        <div
+                          style={{
+                            width: "40px",
+                            height: "22px",
+                            backgroundColor:
+                              selectedConversation?.aiEnabled ?? true
+                                ? "#ffffff"
+                                : "#555",
+                            borderRadius: "11px",
+                            position: "relative",
+                            transition: "background-color 0.2s ease",
+                          }}
+                        >
+                          <div
+                            style={{
+                              width: "18px",
+                              height: "18px",
+                              backgroundColor:
+                                selectedConversation?.aiEnabled ?? true
+                                  ? "#000"
+                                  : "#fff",
+                              borderRadius: "50%",
+                              position: "absolute",
+                              top: "2px",
+                              left:
+                                selectedConversation?.aiEnabled ?? true
+                                  ? "20px"
+                                  : "2px",
+                              transition:
+                                "left 0.2s ease, background-color 0.2s ease",
+                            }}
+                          />
+                        </div>
+                      </div>
+                      <div
+                        style={{
+                          height: "1px",
+                          backgroundColor: "#333",
+                          margin: "0.25rem 0",
+                        }}
+                      />
                       <button
                         onClick={() => {
                           alert("Tags feature coming soon!");
@@ -1416,18 +1527,12 @@ export default function MessagesView() {
                 disabled={!messageInput.trim() || sending}
                 style={{ opacity: !messageInput.trim() || sending ? 0.5 : 1 }}
               >
-                {sending ? "Sending..." : "Send"}
-                <svg
-                  width="16"
-                  height="16"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                >
-                  <line x1="22" y1="2" x2="11" y2="13" />
-                  <polygon points="22 2 15 22 11 13 2 9 22 2" />
-                </svg>
+                <img
+                  src="/icons/message_3_dots/send.svg"
+                  alt="Send"
+                  width="28"
+                  height="28"
+                />
               </button>
             </div>
           </>
@@ -1460,8 +1565,12 @@ export default function MessagesView() {
       </div>
 
       {/* Contact Details Panel */}
-      {showContactPanel && selectedConversation && (
-        <div className={styles.contactPanel}>
+      {selectedConversation && (
+        <div
+          className={`${styles.contactPanel} ${
+            showContactPanel ? styles.contactPanelVisible : ""
+          }`}
+        >
           <div className={styles.contactHeader}>
             <h3 className={styles.panelTitle}>Details</h3>
             <button
@@ -1469,8 +1578,8 @@ export default function MessagesView() {
               onClick={() => setShowContactPanel(false)}
             >
               <svg
-                width="18"
-                height="18"
+                width="24"
+                height="24"
                 viewBox="0 0 24 24"
                 fill="none"
                 stroke="currentColor"
@@ -1494,16 +1603,45 @@ export default function MessagesView() {
             <div className={styles.contactSection}>
               <h5 className={styles.sectionTitle}>Contact</h5>
               <div className={styles.contactField}>
-                <span className={styles.fieldIcon}>📞</span>
+                <span className={styles.fieldIcon}>
+                  <img
+                    src="/icons/contact_details/phone.svg"
+                    alt=""
+                    width="18"
+                    height="18"
+                  />
+                </span>
                 <div className={styles.fieldContent}>
                   <span className={styles.fieldLabel}>Phone</span>
-                  <span className={styles.fieldValue}>
-                    {selectedConversation.phone}
-                  </span>
+                  <div
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "space-between",
+                      gap: "1rem",
+                    }}
+                  >
+                    <span className={styles.fieldValue}>
+                      {selectedConversation.phone}
+                    </span>
+                    <a
+                      href={`tel:${selectedConversation.phone}`}
+                      className={styles.callNowBtn}
+                    >
+                      Call Now
+                    </a>
+                  </div>
                 </div>
               </div>
               <div className={styles.contactField}>
-                <span className={styles.fieldIcon}>💬</span>
+                <span className={styles.fieldIcon}>
+                  <img
+                    src="/icons/contact_details/message.svg"
+                    alt=""
+                    width="18"
+                    height="18"
+                  />
+                </span>
                 <div className={styles.fieldContent}>
                   <span className={styles.fieldLabel}>Total Messages</span>
                   <span className={styles.fieldValue}>
@@ -1513,7 +1651,14 @@ export default function MessagesView() {
                 </div>
               </div>
               <div className={styles.contactField}>
-                <span className={styles.fieldIcon}>🌐</span>
+                <span className={styles.fieldIcon}>
+                  <img
+                    src="/icons/contact_details/language.svg"
+                    alt=""
+                    width="18"
+                    height="18"
+                  />
+                </span>
                 <div className={styles.fieldContent}>
                   <span className={styles.fieldLabel}>Language</span>
                   <span className={styles.fieldValue}>
@@ -1526,7 +1671,14 @@ export default function MessagesView() {
                 </div>
               </div>
               <div className={styles.contactField}>
-                <span className={styles.fieldIcon}>📅</span>
+                <span className={styles.fieldIcon}>
+                  <img
+                    src="/icons/contact_details/calender.svg"
+                    alt=""
+                    width="18"
+                    height="18"
+                  />
+                </span>
                 <div className={styles.fieldContent}>
                   <span className={styles.fieldLabel}>Last Active</span>
                   <span className={styles.fieldValue}>
@@ -1534,100 +1686,6 @@ export default function MessagesView() {
                   </span>
                 </div>
               </div>
-            </div>
-
-            {/* AI Stats Section */}
-            <div className={styles.contactSection}>
-              <h5 className={styles.sectionTitle}>🤖 AI Stats</h5>
-              <div className={styles.contactField}>
-                <span className={styles.fieldIcon}>🤖</span>
-                <div className={styles.fieldContent}>
-                  <span className={styles.fieldLabel}>AI Replies</span>
-                  <span className={styles.fieldValue}>
-                    {selectedConversation.aiReplies || 0}
-                  </span>
-                </div>
-              </div>
-              <div className={styles.contactField}>
-                <span className={styles.fieldIcon}>👤</span>
-                <div className={styles.fieldContent}>
-                  <span className={styles.fieldLabel}>Human Replies</span>
-                  <span className={styles.fieldValue}>
-                    {selectedConversation.humanReplies || 0}
-                  </span>
-                </div>
-              </div>
-              {(selectedConversation.aiReplies || 0) > 0 && (
-                <div className={styles.contactField}>
-                  <span className={styles.fieldIcon}>📊</span>
-                  <div className={styles.fieldContent}>
-                    <span className={styles.fieldLabel}>
-                      AI Automation Rate
-                    </span>
-                    <span className={styles.fieldValue}>
-                      {Math.round(
-                        ((selectedConversation.aiReplies || 0) /
-                          ((selectedConversation.aiReplies || 0) +
-                            (selectedConversation.humanReplies || 0))) *
-                          100
-                      )}
-                      %
-                    </span>
-                  </div>
-                </div>
-              )}
-            </div>
-
-            <div className={styles.contactSection}>
-              <h5 className={styles.sectionTitle}>Tags & Status</h5>
-              <div className={styles.tagsContainer}>
-                <span className={styles.tag}>WhatsApp</span>
-                {selectedConversation.unread > 0 && (
-                  <span
-                    className={styles.tag}
-                    style={{ background: "var(--dash-warning)", color: "#000" }}
-                  >
-                    {selectedConversation.unread} Unread
-                  </span>
-                )}
-                {selectedConversation.priority === "high" && (
-                  <span
-                    className={styles.tag}
-                    style={{ background: "var(--dash-danger)" }}
-                  >
-                    High Priority
-                  </span>
-                )}
-                {selectedConversation.priority === "urgent" && (
-                  <span
-                    className={styles.tag}
-                    style={{ background: "#ff0000" }}
-                  >
-                    🚨 Urgent
-                  </span>
-                )}
-                {selectedConversation.status === "resolved" && (
-                  <span
-                    className={styles.tag}
-                    style={{ background: "var(--dash-success)" }}
-                  >
-                    ✓ Resolved
-                  </span>
-                )}
-                {selectedConversation.tags?.map((tag) => (
-                  <span key={tag} className={styles.tag}>
-                    {tag}
-                  </span>
-                ))}
-              </div>
-            </div>
-
-            <div className={styles.contactSection}>
-              <h5 className={styles.sectionTitle}>Notes</h5>
-              <textarea
-                className={styles.notesInput}
-                placeholder="Add notes about this contact..."
-              />
             </div>
           </div>
         </div>
