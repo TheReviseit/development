@@ -1,85 +1,56 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import styles from "../dashboard.module.css";
-
-// Mock campaigns data
-const mockCampaigns = [
-  {
-    id: "1",
-    name: "Holiday Sale 2024",
-    status: "active",
-    type: "broadcast",
-    recipients: 2500,
-    sent: 2450,
-    delivered: 2398,
-    read: 1876,
-    startDate: "Dec 15, 2024",
-    endDate: "Dec 25, 2024",
-  },
-  {
-    id: "2",
-    name: "New Year Promotion",
-    status: "scheduled",
-    type: "broadcast",
-    recipients: 5000,
-    sent: 0,
-    delivered: 0,
-    read: 0,
-    startDate: "Dec 31, 2024",
-    endDate: "Jan 5, 2025",
-  },
-  {
-    id: "3",
-    name: "Welcome Series",
-    status: "active",
-    type: "drip",
-    recipients: 850,
-    sent: 720,
-    delivered: 715,
-    read: 580,
-    startDate: "Nov 1, 2024",
-    endDate: "Ongoing",
-  },
-  {
-    id: "4",
-    name: "Black Friday Deals",
-    status: "completed",
-    type: "broadcast",
-    recipients: 8000,
-    sent: 7950,
-    delivered: 7820,
-    read: 5640,
-    startDate: "Nov 24, 2024",
-    endDate: "Nov 27, 2024",
-  },
-  {
-    id: "5",
-    name: "Customer Feedback",
-    status: "draft",
-    type: "broadcast",
-    recipients: 1200,
-    sent: 0,
-    delivered: 0,
-    read: 0,
-    startDate: "-",
-    endDate: "-",
-  },
-];
+import { fetchCampaigns, Campaign } from "@/lib/api/whatsapp";
 
 const statusFilters = [
   { id: "all", label: "All Campaigns" },
-  { id: "active", label: "Active" },
+  { id: "sending", label: "Active" },
   { id: "scheduled", label: "Scheduled" },
   { id: "completed", label: "Completed" },
   { id: "draft", label: "Draft" },
 ];
 
 export default function CampaignsView() {
+  const router = useRouter();
+  const [campaigns, setCampaigns] = useState<Campaign[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [selectedStatus, setSelectedStatus] = useState("all");
   const [searchQuery, setSearchQuery] = useState("");
 
-  const filteredCampaigns = mockCampaigns.filter((campaign) => {
+  // TODO: Get actual user ID from auth context
+  const userId =
+    typeof window !== "undefined" ? localStorage.getItem("userId") || "" : "";
+
+  useEffect(() => {
+    async function loadCampaigns() {
+      if (!userId) {
+        setLoading(false);
+        return;
+      }
+
+      try {
+        setLoading(true);
+        setError(null);
+        const data = await fetchCampaigns(userId);
+        setCampaigns(data || []);
+      } catch (err: any) {
+        console.error("Error fetching campaigns:", err);
+        setError(err.message || "Failed to load campaigns");
+        // Keep empty array for now
+        setCampaigns([]);
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    loadCampaigns();
+  }, [userId]);
+
+  const filteredCampaigns = campaigns.filter((campaign) => {
     const matchesStatus =
       selectedStatus === "all" || campaign.status === selectedStatus;
     const matchesSearch = campaign.name
@@ -90,7 +61,7 @@ export default function CampaignsView() {
 
   const getStatusStyle = (status: string) => {
     switch (status) {
-      case "active":
+      case "sending":
         return styles.campaignActive;
       case "scheduled":
         return styles.campaignScheduled;
@@ -113,6 +84,21 @@ export default function CampaignsView() {
     return ((read / delivered) * 100).toFixed(1) + "%";
   };
 
+  // Navigate to bulk messages to create a new campaign
+  const handleCreateCampaign = () => {
+    router.push("/dashboard/bulk-messages");
+  };
+
+  // Stats counts
+  const totalCount = campaigns.length;
+  const activeCount = campaigns.filter((c) => c.status === "sending").length;
+  const scheduledCount = campaigns.filter(
+    (c) => c.status === "scheduled"
+  ).length;
+  const completedCount = campaigns.filter(
+    (c) => c.status === "completed"
+  ).length;
+
   return (
     <div className={styles.campaignsView}>
       {/* Header */}
@@ -123,7 +109,7 @@ export default function CampaignsView() {
             Create and manage your WhatsApp marketing campaigns
           </p>
         </div>
-        <button className={styles.primaryBtn}>
+        <button className={styles.primaryBtn} onClick={handleCreateCampaign}>
           <svg
             width="18"
             height="18"
@@ -144,206 +130,197 @@ export default function CampaignsView() {
         <div className={styles.campaignStatCard}>
           <div className={styles.campaignStatIcon}>📊</div>
           <div className={styles.campaignStatContent}>
-            <span className={styles.campaignStatValue}>
-              {mockCampaigns.length}
-            </span>
+            <span className={styles.campaignStatValue}>{totalCount}</span>
             <span className={styles.campaignStatLabel}>Total Campaigns</span>
           </div>
         </div>
         <div className={styles.campaignStatCard}>
           <div className={styles.campaignStatIcon}>🚀</div>
           <div className={styles.campaignStatContent}>
-            <span className={styles.campaignStatValue}>
-              {mockCampaigns.filter((c) => c.status === "active").length}
-            </span>
+            <span className={styles.campaignStatValue}>{activeCount}</span>
             <span className={styles.campaignStatLabel}>Active</span>
           </div>
         </div>
         <div className={styles.campaignStatCard}>
           <div className={styles.campaignStatIcon}>⏰</div>
           <div className={styles.campaignStatContent}>
-            <span className={styles.campaignStatValue}>
-              {mockCampaigns.filter((c) => c.status === "scheduled").length}
-            </span>
+            <span className={styles.campaignStatValue}>{scheduledCount}</span>
             <span className={styles.campaignStatLabel}>Scheduled</span>
           </div>
         </div>
         <div className={styles.campaignStatCard}>
           <div className={styles.campaignStatIcon}>✅</div>
           <div className={styles.campaignStatContent}>
-            <span className={styles.campaignStatValue}>
-              {mockCampaigns.filter((c) => c.status === "completed").length}
-            </span>
+            <span className={styles.campaignStatValue}>{completedCount}</span>
             <span className={styles.campaignStatLabel}>Completed</span>
           </div>
         </div>
       </div>
 
+      {/* Loading State */}
+      {loading && (
+        <div className={styles.loadingState}>
+          <div className={styles.spinner}></div>
+          <p>Loading campaigns...</p>
+        </div>
+      )}
+
+      {/* Error State */}
+      {error && !loading && (
+        <div className={styles.errorBanner}>
+          <span>⚠️ {error}</span>
+        </div>
+      )}
+
+      {/* Empty State */}
+      {!loading && campaigns.length === 0 && (
+        <div className={styles.emptyState}>
+          <div className={styles.emptyIcon}>📨</div>
+          <h2>No campaigns yet</h2>
+          <p>Create your first bulk message campaign to get started</p>
+          <button className={styles.primaryBtn} onClick={handleCreateCampaign}>
+            + Create Campaign
+          </button>
+        </div>
+      )}
+
       {/* Filters */}
-      <div className={styles.campaignsFilters}>
-        <div className={styles.statusTabs}>
-          {statusFilters.map((filter) => (
-            <button
-              key={filter.id}
-              className={`${styles.statusTab} ${
-                selectedStatus === filter.id ? styles.statusTabActive : ""
-              }`}
-              onClick={() => setSelectedStatus(filter.id)}
-            >
-              {filter.label}
-            </button>
-          ))}
-        </div>
-        <div className={styles.searchWrapper}>
-          <svg
-            width="16"
-            height="16"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-          >
-            <circle cx="11" cy="11" r="8" />
-            <line x1="21" y1="21" x2="16.65" y2="16.65" />
-          </svg>
-          <input
-            type="text"
-            placeholder="Search campaigns..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className={styles.searchInput}
-          />
-        </div>
-      </div>
-
-      {/* Campaigns List */}
-      <div className={styles.campaignsList}>
-        {filteredCampaigns.map((campaign) => (
-          <div key={campaign.id} className={styles.campaignCard}>
-            <div className={styles.campaignMain}>
-              <div className={styles.campaignInfo}>
-                <div className={styles.campaignTitleRow}>
-                  <h3 className={styles.campaignName}>{campaign.name}</h3>
-                  <span
-                    className={`${styles.campaignStatus} ${getStatusStyle(
-                      campaign.status
-                    )}`}
-                  >
-                    {campaign.status}
-                  </span>
-                </div>
-                <div className={styles.campaignMeta}>
-                  <span className={styles.campaignType}>
-                    {campaign.type === "broadcast"
-                      ? "📡 Broadcast"
-                      : "💧 Drip Campaign"}
-                  </span>
-                  <span className={styles.campaignDates}>
-                    📅 {campaign.startDate} - {campaign.endDate}
-                  </span>
-                </div>
-              </div>
-
-              <div className={styles.campaignMetrics}>
-                <div className={styles.metric}>
-                  <span className={styles.metricValue}>
-                    {campaign.recipients.toLocaleString()}
-                  </span>
-                  <span className={styles.metricLabel}>Recipients</span>
-                </div>
-                <div className={styles.metric}>
-                  <span className={styles.metricValue}>
-                    {campaign.sent.toLocaleString()}
-                  </span>
-                  <span className={styles.metricLabel}>Sent</span>
-                </div>
-                <div className={styles.metric}>
-                  <span className={styles.metricValue}>
-                    {getDeliveryRate(campaign.sent, campaign.delivered)}
-                  </span>
-                  <span className={styles.metricLabel}>Delivery Rate</span>
-                </div>
-                <div className={styles.metric}>
-                  <span className={styles.metricValue}>
-                    {getReadRate(campaign.delivered, campaign.read)}
-                  </span>
-                  <span className={styles.metricLabel}>Read Rate</span>
-                </div>
-              </div>
-
-              <div className={styles.campaignActions}>
-                <button className={styles.campaignBtn} title="View Details">
-                  <svg
-                    width="16"
-                    height="16"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                  >
-                    <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
-                    <circle cx="12" cy="12" r="3" />
-                  </svg>
-                </button>
-                <button className={styles.campaignBtn} title="Edit">
-                  <svg
-                    width="16"
-                    height="16"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                  >
-                    <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
-                    <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
-                  </svg>
-                </button>
-                <button className={styles.campaignBtn} title="Duplicate">
-                  <svg
-                    width="16"
-                    height="16"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                  >
-                    <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
-                    <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
-                  </svg>
-                </button>
+      {!loading && campaigns.length > 0 && (
+        <>
+          <div className={styles.campaignsFilters}>
+            <div className={styles.statusTabs}>
+              {statusFilters.map((filter) => (
                 <button
-                  className={`${styles.campaignBtn} ${styles.deleteBtn}`}
-                  title="Delete"
+                  key={filter.id}
+                  className={`${styles.statusTab} ${
+                    selectedStatus === filter.id ? styles.statusTabActive : ""
+                  }`}
+                  onClick={() => setSelectedStatus(filter.id)}
                 >
-                  <svg
-                    width="16"
-                    height="16"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                  >
-                    <polyline points="3 6 5 6 21 6" />
-                    <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
-                  </svg>
+                  {filter.label}
                 </button>
-              </div>
+              ))}
             </div>
-
-            {/* Progress bar for active campaigns */}
-            {campaign.status === "active" && campaign.recipients > 0 && (
-              <div className={styles.campaignProgress}>
-                <div
-                  className={styles.progressBar}
-                  style={{
-                    width: `${(campaign.sent / campaign.recipients) * 100}%`,
-                  }}
-                />
-              </div>
-            )}
+            <div className={styles.searchWrapper}>
+              <svg
+                width="16"
+                height="16"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+              >
+                <circle cx="11" cy="11" r="8" />
+                <line x1="21" y1="21" x2="16.65" y2="16.65" />
+              </svg>
+              <input
+                type="text"
+                placeholder="Search campaigns..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className={styles.searchInput}
+              />
+            </div>
           </div>
-        ))}
-      </div>
+
+          {/* Campaigns List */}
+          <div className={styles.campaignsList}>
+            {filteredCampaigns.map((campaign) => (
+              <div key={campaign.id} className={styles.campaignCard}>
+                <div className={styles.campaignMain}>
+                  <div className={styles.campaignInfo}>
+                    <div className={styles.campaignTitleRow}>
+                      <h3 className={styles.campaignName}>{campaign.name}</h3>
+                      <span
+                        className={`${styles.campaignStatus} ${getStatusStyle(
+                          campaign.status
+                        )}`}
+                      >
+                        {campaign.status}
+                      </span>
+                    </div>
+                    <div className={styles.campaignMeta}>
+                      <span className={styles.campaignType}>📡 Broadcast</span>
+                      <span className={styles.campaignDates}>
+                        📅{" "}
+                        {campaign.started_at
+                          ? new Date(campaign.started_at).toLocaleDateString()
+                          : "Not started"}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className={styles.campaignMetrics}>
+                    <div className={styles.metric}>
+                      <span className={styles.metricValue}>
+                        {(campaign.total_recipients || 0).toLocaleString()}
+                      </span>
+                      <span className={styles.metricLabel}>Recipients</span>
+                    </div>
+                    <div className={styles.metric}>
+                      <span className={styles.metricValue}>
+                        {(campaign.sent_count || 0).toLocaleString()}
+                      </span>
+                      <span className={styles.metricLabel}>Sent</span>
+                    </div>
+                    <div className={styles.metric}>
+                      <span className={styles.metricValue}>
+                        {getDeliveryRate(
+                          campaign.sent_count || 0,
+                          campaign.delivered_count || 0
+                        )}
+                      </span>
+                      <span className={styles.metricLabel}>Delivery Rate</span>
+                    </div>
+                    <div className={styles.metric}>
+                      <span className={styles.metricValue}>
+                        {getReadRate(
+                          campaign.delivered_count || 0,
+                          campaign.read_count || 0
+                        )}
+                      </span>
+                      <span className={styles.metricLabel}>Read Rate</span>
+                    </div>
+                  </div>
+
+                  <div className={styles.campaignActions}>
+                    <button className={styles.campaignBtn} title="View Details">
+                      <svg
+                        width="16"
+                        height="16"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                      >
+                        <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+                        <circle cx="12" cy="12" r="3" />
+                      </svg>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Progress bar for active campaigns */}
+                {campaign.status === "sending" &&
+                  (campaign.total_recipients || 0) > 0 && (
+                    <div className={styles.campaignProgress}>
+                      <div
+                        className={styles.progressBar}
+                        style={{
+                          width: `${
+                            ((campaign.sent_count || 0) /
+                              (campaign.total_recipients || 1)) *
+                            100
+                          }%`,
+                        }}
+                      />
+                    </div>
+                  )}
+              </div>
+            ))}
+          </div>
+        </>
+      )}
     </div>
   );
 }
