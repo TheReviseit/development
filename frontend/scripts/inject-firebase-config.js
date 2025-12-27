@@ -1,10 +1,13 @@
 /**
  * Script to inject Firebase config into service worker
  * This runs at build time to replace placeholder values with actual config
+ *
+ * Run before build: node scripts/inject-firebase-config.js
  */
 
 const fs = require("fs");
 const path = require("path");
+require("dotenv").config({ path: path.join(__dirname, "../.env.local") });
 
 // Read the service worker file
 const swPath = path.join(__dirname, "../public/sw.js");
@@ -20,20 +23,40 @@ const firebaseConfig = {
   appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID || "",
 };
 
-// Create the config object string
-const configString = `const firebaseConfig = ${JSON.stringify(
-  firebaseConfig,
-  null,
-  2
-)};`;
+// Check if config values are present
+const missingKeys = Object.entries(firebaseConfig)
+  .filter(([, v]) => !v)
+  .map(([k]) => k);
 
-// Replace the placeholder config in service worker
+if (missingKeys.length > 0) {
+  console.warn(`⚠️ Missing Firebase config values: ${missingKeys.join(", ")}`);
+  console.warn(
+    "   Make sure .env.local has all NEXT_PUBLIC_FIREBASE_* values set"
+  );
+}
+
+// Replace placeholders with actual values
+swContent = swContent.replace("%%FIREBASE_API_KEY%%", firebaseConfig.apiKey);
 swContent = swContent.replace(
-  /const firebaseConfig = \{[\s\S]*?\};/,
-  configString
+  "%%FIREBASE_AUTH_DOMAIN%%",
+  firebaseConfig.authDomain
 );
+swContent = swContent.replace(
+  "%%FIREBASE_PROJECT_ID%%",
+  firebaseConfig.projectId
+);
+swContent = swContent.replace(
+  "%%FIREBASE_STORAGE_BUCKET%%",
+  firebaseConfig.storageBucket
+);
+swContent = swContent.replace(
+  "%%FIREBASE_MESSAGING_SENDER_ID%%",
+  firebaseConfig.messagingSenderId
+);
+swContent = swContent.replace("%%FIREBASE_APP_ID%%", firebaseConfig.appId);
 
 // Write back to service worker
 fs.writeFileSync(swPath, swContent, "utf8");
 
 console.log("✅ Firebase config injected into service worker");
+console.log(`   Project ID: ${firebaseConfig.projectId || "(not set)"}`);

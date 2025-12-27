@@ -1,5 +1,62 @@
-// Service Worker for ReviseIt PWA
-// Enhanced caching with Firebase Cloud Messaging support
+self.addEventListener("push", (event) => {
+  console.log("🔔 Native push event received:", event);
+
+  if (!event.data) {
+    console.warn("Push event has no data");
+    return;
+  }
+
+  let payload;
+  try {
+    payload = event.data.json();
+    console.log("📦 Push payload:", payload);
+  } catch (e) {
+    console.warn("Could not parse push data as JSON:", e);
+    payload = {
+      notification: { title: "New Message", body: event.data.text() },
+    };
+  }
+
+  // Extract notification data (FCM format)
+  // FCM sends: { notification: {title, body}, data: {...} }
+  const notification = payload.notification || {};
+  const data = payload.data || {};
+
+  // FCM may also send fcmOptions with link
+  const fcmOptions = payload.fcmOptions || {};
+
+  const title = notification.title || data.title || "ReviseIt - New Message";
+  const body = notification.body || data.body || "You have a new message";
+  const icon = notification.icon || data.icon || "/icon-192.png";
+
+  // Build URL for click action
+  let clickUrl = fcmOptions.link || data.url || "/dashboard";
+  if (data.conversationId) {
+    clickUrl = `/dashboard?conversation=${data.conversationId}`;
+  }
+
+  const options = {
+    body,
+    icon,
+    badge: "/icon-192.png",
+    tag: data.conversationId || "message",
+    data: {
+      url: clickUrl,
+      conversationId: data.conversationId,
+      senderPhone: data.senderPhone,
+      senderName: data.senderName,
+      ...data,
+    },
+    vibrate: [200, 100, 200],
+    requireInteraction: false,
+    actions: [
+      { action: "open", title: "Open" },
+      { action: "dismiss", title: "Dismiss" },
+    ],
+  };
+
+  event.waitUntil(self.registration.showNotification(title, options));
+});
 
 // ============================================
 // Firebase Cloud Messaging (FCM) Setup
@@ -13,25 +70,53 @@ importScripts(
   "https://www.gstatic.com/firebasejs/10.7.1/firebase-messaging-compat.js"
 );
 
-// Firebase will be initialized when config is received from the client
+// ============================================
+// Firebase Config - HARDCODED for SW to work without client
+// IMPORTANT: Replace these values with your actual Firebase config
+// Get these from Firebase Console -> Project Settings -> General
+// ============================================
+const FIREBASE_CONFIG = {
+  apiKey: "AIzaSyAll4KrhbRPu5W7MR3TVj3-X60Hexapk8k",
+  authDomain: "reviseit-def4c.firebaseapp.com",
+  projectId: "reviseit-def4c",
+  storageBucket: "reviseit-def4c.firebasestorage.app",
+  messagingSenderId: "636743724509",
+  appId: "1:636743724509:web:25460ed67da07100555a34",
+  measurementId: "G-N6F5JK2FKE",
+};
+
 let firebaseApp = null;
 let messaging = null;
 
-// Listen for Firebase config from the client
+// Initialize Firebase immediately if config is valid
+// This allows onBackgroundMessage to work as a fallback
+function initializeFirebase(config) {
+  if (firebaseApp) return true;
+
+  try {
+    // Check if config has real values (not placeholders)
+    if (config.apiKey && !config.apiKey.includes("%%")) {
+      firebaseApp = firebase.initializeApp(config);
+      messaging = firebase.messaging(firebaseApp);
+      console.log("✅ Firebase initialized in service worker");
+      setupBackgroundMessageHandler();
+      return true;
+    }
+  } catch (error) {
+    console.error("❌ Failed to initialize Firebase in SW:", error);
+  }
+  return false;
+}
+
+// Try to initialize with hardcoded config
+initializeFirebase(FIREBASE_CONFIG);
+
+// Listen for Firebase config from the client (fallback/update)
 self.addEventListener("message", (event) => {
   if (event.data && event.data.type === "FIREBASE_CONFIG") {
-    try {
-      // Initialize Firebase if not already initialized
-      if (!firebaseApp) {
-        firebaseApp = firebase.initializeApp(event.data.config);
-        messaging = firebase.messaging(firebaseApp);
-        console.log("✅ Firebase initialized in service worker");
-
-        // Set up background message handler
-        setupBackgroundMessageHandler();
-      }
-    } catch (error) {
-      console.error("❌ Failed to initialize Firebase in SW:", error);
+    // Initialize with client-provided config if not already done
+    if (!firebaseApp && event.data.config) {
+      initializeFirebase(event.data.config);
     }
   }
 
