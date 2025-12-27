@@ -18,7 +18,7 @@ const supabaseAdmin = createClient(
 
 export async function POST(
   request: NextRequest,
-  { params }: { params: { conversationId: string } }
+  { params }: { params: Promise<{ conversationId: string }> }
 ) {
   try {
     const { conversationId } = await params;

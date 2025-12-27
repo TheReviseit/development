@@ -397,3 +397,83 @@ export async function getCampaignStats(
 ): Promise<any> {
   return apiRequest(`/api/campaigns/${campaignId}/stats`, userId);
 }
+
+// =====================================================
+// BULK MESSAGE CAMPAIGNS API
+// =====================================================
+
+export interface BulkContact {
+  phone: string;
+  name?: string;
+  email?: string;
+  variables?: Record<string, string>;
+}
+
+export interface BulkCampaign {
+  id: string;
+  name: string;
+  status: "draft" | "scheduled" | "sending" | "sent" | "failed";
+  message_text?: string;
+  media_url?: string;
+  media_type?: string;
+  total_contacts: number;
+  sent_count: number;
+  delivered_count: number;
+  read_count: number;
+  failed_count: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export async function createBulkCampaign(
+  userId: string,
+  name: string
+): Promise<BulkCampaign> {
+  const response = await apiRequest<{
+    campaign?: BulkCampaign;
+    id?: string;
+    name?: string;
+  }>("/api/bulk-campaigns", userId, {
+    method: "POST",
+    body: JSON.stringify({ name }),
+  });
+  // Handle different response formats
+  if (response.campaign) {
+    return response.campaign;
+  }
+  return response as unknown as BulkCampaign;
+}
+
+export async function addBulkCampaignContacts(
+  userId: string,
+  campaignId: string,
+  contacts: BulkContact[]
+): Promise<{ success: boolean; count: number }> {
+  return apiRequest(`/api/bulk-campaigns/${campaignId}/contacts`, userId, {
+    method: "POST",
+    body: JSON.stringify({ contacts }),
+  });
+}
+
+export async function sendBulkCampaign(
+  userId: string,
+  campaignId: string,
+  message_text: string,
+  media_url?: string,
+  media_type?: string
+): Promise<{ success: boolean; message: string }> {
+  return apiRequest(`/api/bulk-campaigns/${campaignId}/send`, userId, {
+    method: "POST",
+    body: JSON.stringify({ message_text, media_url, media_type }),
+  });
+}
+
+export async function fetchBulkCampaigns(
+  userId: string
+): Promise<BulkCampaign[]> {
+  const response = await apiRequest<{ campaigns: BulkCampaign[] }>(
+    "/api/bulk-campaigns",
+    userId
+  );
+  return response.campaigns || [];
+}
