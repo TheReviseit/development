@@ -98,10 +98,11 @@ export function useNotification() {
         console.log("🔔 Creating Notification object...");
         const notification = new Notification(title, {
           body: body.length > 100 ? body.substring(0, 100) + "..." : body,
-          icon: icon || "/logo.svg",
+          icon: icon || "/icon-192.png",
           tag: tag, // Prevents duplicate notifications for same conversation
-          badge: "/logo.svg",
-          silent: false, // Allow browser to show notification visibly
+          badge: "/icon-192.png",
+          silent: false, // Allow browser to show notification with sound
+          requireInteraction: true, // Keep notification visible until user interacts
         });
 
         console.log("✅ Notification created successfully:", notification);
@@ -121,8 +122,8 @@ export function useNotification() {
           console.error("❌ Notification error:", e);
         };
 
-        // Auto close after 5 seconds
-        setTimeout(() => notification.close(), 5000);
+        // Auto close after 10 seconds (longer duration for visibility)
+        setTimeout(() => notification.close(), 10000);
       } catch (error) {
         console.error("❌ Error creating notification:", error);
       }
