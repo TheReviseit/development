@@ -101,7 +101,7 @@ export function useNotification() {
           icon: icon || "/logo.svg",
           tag: tag, // Prevents duplicate notifications for same conversation
           badge: "/logo.svg",
-          silent: true, // We're playing our own sound
+          silent: false, // Allow browser to show notification visibly
         });
 
         console.log("✅ Notification created successfully:", notification);
