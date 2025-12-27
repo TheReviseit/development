@@ -98,9 +98,9 @@ export function useNotification() {
         console.log("🔔 Creating Notification object...");
         const notification = new Notification(title, {
           body: body.length > 100 ? body.substring(0, 100) + "..." : body,
-          icon: icon || "/icon-192.png",
+          icon: icon || "/logo-circle.png",
           tag: tag, // Prevents duplicate notifications for same conversation
-          badge: "/icon-192.png",
+          badge: "/logo-circle.png",
           silent: false, // Allow browser to show notification with sound
           requireInteraction: true, // Keep notification visible until user interacts
         });

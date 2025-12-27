@@ -27,18 +27,18 @@ self.addEventListener("push", (event) => {
 
   const title = notification.title || data.title || "ReviseIt - New Message";
   const body = notification.body || data.body || "You have a new message";
-  const icon = notification.icon || data.icon || "/icon-192.png";
+  const icon = notification.icon || data.icon || "/logo-circle.png";
 
   // Build URL for click action
-  let clickUrl = fcmOptions.link || data.url || "/dashboard";
+  let clickUrl = fcmOptions.link || data.url || "/dashboard/messages";
   if (data.conversationId) {
-    clickUrl = `/dashboard?conversation=${data.conversationId}`;
+    clickUrl = `/dashboard/messages?conversation=${data.conversationId}`;
   }
 
   const options = {
     body,
     icon,
-    badge: "/icon-192.png",
+    badge: "/logo-circle.png",
     tag: data.conversationId || "message",
     data: {
       url: clickUrl,
@@ -141,15 +141,16 @@ function setupBackgroundMessageHandler() {
       payload.data?.body ||
       "You have a new message";
     const notificationIcon =
-      payload.notification?.icon || payload.data?.icon || "/icon-192.png";
+      payload.notification?.icon || payload.data?.icon || "/logo-circle.png";
     const conversationId = payload.data?.conversationId;
-    const url = payload.data?.url || payload.fcmOptions?.link || "/dashboard";
+    const url =
+      payload.data?.url || payload.fcmOptions?.link || "/dashboard/messages";
 
     // Show notification
     const notificationOptions = {
       body: notificationBody,
       icon: notificationIcon,
-      badge: "/icon-192.png",
+      badge: "/logo-circle.png",
       tag: conversationId || "message",
       data: {
         url: url,
@@ -372,7 +373,7 @@ self.addEventListener("notificationclick", (event) => {
 
   // Get the URL to open
   const data = event.notification.data || {};
-  const urlToOpen = data.url || "/dashboard";
+  const urlToOpen = data.url || "/dashboard/messages";
 
   // Focus existing window or open new one
   const promiseChain = clients
