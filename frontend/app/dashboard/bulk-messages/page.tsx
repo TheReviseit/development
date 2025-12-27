@@ -1,8 +1,9 @@
 "use client";
 
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
 import * as XLSX from "xlsx";
-import styles from "../dashboard.module.css";
+import styles from "./bulk-messages.module.css";
+import MessageComposer from "./MessageComposer";
 
 interface Contact {
   name: string;
@@ -11,13 +12,66 @@ interface Contact {
   [key: string]: string | undefined;
 }
 
+const STORAGE_KEY = "bulkMessagesContacts";
+const FILENAME_KEY = "bulkMessagesFileName";
+
 export default function BulkMessagesPage() {
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [fileName, setFileName] = useState<string | null>(null);
   const [isDragging, setIsDragging] = useState(false);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [currentStep, setCurrentStep] = useState(1);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Load contacts from localStorage on mount
+  useEffect(() => {
+    try {
+      const savedContacts = localStorage.getItem(STORAGE_KEY);
+      const savedFileName = localStorage.getItem(FILENAME_KEY);
+      if (savedContacts) {
+        setContacts(JSON.parse(savedContacts));
+      }
+      if (savedFileName) {
+        setFileName(savedFileName);
+      }
+    } catch (err) {
+      console.error("Error loading contacts from localStorage:", err);
+    }
+  }, []);
+
+  // Save contacts to localStorage whenever they change
+  useEffect(() => {
+    try {
+      if (contacts.length > 0) {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(contacts));
+      } else {
+        localStorage.removeItem(STORAGE_KEY);
+      }
+    } catch (err) {
+      console.error("Error saving contacts to localStorage:", err);
+    }
+  }, [contacts]);
+
+  // Save fileName to localStorage whenever it changes
+  useEffect(() => {
+    try {
+      if (fileName) {
+        localStorage.setItem(FILENAME_KEY, fileName);
+      } else {
+        localStorage.removeItem(FILENAME_KEY);
+      }
+    } catch (err) {
+      console.error("Error saving fileName to localStorage:", err);
+    }
+  }, [fileName]);
+
+  const CONTACTS_PER_PAGE = 5;
+  const totalPages = Math.ceil(contacts.length / CONTACTS_PER_PAGE);
+  const startIndex = (currentPage - 1) * CONTACTS_PER_PAGE;
+  const endIndex = startIndex + CONTACTS_PER_PAGE;
+  const paginatedContacts = contacts.slice(startIndex, endIndex);
 
   const processExcelFile = useCallback((file: File) => {
     setIsLoading(true);
@@ -112,17 +166,49 @@ export default function BulkMessagesPage() {
   };
 
   const handleRemoveContact = (index: number) => {
-    setContacts((prev) => prev.filter((_, i) => i !== index));
+    const actualIndex = startIndex + index;
+    setContacts((prev) => prev.filter((_, i) => i !== actualIndex));
+    // If removing last item on current page, go to previous page
+    if (paginatedContacts.length === 1 && currentPage > 1) {
+      setCurrentPage(currentPage - 1);
+    }
   };
 
   const handleClearAll = () => {
     setContacts([]);
     setFileName(null);
     setError(null);
+    setCurrentPage(1);
     if (fileInputRef.current) {
       fileInputRef.current.value = "";
     }
   };
+
+  const goToPage = (page: number) => {
+    if (page >= 1 && page <= totalPages) {
+      setCurrentPage(page);
+    }
+  };
+
+  // Handle send from composer
+  const handleSendMessage = (message: string, mediaFiles: File[]) => {
+    console.log("Sending message:", message);
+    console.log("Media files:", mediaFiles);
+    console.log("To contacts:", contacts);
+    // TODO: Implement actual sending logic
+    alert(`Message will be sent to ${contacts.length} contacts!`);
+  };
+
+  // If on step 2 (composer), show the MessageComposer
+  if (currentStep === 2) {
+    return (
+      <MessageComposer
+        contacts={contacts}
+        onBack={() => setCurrentStep(1)}
+        onSend={handleSendMessage}
+      />
+    );
+  }
 
   return (
     <div className={styles.bulkMessagesContainer}>
@@ -154,33 +240,11 @@ export default function BulkMessagesPage() {
               style={{ display: "none" }}
             />
             <div className={styles.dropZoneContent}>
-              <svg
-                width="48"
-                height="48"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="1.5"
-              >
-                <path
-                  d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                />
-                <polyline
-                  points="17 8 12 3 7 8"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                />
-                <line
-                  x1="12"
-                  y1="3"
-                  x2="12"
-                  y2="15"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                />
-              </svg>
+              <img
+                src="/icons/bulk_message/upload.svg"
+                alt="Upload"
+                className={styles.uploadIcon}
+              />
               <h3>Drop your Excel file here</h3>
               <p>or click to browse</p>
               <span className={styles.fileFormats}>
@@ -221,39 +285,45 @@ export default function BulkMessagesPage() {
       {/* Contacts Table */}
       {contacts.length > 0 && (
         <div className={styles.contactsSection}>
-          <div className={styles.contactsHeader}>
-            <div className={styles.contactsInfo}>
-              <h2>Uploaded Contacts</h2>
-              <span className={styles.contactsCount}>
-                {contacts.length} contacts from {fileName}
-              </span>
-            </div>
-            <div className={styles.contactsActions}>
-              <button className={styles.clearBtn} onClick={handleClearAll}>
-                Clear All
-              </button>
-              <button className={styles.sendBulkBtn}>
-                Send Messages ({contacts.length})
-              </button>
-            </div>
-          </div>
-
           <div className={styles.contactsTableWrapper}>
             <table className={styles.contactsTable}>
               <thead>
                 <tr>
-                  <th className={styles.tableHeaderCell}>#</th>
-                  <th className={styles.tableHeaderCell}>Name</th>
-                  <th className={styles.tableHeaderCell}>Phone</th>
-                  <th className={styles.tableHeaderCell}>Email</th>
-                  <th className={styles.tableHeaderCell}>Action</th>
+                  <th
+                    className={`${styles.tableHeaderCell} ${styles.snoColumn}`}
+                  >
+                    S.No
+                  </th>
+                  <th
+                    className={`${styles.tableHeaderCell} ${styles.nameColumn}`}
+                  >
+                    Name
+                  </th>
+                  <th
+                    className={`${styles.tableHeaderCell} ${styles.detailsColumn}`}
+                  >
+                    Details
+                  </th>
+                  <th
+                    className={`${styles.tableHeaderCell} ${styles.phoneColumn}`}
+                  >
+                    Phone
+                  </th>
+                  <th
+                    className={`${styles.tableHeaderCell} ${styles.actionColumn}`}
+                  >
+                    Action
+                  </th>
                 </tr>
               </thead>
               <tbody>
-                {contacts.map((contact, index) => (
-                  <tr key={index} className={styles.tableRow}>
-                    <td className={styles.tableCell}>{index + 1}</td>
-                    <td className={styles.tableCell}>
+                {paginatedContacts.map((contact, index) => (
+                  <tr key={startIndex + index} className={styles.tableRow}>
+                    <td className={`${styles.tableCell} ${styles.snoColumn}`}>
+                      {startIndex + index + 1}
+                    </td>
+                    {/* Desktop: Name column with avatar */}
+                    <td className={`${styles.tableCell} ${styles.nameColumn}`}>
                       <div className={styles.tableCellName}>
                         <div className={styles.tableAvatar}>
                           {contact.name
@@ -263,9 +333,33 @@ export default function BulkMessagesPage() {
                         <span>{contact.name || "Unknown"}</span>
                       </div>
                     </td>
-                    <td className={styles.tableCell}>{contact.phone}</td>
-                    <td className={styles.tableCell}>{contact.email || "-"}</td>
-                    <td className={styles.tableCell}>
+                    {/* Mobile: Details column with avatar, name, and phone */}
+                    <td
+                      className={`${styles.tableCell} ${styles.detailsColumn}`}
+                    >
+                      <div className={styles.mobileDetailsCell}>
+                        <div className={styles.tableAvatar}>
+                          {contact.name
+                            ? contact.name.substring(0, 2).toUpperCase()
+                            : contact.phone.substring(0, 2)}
+                        </div>
+                        <div className={styles.mobileDetailsText}>
+                          <span className={styles.mobileDetailsName}>
+                            {contact.name || "Unknown"}
+                          </span>
+                          <span className={styles.mobileDetailsPhone}>
+                            {contact.phone}
+                          </span>
+                        </div>
+                      </div>
+                    </td>
+                    {/* Desktop: Phone column */}
+                    <td className={`${styles.tableCell} ${styles.phoneColumn}`}>
+                      {contact.phone}
+                    </td>
+                    <td
+                      className={`${styles.tableCell} ${styles.actionColumn}`}
+                    >
                       <button
                         className={styles.removeContactBtn}
                         onClick={() => handleRemoveContact(index)}
@@ -289,6 +383,83 @@ export default function BulkMessagesPage() {
               </tbody>
             </table>
           </div>
+        </div>
+      )}
+
+      {/* Footer with Clear All, Pagination, and Next */}
+      {contacts.length > 0 && (
+        <div className={styles.tableFooter}>
+          <button className={styles.clearBtn} onClick={handleClearAll}>
+            Clear All
+          </button>
+
+          {/* Pagination Controls */}
+          {totalPages > 1 && (
+            <div className={styles.pagination}>
+              <button
+                className={styles.paginationArrow}
+                onClick={() => goToPage(currentPage - 1)}
+                disabled={currentPage === 1}
+              >
+                <svg
+                  width="16"
+                  height="16"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                >
+                  <polyline
+                    points="15 18 9 12 15 6"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                </svg>
+              </button>
+
+              {Array.from({ length: totalPages }, (_, i) => i + 1).map(
+                (page) => (
+                  <button
+                    key={page}
+                    className={`${styles.paginationBtn} ${
+                      currentPage === page ? styles.paginationBtnActive : ""
+                    }`}
+                    onClick={() => goToPage(page)}
+                  >
+                    {page}
+                  </button>
+                )
+              )}
+
+              <button
+                className={styles.paginationArrow}
+                onClick={() => goToPage(currentPage + 1)}
+                disabled={currentPage === totalPages}
+              >
+                <svg
+                  width="16"
+                  height="16"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                >
+                  <polyline
+                    points="9 18 15 12 9 6"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                </svg>
+              </button>
+            </div>
+          )}
+
+          <button
+            className={styles.sendBulkBtn}
+            onClick={() => setCurrentStep(2)}
+          >
+            Next
+          </button>
         </div>
       )}
     </div>
