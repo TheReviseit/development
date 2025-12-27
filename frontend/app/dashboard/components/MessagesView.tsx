@@ -110,6 +110,29 @@ function formatPhoneNumber(phone: string): string {
   return phone;
 }
 
+// Generate consistent random color based on string (name)
+const avatarColors = [
+  "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
+  "linear-gradient(135deg, #f093fb 0%, #f5576c 100%)",
+  "linear-gradient(135deg, #4facfe 0%, #00f2fe 100%)",
+  "linear-gradient(135deg, #43e97b 0%, #38f9d7 100%)",
+  "linear-gradient(135deg, #fa709a 0%, #fee140 100%)",
+  "linear-gradient(135deg, #a8edea 0%, #fed6e3 100%)",
+  "linear-gradient(135deg, #ff9a9e 0%, #fecfef 100%)",
+  "linear-gradient(135deg, #ffecd2 0%, #fcb69f 100%)",
+  "linear-gradient(135deg, #667eea 0%, #f093fb 100%)",
+  "linear-gradient(135deg, #5ee7df 0%, #b490ca 100%)",
+];
+
+function getAvatarColor(name: string): string {
+  let hash = 0;
+  for (let i = 0; i < name.length; i++) {
+    hash = name.charCodeAt(i) + ((hash << 5) - hash);
+  }
+  const index = Math.abs(hash) % avatarColors.length;
+  return avatarColors[index];
+}
+
 // Memoized Message Bubble component to prevent re-rendering on new messages
 interface MessageBubbleProps {
   msg: Message;
@@ -125,6 +148,7 @@ const MessageBubble = memo(function MessageBubble({
       className={`${styles.messageWrapper} ${
         msg.sender === "user" ? styles.messageOut : styles.messageIn
       }`}
+      style={{ marginBottom: "0.75rem" }}
     >
       <div className={styles.messageBubble}>
         {msg.type === "text" && (
@@ -1003,7 +1027,10 @@ export default function MessagesView() {
                   if (isMobile) setShowMobileChat(true);
                 }}
               >
-                <div className={styles.conversationAvatar}>
+                <div
+                  className={styles.conversationAvatar}
+                  style={{ background: getAvatarColor(conv.name) }}
+                >
                   {getInitials(conv.name)}
                   {conv.online && <span className={styles.onlineIndicator} />}
                 </div>
@@ -1077,87 +1104,6 @@ export default function MessagesView() {
                 </div>
               </div>
               <div className={styles.chatHeaderActions}>
-                {/* Notification Permission Button */}
-                {!isSubscribed && (
-                  <button
-                    onClick={subscribe}
-                    title={
-                      permissionStatus === "denied"
-                        ? "Notifications blocked. Enable in browser settings."
-                        : "Enable notifications"
-                    }
-                    style={{
-                      display: "flex",
-                      alignItems: "center",
-                      gap: "0.5rem",
-                      padding: "0.5rem 0.75rem",
-                      background:
-                        permissionStatus === "denied"
-                          ? "rgba(248, 81, 73, 0.15)"
-                          : "rgba(34, 193, 90, 0.15)",
-                      border: `1px solid ${
-                        permissionStatus === "denied"
-                          ? "var(--dash-danger)"
-                          : "var(--dash-accent)"
-                      }`,
-                      borderRadius: "8px",
-                      color:
-                        permissionStatus === "denied"
-                          ? "var(--dash-danger)"
-                          : "var(--dash-accent)",
-                      fontSize: "0.8125rem",
-                      fontWeight: 500,
-                      cursor:
-                        permissionStatus === "denied"
-                          ? "not-allowed"
-                          : "pointer",
-                      transition: "all 0.2s ease",
-                    }}
-                  >
-                    <svg
-                      width="16"
-                      height="16"
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="2"
-                    >
-                      <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
-                      <path d="M13.73 21a2 2 0 0 1-3.46 0" />
-                    </svg>
-                    {permissionStatus === "denied"
-                      ? "Blocked"
-                      : "Enable Alerts"}
-                  </button>
-                )}
-                {permissionStatus === "granted" && (
-                  <div
-                    title="Notifications enabled"
-                    style={{
-                      display: "flex",
-                      alignItems: "center",
-                      gap: "0.375rem",
-                      padding: "0.5rem 0.75rem",
-                      background: "rgba(34, 193, 90, 0.1)",
-                      borderRadius: "8px",
-                      color: "var(--dash-accent)",
-                      fontSize: "0.75rem",
-                    }}
-                  >
-                    <svg
-                      width="14"
-                      height="14"
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="2"
-                    >
-                      <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
-                      <path d="M13.73 21a2 2 0 0 1-3.46 0" />
-                    </svg>
-                    ✓
-                  </div>
-                )}
                 {/* <button
                   className={styles.markReadBtn}
                   onClick={handleMarkAsRead}

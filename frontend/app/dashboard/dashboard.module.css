@@ -1406,12 +1406,18 @@
 }
 
 .conversationItem:hover {
-  background: var(--dash-bg-hover);
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+  margin: 0.25rem 0.5rem;
+  padding: 1rem;
 }
 
 .conversationActive {
-  background: var(--dash-accent-muted);
-  border-left: 3px solid var(--dash-accent);
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+  margin: 0.25rem 0.5rem;
+  padding: 1rem;
+  border-bottom: none;
 }
 
 .conversationAvatar {
@@ -3308,14 +3314,8 @@
    ============================================ */
 
 .notificationBanner {
-  background: linear-gradient(
-    90deg,
-    rgba(255, 255, 255, 0.05) 0%,
-    rgba(255, 255, 255, 0.08) 100%
-  );
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
-  border: 1px solid var(--dash-border);
+  background: #000000;
+  border: 1px solid rgba(255, 255, 255, 0.15);
   border-radius: 12px;
   padding: 1rem 1.25rem;
   margin-bottom: 1.5rem;
@@ -3328,15 +3328,7 @@
   overflow: hidden;
 }
 
-.notificationBanner::before {
-  content: "";
-  position: absolute;
-  left: 0;
-  top: 0;
-  width: 4px;
-  height: 100%;
-  background: var(--dash-accent);
-}
+/* Left accent bar removed */
 
 .notificationBannerContent {
   display: flex;
@@ -3365,12 +3357,12 @@
 .notificationBannerText strong {
   font-size: 0.9375rem;
   font-weight: 600;
-  color: var(--dash-text-primary);
+  color: #ffffff;
 }
 
 .notificationBannerText span {
   font-size: 0.8125rem;
-  color: var(--dash-text-secondary);
+  color: rgba(255, 255, 255, 0.7);
 }
 
 .notificationBannerActions {
@@ -3382,8 +3374,8 @@
 
 .notificationBannerDismiss {
   background: transparent;
-  border: none;
-  color: var(--dash-text-muted);
+  border: 1px solid rgba(255, 255, 255, 0.5);
+  color: #ffffff;
   font-size: 0.8125rem;
   font-weight: 500;
   cursor: pointer;

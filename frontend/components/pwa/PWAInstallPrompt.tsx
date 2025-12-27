@@ -71,6 +71,12 @@ export function PWAInstallPrompt() {
       return;
     }
 
+    // Check if already shown this session (prevent showing on every page)
+    const shownThisSession = sessionStorage.getItem("pwa-prompt-shown");
+    if (shownThisSession === "true") {
+      return;
+    }
+
     // Check if user already dismissed the prompt (don't show again for 7 days)
     const dismissedAt = localStorage.getItem("pwa-prompt-dismissed");
     if (dismissedAt) {
@@ -100,6 +106,7 @@ export function PWAInstallPrompt() {
           )
         ) {
           setShowPrompt(true);
+          sessionStorage.setItem("pwa-prompt-shown", "true");
         }
       }, 3000);
       return () => clearTimeout(timer);
@@ -111,9 +118,13 @@ export function PWAInstallPrompt() {
       setDeferredPrompt(e as BeforeInstallPromptEvent);
 
       // Show the install prompt after a short delay (better UX)
-      setTimeout(() => {
-        setShowPrompt(true);
-      }, 3000);
+      // Only show once per session
+      if (!sessionStorage.getItem("pwa-prompt-shown")) {
+        setTimeout(() => {
+          setShowPrompt(true);
+          sessionStorage.setItem("pwa-prompt-shown", "true");
+        }, 3000);
+      }
     };
 
     // Check if app was installed
@@ -215,12 +226,12 @@ export function PWAInstallPrompt() {
             </div>
           ) : (
             <div className="pwa-actions">
+              <button className="pwa-later-btn" onClick={handleDismiss}>
+                Maybe Later
+              </button>
               <button className="pwa-install-btn" onClick={handleInstallClick}>
                 <DownloadIcon />
                 Install App
-              </button>
-              <button className="pwa-later-btn" onClick={handleDismiss}>
-                Maybe Later
               </button>
             </div>
           )}
@@ -330,20 +341,20 @@ export function PWAInstallPrompt() {
           justify-content: center;
           gap: 8px;
           padding: 14px 24px;
-          background: linear-gradient(135deg, #22c15a 0%, #1da14c 100%);
-          color: white;
+          background: #ffffff;
+          color: #000000;
           border: none;
           border-radius: 12px;
           font-size: 1rem;
           font-weight: 600;
           cursor: pointer;
           transition: all 0.3s ease;
-          box-shadow: 0 4px 15px rgba(34, 193, 90, 0.3);
+          box-shadow: 0 4px 15px rgba(255, 255, 255, 0.2);
         }
 
         .pwa-install-btn:hover {
           transform: translateY(-2px);
-          box-shadow: 0 6px 20px rgba(34, 193, 90, 0.4);
+          box-shadow: 0 6px 20px rgba(255, 255, 255, 0.3);
         }
 
         .pwa-install-btn:active {
