@@ -28,9 +28,11 @@ def send_push_to_user(user_id, title, body, data=None):
     messages = []
     for token in tokens:
         # Determine the URL to open when notification is clicked
-        notification_url = '/dashboard'
+        # FCM requires full HTTPS URL for webpush link
+        frontend_url = os.getenv('FRONTEND_URL', 'https://reviseit.app')
+        notification_url = f'{frontend_url}/dashboard'
         if fcm_data.get('conversationId'):
-            notification_url = f'/dashboard?conversation={fcm_data["conversationId"]}'
+            notification_url = f'{frontend_url}/dashboard?conversation={fcm_data["conversationId"]}'
         
         message = messaging.Message(
             notification=messaging.Notification(
