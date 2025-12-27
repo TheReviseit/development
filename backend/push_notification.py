@@ -1,23 +1,7 @@
-import os
 import firebase_admin
-from firebase_admin import credentials, messaging
+from firebase_admin import messaging
 from supabase_client import get_user_push_tokens, delete_push_token
 
-# Initialize Firebase Admin SDK if not already initialized
-if not firebase_admin._apps:
-    cred_path = os.getenv('FIREBASE_SERVICE_ACCOUNT_KEY_PATH')
-    if cred_path and os.path.exists(cred_path):
-        try:
-            cred = credentials.Certificate(cred_path)
-            firebase_admin.initialize_app(cred)
-            print("✅ Firebase Admin SDK initialized for FCM")
-        except Exception as e:
-            print(f"❌ Failed to initialize Firebase Admin SDK: {e}")
-            print("⚠️ Push notifications will not work")
-    else:
-        print("⚠️ FIREBASE_SERVICE_ACCOUNT_KEY_PATH not set or file missing")
-        print("⚠️ Push notifications will not work until configured")
-        print(f"   Expected path: {cred_path or 'Not set'}")
 
 def send_push_to_user(user_id, title, body, data=None):
     """
@@ -102,7 +86,16 @@ def send_push_to_user(user_id, title, body, data=None):
                 token = tokens[idx]
                 print(f"❌ Failed to send to token {token[:10]}... Error: {error}")
                 # If token is invalid/expired, remove it
-                if error.code in ['messaging/invalid-registration-token', 'messaging/registration-token-not-registered']:
+                # Firebase Admin SDK uses exception types, not string codes like JS SDK
+                error_msg = str(error).lower()
+                is_invalid_token = (
+                    'not a valid fcm' in error_msg or
+                    'not registered' in error_msg or
+                    'invalid' in error_msg or
+                    'unregistered' in error_msg or
+                    hasattr(error, '__class__') and 'Unregistered' in error.__class__.__name__
+                )
+                if is_invalid_token:
                     print(f"♻️ Removing expired token: {token[:10]}...")
                     delete_push_token(token)
                     
