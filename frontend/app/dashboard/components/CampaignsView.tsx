@@ -3,27 +3,28 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import styles from "../dashboard.module.css";
-import { fetchCampaigns, Campaign } from "@/lib/api/whatsapp";
+import { fetchBulkCampaigns, BulkCampaign } from "@/lib/api/whatsapp";
+import { useAuth } from "@/app/components/auth/AuthProvider";
 
 const statusFilters = [
   { id: "all", label: "All Campaigns" },
   { id: "sending", label: "Active" },
   { id: "scheduled", label: "Scheduled" },
-  { id: "completed", label: "Completed" },
+  { id: "sent", label: "Completed" },
   { id: "draft", label: "Draft" },
 ];
 
 export default function CampaignsView() {
   const router = useRouter();
-  const [campaigns, setCampaigns] = useState<Campaign[]>([]);
+  const { user } = useAuth();
+  const [campaigns, setCampaigns] = useState<BulkCampaign[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedStatus, setSelectedStatus] = useState("all");
   const [searchQuery, setSearchQuery] = useState("");
 
-  // TODO: Get actual user ID from auth context
-  const userId =
-    typeof window !== "undefined" ? localStorage.getItem("userId") || "" : "";
+  // Get user ID from auth context
+  const userId = user?.id || "";
 
   useEffect(() => {
     async function loadCampaigns() {
@@ -35,7 +36,7 @@ export default function CampaignsView() {
       try {
         setLoading(true);
         setError(null);
-        const data = await fetchCampaigns(userId);
+        const data = await fetchBulkCampaigns(userId);
         setCampaigns(data || []);
       } catch (err: any) {
         console.error("Error fetching campaigns:", err);
@@ -65,10 +66,12 @@ export default function CampaignsView() {
         return styles.campaignActive;
       case "scheduled":
         return styles.campaignScheduled;
-      case "completed":
+      case "sent":
         return styles.campaignCompleted;
       case "draft":
         return styles.campaignDraft;
+      case "failed":
+        return styles.campaignFailed || "";
       default:
         return "";
     }
@@ -95,9 +98,7 @@ export default function CampaignsView() {
   const scheduledCount = campaigns.filter(
     (c) => c.status === "scheduled"
   ).length;
-  const completedCount = campaigns.filter(
-    (c) => c.status === "completed"
-  ).length;
+  const completedCount = campaigns.filter((c) => c.status === "sent").length;
 
   return (
     <div className={styles.campaignsView}>
@@ -253,7 +254,7 @@ export default function CampaignsView() {
                   <div className={styles.campaignMetrics}>
                     <div className={styles.metric}>
                       <span className={styles.metricValue}>
-                        {(campaign.total_recipients || 0).toLocaleString()}
+                        {(campaign.total_contacts || 0).toLocaleString()}
                       </span>
                       <span className={styles.metricLabel}>Recipients</span>
                     </div>
@@ -302,14 +303,14 @@ export default function CampaignsView() {
 
                 {/* Progress bar for active campaigns */}
                 {campaign.status === "sending" &&
-                  (campaign.total_recipients || 0) > 0 && (
+                  (campaign.total_contacts || 0) > 0 && (
                     <div className={styles.campaignProgress}>
                       <div
                         className={styles.progressBar}
                         style={{
                           width: `${
                             ((campaign.sent_count || 0) /
-                              (campaign.total_recipients || 1)) *
+                              (campaign.total_contacts || 1)) *
                             100
                           }%`,
                         }}
