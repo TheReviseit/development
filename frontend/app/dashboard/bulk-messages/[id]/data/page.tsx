@@ -3,6 +3,8 @@
 import { useState, useRef, useCallback, useEffect } from "react";
 import { useRouter, useParams } from "next/navigation";
 import * as XLSX from "xlsx";
+import { useAuth } from "@/app/components/auth/AuthProvider";
+import { addBulkCampaignContacts } from "@/lib/api/whatsapp";
 import styles from "../../bulk-messages.module.css";
 
 interface Contact {
@@ -27,6 +29,7 @@ export default function DataPage() {
   const router = useRouter();
   const params = useParams();
   const campaignId = params.id as string;
+  const { user } = useAuth();
 
   const [campaign, setCampaign] = useState<Campaign | null>(null);
   const [contacts, setContacts] = useState<Contact[]>([]);
@@ -35,6 +38,7 @@ export default function DataPage() {
   const [fileName, setFileName] = useState<string | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
+  const [isSyncing, setIsSyncing] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const CONTACTS_PER_PAGE = 5;
@@ -64,9 +68,10 @@ export default function DataPage() {
     }
   }, [campaignId, router]);
 
-  // Save contacts to campaign
+  // Save contacts to campaign (localStorage + backend API)
   const saveCampaign = useCallback(
-    (newContacts: Contact[]) => {
+    async (newContacts: Contact[]) => {
+      // Save to localStorage first
       try {
         const saved = localStorage.getItem(CAMPAIGNS_KEY);
         if (saved) {
@@ -79,10 +84,29 @@ export default function DataPage() {
           }
         }
       } catch (err) {
-        console.error("Error saving campaign:", err);
+        console.error("Error saving to localStorage:", err);
+      }
+
+      // Sync to backend database
+      if (user?.id && newContacts.length > 0) {
+        setIsSyncing(true);
+        try {
+          const apiContacts = newContacts.map((c) => ({
+            phone: c.phone,
+            name: c.name,
+            email: c.email,
+          }));
+          await addBulkCampaignContacts(user.id, campaignId, apiContacts);
+          console.log("✅ Contacts synced to database");
+        } catch (err: any) {
+          console.error("Error syncing contacts to database:", err);
+          setError("Failed to sync contacts. You can still proceed.");
+        } finally {
+          setIsSyncing(false);
+        }
       }
     },
-    [campaignId]
+    [campaignId, user?.id]
   );
 
   const processExcelFile = useCallback(

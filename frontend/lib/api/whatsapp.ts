@@ -421,6 +421,9 @@ export interface BulkCampaign {
   delivered_count: number;
   read_count: number;
   failed_count: number;
+  scheduled_at?: string;
+  started_at?: string;
+  completed_at?: string;
   created_at: string;
   updated_at: string;
 }

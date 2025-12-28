@@ -1,7 +1,8 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useState, useRef, useMemo, useEffect } from "react";
 import styles from "./MessageComposer.module.css";
+import { getSessionAvatarColor } from "@/lib/utils/avatarColors";
 
 interface Contact {
   name: string;
@@ -24,6 +25,13 @@ interface UploadedMedia {
   preview: string;
 }
 
+interface MessageButton {
+  id: string;
+  text: string;
+  type: "quick_reply" | "url" | "phone";
+  value?: string;
+}
+
 const ACCEPTED_TYPES: Record<MediaType, string[]> = {
   image: [".jpg", ".jpeg", ".png", ".gif", ".webp"],
   video: [".mp4", ".mov", ".avi", ".webm"],
@@ -32,11 +40,36 @@ const ACCEPTED_TYPES: Record<MediaType, string[]> = {
 };
 
 const MEDIA_ICONS: Record<MediaType, string> = {
-  image: "🖼️",
-  video: "🎬",
-  document: "📄",
-  audio: "🎵",
+  image: "/icons/bulk_message/image.svg",
+  video: "/icons/bulk_message/image.svg", // Using image icon for video
+  document: "/icons/bulk_message/pdf.svg",
+  audio: "/icons/bulk_message/audio.svg",
 };
+
+// Button type options with icons
+const BUTTON_TYPES = [
+  {
+    value: "url",
+    label: "Visit Website",
+    defaultText: "Visit Website",
+    placeholder: "https://example.com",
+    icon: "/icons/bulk_message/link.svg",
+  },
+  {
+    value: "phone",
+    label: "Call Phone",
+    defaultText: "Call Now",
+    placeholder: "+1234567890",
+    icon: "/icons/bulk_message/phone.svg",
+  },
+  {
+    value: "quick_reply",
+    label: "Quick Reply",
+    defaultText: "Know More",
+    placeholder: "",
+    icon: "/icons/bulk_message/quick.svg",
+  },
+] as const;
 
 export default function MessageComposer({
   contacts,
@@ -46,7 +79,11 @@ export default function MessageComposer({
   const [message, setMessage] = useState("");
   const [uploadedMedia, setUploadedMedia] = useState<UploadedMedia[]>([]);
   const [isDragging, setIsDragging] = useState(false);
+  const [messageButtons, setMessageButtons] = useState<MessageButton[]>([]);
+  const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+  const [showMobilePreview, setShowMobilePreview] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const dropdownRef = useRef<HTMLDivElement>(null);
 
   // Get first contact for preview
   const sampleContact = contacts[0] || {
@@ -54,10 +91,25 @@ export default function MessageComposer({
     phone: "1234567890",
   };
 
-  // Get available variables from contact data
-  const availableVariables = Object.keys(sampleContact).filter(
-    (key) => sampleContact[key] && typeof sampleContact[key] === "string"
-  );
+  // Get session avatar color (consistent for the session)
+  const avatarColor = useMemo(() => getSessionAvatarColor(), []);
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (
+        dropdownRef.current &&
+        !dropdownRef.current.contains(event.target as Node)
+      ) {
+        setIsDropdownOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  // Available variables (keep only name)
+  const availableVariables = ["name"];
 
   // Detect file type
   const getMediaType = (file: File): MediaType => {
@@ -123,6 +175,37 @@ export default function MessageComposer({
     setMessage((prev) => prev + `{{${variable}}}`);
   };
 
+  // Add a new button with specific type
+  const addButton = (type: "quick_reply" | "url" | "phone" = "quick_reply") => {
+    if (messageButtons.length >= 3) return; // WhatsApp limit
+    const buttonType = BUTTON_TYPES.find((t) => t.value === type);
+    const newButton: MessageButton = {
+      id: Date.now().toString(),
+      text: buttonType?.defaultText || "",
+      type,
+      value: "",
+    };
+    setMessageButtons([...messageButtons, newButton]);
+  };
+
+  // Update button field
+  const updateButton = (
+    id: string,
+    field: "text" | "value" | "type",
+    val: string
+  ) => {
+    setMessageButtons(
+      messageButtons.map((btn) =>
+        btn.id === id ? { ...btn, [field]: val } : btn
+      )
+    );
+  };
+
+  // Remove a button
+  const removeButton = (id: string) => {
+    setMessageButtons(messageButtons.filter((btn) => btn.id !== id));
+  };
+
   // Replace variables with sample values for preview
   const getPreviewMessage = () => {
     let previewText = message || "Your message will appear here...";
@@ -154,9 +237,40 @@ export default function MessageComposer({
 
   return (
     <div className={styles.composerContainer}>
+      {/* Mobile Preview Toggle Button */}
+      <button
+        className={styles.mobilePreviewBtn}
+        onClick={() => setShowMobilePreview(true)}
+      >
+        <svg
+          width="20"
+          height="20"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+        >
+          <rect x="5" y="2" width="14" height="20" rx="2" ry="2" />
+          <line x1="12" y1="18" x2="12" y2="18" />
+        </svg>
+        Preview
+      </button>
+
       {/* Preview Panel */}
-      <div className={styles.previewPanel}>
-        <h3 className={styles.previewTitle}>Message Preview</h3>
+      <div
+        className={`${styles.previewPanel} ${
+          showMobilePreview ? styles.previewPanelVisible : ""
+        }`}
+      >
+        <div className={styles.previewHeader}>
+          <h3 className={styles.previewTitle}>Message Preview</h3>
+          <button
+            className={styles.closePreviewBtn}
+            onClick={() => setShowMobilePreview(false)}
+          >
+            ×
+          </button>
+        </div>
         <div className={styles.phonePreview}>
           {/* Chat Header */}
           <div className={styles.chatHeader}>
@@ -172,7 +286,13 @@ export default function MessageComposer({
                 <polyline points="15 18 9 12 15 6" />
               </svg>
             </button>
-            <div className={styles.contactAvatar}>
+            <div
+              className={styles.contactAvatar}
+              style={{
+                background: avatarColor.background,
+                color: avatarColor.text,
+              }}
+            >
               {sampleContact.name?.substring(0, 2).toUpperCase() || "CN"}
             </div>
             <div className={styles.contactInfo}>
@@ -185,38 +305,64 @@ export default function MessageComposer({
 
           {/* Chat Background */}
           <div className={styles.chatBackground}>
-            <div className={styles.messageBubble}>
-              {/* Media Preview */}
+            <div className={styles.templateMessage}>
+              {/* Media Preview - Full width at top */}
               {uploadedMedia.length > 0 && (
-                <div className={styles.mediaPreview}>
-                  {uploadedMedia.map((media, index) => (
-                    <div key={index} className={styles.mediaItem}>
-                      {media.type === "image" && media.preview ? (
-                        <img
-                          src={media.preview}
-                          alt="Preview"
-                          className={styles.mediaImage}
-                        />
-                      ) : (
-                        <div className={styles.mediaPlaceholder}>
-                          <span className={styles.mediaIcon}>
-                            {MEDIA_ICONS[media.type]}
-                          </span>
-                          <span className={styles.mediaName}>
-                            {media.file.name}
-                          </span>
-                        </div>
-                      )}
+                <div className={styles.templateMedia}>
+                  {uploadedMedia[0].type === "image" &&
+                  uploadedMedia[0].preview ? (
+                    <img
+                      src={uploadedMedia[0].preview}
+                      alt="Preview"
+                      className={styles.templateImage}
+                    />
+                  ) : (
+                    <div className={styles.templateMediaPlaceholder}>
+                      <img
+                        src={MEDIA_ICONS[uploadedMedia[0].type]}
+                        alt=""
+                        className={styles.mediaIconSvg}
+                      />
+                      <span className={styles.mediaName}>
+                        {uploadedMedia[0].file.name}
+                      </span>
                     </div>
-                  ))}
+                  )}
                 </div>
               )}
 
-              {/* Message Text */}
-              <div className={styles.previewMessageBody}>
-                {getPreviewMessage()}
+              {/* Message Body */}
+              <div className={styles.templateBody}>
+                <div className={styles.previewMessageBody}>
+                  {getPreviewMessage()}
+                </div>
+                <span className={styles.messageTime}>{getCurrentTime()}</span>
               </div>
-              <span className={styles.messageTime}>{getCurrentTime()}</span>
+
+              {/* Buttons - After message body */}
+              {messageButtons.length > 0 && (
+                <div className={styles.templateButtons}>
+                  {messageButtons.map((btn) => (
+                    <button key={btn.id} className={styles.templateButton}>
+                      {btn.value && (
+                        <svg
+                          width="14"
+                          height="14"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="2"
+                        >
+                          <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+                          <polyline points="15 3 21 3 21 9" />
+                          <line x1="10" y1="14" x2="21" y2="3" />
+                        </svg>
+                      )}
+                      {btn.text || "Button"}
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -232,7 +378,11 @@ export default function MessageComposer({
         {/* Media Upload Section */}
         <div className={styles.section}>
           <label className={styles.sectionLabel}>
-            <span className={styles.labelIcon}>📎</span>
+            <img
+              src="/icons/bulk_message/file.svg"
+              alt=""
+              className={styles.labelIconSvg}
+            />
             Attach Media (Optional)
           </label>
           <div
@@ -253,7 +403,11 @@ export default function MessageComposer({
               multiple
             />
             <div className={styles.dropZoneContent}>
-              <span className={styles.uploadIcon}>📤</span>
+              <img
+                src="/icons/bulk_message/file-upload.svg"
+                alt=""
+                className={styles.dropZoneIconSvg}
+              />
               <p>Drop files here or click to upload</p>
               <span className={styles.supportedFormats}>
                 Images, Videos, Documents, Audio
@@ -266,9 +420,11 @@ export default function MessageComposer({
             <div className={styles.uploadedFiles}>
               {uploadedMedia.map((media, index) => (
                 <div key={index} className={styles.uploadedFile}>
-                  <span className={styles.fileIcon}>
-                    {MEDIA_ICONS[media.type]}
-                  </span>
+                  <img
+                    src={MEDIA_ICONS[media.type]}
+                    alt=""
+                    className={styles.fileIconSvg}
+                  />
                   <span className={styles.fileName}>{media.file.name}</span>
                   <button
                     className={styles.removeFileBtn}
@@ -285,7 +441,11 @@ export default function MessageComposer({
         {/* Text Message Section */}
         <div className={styles.section}>
           <label className={styles.sectionLabel}>
-            <span className={styles.labelIcon}>💬</span>
+            <img
+              src="/icons/bulk_message/message.svg"
+              alt=""
+              className={styles.labelIconSvg}
+            />
             Message Text
           </label>
 
@@ -314,6 +474,129 @@ export default function MessageComposer({
             <span className={styles.charCount}>
               {message.length} characters
             </span>
+          </div>
+        </div>
+
+        {/* Buttons Section */}
+        <div className={styles.section}>
+          <label className={styles.sectionLabel}>
+            <svg
+              width="18"
+              height="18"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              className={styles.labelIconSvg}
+              style={{ filter: "none" }}
+            >
+              <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
+              <line x1="12" y1="8" x2="12" y2="16" />
+              <line x1="8" y1="12" x2="16" y2="12" />
+            </svg>
+            Add Buttons (Optional)
+          </label>
+          <p className={styles.buttonHint}>
+            Add up to 3 CTA or Quick Reply buttons to your message
+          </p>
+
+          <div className={styles.buttonsContainer}>
+            {messageButtons.map((btn, index) => {
+              const buttonType = BUTTON_TYPES.find((t) => t.value === btn.type);
+              return (
+                <div key={btn.id} className={styles.buttonInputRow}>
+                  <div className={styles.buttonInputHeader}>
+                    <span className={styles.buttonNumber}>{index + 1}</span>
+                    <span className={styles.buttonTypeLabel}>
+                      <img
+                        src={buttonType?.icon}
+                        alt=""
+                        className={styles.buttonTypeLabelIcon}
+                      />
+                      {buttonType?.label}
+                    </span>
+                    <button
+                      className={styles.removeButtonBtn}
+                      onClick={() => removeButton(btn.id)}
+                    >
+                      ×
+                    </button>
+                  </div>
+                  <div className={styles.buttonInputFields}>
+                    <input
+                      type="text"
+                      placeholder="Button text"
+                      value={btn.text}
+                      onChange={(e) =>
+                        updateButton(btn.id, "text", e.target.value)
+                      }
+                      className={styles.buttonTextField}
+                      maxLength={20}
+                    />
+                    {btn.type !== "quick_reply" && (
+                      <input
+                        type={btn.type === "phone" ? "tel" : "url"}
+                        placeholder={
+                          btn.type === "phone"
+                            ? "Phone number (e.g., +1234567890)"
+                            : "Website URL (e.g., https://example.com)"
+                        }
+                        value={btn.value || ""}
+                        onChange={(e) =>
+                          updateButton(btn.id, "value", e.target.value)
+                        }
+                        className={styles.buttonUrlField}
+                      />
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+
+            {messageButtons.length < 3 && (
+              <div className={styles.addButtonDropdown} ref={dropdownRef}>
+                <button
+                  type="button"
+                  className={styles.addButtonTrigger}
+                  onClick={() => setIsDropdownOpen(!isDropdownOpen)}
+                >
+                  + Add Button
+                  <svg
+                    width="12"
+                    height="12"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    className={isDropdownOpen ? styles.chevronUp : ""}
+                  >
+                    <polyline points="6 9 12 15 18 9" />
+                  </svg>
+                </button>
+                {isDropdownOpen && (
+                  <div className={styles.dropdownMenu}>
+                    {BUTTON_TYPES.map((type) => (
+                      <button
+                        key={type.value}
+                        type="button"
+                        className={styles.dropdownItem}
+                        onClick={() => {
+                          addButton(type.value);
+                          setIsDropdownOpen(false);
+                        }}
+                      >
+                        <img
+                          src={type.icon}
+                          alt=""
+                          className={styles.dropdownIcon}
+                        />
+                        {type.label}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         </div>
 

@@ -13,6 +13,11 @@
   flex: 0 0 340px;
   display: flex;
   flex-direction: column;
+  justify-content: center;
+  min-height: calc(100vh - 100px);
+  position: sticky;
+  top: 0;
+  align-self: stretch;
 }
 
 .previewTitle {
@@ -23,14 +28,14 @@
 }
 
 .phonePreview {
-  background: #0b141a;
-  border-radius: 24px;
+  background: #ebe6de;
+  border-radius: 20px;
   overflow: hidden;
-  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.4);
-  flex: 1;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
   display: flex;
   flex-direction: column;
-  max-height: 500px;
+  min-height: 500px;
+  max-height: 700px;
 }
 
 /* Chat Header */
@@ -39,14 +44,14 @@
   align-items: center;
   gap: 0.75rem;
   padding: 0.75rem 1rem;
-  background: #1f2c34;
+  background: #075e54;
   border-bottom: 1px solid rgba(255, 255, 255, 0.1);
 }
 
 .backArrow {
   background: none;
   border: none;
-  color: #00bcd4;
+  color: #ffffff;
   cursor: pointer;
   padding: 0.25rem;
   display: flex;
@@ -58,13 +63,12 @@
   width: 40px;
   height: 40px;
   border-radius: 50%;
-  background: linear-gradient(135deg, #00bcd4, #00acc1);
+  /* Background and color set dynamically via inline style */
   display: flex;
   align-items: center;
   justify-content: center;
   font-weight: 600;
   font-size: 0.875rem;
-  color: #000;
 }
 
 .contactInfo {
@@ -81,7 +85,7 @@
 
 .contactStatus {
   font-size: 0.75rem;
-  color: #00bcd4;
+  color: #ffffff;
 }
 
 /* Chat Background */
@@ -101,6 +105,78 @@
   max-width: 85%;
   align-self: flex-end;
   position: relative;
+}
+
+/* Template Message Styles */
+.templateMessage {
+  background: #0b1820;
+  border-radius: 12px;
+  overflow: hidden;
+  max-width: 100%;
+  align-self: flex-end;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+}
+
+.templateMedia {
+  width: 100%;
+  position: relative;
+  padding: 0.5rem 0.5rem 0 0.5rem;
+}
+
+.templateImage {
+  width: 100%;
+  height: 140px;
+  object-fit: cover;
+  display: block;
+  border-radius: 8px;
+}
+
+.templateMediaPlaceholder {
+  width: 100%;
+  height: 120px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+}
+
+.templateBody {
+  padding: 0.75rem 0.875rem;
+  background: #0b1820;
+}
+
+.templateButtons {
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  background: #0b1820;
+}
+
+.templateButton {
+  width: 100%;
+  padding: 0.625rem 0.75rem;
+  background: transparent;
+  border: none;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  color: #04d847;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  cursor: default;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.375rem;
+}
+
+.templateButton:first-child {
+  border-top: none;
+}
+
+.templateButton svg {
+  stroke: #04d847;
+  width: 14px;
+  height: 14px;
 }
 
 /* Media Preview in Bubble */
@@ -132,6 +208,19 @@
   font-size: 1.25rem;
 }
 
+.mediaIconSvg {
+  width: 48px;
+  height: 48px;
+  filter: brightness(0) invert(1);
+}
+
+.fileIconSvg {
+  width: 24px;
+  height: 24px;
+  filter: brightness(0) invert(1);
+  flex-shrink: 0;
+}
+
 .mediaName {
   font-size: 0.75rem;
   color: rgba(255, 255, 255, 0.8);
@@ -161,7 +250,8 @@
   font-size: 0.75rem;
   color: var(--dash-text-muted, #808080);
   text-align: center;
-  margin-top: 0.75rem;
+  margin-top: 1rem;
+  padding: 0;
 }
 
 /* Composer Panel */
@@ -201,25 +291,31 @@
   font-size: 1rem;
 }
 
+.labelIconSvg {
+  width: 18px;
+  height: 18px;
+  filter: brightness(0) invert(1);
+}
+
 /* Drop Zone */
 .dropZone {
-  border: 2px dashed rgba(255, 255, 255, 0.3);
+  border: 1px dashed rgba(255, 255, 255, 0.2);
   border-radius: 12px;
-  padding: 2rem;
+  padding: 1.5rem;
   text-align: center;
   cursor: pointer;
-  transition: all 0.3s ease;
-  background: rgba(255, 255, 255, 0.02);
+  transition: all 0.2s ease;
+  background: transparent;
 }
 
 .dropZone:hover {
-  border-color: rgba(255, 255, 255, 0.5);
-  background: rgba(255, 255, 255, 0.05);
+  border-color: rgba(255, 255, 255, 0.4);
+  background: rgba(255, 255, 255, 0.02);
 }
 
 .dropZoneActive {
-  border-color: #00bcd4;
-  background: rgba(0, 188, 212, 0.1);
+  border-color: #ffffff;
+  background: rgba(255, 255, 255, 0.05);
 }
 
 .dropZoneContent {
@@ -230,8 +326,11 @@
   color: var(--dash-text-secondary, #b0b0b0);
 }
 
-.uploadIcon {
-  font-size: 2rem;
+.dropZoneIconSvg {
+  width: 48px;
+  height: 48px;
+  margin-bottom: 0.5rem;
+  filter: brightness(0) invert(1);
 }
 
 .dropZoneContent p {
@@ -306,19 +405,19 @@
 
 .variableBtn {
   padding: 0.375rem 0.75rem;
-  background: rgba(0, 188, 212, 0.15);
-  border: 1px solid rgba(0, 188, 212, 0.3);
-  border-radius: 20px;
-  color: #00bcd4;
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 6px;
+  color: #ffffff;
   font-size: 0.75rem;
-  font-family: monospace;
+  font-family: "SF Mono", "Monaco", "Menlo", monospace;
   cursor: pointer;
   transition: all 0.2s ease;
 }
 
 .variableBtn:hover {
-  background: rgba(0, 188, 212, 0.25);
-  border-color: #00bcd4;
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.4);
 }
 
 /* Message Textarea */
@@ -342,7 +441,7 @@
 
 .messageTextarea:focus {
   outline: none;
-  border-color: #00bcd4;
+  border-color: #ffffff;
 }
 
 .textareaFooter {
@@ -387,7 +486,7 @@
 
 .sendBtn {
   padding: 0.75rem 2rem;
-  background: #00bcd4;
+  background: #ffffff;
   border: none;
   border-radius: 8px;
   color: #000000;
@@ -398,13 +497,308 @@
 }
 
 .sendBtn:hover:not(:disabled) {
-  background: #00acc1;
+  background: #e5e5e5;
   transform: translateY(-1px);
 }
 
 .sendBtn:disabled {
   opacity: 0.5;
   cursor: not-allowed;
+}
+
+/* Preview Buttons in Chat */
+.previewButtons {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+  max-width: 85%;
+  align-self: flex-end;
+}
+
+.previewButton {
+  background: transparent;
+  border: 1px solid rgba(0, 188, 212, 0.5);
+  border-radius: 8px;
+  padding: 0.5rem 1rem;
+  color: #00bcd4;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  cursor: default;
+  text-align: center;
+}
+
+/* Buttons Section */
+.buttonHint {
+  font-size: 0.75rem;
+  color: var(--dash-text-muted, #808080);
+  margin: 0 0 0.75rem 0;
+}
+
+.buttonsContainer {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.buttonInput {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.buttonInputRow {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 0.75rem;
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid var(--dash-border, rgba(255, 255, 255, 0.08));
+  border-radius: 8px;
+}
+
+.buttonInputHeader {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.buttonTypeSelect {
+  flex: 1;
+  padding: 0.5rem 0.75rem;
+  background: var(--dash-bg-tertiary, #1a1a1a);
+  border: 1px solid var(--dash-border, rgba(255, 255, 255, 0.12));
+  border-radius: 6px;
+  color: var(--dash-text-primary, #ffffff);
+  font-size: 0.8125rem;
+  cursor: pointer;
+}
+
+.buttonTypeSelect:focus {
+  outline: none;
+  border-color: #ffffff;
+}
+
+.buttonTypeLabel {
+  flex: 1;
+  padding: 0.375rem 0.625rem;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 6px;
+  color: var(--dash-text-secondary, #b0b0b0);
+  font-size: 0.75rem;
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.buttonTypeLabelIcon {
+  width: 16px;
+  height: 16px;
+  filter: brightness(0) invert(0.7);
+}
+
+.buttonInputFields {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-left: 32px;
+}
+
+.buttonUrlRow {
+  margin-left: 36px;
+}
+
+.buttonUrlField {
+  width: 100%;
+  padding: 0.625rem 1rem;
+  background: var(--dash-bg-tertiary, #1a1a1a);
+  border: 1px solid var(--dash-border, rgba(255, 255, 255, 0.12));
+  border-radius: 8px;
+  color: var(--dash-text-primary, #ffffff);
+  font-size: 0.8125rem;
+}
+
+.buttonUrlField::placeholder {
+  color: var(--dash-text-muted, #808080);
+}
+
+.buttonUrlField:focus {
+  outline: none;
+  border-color: #ffffff;
+}
+
+.buttonNumber {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.1);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--dash-text-secondary, #b0b0b0);
+  flex-shrink: 0;
+}
+
+.buttonTextField {
+  width: 100%;
+  padding: 0.625rem 1rem;
+  background: var(--dash-bg-tertiary, #1a1a1a);
+  border: 1px solid var(--dash-border, rgba(255, 255, 255, 0.12));
+  border-radius: 8px;
+  color: var(--dash-text-primary, #ffffff);
+  font-size: 0.8125rem;
+}
+
+.buttonTextField::placeholder {
+  color: var(--dash-text-muted, #808080);
+}
+
+.buttonTextField:focus {
+  outline: none;
+  border-color: #ffffff;
+}
+
+.removeButtonBtn {
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  background: transparent;
+  border: 1px solid rgba(255, 68, 68, 0.3);
+  color: #ff4444;
+  font-size: 1rem;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+  flex-shrink: 0;
+}
+
+.removeButtonBtn:hover {
+  background: rgba(255, 68, 68, 0.1);
+  border-color: #ff4444;
+}
+
+.addButtonDropdown {
+  width: 100%;
+  position: relative;
+}
+
+.addButtonTrigger {
+  width: 100%;
+  padding: 0.75rem 1rem;
+  background: transparent;
+  border: 1px dashed rgba(255, 255, 255, 0.2);
+  border-radius: 8px;
+  color: var(--dash-text-secondary, #b0b0b0);
+  font-size: 0.875rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+}
+
+.addButtonTrigger:hover {
+  border-color: rgba(255, 255, 255, 0.4);
+  background: rgba(255, 255, 255, 0.02);
+  color: var(--dash-text-primary, #ffffff);
+}
+
+.addButtonTrigger svg {
+  transition: transform 0.2s ease;
+}
+
+.chevronUp {
+  transform: rotate(180deg);
+}
+
+.dropdownMenu {
+  position: absolute;
+  top: calc(100% + 0.5rem);
+  left: 0;
+  right: 0;
+  background: var(--dash-bg-secondary, #1a1a1a);
+  border: 1px solid var(--dash-border, rgba(255, 255, 255, 0.12));
+  border-radius: 8px;
+  overflow: hidden;
+  z-index: 100;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
+}
+
+.dropdownItem {
+  width: 100%;
+  padding: 0.75rem 1rem;
+  background: transparent;
+  border: none;
+  color: var(--dash-text-primary, #ffffff);
+  font-size: 0.875rem;
+  font-weight: 500;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  text-align: center;
+  transition: background 0.15s ease;
+}
+
+.dropdownItem:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.dropdownItem:not(:last-child) {
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.dropdownIcon {
+  width: 20px;
+  height: 20px;
+  filter: brightness(0) invert(1);
+}
+
+.addButtonSelect {
+  width: 100%;
+  padding: 0.75rem 1rem;
+  background: transparent;
+  border: 1px dashed rgba(255, 255, 255, 0.2);
+  border-radius: 8px;
+  color: var(--dash-text-secondary, #b0b0b0);
+  font-size: 0.875rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  appearance: none;
+  text-align: center;
+}
+
+.addButtonSelect:hover {
+  border-color: rgba(255, 255, 255, 0.4);
+  background: rgba(255, 255, 255, 0.02);
+  color: var(--dash-text-primary, #ffffff);
+}
+
+.addButtonBtn {
+  padding: 0.75rem 1rem;
+  background: transparent;
+  border: 1px dashed rgba(255, 255, 255, 0.2);
+  border-radius: 8px;
+  color: var(--dash-text-secondary, #b0b0b0);
+  font-size: 0.875rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.addButtonBtn:hover {
+  border-color: rgba(255, 255, 255, 0.4);
+  background: rgba(255, 255, 255, 0.02);
+  color: var(--dash-text-primary, #ffffff);
 }
 
 /* Mobile Responsive */
@@ -468,5 +862,207 @@
   .variableBtn {
     padding: 0.25rem 0.5rem;
     font-size: 0.6875rem;
+  }
+}
+
+/* Mobile Preview Button - Hidden on desktop */
+.mobilePreviewBtn {
+  display: none;
+}
+
+/* Preview Header */
+.previewHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 1rem;
+}
+
+.previewHeader .previewTitle {
+  margin-bottom: 0;
+}
+
+/* Close Button - Hidden on desktop */
+.closePreviewBtn {
+  display: none;
+}
+
+/* Mobile Responsive Styles */
+@media (max-width: 768px) {
+  .composerContainer {
+    flex-direction: column;
+    gap: 1rem;
+    padding: 0.75rem;
+    min-height: auto;
+  }
+
+  /* Show mobile preview button */
+  .mobilePreviewBtn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    position: fixed;
+    top: 4.5rem;
+    right: 1rem;
+    padding: 0.5rem 1rem;
+    background: var(--dash-accent, #00bcd4);
+    color: #000;
+    border: none;
+    border-radius: 50px;
+    font-size: 0.8125rem;
+    font-weight: 600;
+    cursor: pointer;
+    z-index: 90;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+  }
+
+  .mobilePreviewBtn:active {
+    transform: scale(0.95);
+  }
+
+  /* Hide preview panel by default on mobile */
+  .previewPanel {
+    display: none;
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 100;
+    background: var(--dash-bg-primary, #0a0a0a);
+    padding: 1rem;
+    flex: none;
+    min-height: auto;
+    justify-content: flex-start;
+    overflow-y: auto;
+  }
+
+  /* Show preview panel when visible */
+  .previewPanelVisible {
+    display: flex;
+  }
+
+  /* Show close button on mobile */
+  .closePreviewBtn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 36px;
+    background: rgba(255, 255, 255, 0.1);
+    border: none;
+    border-radius: 50%;
+    color: var(--dash-text-primary, #ffffff);
+    font-size: 1.5rem;
+    cursor: pointer;
+    transition: background 0.2s ease;
+  }
+
+  .closePreviewBtn:hover {
+    background: rgba(255, 255, 255, 0.2);
+  }
+
+  /* Phone preview adjustments for mobile */
+  .phonePreview {
+    min-height: 350px;
+    max-height: calc(100vh - 150px);
+    flex: 1;
+  }
+
+  /* Composer panel full width */
+  .composerPanel {
+    flex: none;
+    width: 100%;
+    padding: 0;
+    background: transparent;
+  }
+
+  /* Footer adjustments */
+  .composerFooter {
+    flex-direction: row;
+    flex-wrap: nowrap;
+    align-items: center;
+    gap: 0.75rem;
+    padding-bottom: 1rem;
+  }
+
+  .backBtn {
+    flex: 0 0 auto;
+    width: auto;
+    padding: 0.75rem 1rem;
+  }
+
+  .sendBtn {
+    flex: 1;
+    width: auto;
+    min-width: 0;
+    justify-content: center;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  /* Smaller inputs */
+  .messageTextarea {
+    min-height: 100px;
+  }
+
+  /* Button input adjustments */
+  .buttonInputRow {
+    padding: 0.5rem;
+  }
+
+  .buttonInputFields {
+    margin-left: 0;
+  }
+
+  /* Section spacing */
+  .section {
+    margin-bottom: 1.25rem;
+  }
+
+  .sectionLabel {
+    font-size: 0.8125rem;
+  }
+
+  /* Drop zone adjustments */
+  .dropZone {
+    padding: 1.5rem 1rem;
+  }
+
+  .dropZoneText {
+    font-size: 0.8125rem;
+  }
+}
+
+/* Small mobile */
+@media (max-width: 480px) {
+  .composerContainer {
+    padding: 0.5rem;
+  }
+
+  .previewPanel {
+    padding: 0.75rem;
+  }
+
+  .composerTitle {
+    font-size: 1rem;
+  }
+
+  .buttonTypeLabel {
+    font-size: 0.6875rem;
+    padding: 0.25rem 0.5rem;
+  }
+
+  .addButtonTrigger {
+    padding: 0.625rem 0.75rem;
+    font-size: 0.8125rem;
+  }
+
+  .dropdownItem {
+    padding: 0.625rem 0.75rem;
+    font-size: 0.8125rem;
   }
 }

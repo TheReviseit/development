@@ -231,31 +231,107 @@ def send_bulk_campaign(campaign_id: str):
         if not contacts:
             return jsonify({'success': False, 'error': 'No contacts in campaign'}), 400
         
-        # Update campaign with message and status
+        # Update campaign status to 'sending'
         client.table('bulk_campaigns').update({
             'message_text': message_text,
             'media_url': data.get('media_url'),
             'media_type': data.get('media_type'),
-            'status': 'sent',
+            'status': 'sending',
             'started_at': datetime.utcnow().isoformat(),
+        }).eq('id', campaign_id).execute()
+        
+        # Get user's WhatsApp credentials
+        from routes.templates import get_user_phone_credentials
+        creds = get_user_phone_credentials(user_id)
+        
+        if not creds or not creds.get('access_token'):
+            # No credentials - mark as failed
+            client.table('bulk_campaigns').update({
+                'status': 'failed',
+            }).eq('id', campaign_id).execute()
+            return jsonify({
+                'success': False, 
+                'error': 'WhatsApp credentials not found. Please reconnect your WhatsApp Business Account.'
+            }), 400
+        
+        # Import WhatsApp service
+        from whatsapp_service import WhatsAppService
+        whatsapp = WhatsAppService()
+        
+        import time
+        sent_count = 0
+        failed_count = 0
+        
+        print(f"📤 Starting bulk send for campaign '{campaign['name']}' to {len(contacts)} contacts")
+        
+        for contact in contacts:
+            phone = contact.get('phone', '').strip()
+            contact_id = contact.get('id')
+            
+            if not phone:
+                continue
+            
+            # Clean phone number (remove +, spaces, dashes)
+            phone = ''.join(c for c in phone if c.isdigit())
+            
+            # Replace variables in message if any (e.g., {{name}} -> contact name)
+            personalized_message = message_text
+            contact_name = contact.get('name', '')
+            if contact_name:
+                personalized_message = personalized_message.replace('{{name}}', contact_name)
+                personalized_message = personalized_message.replace('{{Name}}', contact_name)
+            
+            try:
+                # Send message using credentials
+                result = whatsapp.send_message_with_credentials(
+                    phone_number_id=creds['phone_number_id'],
+                    access_token=creds['access_token'],
+                    to=phone,
+                    message=personalized_message
+                )
+                
+                if result.get('success'):
+                    sent_count += 1
+                    # Update contact status
+                    client.table('campaign_contacts').update({
+                        'status': 'sent',
+                        'wamid': result.get('message_id'),
+                        'sent_at': datetime.utcnow().isoformat(),
+                    }).eq('id', contact_id).execute()
+                    print(f"   ✅ Sent to {phone}")
+                else:
+                    failed_count += 1
+                    client.table('campaign_contacts').update({
+                        'status': 'failed',
+                        'error_message': result.get('error', 'Unknown error'),
+                    }).eq('id', contact_id).execute()
+                    print(f"   ❌ Failed for {phone}: {result.get('error')}")
+            
+            except Exception as e:
+                failed_count += 1
+                client.table('campaign_contacts').update({
+                    'status': 'failed',
+                    'error_message': str(e),
+                }).eq('id', contact_id).execute()
+                print(f"   ❌ Exception for {phone}: {e}")
+            
+            # Small delay to avoid rate limiting (1 second between messages)
+            time.sleep(1)
+        
+        # Update campaign as completed
+        final_status = 'sent' if failed_count == 0 else ('failed' if sent_count == 0 else 'sent')
+        client.table('bulk_campaigns').update({
+            'status': final_status,
             'completed_at': datetime.utcnow().isoformat(),
         }).eq('id', campaign_id).execute()
         
-        # Mark all contacts as sent
-        client.table('campaign_contacts').update({
-            'status': 'sent',
-            'sent_at': datetime.utcnow().isoformat(),
-        }).eq('campaign_id', campaign_id).execute()
-        
-        # TODO: Implement actual WhatsApp message sending
-        # This would integrate with your whatsapp_service.py
-        
-        print(f"📤 Bulk campaign '{campaign['name']}' sent to {len(contacts)} contacts")
+        print(f"📤 Bulk campaign '{campaign['name']}' completed: {sent_count} sent, {failed_count} failed")
         
         return jsonify({
             'success': True,
-            'message': f"Campaign sent to {len(contacts)} contacts",
-            'sent_count': len(contacts)
+            'message': f"Campaign sent to {sent_count} contacts" + (f" ({failed_count} failed)" if failed_count > 0 else ""),
+            'sent_count': sent_count,
+            'failed_count': failed_count
         })
         
     except Exception as e:

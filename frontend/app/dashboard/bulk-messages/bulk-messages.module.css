@@ -66,13 +66,41 @@
   transform: translateY(-1px);
 }
 
-/* Create Campaign Card */
 .createCampaignCard {
   background: var(--dash-bg-secondary);
   border: 1px solid var(--dash-border);
   border-radius: 16px;
-  padding: 2rem;
-  margin-bottom: 2rem;
+  padding: 1.5rem;
+  margin-bottom: 1.5rem;
+}
+
+@media (max-width: 600px) {
+  .createCampaignCard {
+    padding: 1rem;
+    border-radius: 12px;
+  }
+
+  .createTitle {
+    font-size: 1.125rem;
+  }
+
+  .createSubtitle {
+    font-size: 0.8125rem;
+  }
+
+  .campaignInput {
+    padding: 0.875rem 1rem;
+    font-size: 0.9375rem;
+  }
+
+  .createFormActions {
+    justify-content: stretch;
+  }
+
+  .createBtn {
+    width: 100%;
+    padding: 0.75rem 1rem;
+  }
 }
 
 .createTitle {
@@ -111,7 +139,7 @@
 
 .campaignInput:focus {
   outline: none;
-  border-color: #00bcd4;
+  border-color: #ffffff;
 }
 
 .createFormActions {
@@ -139,12 +167,12 @@
 }
 
 .createBtn {
-  padding: 0.75rem 2rem;
+  padding: 0.5rem 1.25rem;
   background: #ffffff;
   border: none;
   border-radius: 8px;
   color: #000000;
-  font-size: 0.875rem;
+  font-size: 0.8125rem;
   font-weight: 600;
   cursor: pointer;
   transition: all 0.2s ease;
@@ -968,4 +996,241 @@
     order: 2;
     flex: 1;
   }
+}
+
+/* ============================================
+   Success Page Styles
+   ============================================ */
+
+.successPage {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  min-height: calc(100vh - 200px);
+  padding: 2rem;
+}
+
+.successIcon {
+  width: 120px;
+  height: 120px;
+  border-radius: 50%;
+  background: rgba(76, 175, 80, 0.15);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 2rem;
+  animation: successPulse 2s ease-in-out infinite;
+}
+
+.successIcon svg {
+  color: #4caf50;
+}
+
+@keyframes successPulse {
+  0%,
+  100% {
+    transform: scale(1);
+    box-shadow: 0 0 0 0 rgba(76, 175, 80, 0.4);
+  }
+  50% {
+    transform: scale(1.05);
+    box-shadow: 0 0 0 20px rgba(76, 175, 80, 0);
+  }
+}
+
+.successTitle {
+  font-size: 2rem;
+  font-weight: 700;
+  color: var(--dash-text-primary);
+  margin: 0 0 0.75rem 0;
+}
+
+.successSubtitle {
+  font-size: 1.125rem;
+  color: var(--dash-text-secondary);
+  margin: 0 0 2rem 0;
+}
+
+.successSummary {
+  background: var(--dash-bg-secondary);
+  border: 1px solid var(--dash-border);
+  border-radius: 16px;
+  padding: 1.5rem 2rem;
+  margin-bottom: 2rem;
+  min-width: 300px;
+}
+
+.successSummary h3 {
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: var(--dash-text-primary);
+  margin: 0 0 1rem 0;
+}
+
+.successStats {
+  display: flex;
+  justify-content: center;
+  gap: 2rem;
+}
+
+.successStat {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.successStatValue {
+  font-size: 2rem;
+  font-weight: 700;
+  color: #4caf50;
+}
+
+.failedStat {
+  color: var(--dash-danger) !important;
+}
+
+.successStatLabel {
+  font-size: 0.875rem;
+  color: var(--dash-text-muted);
+}
+
+.successActions {
+  display: flex;
+  gap: 1rem;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.successBtnPrimary {
+  padding: 0.875rem 2rem;
+  background: #ffffff;
+  border: none;
+  border-radius: 10px;
+  color: #000000;
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+  text-decoration: none;
+  transition: all 0.2s ease;
+}
+
+.successBtnPrimary:hover {
+  background: #e5e5e5;
+  transform: translateY(-2px);
+}
+
+.successBtnSecondary {
+  padding: 0.875rem 2rem;
+  background: transparent;
+  border: 1px solid var(--dash-border);
+  border-radius: 10px;
+  color: var(--dash-text-secondary);
+  font-size: 1rem;
+  font-weight: 500;
+  cursor: pointer;
+  text-decoration: none;
+  transition: all 0.2s ease;
+}
+
+.successBtnSecondary:hover {
+  background: var(--dash-bg-hover);
+  border-color: var(--dash-text-primary);
+  color: var(--dash-text-primary);
+}
+
+/* ============================================
+   Recent Campaigns Section Styles
+   ============================================ */
+
+.recentCampaignsSection {
+  margin-top: 2rem;
+}
+
+.sectionHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1rem;
+}
+
+.sectionTitle {
+  font-size: 1.125rem;
+  font-weight: 600;
+  color: var(--dash-text-primary);
+  margin: 0;
+}
+
+.viewAllLink {
+  font-size: 0.875rem;
+  color: white;
+  text-decoration: none;
+  font-weight: 500;
+  transition: color 0.2s ease;
+}
+
+.viewAllLink:hover {
+  color: #00acc1;
+  text-decoration: underline;
+}
+
+.recentCampaignsList {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.recentCampaignCard {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 1rem 1.25rem;
+  background: var(--dash-bg-secondary);
+  border: 1px solid var(--dash-border-light);
+  border-radius: 12px;
+  transition: all 0.2s ease;
+}
+
+.recentCampaignCard:hover {
+  background: var(--dash-bg-tertiary);
+  border-color: var(--dash-border);
+}
+
+.recentCampaignInfo {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.recentCampaignName {
+  font-size: 0.9375rem;
+  font-weight: 600;
+  color: var(--dash-text-primary);
+}
+
+.recentCampaignMeta {
+  font-size: 0.8125rem;
+  color: var(--dash-text-muted);
+}
+
+.recentCampaignStatus {
+  padding: 0.375rem 0.75rem;
+  border-radius: 20px;
+  font-size: 0.75rem;
+  font-weight: 500;
+  text-transform: capitalize;
+}
+
+.statusSending {
+  background: rgba(255, 193, 7, 0.15);
+  color: #ffc107;
+}
+
+.noCampaigns {
+  text-align: center;
+  padding: 2rem;
+  color: var(--dash-text-muted);
+  font-size: 0.875rem;
 }
