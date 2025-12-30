@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 
-const BACKEND_URL = process.env.BACKEND_URL || "http://localhost:5000";
+const BACKEND_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
 
 export async function POST(request: NextRequest) {
   try {
@@ -20,7 +20,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(
       {
         error:
-          "Could not connect to AI Brain. Make sure backend is running on port 5000.",
+          "Could not connect to AI Brain. Make sure the backend server is running and accessible.",
       },
       { status: 503 }
     );

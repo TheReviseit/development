@@ -12,7 +12,7 @@ export async function POST(request: NextRequest) {
 
     // Get backend URL from environment
     const backendUrl =
-      process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:5000";
+      process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
 
     // Call backend to send push notification
     const response = await fetch(`${backendUrl}/api/test-push`, {

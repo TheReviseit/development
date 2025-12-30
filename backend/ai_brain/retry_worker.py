@@ -8,6 +8,7 @@ To run the worker:
 To run periodic tasks:
     celery -A ai_brain.retry_worker beat --loglevel=info
 """
+import os
 import logging
 from typing import Optional
 
@@ -18,10 +19,11 @@ try:
     from celery import Celery
     from celery.schedules import crontab
     
+    redis_url = os.getenv('REDIS_URL', 'redis://localhost:6379/0')
     celery = Celery(
         'ai_brain',
-        broker='redis://localhost:6379/0',
-        backend='redis://localhost:6379/0'
+        broker=redis_url,
+        backend=redis_url
     )
     
     # Configure Celery
