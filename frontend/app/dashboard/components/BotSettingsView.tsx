@@ -1,7 +1,8 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import styles from "./BotSettingsView.module.css";
+import CustomDropdown, { DropdownOption } from "./CustomDropdown";
 
 // Types for business data
 interface ProductService {
@@ -197,6 +198,35 @@ export default function BotSettingsView() {
   const [previewQuery, setPreviewQuery] = useState("");
   const [previewResponse, setPreviewResponse] = useState<any>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
+  const [chatMessages, setChatMessages] = useState<
+    { role: "user" | "bot"; content: string; time: string; intent?: string }[]
+  >([]);
+  const chatEndRef = useRef<HTMLDivElement>(null);
+
+  // Initialize chat with welcome message if empty
+  useEffect(() => {
+    if (activeTab === "preview" && chatMessages.length === 0) {
+      setChatMessages([
+        {
+          role: "bot",
+          content: `Hi! I'm your AI Business Assistant. I've learned all about ${
+            data.businessName || "your business"
+          }. Ask me anything to see how I'll respond to your customers!`,
+          time: new Date().toLocaleTimeString([], {
+            hour: "2-digit",
+            minute: "2-digit",
+          }),
+        },
+      ]);
+    }
+  }, [activeTab, data.businessName, chatMessages.length]);
+
+  // Scroll to bottom whenever messages change
+  useEffect(() => {
+    if (chatEndRef.current) {
+      chatEndRef.current.scrollIntoView({ behavior: "smooth" });
+    }
+  }, [chatMessages, previewLoading]);
 
   // Load saved data on mount
   useEffect(() => {
@@ -239,7 +269,9 @@ export default function BotSettingsView() {
 
       // Also sync to Flask backend for WhatsApp webhook
       try {
-        await fetch("http://localhost:5000/api/whatsapp/set-business-data", {
+        const backendUrl =
+          process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
+        await fetch(`${backendUrl}/api/whatsapp/set-business-data`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(convertToApiFormat(data)),
@@ -263,26 +295,73 @@ export default function BotSettingsView() {
     }
   };
 
-  const handlePreview = async () => {
-    if (!previewQuery.trim()) return;
+  const handlePreview = async (customQuery?: string) => {
+    const query = customQuery || previewQuery;
+    if (!query.trim()) return;
+
+    const userTime = new Date().toLocaleTimeString([], {
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+
+    // Add user message to chat
+    setChatMessages((prev) => [
+      ...prev,
+      { role: "user", content: query, time: userTime },
+    ]);
+
+    setPreviewQuery("");
     setPreviewLoading(true);
     setPreviewResponse(null);
+
     try {
       const response = await fetch("/api/ai/preview", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           business_data: convertToApiFormat(data),
-          user_message: previewQuery,
-          history: [],
+          user_message: query,
+          history: chatMessages.map((m) => ({
+            role: m.role === "bot" ? "assistant" : "user",
+            content: m.content,
+          })),
         }),
       });
+
       const result = await response.json();
       setPreviewResponse(result);
+
+      // Add bot response to chat
+      setChatMessages((prev) => [
+        ...prev,
+        {
+          role: "bot",
+          content:
+            result.reply ||
+            result.error ||
+            "I'm sorry, I couldn't generate a response.",
+          time: new Date().toLocaleTimeString([], {
+            hour: "2-digit",
+            minute: "2-digit",
+          }),
+          intent: result.intent,
+        },
+      ]);
     } catch (error) {
-      setPreviewResponse({
-        error: "Could not connect to AI Brain. Make sure backend is running.",
-      });
+      const errorMsg =
+        "Could not connect to AI Brain. Make sure backend is running.";
+      setPreviewResponse({ error: errorMsg });
+      setChatMessages((prev) => [
+        ...prev,
+        {
+          role: "bot",
+          content: errorMsg,
+          time: new Date().toLocaleTimeString([], {
+            hour: "2-digit",
+            minute: "2-digit",
+          }),
+        },
+      ]);
     } finally {
       setPreviewLoading(false);
     }
@@ -414,16 +493,91 @@ export default function BotSettingsView() {
     setData({ ...data, faqs: data.faqs.filter((f) => f.id !== id) });
   };
 
-  const tabs: { id: TabType; label: string; icon: string }[] = [
-    { id: "profile", label: "Profile", icon: "🏢" },
-    { id: "brand", label: "Brand Voice", icon: "✨" },
-    { id: "services", label: "Services", icon: "🛒" },
-    { id: "timings", label: "Timings", icon: "🕐" },
-    { id: "policies", label: "Policies", icon: "📋" },
-    { id: "ecommerce", label: "E-commerce", icon: "📦" },
-    { id: "faqs", label: "FAQs", icon: "❓" },
-    { id: "preview", label: "Preview", icon: "🤖" },
+  // Tab configuration with SVG icons
+  const tabs: { id: TabType; label: string; iconPath: string }[] = [
+    {
+      id: "profile",
+      label: "Profile",
+      iconPath: "/icons/ai_settings/profile.svg",
+    },
+    {
+      id: "brand",
+      label: "Brand Voice",
+      iconPath: "/icons/ai_settings/brand_voice.svg",
+    },
+    {
+      id: "services",
+      label: "Services",
+      iconPath: "/icons/ai_settings/services.svg",
+    },
+    {
+      id: "timings",
+      label: "Timings",
+      iconPath: "/icons/ai_settings/store_timings.svg",
+    },
+    {
+      id: "policies",
+      label: "Policies",
+      iconPath: "/icons/ai_settings/policies.svg",
+    },
+    {
+      id: "ecommerce",
+      label: "E-commerce",
+      iconPath: "/icons/ai_settings/ecommerce.svg",
+    },
+    { id: "faqs", label: "FAQs", iconPath: "/icons/ai_settings/faqs.svg" },
+    {
+      id: "preview",
+      label: "Preview",
+      iconPath: "/icons/ai_settings/preview.svg",
+    },
   ];
+
+  // Check if a tab's required fields are complete
+  const checkTabCompletion = (tabId: TabType): boolean => {
+    switch (tabId) {
+      case "profile":
+        return !!(
+          data.businessName.trim() &&
+          data.industry &&
+          data.contact.phone.trim()
+        );
+      case "brand":
+        return !!(data.brandVoice.tone && data.brandVoice.languagePreference);
+      case "services":
+        return (
+          data.products.length > 0 &&
+          data.products.every((p) => p.name.trim() && p.price > 0)
+        );
+      case "timings":
+        return Object.values(data.timings).some(
+          (t) => !t.isClosed && t.open && t.close
+        );
+      case "policies":
+        return !!(
+          data.policies.refund.trim() || data.policies.cancellation.trim()
+        );
+      case "ecommerce":
+        return !!(
+          data.ecommercePolicies.shippingPolicy.trim() ||
+          data.ecommercePolicies.returnPolicy.trim()
+        );
+      case "faqs":
+        return (
+          data.faqs.length > 0 &&
+          data.faqs.every((f) => f.question.trim() && f.answer.trim())
+        );
+      case "preview":
+        return true; // Preview is always "complete"
+      default:
+        return false;
+    }
+  };
+
+  const getTabStatus = (tabId: TabType) => {
+    if (tabId === "preview") return null;
+    return checkTabCompletion(tabId);
+  };
 
   return (
     <div className={styles.container}>
@@ -462,19 +616,58 @@ export default function BotSettingsView() {
         </div>
       )}
 
+      {/* Mobile Dropdown - Custom Component */}
+      <div className={styles.mobileTabSelect}>
+        <CustomDropdown
+          options={tabs.map((tab) => ({
+            id: tab.id,
+            label: tab.label,
+            iconPath: tab.iconPath,
+            status:
+              getTabStatus(tab.id) === null
+                ? null
+                : getTabStatus(tab.id)
+                ? "complete"
+                : "incomplete",
+          }))}
+          value={activeTab}
+          onChange={(value) => setActiveTab(value as TabType)}
+          placeholder="Select a section"
+        />
+      </div>
+
+      {/* Desktop Tabs */}
       <div className={styles.tabs}>
-        {tabs.map((tab) => (
-          <button
-            key={tab.id}
-            className={`${styles.tab} ${
-              activeTab === tab.id ? styles.tabActive : ""
-            }`}
-            onClick={() => setActiveTab(tab.id)}
-          >
-            <span>{tab.icon}</span>
-            <span>{tab.label}</span>
-          </button>
-        ))}
+        {tabs.map((tab) => {
+          const status = getTabStatus(tab.id);
+          return (
+            <button
+              key={tab.id}
+              className={`${styles.tab} ${
+                activeTab === tab.id ? styles.tabActive : ""
+              }`}
+              onClick={() => setActiveTab(tab.id)}
+            >
+              <img
+                src={tab.iconPath}
+                alt=""
+                className={styles.tabIcon}
+                width={20}
+                height={20}
+              />
+              <span>{tab.label}</span>
+              {status !== null && (
+                <span
+                  className={`${styles.tabStatus} ${
+                    status ? styles.tabComplete : styles.tabIncomplete
+                  }`}
+                >
+                  {status ? "✓" : "!"}
+                </span>
+              )}
+            </button>
+          );
+        })}
       </div>
 
       <div className={styles.content}>
@@ -1303,68 +1496,100 @@ export default function BotSettingsView() {
 
         {activeTab === "preview" && (
           <div className={styles.section}>
-            <h2 className={styles.sectionTitle}>Test AI Responses</h2>
-            <p className={styles.previewHint}>
-              Try asking questions like: "What is the price?", "Timing?", "Where
-              are you located?"
-            </p>
-
-            <div className={styles.previewInput}>
-              <input
-                type="text"
-                value={previewQuery}
-                onChange={(e) => setPreviewQuery(e.target.value)}
-                placeholder="Type a customer question..."
-                onKeyDown={(e) => e.key === "Enter" && handlePreview()}
-              />
-              <button
-                onClick={handlePreview}
-                disabled={previewLoading || !previewQuery.trim()}
-              >
-                {previewLoading ? "..." : "Send"}
-              </button>
+            <div className={styles.sectionHeader}>
+              <h2 className={styles.sectionTitle}>AI Brain Preview</h2>
+              <div className={styles.intentBadge}>
+                Tone: {data.brandVoice.tone}
+              </div>
             </div>
 
-            {previewResponse && (
-              <div className={styles.previewResponse}>
-                {previewResponse.error ? (
-                  <div className={styles.previewError}>
-                    {previewResponse.error}
+            <div className={styles.chatContainer}>
+              <div className={styles.messageList}>
+                {chatMessages.map((msg, idx) => (
+                  <div
+                    key={idx}
+                    className={`${styles.message} ${
+                      msg.role === "user"
+                        ? styles.userMessage
+                        : styles.botMessage
+                    }`}
+                  >
+                    <div className={styles.bubble}>{msg.content}</div>
+                    <div className={styles.messageTime}>
+                      {msg.time}
+                      {msg.intent && ` • Intent: ${msg.intent}`}
+                    </div>
                   </div>
-                ) : (
-                  <>
-                    <div className={styles.previewMeta}>
-                      <span className={styles.intentBadge}>
-                        Intent: {previewResponse.intent} (
-                        {Math.round(previewResponse.confidence * 100)}%)
-                      </span>
-                      {previewResponse.needs_human && (
-                        <span className={styles.humanBadge}>Needs Human</span>
-                      )}
+                ))}
+
+                {previewLoading && (
+                  <div className={`${styles.message} ${styles.botMessage}`}>
+                    <div className={styles.typingBubble}>
+                      <div className={styles.dot}></div>
+                      <div className={styles.dot}></div>
+                      <div className={styles.dot}></div>
                     </div>
-                    <div className={styles.previewMessage}>
-                      <div className={styles.botIcon}>🤖</div>
-                      <div className={styles.botReply}>
-                        {previewResponse.reply}
-                      </div>
-                    </div>
-                  </>
+                  </div>
                 )}
+                <div ref={chatEndRef} />
               </div>
-            )}
+
+              <div className={styles.suggestions}>
+                {[
+                  "What is the price?",
+                  "What are your timings?",
+                  "Where are you located?",
+                  "How to book an appointment?",
+                ].map((s, i) => (
+                  <button
+                    key={i}
+                    className={styles.suggestionChip}
+                    onClick={() => handlePreview(s)}
+                    disabled={previewLoading}
+                  >
+                    {s}
+                  </button>
+                ))}
+              </div>
+
+              <div className={styles.chatFooter}>
+                <input
+                  type="text"
+                  value={previewQuery}
+                  onChange={(e) => setPreviewQuery(e.target.value)}
+                  placeholder="Type a customer question..."
+                  onKeyDown={(e) => e.key === "Enter" && handlePreview()}
+                  disabled={previewLoading}
+                />
+                <button
+                  className={styles.sendButton}
+                  onClick={() => handlePreview()}
+                  disabled={previewLoading || !previewQuery.trim()}
+                >
+                  {previewLoading ? "..." : "Send"}
+                </button>
+              </div>
+            </div>
+
+            <p className={styles.previewHint} style={{ marginTop: "20px" }}>
+              💡 This preview uses the business data you've entered above. Save
+              your changes to sync them with the live WhatsApp automation.
+            </p>
           </div>
         )}
       </div>
 
-      <div className={styles.footer}>
-        <button
-          className={styles.saveButton}
-          onClick={handleSave}
-          disabled={saving}
-        >
-          {saving ? "Saving..." : "💾 Save Changes"}
-        </button>
-      </div>
+      {activeTab !== "preview" && (
+        <div className={styles.footer}>
+          <button
+            className={styles.saveButton}
+            onClick={handleSave}
+            disabled={saving}
+          >
+            {saving ? "Saving..." : "💾 Save Changes"}
+          </button>
+        </div>
+      )}
     </div>
   );
 }

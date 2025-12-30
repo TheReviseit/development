@@ -1,9 +1,3 @@
-/**
- * Test script to verify Hash Map cache implementation
- * Run this in the browser console on the login or signup page
- * to test the cache functionality
- */
-
 // Test 1: Test signup flow with cache
 async function testSignupWithCache() {
   console.log("\n=== Testing Signup Flow with Cache ===");

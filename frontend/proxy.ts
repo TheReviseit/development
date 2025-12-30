@@ -31,6 +31,7 @@ export async function proxy(request: NextRequest) {
     "/manifest.webmanifest",
     "/sw.js",
     "/offline",
+    "/_vercel",
   ];
 
   const isPublicPath =

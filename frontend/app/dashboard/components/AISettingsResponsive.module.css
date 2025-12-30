@@ -1,0 +1,395 @@
+/* AISettingsResponsive.module.css - Global Responsive Design System */
+
+/* ============================================
+   DESIGN TOKENS (CSS Custom Properties)
+   ============================================ */
+
+:root {
+  /* Colors - Primary */
+  --ai-color-primary: #22c15a;
+  --ai-color-primary-hover: #16a34a;
+  --ai-color-primary-light: rgba(34, 193, 90, 0.15);
+
+  /* Colors - States */
+  --ai-color-success: #22c15a;
+  --ai-color-warning: #f59e0b;
+  --ai-color-error: #ef4444;
+  --ai-color-info: #3b82f6;
+
+  /* Colors - Background */
+  --ai-bg-dark: #0a0a0f;
+  --ai-bg-card: rgba(255, 255, 255, 0.03);
+  --ai-bg-card-hover: rgba(255, 255, 255, 0.06);
+  --ai-bg-input: rgba(255, 255, 255, 0.04);
+  --ai-bg-input-hover: rgba(255, 255, 255, 0.08);
+
+  /* Colors - Border */
+  --ai-border-light: rgba(255, 255, 255, 0.06);
+  --ai-border-medium: rgba(255, 255, 255, 0.1);
+  --ai-border-strong: rgba(255, 255, 255, 0.2);
+
+  /* Colors - Text */
+  --ai-text-primary: rgba(255, 255, 255, 0.95);
+  --ai-text-secondary: rgba(255, 255, 255, 0.7);
+  --ai-text-muted: rgba(255, 255, 255, 0.5);
+  --ai-text-disabled: rgba(255, 255, 255, 0.3);
+
+  /* Spacing (4px base system) */
+  --ai-space-1: 4px;
+  --ai-space-2: 8px;
+  --ai-space-3: 12px;
+  --ai-space-4: 16px;
+  --ai-space-5: 20px;
+  --ai-space-6: 24px;
+  --ai-space-8: 32px;
+  --ai-space-10: 40px;
+  --ai-space-12: 48px;
+
+  /* Border Radius */
+  --ai-radius-sm: 8px;
+  --ai-radius-md: 12px;
+  --ai-radius-lg: 14px;
+  --ai-radius-xl: 18px;
+  --ai-radius-2xl: 20px;
+  --ai-radius-full: 9999px;
+
+  /* Shadows */
+  --ai-shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.15);
+  --ai-shadow-md: 0 4px 16px rgba(0, 0, 0, 0.2);
+  --ai-shadow-lg: 0 8px 32px rgba(0, 0, 0, 0.3);
+  --ai-shadow-glow: 0 0 20px rgba(34, 193, 90, 0.2);
+
+  /* Typography */
+  --ai-font-size-xs: 11px;
+  --ai-font-size-sm: 13px;
+  --ai-font-size-base: 15px;
+  --ai-font-size-lg: 18px;
+  --ai-font-size-xl: 22px;
+  --ai-font-size-2xl: 28px;
+  --ai-font-size-3xl: 32px;
+
+  /* Transitions */
+  --ai-transition-fast: 0.15s ease;
+  --ai-transition-normal: 0.2s ease;
+  --ai-transition-smooth: 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+
+  /* Touch Target (minimum 44px for accessibility) */
+  --ai-touch-target: 44px;
+}
+
+/* ============================================
+   UTILITY CLASSES
+   ============================================ */
+
+/* Visually Hidden (for screen readers) */
+.visuallyHidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* Focus Ring */
+.focusRing:focus {
+  outline: none;
+  box-shadow: 0 0 0 3px var(--ai-color-primary-light);
+}
+
+/* Truncate Text */
+.truncate {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ============================================
+   RESPONSIVE CONTAINERS
+   ============================================ */
+
+.responsiveContainer {
+  width: 100%;
+  max-width: 100%;
+  padding-left: var(--ai-space-4);
+  padding-right: var(--ai-space-4);
+}
+
+/* ============================================
+   BREAKPOINT MIXINS (Mobile-First)
+   ============================================ */
+
+/* Mobile (default) - up to 640px */
+/* No media query needed, styles apply by default */
+
+/* Tablet - 641px to 1024px */
+@media (min-width: 641px) {
+  .responsiveContainer {
+    padding-left: var(--ai-space-6);
+    padding-right: var(--ai-space-6);
+  }
+}
+
+/* Desktop - 1024px and up */
+@media (min-width: 1024px) {
+  .responsiveContainer {
+    max-width: 960px;
+    margin-left: auto;
+    margin-right: auto;
+    padding-left: var(--ai-space-8);
+    padding-right: var(--ai-space-8);
+  }
+}
+
+/* Large Desktop - 1280px and up */
+@media (min-width: 1280px) {
+  .responsiveContainer {
+    max-width: 1100px;
+  }
+}
+
+/* ============================================
+   RESPONSIVE GRID SYSTEM
+   ============================================ */
+
+.formGrid {
+  display: grid;
+  gap: var(--ai-space-4);
+  grid-template-columns: 1fr;
+}
+
+@media (min-width: 641px) {
+  .formGrid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: var(--ai-space-5);
+  }
+}
+
+@media (min-width: 1024px) {
+  .formGrid {
+    gap: var(--ai-space-6);
+  }
+}
+
+/* ============================================
+   RESPONSIVE TYPOGRAPHY
+   ============================================ */
+
+.headingLarge {
+  font-size: var(--ai-font-size-xl);
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.headingMedium {
+  font-size: var(--ai-font-size-lg);
+  font-weight: 600;
+  line-height: 1.3;
+}
+
+.bodyText {
+  font-size: var(--ai-font-size-base);
+  line-height: 1.5;
+}
+
+.smallText {
+  font-size: var(--ai-font-size-sm);
+  line-height: 1.4;
+}
+
+@media (min-width: 641px) {
+  .headingLarge {
+    font-size: var(--ai-font-size-2xl);
+  }
+
+  .headingMedium {
+    font-size: var(--ai-font-size-xl);
+  }
+}
+
+@media (min-width: 1024px) {
+  .headingLarge {
+    font-size: var(--ai-font-size-3xl);
+  }
+}
+
+/* ============================================
+   RESPONSIVE SPACING UTILITIES
+   ============================================ */
+
+.stackSmall > * + * {
+  margin-top: var(--ai-space-3);
+}
+
+.stackMedium > * + * {
+  margin-top: var(--ai-space-4);
+}
+
+.stackLarge > * + * {
+  margin-top: var(--ai-space-6);
+}
+
+@media (min-width: 641px) {
+  .stackLarge > * + * {
+    margin-top: var(--ai-space-8);
+  }
+}
+
+/* ============================================
+   FORM ELEMENT BASE STYLES
+   ============================================ */
+
+.inputBase {
+  width: 100%;
+  min-height: var(--ai-touch-target);
+  padding: var(--ai-space-3) var(--ai-space-4);
+  background: var(--ai-bg-input);
+  border: 1px solid var(--ai-border-medium);
+  border-radius: var(--ai-radius-md);
+  color: var(--ai-text-primary);
+  font-size: 16px; /* Prevents zoom on iOS */
+  transition: var(--ai-transition-normal);
+}
+
+.inputBase:hover {
+  background: var(--ai-bg-input-hover);
+  border-color: var(--ai-border-strong);
+}
+
+.inputBase:focus {
+  outline: none;
+  border-color: var(--ai-color-primary);
+  box-shadow: 0 0 0 3px var(--ai-color-primary-light);
+}
+
+.inputBase::placeholder {
+  color: var(--ai-text-muted);
+}
+
+@media (min-width: 1024px) {
+  .inputBase {
+    min-height: 42px;
+    font-size: var(--ai-font-size-base);
+  }
+}
+
+/* ============================================
+   BUTTON BASE STYLES
+   ============================================ */
+
+.buttonBase {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--ai-space-2);
+  min-height: var(--ai-touch-target);
+  padding: var(--ai-space-3) var(--ai-space-5);
+  border: none;
+  border-radius: var(--ai-radius-md);
+  font-size: var(--ai-font-size-base);
+  font-weight: 600;
+  cursor: pointer;
+  transition: var(--ai-transition-smooth);
+}
+
+.buttonBase:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.buttonPrimary {
+  background: var(--ai-color-primary);
+  color: white;
+}
+
+.buttonPrimary:hover:not(:disabled) {
+  background: var(--ai-color-primary-hover);
+  transform: translateY(-1px);
+}
+
+.buttonSecondary {
+  background: var(--ai-bg-card);
+  border: 1px solid var(--ai-border-medium);
+  color: var(--ai-text-primary);
+}
+
+.buttonSecondary:hover:not(:disabled) {
+  background: var(--ai-bg-card-hover);
+  border-color: var(--ai-border-strong);
+}
+
+/* ============================================
+   CARD STYLES
+   ============================================ */
+
+.card {
+  background: var(--ai-bg-card);
+  border: 1px solid var(--ai-border-light);
+  border-radius: var(--ai-radius-xl);
+  padding: var(--ai-space-4);
+}
+
+@media (min-width: 641px) {
+  .card {
+    padding: var(--ai-space-6);
+    border-radius: var(--ai-radius-2xl);
+  }
+}
+
+@media (min-width: 1024px) {
+  .card {
+    padding: var(--ai-space-8);
+  }
+}
+
+/* ============================================
+   ANIMATIONS
+   ============================================ */
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes slideDown {
+  from {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes scaleIn {
+  from {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.animateFadeIn {
+  animation: fadeIn 0.3s ease forwards;
+}
+
+.animateSlideDown {
+  animation: slideDown 0.3s ease forwards;
+}
+
+.animateScaleIn {
+  animation: scaleIn 0.2s ease forwards;
+}
