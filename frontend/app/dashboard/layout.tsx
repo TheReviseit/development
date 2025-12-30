@@ -16,6 +16,7 @@ type Section =
   | "templates"
   | "contacts"
   | "campaigns"
+  | "appointments"
   | "bot-settings"
   | "settings";
 
@@ -26,6 +27,7 @@ const sectionLabels: Record<Section, string> = {
   templates: "Templates",
   contacts: "Contacts",
   campaigns: "Campaigns",
+  appointments: "Appointments",
   "bot-settings": "AI Settings",
   settings: "Settings",
 };
@@ -37,6 +39,7 @@ const getActiveSection = (pathname: string): Section => {
   if (pathname.includes("/templates")) return "templates";
   if (pathname.includes("/contacts")) return "contacts";
   if (pathname.includes("/campaigns")) return "campaigns";
+  if (pathname.includes("/appointments")) return "appointments";
   if (pathname.includes("/bot-settings")) return "bot-settings";
   if (pathname.includes("/settings")) return "settings";
   return "analytics";
@@ -52,10 +55,53 @@ export default function DashboardLayout({
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
   const [showMobileMenu, setShowMobileMenu] = useState(false);
+  const [appointmentBookingEnabled, setAppointmentBookingEnabled] =
+    useState(false);
   const router = useRouter();
   const pathname = usePathname();
 
   const activeSection = getActiveSection(pathname);
+
+  // Fetch AI capabilities for mobile menu
+  useEffect(() => {
+    const fetchCapabilities = async () => {
+      try {
+        const response = await fetch("/api/ai-capabilities");
+        const data = await response.json();
+        if (data.success && data.data) {
+          setAppointmentBookingEnabled(
+            data.data.appointment_booking_enabled || false
+          );
+        }
+      } catch (error) {
+        console.log("Error fetching AI capabilities");
+      }
+    };
+    fetchCapabilities();
+
+    // Listen for capability updates
+    const handleUpdate = (event: Event) => {
+      const customEvent = event as CustomEvent<{
+        appointment_booking_enabled: boolean;
+      }>;
+      if (customEvent.detail) {
+        setAppointmentBookingEnabled(
+          customEvent.detail.appointment_booking_enabled
+        );
+      } else {
+        fetchCapabilities();
+      }
+    };
+    window.addEventListener(
+      "ai-capabilities-updated",
+      handleUpdate as EventListener
+    );
+    return () =>
+      window.removeEventListener(
+        "ai-capabilities-updated",
+        handleUpdate as EventListener
+      );
+  }, []);
 
   // Detect mobile screen
   useEffect(() => {
@@ -350,6 +396,61 @@ export default function DashboardLayout({
                     </svg>
                     <span>Campaigns</span>
                   </button>
+                  {appointmentBookingEnabled && (
+                    <button
+                      className={`${styles.mobileNavLink} ${
+                        activeSection === "appointments"
+                          ? styles.mobileNavLinkActive
+                          : ""
+                      }`}
+                      onClick={() => handleSectionChange("appointments")}
+                    >
+                      <svg
+                        width="20"
+                        height="20"
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                      >
+                        <rect
+                          x="3"
+                          y="4"
+                          width="18"
+                          height="18"
+                          rx="2"
+                          ry="2"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                        />
+                        <line
+                          x1="16"
+                          y1="2"
+                          x2="16"
+                          y2="6"
+                          strokeLinecap="round"
+                          strokeWidth={2}
+                        />
+                        <line
+                          x1="8"
+                          y1="2"
+                          x2="8"
+                          y2="6"
+                          strokeLinecap="round"
+                          strokeWidth={2}
+                        />
+                        <line
+                          x1="3"
+                          y1="10"
+                          x2="21"
+                          y2="10"
+                          strokeLinecap="round"
+                          strokeWidth={2}
+                        />
+                      </svg>
+                      <span>Appointments</span>
+                    </button>
+                  )}
                   <button
                     className={`${styles.mobileNavLink} ${
                       activeSection === "bot-settings"

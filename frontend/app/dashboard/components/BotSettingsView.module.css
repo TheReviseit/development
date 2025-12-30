@@ -8,6 +8,7 @@
   max-width: 900px;
   margin: 0 auto;
   animation: fadeIn 0.4s ease;
+  overflow-x: hidden;
 }
 
 .header {
@@ -1303,6 +1304,236 @@
 
   .suggestionChip {
     padding: 6px 10px;
+    font-size: 11px;
+  }
+}
+
+/* AI Capabilities Section */
+.capabilitiesSection {
+  background: white !important;
+  border: 1px solid rgba(34, 193, 90, 0.2);
+  border-radius: 16px;
+  padding: 20px 24px;
+  margin-bottom: 24px;
+  color: black !important;
+}
+
+.capabilityRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.capabilityInfo {
+  flex: 1;
+}
+
+.capabilityTitle {
+  font-size: 16px;
+  font-weight: 600;
+  color: black;
+  margin-bottom: 4px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.capabilityDescription {
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.5);
+  line-height: 1.5;
+}
+
+/* Clickable card cursor */
+.capabilitiesSection {
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.capabilitiesSection:hover {
+  border-color: rgba(34, 193, 90, 0.4);
+}
+
+/* Chevron icon */
+.chevron {
+  font-size: 10px;
+  color: rgba(0, 0, 0, 0.5);
+  transition: transform 0.3s ease;
+  margin-left: auto;
+}
+
+.chevronUp {
+  transform: rotate(180deg);
+}
+
+/* Dropdown animation */
+.capabilityDropdown {
+  max-height: 0;
+  overflow: hidden;
+  transition: max-height 0.3s ease, padding 0.3s ease, opacity 0.3s ease;
+  opacity: 0;
+}
+
+.capabilityDropdownOpen {
+  max-height: 200px;
+  padding-top: 16px;
+  opacity: 1;
+}
+
+.capabilityDropdownText {
+  font-size: 13px;
+  color: rgba(0, 0, 0, 0.6);
+  line-height: 1.6;
+  margin: 0;
+  padding-top: 12px;
+  border-top: 1px solid rgba(0, 0, 0, 0.1);
+}
+
+/* Hide on mobile */
+.hideOnMobile {
+  display: block;
+}
+
+/* Toggle Switch */
+.toggleSwitch {
+  position: relative;
+  width: 52px;
+  height: 28px;
+  flex-shrink: 0;
+}
+
+.toggleSwitch input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.toggleSlider {
+  position: absolute;
+  cursor: pointer;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(0, 0, 0, 0.2);
+  border-radius: 28px;
+  transition: all 0.3s ease;
+}
+
+.toggleSlider::before {
+  position: absolute;
+  content: "";
+  height: 20px;
+  width: 20px;
+  left: 3px;
+  bottom: 3px;
+  background: white;
+  border-radius: 50%;
+  transition: all 0.3s ease;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+.toggleSwitch input:checked + .toggleSlider {
+  background: black;
+  border-color: black;
+}
+
+.toggleSwitch input:checked + .toggleSlider::before {
+  transform: translateX(24px);
+}
+
+.toggleSwitch input:focus + .toggleSlider {
+  box-shadow: 0 0 0 3px rgba(34, 193, 90, 0.2);
+}
+
+.newBadge {
+  display: inline-flex;
+  padding: 2px 8px;
+  background: linear-gradient(135deg, #22c15a 0%, #2dd4bf 100%);
+  color: white;
+  border-radius: 10px;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+/* Mobile Responsive Styles for Capabilities Section */
+@media (max-width: 768px) {
+  /* Hide AI Capabilities title and description on mobile */
+  .hideOnMobile {
+    display: none !important;
+  }
+
+  /* Fix scroll issue */
+  .section {
+    overflow-x: hidden;
+  }
+
+  .capabilitiesSection {
+    padding: 16px 20px;
+    border-radius: 12px;
+    background: white !important;
+    color: black !important;
+  }
+
+  /* Keep row layout on mobile - simple toggle row */
+  .capabilityRow {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+  }
+
+  .capabilityInfo {
+    flex: 1;
+  }
+
+  .capabilityTitle {
+    font-size: 15px;
+    margin-bottom: 0;
+    color: black !important;
+  }
+
+  /* Hide description in the old location but show in dropdown */
+  .capabilityDescription {
+    display: none;
+  }
+
+  /* Show dropdown text when expanded on mobile */
+  .capabilityDropdownText {
+    font-size: 12px;
+    color: rgba(0, 0, 0, 0.7);
+  }
+
+  /* Hide NEW badge on mobile */
+  .newBadge {
+    display: none;
+  }
+
+  .toggleSwitch {
+    flex-shrink: 0;
+  }
+
+  /* Show chevron on mobile */
+  .chevron {
+    display: inline-block;
+  }
+}
+
+@media (max-width: 480px) {
+  .capabilitiesSection {
+    padding: 14px 16px;
+    margin-bottom: 16px;
+  }
+
+  .capabilityTitle {
+    font-size: 14px;
+  }
+
+  .capabilityDropdownText {
     font-size: 11px;
   }
 }

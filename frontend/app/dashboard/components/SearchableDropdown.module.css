@@ -1,0 +1,251 @@
+/* SearchableDropdown.module.css */
+
+.container {
+  position: relative;
+  width: 100%;
+}
+
+.disabled {
+  opacity: 0.5;
+  pointer-events: none;
+}
+
+/* Input Wrapper */
+.inputWrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.searchIcon {
+  position: absolute;
+  left: 16px;
+  filter: brightness(0) invert(1);
+  opacity: 0.5;
+  pointer-events: none;
+}
+
+.input {
+  width: 100%;
+  padding: 16px 16px 16px 42px !important;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 14px;
+  color: white;
+  font-size: 15px;
+  transition: all 0.2s ease;
+}
+
+.input:hover {
+  background: rgba(255, 255, 255, 0.06);
+  border-color: rgba(255, 255, 255, 0.15);
+}
+
+.input:focus {
+  outline: none;
+  border-color: #22c15a;
+  background: rgba(255, 255, 255, 0.06);
+  box-shadow: 0 0 0 3px rgba(34, 193, 90, 0.15);
+}
+
+.input::placeholder {
+  color: rgba(255, 255, 255, 0.4);
+}
+
+/* Selected Display */
+.selectedDisplay {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 16px;
+  background: rgba(34, 193, 90, 0.1);
+  border: 1px solid rgba(34, 193, 90, 0.3);
+  border-radius: 14px;
+  min-height: 56px;
+}
+
+.selectedIcon {
+  flex-shrink: 0;
+  filter: brightness(0) invert(1);
+  opacity: 0.9;
+}
+
+.selectedLabel {
+  flex: 1;
+  color: white;
+  font-size: 15px;
+  font-weight: 500;
+}
+
+.clearButton {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  background: rgba(255, 255, 255, 0.1);
+  border: none;
+  border-radius: 8px;
+  color: rgba(255, 255, 255, 0.7);
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.clearButton:hover {
+  background: rgba(239, 68, 68, 0.2);
+  color: #ef4444;
+}
+
+/* List Wrapper */
+.listWrapper {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  z-index: 100;
+  animation: slideDown 0.2s ease;
+  background: #0d0d0d;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 14px;
+  overflow: hidden;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+}
+
+@keyframes slideDown {
+  from {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Add Button - White style inside dropdown */
+.addButton {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  padding: 14px 16px;
+  background: rgba(255, 255, 255, 0.1);
+  border: none;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  color: white;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.addButton:hover {
+  background: rgba(255, 255, 255, 0.15);
+}
+
+/* List */
+.list {
+  list-style: none;
+  margin: 0;
+  padding: 6px;
+  max-height: 280px;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.2) transparent;
+}
+
+.list::-webkit-scrollbar {
+  width: 6px;
+}
+
+.list::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.list::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 3px;
+}
+
+/* Option */
+.option {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 14px;
+  min-height: 48px;
+  border-radius: 10px;
+  cursor: pointer;
+  color: rgba(255, 255, 255, 0.85);
+  font-size: 15px;
+  transition: all 0.15s ease;
+}
+
+.option:hover,
+.optionFocused {
+  background: rgba(255, 255, 255, 0.1);
+  color: white;
+}
+
+.optionSelected {
+  background: #000000;
+  color: white;
+  font-weight: 600;
+}
+
+.optionSelected:hover,
+.optionSelected.optionFocused {
+  background: #1a1a1a;
+}
+
+.optionIconImg {
+  flex-shrink: 0;
+  filter: brightness(0) invert(1);
+  opacity: 0.9;
+}
+
+.optionSelected .optionIconImg {
+  opacity: 1;
+}
+
+.optionLabel {
+  flex: 1;
+  min-width: 0;
+}
+
+.noResults {
+  padding: 20px 16px;
+  text-align: center;
+  color: rgba(255, 255, 255, 0.5);
+  font-size: 14px;
+}
+
+/* Responsive */
+@media (max-width: 640px) {
+  .input {
+    padding: 18px 16px 18px 48px;
+    font-size: 16px;
+    min-height: 56px;
+  }
+
+  .selectedDisplay {
+    min-height: 60px;
+    padding: 16px;
+  }
+
+  .addButton {
+    padding: 16px;
+    font-size: 15px;
+  }
+
+  .option {
+    min-height: 52px;
+    padding: 14px 16px;
+    font-size: 16px;
+  }
+
+  .list {
+    max-height: 240px;
+  }
+}
