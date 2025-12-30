@@ -13,6 +13,10 @@ interface NavItem {
   href: string;
 }
 
+interface AICapabilities {
+  appointment_booking_enabled: boolean;
+}
+
 interface DashboardSidebarProps {
   activeSection: string;
   onSectionChange: (section: string) => void;
@@ -189,6 +193,37 @@ const BotIcon = () => (
   </svg>
 );
 
+// Calendar icon for Appointments - matches existing icon style
+const AppointmentsIcon = () => (
+  <svg
+    width="20"
+    height="20"
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2"
+  >
+    <rect
+      x="3"
+      y="4"
+      width="18"
+      height="18"
+      rx="2"
+      ry="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+    <line x1="16" y1="2" x2="16" y2="6" strokeLinecap="round" />
+    <line x1="8" y1="2" x2="8" y2="6" strokeLinecap="round" />
+    <line x1="3" y1="10" x2="21" y2="10" strokeLinecap="round" />
+    <path d="M8 14h.01" strokeLinecap="round" />
+    <path d="M12 14h.01" strokeLinecap="round" />
+    <path d="M16 14h.01" strokeLinecap="round" />
+    <path d="M8 18h.01" strokeLinecap="round" />
+    <path d="M12 18h.01" strokeLinecap="round" />
+  </svg>
+);
+
 const CollapseIcon = ({ collapsed }: { collapsed: boolean }) => (
   <svg
     width="18"
@@ -223,6 +258,51 @@ export default function DashboardSidebar({
 }: DashboardSidebarProps) {
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [userCount, setUserCount] = useState<number>(0);
+  const [aiCapabilities, setAiCapabilities] = useState<AICapabilities>({
+    appointment_booking_enabled: false,
+  });
+
+  // Fetch AI capabilities to determine which features to show
+  useEffect(() => {
+    const fetchAICapabilities = async () => {
+      try {
+        const response = await fetch("/api/ai-capabilities");
+        const data = await response.json();
+        console.log("Sidebar: Fetched AI capabilities:", data);
+        if (data.success && data.data) {
+          setAiCapabilities(data.data);
+        }
+      } catch (error) {
+        console.error("Error fetching AI capabilities:", error);
+      }
+    };
+    fetchAICapabilities();
+
+    // Listen for capability updates from AI Settings page
+    // The event can include the new state directly to avoid re-fetching
+    const handleCapabilitiesUpdate = (event: Event) => {
+      const customEvent = event as CustomEvent<{
+        appointment_booking_enabled: boolean;
+      }>;
+      if (customEvent.detail) {
+        console.log("Sidebar: Received capability update:", customEvent.detail);
+        setAiCapabilities(customEvent.detail);
+      } else {
+        fetchAICapabilities();
+      }
+    };
+    window.addEventListener(
+      "ai-capabilities-updated",
+      handleCapabilitiesUpdate as EventListener
+    );
+
+    return () => {
+      window.removeEventListener(
+        "ai-capabilities-updated",
+        handleCapabilitiesUpdate as EventListener
+      );
+    };
+  }, []);
 
   // Fetch the actual user/conversation count
   useEffect(() => {
@@ -240,6 +320,7 @@ export default function DashboardSidebar({
     fetchUserCount();
   }, []);
 
+  // Build nav items dynamically based on AI capabilities
   const navItems: NavItem[] = [
     {
       id: "analytics",
@@ -278,6 +359,17 @@ export default function DashboardSidebar({
       icon: <CampaignsIcon />,
       href: "/dashboard/campaigns",
     },
+    // Appointments - only show when toggle is enabled
+    ...(aiCapabilities.appointment_booking_enabled
+      ? [
+          {
+            id: "appointments",
+            label: "Appointments",
+            icon: <AppointmentsIcon />,
+            href: "/dashboard/appointments",
+          },
+        ]
+      : []),
     {
       id: "bot-settings",
       label: "AI Settings",

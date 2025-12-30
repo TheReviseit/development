@@ -3,6 +3,9 @@
 import { useState, useEffect, useRef } from "react";
 import styles from "./BotSettingsView.module.css";
 import CustomDropdown, { DropdownOption } from "./CustomDropdown";
+import SearchableDropdown from "./SearchableDropdown";
+import { AlertToast } from "@/components/ui/alert-toast";
+import { AnimatePresence } from "framer-motion";
 
 // Types for business data
 interface ProductService {
@@ -66,6 +69,7 @@ interface BusinessData {
   businessId: string;
   businessName: string;
   industry: string;
+  customIndustry?: string;
   description: string;
   contact: {
     phone: string;
@@ -104,16 +108,86 @@ interface BusinessData {
 }
 
 const INDUSTRIES = [
-  { value: "salon", label: "💇 Salon & Spa" },
-  { value: "clinic", label: "🏥 Clinic / Healthcare" },
-  { value: "restaurant", label: "🍽️ Restaurant / Food" },
-  { value: "real_estate", label: "🏠 Real Estate" },
-  { value: "coaching", label: "📚 Coaching / Tuition" },
-  { value: "fitness", label: "💪 Gym / Fitness" },
-  { value: "retail", label: "🛍️ Retail / Shop" },
-  { value: "education", label: "🎓 Education" },
-  { value: "ecommerce", label: "🛒 E-commerce / Online Store" },
-  { value: "other", label: "🏢 Other" },
+  {
+    value: "salon",
+    label: "Salon & Spa",
+    iconPath: "/icons/ai_settings/bussiness_type/salon.svg",
+  },
+  {
+    value: "clinic",
+    label: "Clinic / Healthcare",
+    iconPath: "/icons/ai_settings/bussiness_type/clinic.svg",
+  },
+  {
+    value: "restaurant",
+    label: "Restaurant / Food",
+    iconPath: "/icons/ai_settings/bussiness_type/restoreent.svg",
+  },
+  {
+    value: "real_estate",
+    label: "Real Estate",
+    iconPath: "/icons/ai_settings/bussiness_type/real_esate.svg",
+  },
+  {
+    value: "coaching",
+    label: "Coaching / Tuition",
+    iconPath: "/icons/ai_settings/bussiness_type/others.svg",
+  },
+  {
+    value: "fitness",
+    label: "Gym / Fitness",
+    iconPath: "/icons/ai_settings/bussiness_type/gym.svg",
+  },
+  {
+    value: "retail",
+    label: "Retail / Shop",
+    iconPath: "/icons/ai_settings/bussiness_type/retail.svg",
+  },
+  {
+    value: "education",
+    label: "Education",
+    iconPath: "/icons/ai_settings/bussiness_type/others.svg",
+  },
+  {
+    value: "ecommerce",
+    label: "E-commerce / Online Store",
+    iconPath: "/icons/ai_settings/bussiness_type/ecommers.svg",
+  },
+  {
+    value: "travel",
+    label: "Travel & Tourism",
+    iconPath: "/icons/ai_settings/bussiness_type/travel.svg",
+  },
+  {
+    value: "logistics",
+    label: "Logistics & Delivery",
+    iconPath: "/icons/ai_settings/bussiness_type/logistics.svg",
+  },
+  // {
+  //   value: "home_services",
+  //   label: "Home Services",
+  //   iconPath: "/icons/ai_settings/bussiness_type/others.svg",
+  // },
+  {
+    value: "automobile",
+    label: "Automobile",
+    iconPath: "/icons/ai_settings/bussiness_type/automobile.svg",
+  },
+  {
+    value: "finance",
+    label: "Finance & Banking",
+    iconPath: "/icons/ai_settings/bussiness_type/finance.svg",
+  },
+  {
+    value: "events",
+    label: "Events & Entertainment",
+    iconPath: "/icons/ai_settings/bussiness_type/events.svg",
+  },
+  {
+    value: "other",
+    label: "Other (Custom)",
+    iconPath: "/icons/ai_settings/bussiness_type/others.svg",
+  },
 ];
 
 const DEFAULT_TIMING: DayTiming = {
@@ -185,6 +259,7 @@ type TabType =
   | "policies"
   | "ecommerce"
   | "faqs"
+  | "capabilities"
   | "preview";
 
 export default function BotSettingsView() {
@@ -202,6 +277,18 @@ export default function BotSettingsView() {
     { role: "user" | "bot"; content: string; time: string; intent?: string }[]
   >([]);
   const chatEndRef = useRef<HTMLDivElement>(null);
+
+  // AI Capabilities state
+  const [appointmentBookingEnabled, setAppointmentBookingEnabled] =
+    useState(false);
+  const [capabilitiesLoading, setCapabilitiesLoading] = useState(false);
+  const [capabilityExpanded, setCapabilityExpanded] = useState(false);
+  const [alertToast, setAlertToast] = useState<{
+    show: boolean;
+    variant: "success" | "warning" | "info" | "error";
+    title: string;
+    description: string;
+  } | null>(null);
 
   // Initialize chat with welcome message if empty
   useEffect(() => {
@@ -246,6 +333,79 @@ export default function BotSettingsView() {
     loadData();
   }, []);
 
+  // Load AI capabilities on mount
+  useEffect(() => {
+    const loadCapabilities = async () => {
+      try {
+        const response = await fetch("/api/ai-capabilities");
+        if (response.ok) {
+          const result = await response.json();
+          if (result.success && result.data) {
+            setAppointmentBookingEnabled(
+              result.data.appointment_booking_enabled || false
+            );
+          }
+        }
+      } catch (error) {
+        console.log("Error loading AI capabilities");
+      }
+    };
+    loadCapabilities();
+  }, []);
+
+  // Handle appointment booking toggle
+  const handleAppointmentToggle = async () => {
+    const newValue = !appointmentBookingEnabled;
+    setCapabilitiesLoading(true);
+
+    // Immediately update local state for instant UI feedback
+    setAppointmentBookingEnabled(newValue);
+
+    // Immediately dispatch event to update sidebar (don't wait for API)
+    window.dispatchEvent(
+      new CustomEvent("ai-capabilities-updated", {
+        detail: { appointment_booking_enabled: newValue },
+      })
+    );
+
+    try {
+      const response = await fetch("/api/ai-capabilities", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ appointment_booking_enabled: newValue }),
+      });
+
+      if (response.ok) {
+        setAlertToast({
+          show: true,
+          variant: "success",
+          title: newValue
+            ? "Appointment Booking Enabled"
+            : "Appointment Booking Disabled",
+          description: newValue
+            ? "Check the sidebar for the new Appointments menu."
+            : "The Appointments menu has been removed from the sidebar.",
+        });
+      } else {
+        setAlertToast({
+          show: true,
+          variant: "warning",
+          title: newValue ? "Enabled Locally" : "Disabled Locally",
+          description: "Sync may be pending. Changes saved locally.",
+        });
+      }
+    } catch (error) {
+      setAlertToast({
+        show: true,
+        variant: "warning",
+        title: newValue ? "Enabled Locally" : "Disabled Locally",
+        description: "Database sync pending. Feature works locally.",
+      });
+    } finally {
+      setCapabilitiesLoading(false);
+    }
+  };
+
   // Auto-dismiss toast notification after 5 seconds
   useEffect(() => {
     if (message) {
@@ -255,6 +415,16 @@ export default function BotSettingsView() {
       return () => clearTimeout(timer);
     }
   }, [message]);
+
+  // Auto-dismiss alert toast after 3 seconds
+  useEffect(() => {
+    if (alertToast?.show) {
+      const timer = setTimeout(() => {
+        setAlertToast(null);
+      }, 3000);
+      return () => clearTimeout(timer);
+    }
+  }, [alertToast]);
 
   const handleSave = async () => {
     setSaving(true);
@@ -527,6 +697,11 @@ export default function BotSettingsView() {
     },
     { id: "faqs", label: "FAQs", iconPath: "/icons/ai_settings/faqs.svg" },
     {
+      id: "capabilities",
+      label: "Capabilities",
+      iconPath: "/icons/ai_settings/preview.svg",
+    },
+    {
       id: "preview",
       label: "Preview",
       iconPath: "/icons/ai_settings/preview.svg",
@@ -567,6 +742,8 @@ export default function BotSettingsView() {
           data.faqs.length > 0 &&
           data.faqs.every((f) => f.question.trim() && f.answer.trim())
         );
+      case "capabilities":
+        return true; // Capabilities is always "complete"
       case "preview":
         return true; // Preview is always "complete"
       default:
@@ -615,6 +792,21 @@ export default function BotSettingsView() {
           </div>
         </div>
       )}
+
+      {/* Alert Toast for Appointment Toggle */}
+      <div style={{ position: "fixed", top: 20, right: 20, zIndex: 9999 }}>
+        <AnimatePresence>
+          {alertToast?.show && (
+            <AlertToast
+              variant={alertToast.variant}
+              styleVariant="default"
+              title={alertToast.title}
+              description={alertToast.description}
+              onClose={() => setAlertToast(null)}
+            />
+          )}
+        </AnimatePresence>
+      </div>
 
       {/* Mobile Dropdown - Custom Component */}
       <div className={styles.mobileTabSelect}>
@@ -690,18 +882,23 @@ export default function BotSettingsView() {
 
               <div className={styles.formGroup}>
                 <label>Industry *</label>
-                <select
+                <SearchableDropdown
+                  options={INDUSTRIES.map((ind) => ({
+                    id: ind.value,
+                    label: ind.label,
+                    iconPath: ind.iconPath,
+                  }))}
                   value={data.industry}
-                  onChange={(e) =>
-                    setData({ ...data, industry: e.target.value })
+                  customValue={data.customIndustry || ""}
+                  onChange={(value, customValue) =>
+                    setData({
+                      ...data,
+                      industry: value,
+                      customIndustry: customValue,
+                    })
                   }
-                >
-                  {INDUSTRIES.map((ind) => (
-                    <option key={ind.value} value={ind.value}>
-                      {ind.label}
-                    </option>
-                  ))}
-                </select>
+                  placeholder="Type to search or add your business type..."
+                />
               </div>
             </div>
 
@@ -1494,6 +1691,73 @@ export default function BotSettingsView() {
           </div>
         )}
 
+        {activeTab === "capabilities" && (
+          <div className={styles.section}>
+            <h2 className={`${styles.sectionTitle} ${styles.hideOnMobile}`}>
+              AI Capabilities
+            </h2>
+            <p
+              className={`${styles.capabilityDescription} ${styles.hideOnMobile}`}
+              style={{ marginBottom: "24px" }}
+            >
+              Enable or disable AI-powered features for your business.
+            </p>
+
+            <div
+              className={`${styles.capabilitiesSection} ${
+                capabilityExpanded ? styles.capabilitiesExpanded : ""
+              }`}
+              onClick={() => setCapabilityExpanded(!capabilityExpanded)}
+            >
+              <div className={styles.capabilityRow}>
+                <div className={styles.capabilityInfo}>
+                  <div className={styles.capabilityTitle}>
+                    <img
+                      src="/icons/ai_settings/bussiness_type/calender.svg"
+                      alt="Calendar"
+                      width={20}
+                      height={20}
+                      style={{ filter: "invert(1)" }}
+                    />
+                    Appointment Booking
+                    <span className={styles.newBadge}>NEW</span>
+                    <span
+                      className={`${styles.chevron} ${
+                        capabilityExpanded ? styles.chevronUp : ""
+                      }`}
+                    >
+                      ▼
+                    </span>
+                  </div>
+                </div>
+                <label
+                  className={styles.toggleSwitch}
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <input
+                    type="checkbox"
+                    checked={appointmentBookingEnabled}
+                    onChange={handleAppointmentToggle}
+                    disabled={capabilitiesLoading}
+                  />
+                  <span className={styles.toggleSlider}></span>
+                </label>
+              </div>
+              <div
+                className={`${styles.capabilityDropdown} ${
+                  capabilityExpanded ? styles.capabilityDropdownOpen : ""
+                }`}
+              >
+                <p className={styles.capabilityDropdownText}>
+                  Enable AI-powered appointment scheduling. When enabled, your
+                  AI assistant can book appointments through WhatsApp and a new
+                  Appointments menu appears in the sidebar.
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+
         {activeTab === "preview" && (
           <div className={styles.section}>
             <div className={styles.sectionHeader}>
@@ -1579,7 +1843,7 @@ export default function BotSettingsView() {
         )}
       </div>
 
-      {activeTab !== "preview" && (
+      {activeTab !== "preview" && activeTab !== "capabilities" && (
         <div className={styles.footer}>
           <button
             className={styles.saveButton}
