@@ -1,13 +1,57 @@
 """
 Flask Backend for WhatsApp Admin Dashboard
-Provides API endpoints for sending WhatsApp messages
+Production-ready with advanced caching, memory management, and performance optimizations.
+
+Performance Features:
+- Gunicorn + gevent for async I/O
+- Multi-layer caching (L1: in-memory, L2: Redis)
+- Circuit breaker for external API calls
+- Gzip compression
+- Request profiling and metrics
 """
 
 import os
 import time
-from flask import Flask, request, jsonify
+import asyncio
+from flask import Flask, request, jsonify, g
 from flask_cors import CORS
 from dotenv import load_dotenv
+from functools import wraps
+
+# Load environment variables first
+load_dotenv()
+
+# =============================================================================
+# Production Configuration
+# =============================================================================
+
+try:
+    from config import get_config
+    prod_config = get_config()
+    PRODUCTION_CONFIG_AVAILABLE = True
+except ImportError:
+    PRODUCTION_CONFIG_AVAILABLE = False
+    prod_config = None
+
+# =============================================================================
+# Monitoring and Logging Setup (before other imports)
+# =============================================================================
+
+try:
+    from monitoring import setup_structured_logging, get_logger
+    setup_structured_logging()
+    logger = get_logger('reviseit.app')
+    LOGGING_CONFIGURED = True
+except ImportError:
+    import logging
+    logging.basicConfig(level=logging.INFO)
+    logger = logging.getLogger('reviseit.app')
+    LOGGING_CONFIGURED = False
+
+# =============================================================================
+# Service Imports
+# =============================================================================
+
 from whatsapp_service import WhatsAppService
 
 # New modular routes
@@ -15,7 +59,7 @@ try:
     from routes import register_routes
     ROUTES_AVAILABLE = True
 except ImportError as e:
-    print(f"⚠️ Routes module not available: {e}")
+    logger.warning(f"Routes module not available: {e}")
     ROUTES_AVAILABLE = False
     register_routes = None
 
@@ -24,7 +68,7 @@ try:
     from middleware import rate_limit, get_webhook_security
     RATE_LIMIT_AVAILABLE = True
 except ImportError as e:
-    print(f"⚠️ Rate limiting not available: {e}")
+    logger.warning(f"Rate limiting not available: {e}")
     RATE_LIMIT_AVAILABLE = False
     rate_limit = None
     get_webhook_security = None
@@ -38,66 +82,105 @@ try:
         get_business_id_for_user,
         store_message,
         update_message_status,
-        get_or_create_conversation  # ADDED: Fix for push notification
+        get_or_create_conversation
     )
     SUPABASE_AVAILABLE = True
 except ImportError as e:
-    print(f"⚠️ Supabase client not available: {e}")
+    logger.warning(f"Supabase client not available: {e}")
     SUPABASE_AVAILABLE = False
     get_credentials_by_phone_number_id = None
     get_business_data_for_user = None
     get_firebase_uid_from_user_id = None
     store_message = None
     update_message_status = None
-    get_or_create_conversation = None  # ADDED
+    get_or_create_conversation = None
 
 # Firebase client for business data (Firestore)
 try:
     from firebase_client import get_business_data_from_firestore, initialize_firebase
     FIREBASE_AVAILABLE = initialize_firebase()
-    # Import push notification utility
     from push_notification import send_push_to_user
 except ImportError as e:
-    print(f"⚠️ Firebase client or push utility not available: {e}")
+    logger.warning(f"Firebase client or push utility not available: {e}")
     FIREBASE_AVAILABLE = False
     get_business_data_from_firestore = None
     send_push_to_user = None
 
-# AI Brain import (optional, graceful fallback if not available)
+# =============================================================================
+# Production Extensions (Caching, Compression, Profiling)
+# =============================================================================
+
+try:
+    from extensions import init_extensions
+    EXTENSIONS_AVAILABLE = True
+except ImportError:
+    EXTENSIONS_AVAILABLE = False
+    init_extensions = None
+
+# Advanced caching
+try:
+    from cache import get_cache_manager, cache_response
+    ADVANCED_CACHE_AVAILABLE = True
+except ImportError:
+    ADVANCED_CACHE_AVAILABLE = False
+    get_cache_manager = None
+
+# Circuit breaker for resilience
+try:
+    from resilience import (
+        get_circuit_breaker, 
+        with_circuit_breaker,
+        retry_with_backoff,
+        get_fallback_handler,
+    )
+    RESILIENCE_AVAILABLE = True
+except ImportError:
+    RESILIENCE_AVAILABLE = False
+    get_circuit_breaker = None
+
+# Metrics
+try:
+    from monitoring import track_request_latency, get_metrics_summary, check_kpis
+    METRICS_AVAILABLE = True
+except ImportError:
+    METRICS_AVAILABLE = False
+
+# =============================================================================
+# AI Brain Import
+# =============================================================================
+
 try:
     from ai_brain import AIBrain, AIBrainConfig
     from supabase_client import get_supabase_client
     
-    # Initialize with Supabase client for LLM usage tracking
     supabase_client = get_supabase_client() if SUPABASE_AVAILABLE else None
     ai_brain = AIBrain(
         config=AIBrainConfig.from_env(),
         supabase_client=supabase_client
     )
     AI_BRAIN_AVAILABLE = True
-    print("🧠 AI Brain initialized with usage tracking")
+    logger.info("🧠 AI Brain initialized with usage tracking")
 except ImportError as e:
-    print(f"⚠️ AI Brain not available: {e}")
+    logger.warning(f"AI Brain not available: {e}")
     ai_brain = None
     AI_BRAIN_AVAILABLE = False
 
-# Load environment variables
-load_dotenv()
+# =============================================================================
+# Flask App Initialization
+# =============================================================================
 
-# Initialize Flask app
 app = Flask(__name__)
 
-# Configure CORS to allow requests from frontend
-# Supports both localhost (development) and production URL (Vercel)
+# Configure from production config
+if PRODUCTION_CONFIG_AVAILABLE and prod_config:
+    app.config.update(prod_config.to_flask_config())
+
+# Configure CORS
 frontend_url = os.getenv('FRONTEND_URL', 'http://localhost:3000')
-
-# Build list of allowed origins
 allowed_origins = [
-    'http://localhost:3000',  # Local development
-    'http://localhost:3001',  # Alternative local port
+    'http://localhost:3000',
+    'http://localhost:3001',
 ]
-
-# Add production frontend URL if set
 if frontend_url and frontend_url not in allowed_origins:
     allowed_origins.append(frontend_url)
 
@@ -112,7 +195,13 @@ CORS(app, resources={
 # Initialize WhatsApp service
 whatsapp_service = WhatsAppService()
 
-# Register modular routes (templates, contacts, analytics, campaigns)
+# Initialize production extensions (compression, caching, profiling)
+if EXTENSIONS_AVAILABLE and init_extensions:
+    redis_url = os.getenv("REDIS_URL")
+    init_extensions(app, redis_url)
+    logger.info("✅ Production extensions initialized")
+
+# Register modular routes
 if ROUTES_AVAILABLE and register_routes:
     register_routes(app)
 
@@ -120,66 +209,138 @@ if ROUTES_AVAILABLE and register_routes:
 webhook_security = None
 if RATE_LIMIT_AVAILABLE and get_webhook_security:
     webhook_security = get_webhook_security()
-    print("🔒 Webhook security initialized")
+    logger.info("🔒 Webhook security initialized")
 
+# Initialize cache manager
+cache_manager = None
+if ADVANCED_CACHE_AVAILABLE and get_cache_manager:
+    cache_manager = get_cache_manager()
+    logger.info("💾 Advanced cache manager initialized")
+
+# =============================================================================
+# Request Timing Middleware
+# =============================================================================
+
+@app.before_request
+def before_request():
+    """Record request start time."""
+    g.start_time = time.time()
+
+
+@app.after_request
+def after_request(response):
+    """Add performance headers to response."""
+    if hasattr(g, 'start_time'):
+        elapsed_ms = (time.time() - g.start_time) * 1000
+        response.headers['X-Response-Time'] = f"{elapsed_ms:.2f}ms"
+        
+        # Log slow requests
+        if elapsed_ms > 500:
+            logger.warning(f"Slow request: {request.path} took {elapsed_ms:.2f}ms")
+    
+    # Add rate limit headers if available
+    if hasattr(g, 'rate_limit_info'):
+        info = g.rate_limit_info
+        response.headers['X-RateLimit-Limit'] = str(info.get('limit', 60))
+        response.headers['X-RateLimit-Remaining'] = str(info.get('remaining', 60))
+    
+    return response
+
+
+# =============================================================================
+# Business Data Cache
+# =============================================================================
+
+BUSINESS_DATA_CACHE = {}
+DEFAULT_BUSINESS_DATA = {
+    "business_id": "default",
+    "business_name": "Our Business",
+    "industry": "other",
+    "products_services": [],
+    "contact": {"phone": os.getenv('WHATSAPP_PHONE_NUMBER_ID', '')},
+}
+
+
+# =============================================================================
+# API Endpoints
+# =============================================================================
 
 @app.route('/api/health', methods=['GET'])
 def health_check():
-    """Health check endpoint"""
-    return jsonify({
+    """Health check endpoint with system status."""
+    health = {
         'status': 'ok',
-        'message': 'WhatsApp Admin API is running'
-    }), 200
+        'message': 'WhatsApp Admin API is running',
+        'components': {
+            'ai_brain': AI_BRAIN_AVAILABLE,
+            'supabase': SUPABASE_AVAILABLE,
+            'firebase': FIREBASE_AVAILABLE,
+            'cache': ADVANCED_CACHE_AVAILABLE,
+            'resilience': RESILIENCE_AVAILABLE,
+        }
+    }
+    
+    # Add metrics if available
+    if METRICS_AVAILABLE:
+        try:
+            health['metrics'] = get_metrics_summary()
+        except Exception:
+            pass
+    
+    return jsonify(health), 200
+
+
+@app.route('/api/health/detailed', methods=['GET'])
+def detailed_health_check():
+    """Detailed health check with KPI status."""
+    health = {
+        'status': 'healthy',
+        'timestamp': time.time(),
+    }
+    
+    # Check cache
+    if cache_manager:
+        health['cache'] = cache_manager.get_stats()
+    
+    # Check KPIs
+    if METRICS_AVAILABLE:
+        try:
+            health['kpis'] = check_kpis()
+            if health['kpis']['status'] != 'healthy':
+                health['status'] = health['kpis']['status']
+        except Exception as e:
+            health['kpis'] = {'error': str(e)}
+    
+    return jsonify(health), 200
 
 
 @app.route('/api/whatsapp/status', methods=['GET'])
 def check_whatsapp_status():
-    """Check WhatsApp API configuration status"""
+    """Check WhatsApp API configuration status."""
     status = whatsapp_service.check_status()
     return jsonify(status), 200
 
 
 @app.route('/api/whatsapp/send', methods=['POST'])
 def send_message():
-    """
-    Send a WhatsApp message
-    
-    Expected JSON body:
-    {
-        "to": "recipient_phone_number",  // Format: country code + number (e.g., 919876543210)
-        "message": "Your message text"
-    }
-    """
+    """Send a WhatsApp message."""
     try:
-        # Validate request data
         data = request.get_json()
         
         if not data:
-            return jsonify({
-                'success': False,
-                'error': 'No data provided'
-            }), 400
+            return jsonify({'success': False, 'error': 'No data provided'}), 400
         
         to = data.get('to', '').strip()
         message = data.get('message', '').strip()
         
-        # Validate required fields
         if not to:
-            return jsonify({
-                'success': False,
-                'error': 'Recipient phone number is required'
-            }), 400
+            return jsonify({'success': False, 'error': 'Recipient phone number is required'}), 400
         
         if not message:
-            return jsonify({
-                'success': False,
-                'error': 'Message text is required'
-            }), 400
+            return jsonify({'success': False, 'error': 'Message text is required'}), 400
         
-        # Remove + sign if present
         to = to.replace('+', '')
         
-        # Validate phone number format (basic check)
         if not to.isdigit():
             return jsonify({
                 'success': False,
@@ -192,7 +353,21 @@ def send_message():
                 'error': 'Phone number must be between 10 and 15 digits'
             }), 400
         
-        # Send message via WhatsApp service
+        # Split long messages (WhatsApp 1600 char limit)
+        if len(message) > 1500:
+            from tasks.messaging import split_and_send_long_message
+            result = split_and_send_long_message.delay(
+                phone_number_id=os.getenv('WHATSAPP_PHONE_NUMBER_ID'),
+                access_token=os.getenv('WHATSAPP_ACCESS_TOKEN'),
+                to=to,
+                message=message
+            )
+            return jsonify({
+                'success': True,
+                'message': 'Long message queued for sending',
+                'task_id': result.id
+            }), 202
+        
         result = whatsapp_service.send_text_message(to, message)
         
         if result['success']:
@@ -201,34 +376,17 @@ def send_message():
             return jsonify(result), 400
             
     except Exception as e:
-        return jsonify({
-            'success': False,
-            'error': f'Server error: {str(e)}'
-        }), 500
+        logger.error(f"Send message error: {e}")
+        return jsonify({'success': False, 'error': f'Server error: {str(e)}'}), 500
 
 
-# ============================================
-# WhatsApp Webhook (receives incoming messages)
-# ============================================
-
-# Store for business data (in production, fetch from database)
-BUSINESS_DATA_CACHE = {}
-
-# Default business data if none provided
-DEFAULT_BUSINESS_DATA = {
-    "business_id": "default",
-    "business_name": "Our Business",
-    "industry": "other",
-    "products_services": [],
-    "contact": {"phone": os.getenv('WHATSAPP_PHONE_NUMBER_ID', '')},
-}
+# =============================================================================
+# WhatsApp Webhook
+# =============================================================================
 
 @app.route('/api/whatsapp/webhook', methods=['GET'])
 def verify_webhook():
-    """
-    Verify webhook for WhatsApp Cloud API.
-    Facebook sends a GET request to verify the webhook URL.
-    """
+    """Verify webhook for WhatsApp Cloud API."""
     mode = request.args.get('hub.mode')
     token = request.args.get('hub.verify_token')
     challenge = request.args.get('hub.challenge')
@@ -236,23 +394,21 @@ def verify_webhook():
     verify_token = os.getenv('WHATSAPP_VERIFY_TOKEN', 'reviseit_webhook_token')
     
     if mode == 'subscribe' and token == verify_token:
-        print(f"✅ Webhook verified successfully!")
+        logger.info("✅ Webhook verified successfully!")
         return challenge, 200
     else:
-        print(f"❌ Webhook verification failed. Token: {token}")
+        logger.warning(f"❌ Webhook verification failed. Token: {token}")
         return 'Forbidden', 403
 
 
 @app.route('/api/whatsapp/webhook', methods=['POST'])
 def webhook():
-    """
-    Receive incoming WhatsApp messages and respond with AI.
-    """
+    """Receive incoming WhatsApp messages and respond with AI."""
+    start_time = time.time()
+    
     try:
         data = request.get_json()
-        
-        # Log incoming webhook
-        print(f"📨 Webhook received: {data}")
+        logger.info(f"📨 Webhook received")
         
         # Extract message data
         entry = data.get('entry', [{}])[0]
@@ -261,14 +417,11 @@ def webhook():
         messages = value.get('messages', [])
         statuses = value.get('statuses', [])
         
-        # Extract phone_number_id from webhook metadata (identifies which customer this is for)
         metadata = value.get('metadata', {})
         phone_number_id = metadata.get('phone_number_id')
         display_phone = metadata.get('display_phone_number', 'Unknown')
         
-        print(f"📞 Webhook for phone: {display_phone} (ID: {phone_number_id})")
-        
-        # Handle status updates (sent, delivered, read)
+        # Handle status updates
         if statuses and SUPABASE_AVAILABLE and update_message_status:
             for status_update in statuses:
                 status_msg_id = status_update.get('id')
@@ -276,7 +429,6 @@ def webhook():
                 timestamp = status_update.get('timestamp')
                 
                 if status_msg_id and status:
-                    # Convert timestamp to ISO format
                     from datetime import datetime
                     iso_timestamp = None
                     if timestamp:
@@ -284,11 +436,9 @@ def webhook():
                             iso_timestamp = datetime.fromtimestamp(int(timestamp)).isoformat()
                         except:
                             pass
-                    
                     update_message_status(status_msg_id, status, iso_timestamp)
         
         if not messages:
-            # No messages - was a status update
             return jsonify({'status': 'ok'}), 200
         
         message = messages[0]
@@ -296,13 +446,9 @@ def webhook():
         message_type = message.get('type')
         msg_id = message.get('id')
         
-        # Get contact name from contacts array
         contacts = value.get('contacts', [])
-        contact_name = None
-        if contacts:
-            contact_name = contacts[0].get('profile', {}).get('name')
+        contact_name = contacts[0].get('profile', {}).get('name') if contacts else None
         
-        # Extract message content based on type
         message_text = ''
         media_id = None
         if message_type == 'text':
@@ -312,9 +458,9 @@ def webhook():
             media_id = media_data.get('id')
             message_text = media_data.get('caption', '')
         
-        print(f"💬 Message from {from_number}: {message_text or f'[{message_type}]'}")
+        logger.info(f"💬 Message from {from_number}: {message_text or f'[{message_type}]'}")
         
-        # 1. Fetch credentials (needed for read receipts, typing, and sending)
+        # Fetch credentials
         credentials = None
         business_data = None
         user_id = None
@@ -324,47 +470,35 @@ def webhook():
             if credentials:
                 user_id = credentials.get('user_id')
                 
-                # Get business-specific data for AI context
-                # Priority: 1. Firestore (AI Settings), 2. Cache, 3. Default
                 try:
-                    # Convert Supabase UUID to Firebase UID for Firestore lookup
                     firebase_uid = None
                     if get_firebase_uid_from_user_id:
                         firebase_uid = get_firebase_uid_from_user_id(user_id)
                     
-                    # Try Firestore first (has complete business profile from AI Settings)
                     if firebase_uid and FIREBASE_AVAILABLE and get_business_data_from_firestore:
                         business_data = get_business_data_from_firestore(firebase_uid)
                     
-                    # Use cache or default if Firestore doesn't have data
-                    # NOTE: We intentionally skip Supabase fallback as it returns
-                    # Facebook Business Manager metadata, not AI Settings data
                     if not business_data:
-                        print(f"⚠️ No AI Settings found in Firestore for Firebase UID: {firebase_uid}")
+                        logger.warning(f"⚠️ No AI Settings found for Firebase UID: {firebase_uid}")
                         business_data = BUSINESS_DATA_CACHE.get('current', DEFAULT_BUSINESS_DATA)
                     
-                    # Ensure business_name is set
                     if 'business_name' not in business_data or not business_data['business_name']:
                         business_data['business_name'] = credentials.get('business_name', 'Our Business')
                         
                 except Exception as e:
-                    print(f"⚠️ Error fetching business data: {e}")
+                    logger.error(f"⚠️ Error fetching business data: {e}")
                     business_data = BUSINESS_DATA_CACHE.get('current', DEFAULT_BUSINESS_DATA)
         
         if not business_data:
-             business_data = BUSINESS_DATA_CACHE.get('current', DEFAULT_BUSINESS_DATA)
+            business_data = BUSINESS_DATA_CACHE.get('current', DEFAULT_BUSINESS_DATA)
 
-        # IMPORTANT: Override business_id with Supabase ID for consistent token tracking
-        # The LLM usage tracker and analytics both use connected_business_managers.id,
-        # not the Firebase UID from Firestore. This ensures tokens are tracked correctly.
+        # Override business_id for consistent tracking
         if SUPABASE_AVAILABLE and user_id:
             supabase_business_id = get_business_id_for_user(user_id)
             if supabase_business_id:
                 business_data['business_id'] = supabase_business_id
-                print(f"🔑 Using Supabase business_id for tracking: {supabase_business_id[:8]}...")
 
-
-        # 2. Store the incoming message in the database
+        # Store incoming message
         if SUPABASE_AVAILABLE and store_message and user_id:
             store_message(
                 user_id=user_id,
@@ -382,10 +516,9 @@ def webhook():
                 conversation_origin='user_initiated'
             )
 
-        # 2.5 Send push notification for incoming message
+        # Send push notification
         if FIREBASE_AVAILABLE and send_push_to_user and user_id:
             try:
-                # Get the actual conversation UUID from database
                 conversation_id = None
                 if get_or_create_conversation and get_business_id_for_user:
                     business_id = get_business_id_for_user(user_id)
@@ -405,59 +538,97 @@ def webhook():
                     'senderName': contact_name or from_number
                 }
                 send_push_to_user(user_id, push_title, push_body, push_data)
-                print(f"📬 Push notification triggered for conversation: {conversation_id or from_number}")
             except Exception as push_err:
-                print(f"⚠️ Failed to trigger push notification: {push_err}")
+                logger.warning(f"⚠️ Failed to trigger push notification: {push_err}")
 
-        # 3. Mark as Read & Send Typing Indicator
-        # We need the specific access_token and phone_number_id for this business
+        # Mark as read with typing indicator
         wa_id = credentials.get('phone_number_id') if credentials else None
         token = credentials.get('access_token') if credentials else None
         
-        # Mark as read and show typing indicator
-        # Per Meta's Oct 2025 API, this combines read receipt + typing in one call
         if msg_id:
             whatsapp_service.mark_message_as_read(wa_id, token, msg_id, show_typing=True)
         
         # Generate AI response
         if message_type == 'text':
             if AI_BRAIN_AVAILABLE and ai_brain:
-                # Generate AI reply
                 try:
                     result = ai_brain.generate_reply(
                         business_data=business_data,
                         user_message=message_text,
-                        history=[]  # Could store conversation history per user
+                        user_id=from_number,
+                        history=None,
+                        business_id=business_data.get('business_id')
                     )
                     
                     reply_text = result.get('reply', "I'll connect you with our team shortly.")
                     intent = result.get('intent', 'unknown')
                     needs_human = result.get('needs_human', False)
                     
-                    print(f"🤖 AI Response (intent: {intent}, needs_human: {needs_human}): {reply_text}")
+                    # Track metrics
+                    if METRICS_AVAILABLE:
+                        elapsed_ms = (time.time() - start_time) * 1000
+                        from monitoring import track_ai_response
+                        track_ai_response(
+                            latency_ms=elapsed_ms,
+                            intent=intent,
+                            cached=result.get('metadata', {}).get('from_cache', False)
+                        )
                     
-                    # Log metadata for debugging
-                    metadata = result.get('metadata', {})
-                    if 'error' in metadata:
-                        print(f"⚠️ AI Error in metadata: {metadata['error']}")
-                    if metadata.get('generation_method') == 'error':
-                        print(f"⚠️ Error generation method detected")
+                    logger.info(f"🤖 AI Response (intent: {intent}): {reply_text[:50]}...")
                         
                 except Exception as e:
-                    print(f"❌ Exception in AI generation: {str(e)}")
-                    import traceback
-                    traceback.print_exc()
-                    reply_text = "Thank you for your message! Our team will respond shortly."
+                    logger.error(f"❌ Exception in AI generation: {str(e)}")
+                    
+                    # Use fallback handler if available
+                    if RESILIENCE_AVAILABLE and get_fallback_handler:
+                        fallback = get_fallback_handler()
+                        fallback_response = fallback.get_fallback(
+                            error_type="ai_unavailable",
+                            business_data=business_data
+                        )
+                        reply_text = fallback_response.reply
+                    else:
+                        reply_text = "Thank you for your message! Our team will respond shortly."
             else:
-                # Fallback if AI not available
                 reply_text = "Thank you for your message! Our team will respond shortly."
         else:
-            # For non-text messages
             reply_text = f"Thank you for sending a {message_type}! Our team will review it shortly."
         
-        # 5. Send the reply using dynamic credentials (multi-tenant) or fallback to .env
+        # Split long replies (WhatsApp 1600 char limit)
+        if len(reply_text) > 1500:
+            # Split at sentence boundaries
+            import re
+            sentences = re.split(r'(?<=[.!?\n])\s+', reply_text)
+            parts = []
+            current_part = ""
+            
+            for sentence in sentences:
+                if len(current_part) + len(sentence) + 1 <= 1500:
+                    current_part += (" " if current_part else "") + sentence
+                else:
+                    if current_part:
+                        parts.append(current_part)
+                    current_part = sentence
+            
+            if current_part:
+                parts.append(current_part)
+            
+            # Send parts
+            for i, part in enumerate(parts):
+                if credentials and credentials.get('access_token'):
+                    whatsapp_service.send_message_with_credentials(
+                        phone_number_id=credentials['phone_number_id'],
+                        access_token=credentials['access_token'],
+                        to=from_number,
+                        message=f"({i+1}/{len(parts)}) {part}" if len(parts) > 1 else part
+                    )
+                time.sleep(0.5)
+            
+            return jsonify({'status': 'ok'}), 200
+        
+        # Send reply
         if credentials and credentials.get('access_token'):
-            print(f"🏢 Using credentials for: {credentials.get('business_name')}")
+            logger.info(f"🏢 Using credentials for: {credentials.get('business_name')}")
             send_result = whatsapp_service.send_message_with_credentials(
                 phone_number_id=credentials['phone_number_id'],
                 access_token=credentials['access_token'],
@@ -465,17 +636,13 @@ def webhook():
                 message=reply_text
             )
         else:
-            # Fallback to .env credentials
-            print(f"⚠️ Using fallback .env credentials")
+            logger.warning("⚠️ Using fallback .env credentials")
             send_result = whatsapp_service.send_text_message(from_number, reply_text)
         
         if send_result['success']:
             reply_message_id = send_result.get('message_id', 'N/A')
-            print(f"✅ Reply sent successfully to {from_number}")
-            print(f"   📋 Message ID: {reply_message_id}")
-            print(f"   📦 Full Response: {send_result.get('data', {})}")
+            logger.info(f"✅ Reply sent successfully to {from_number}")
             
-            # 6. Store the outgoing message in the database
             if SUPABASE_AVAILABLE and store_message and user_id and reply_message_id != 'N/A':
                 store_message(
                     user_id=user_id,
@@ -489,90 +656,76 @@ def webhook():
                     status='sent',
                     wamid=reply_message_id,
                     conversation_origin='business_initiated',
-                    is_ai_generated=True  # Mark as AI-generated
+                    is_ai_generated=True
                 )
         else:
-            print(f"❌ Failed to send reply: {send_result.get('error')}")
-            print(f"   📦 Full Response: {send_result.get('data', {})}")
+            logger.error(f"❌ Failed to send reply: {send_result.get('error')}")
         
         return jsonify({'status': 'ok'}), 200
         
     except Exception as e:
-        print(f"❌ Webhook error: {str(e)}")
+        logger.error(f"❌ Webhook error: {str(e)}")
         return jsonify({'status': 'error', 'message': str(e)}), 500
 
 
 @app.route('/api/whatsapp/set-business-data', methods=['POST'])
 def set_business_data():
-    """
-    Set business data for the AI to use in responses.
-    Called by frontend when business profile is saved.
-    """
+    """Set business data for AI responses."""
     try:
         data = request.get_json()
         BUSINESS_DATA_CACHE['current'] = data
-        print(f"📊 Business data updated: {data.get('business_name', 'Unknown')}")
+        
+        # Invalidate cache for this business
+        if cache_manager and data.get('business_id'):
+            cache_manager.invalidate_business(data['business_id'])
+        
+        logger.info(f"📊 Business data updated: {data.get('business_name', 'Unknown')}")
         return jsonify({'success': True}), 200
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
 
 
-# ============================================
+# =============================================================================
 # AI Brain Endpoints
-# ============================================
+# =============================================================================
 
 @app.route('/api/ai/status', methods=['GET'])
 def ai_status():
-    """Check AI Brain availability and configuration"""
-    return jsonify({
+    """Check AI Brain availability and configuration."""
+    status = {
         'available': AI_BRAIN_AVAILABLE,
         'message': 'AI Brain is ready' if AI_BRAIN_AVAILABLE else 'AI Brain not configured'
-    }), 200
+    }
+    
+    if AI_BRAIN_AVAILABLE and ai_brain:
+        status['cache_stats'] = ai_brain.get_cache_stats()
+    
+    return jsonify(status), 200
 
 
 @app.route('/api/ai/generate-reply', methods=['POST'])
 def generate_ai_reply():
-    """
-    Generate AI reply for customer message.
-    
-    POST Body:
-    {
-        "business_data": {
-            "business_id": "biz_123",
-            "business_name": "Style Studio",
-            "industry": "salon",
-            "products_services": [{"name": "Haircut", "price": 300}],
-            ...
-        },
-        "user_message": "What is the price for haircut?",
-        "history": [{"role": "user", "content": "Hi"}]
-    }
-    """
+    """Generate AI reply for customer message."""
     if not AI_BRAIN_AVAILABLE:
         return jsonify({
             'success': False,
-            'error': 'AI Brain not available. Please install dependencies: pip install -r requirements_ai.txt'
+            'error': 'AI Brain not available. Please install dependencies.'
         }), 503
     
     try:
         data = request.get_json()
         
         if not data:
-            return jsonify({
-                'success': False,
-                'error': 'No data provided'
-            }), 400
+            return jsonify({'success': False, 'error': 'No data provided'}), 400
         
         business_data = data.get('business_data')
         user_message = data.get('user_message', '').strip()
         history = data.get('history', [])
         business_id = data.get('business_id')
+        user_id = data.get('user_id')
         
         if not user_message:
-            return jsonify({
-                'success': False,
-                'error': 'user_message is required'
-            }), 400
+            return jsonify({'success': False, 'error': 'user_message is required'}), 400
         
         if not business_data and not business_id:
             return jsonify({
@@ -580,42 +733,26 @@ def generate_ai_reply():
                 'error': 'Either business_data or business_id is required'
             }), 400
         
-        # Generate reply using AI Brain
         result = ai_brain.generate_reply(
             business_data=business_data,
             user_message=user_message,
             history=history,
-            business_id=business_id
+            business_id=business_id,
+            user_id=user_id
         )
         
-        return jsonify({
-            'success': True,
-            **result
-        }), 200
+        return jsonify({'success': True, **result}), 200
         
     except Exception as e:
-        return jsonify({
-            'success': False,
-            'error': f'AI generation error: {str(e)}'
-        }), 500
+        logger.error(f"AI generation error: {e}")
+        return jsonify({'success': False, 'error': f'AI generation error: {str(e)}'}), 500
 
 
 @app.route('/api/ai/detect-intent', methods=['POST'])
 def detect_intent():
-    """
-    Detect intent from a message (useful for analytics).
-    
-    POST Body:
-    {
-        "message": "What is the price?",
-        "history": []
-    }
-    """
+    """Detect intent from a message."""
     if not AI_BRAIN_AVAILABLE:
-        return jsonify({
-            'success': False,
-            'error': 'AI Brain not available'
-        }), 503
+        return jsonify({'success': False, 'error': 'AI Brain not available'}), 503
     
     try:
         data = request.get_json()
@@ -623,45 +760,66 @@ def detect_intent():
         history = data.get('history', [])
         
         if not message:
-            return jsonify({
-                'success': False,
-                'error': 'message is required'
-            }), 400
+            return jsonify({'success': False, 'error': 'message is required'}), 400
         
         result = ai_brain.detect_intent(message, history)
         
-        return jsonify({
-            'success': True,
-            **result
-        }), 200
+        return jsonify({'success': True, **result}), 200
         
     except Exception as e:
-        return jsonify({
-            'success': False,
-            'error': f'Intent detection error: {str(e)}'
-        }), 500
+        return jsonify({'success': False, 'error': f'Intent detection error: {str(e)}'}), 500
 
+
+# =============================================================================
+# Metrics Endpoint
+# =============================================================================
+
+@app.route('/api/metrics', methods=['GET'])
+def get_metrics():
+    """Get system metrics (for monitoring dashboards)."""
+    metrics = {}
+    
+    if METRICS_AVAILABLE:
+        metrics['performance'] = get_metrics_summary()
+        metrics['kpis'] = check_kpis()
+    
+    if cache_manager:
+        metrics['cache'] = cache_manager.get_stats()
+    
+    if AI_BRAIN_AVAILABLE and ai_brain:
+        metrics['ai_cache'] = ai_brain.get_cache_stats()
+    
+    return jsonify(metrics), 200
+
+
+# =============================================================================
+# Error Handlers
+# =============================================================================
 
 @app.errorhandler(404)
 def not_found(error):
-    """Handle 404 errors"""
-    return jsonify({
-        'success': False,
-        'error': 'Endpoint not found'
-    }), 404
+    return jsonify({'success': False, 'error': 'Endpoint not found'}), 404
 
 
 @app.errorhandler(500)
 def internal_error(error):
-    """Handle 500 errors"""
+    logger.error(f"Internal server error: {error}")
+    return jsonify({'success': False, 'error': 'Internal server error'}), 500
+
+
+@app.errorhandler(429)
+def rate_limited(error):
     return jsonify({
         'success': False,
-        'error': 'Internal server error'
-    }), 500
+        'error': 'Rate limit exceeded. Please try again later.'
+    }), 429
 
+
+# =============================================================================
+# Application Entry Point
+# =============================================================================
 
 if __name__ == '__main__':
-    # PORT is set by Render, FLASK_PORT is for local development
     port = int(os.getenv('PORT', os.getenv('FLASK_PORT', 5000)))
     debug = os.getenv('FLASK_ENV') == 'development'
     
@@ -669,7 +827,9 @@ if __name__ == '__main__':
     print(f'📡 Running on: http://localhost:{port}')
     print(f'🔧 Environment: {os.getenv("FLASK_ENV", "production")}')
     print(f'🌐 CORS enabled for: {frontend_url}')
-    print(f'🧠 AI Brain: {"Ready ✅" if AI_BRAIN_AVAILABLE else "Not configured ⚠️"}\n')
+    print(f'🧠 AI Brain: {"Ready ✅" if AI_BRAIN_AVAILABLE else "Not configured ⚠️"}')
+    print(f'💾 Cache: {"Redis ✅" if ADVANCED_CACHE_AVAILABLE else "In-memory ⚠️"}')
+    print(f'📊 Metrics: {"Enabled ✅" if METRICS_AVAILABLE else "Disabled ⚠️"}')
+    print(f'🛡️ Resilience: {"Enabled ✅" if RESILIENCE_AVAILABLE else "Disabled ⚠️"}\n')
     
     app.run(host='0.0.0.0', port=port, debug=debug)
-

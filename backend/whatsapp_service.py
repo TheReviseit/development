@@ -194,6 +194,12 @@ class WhatsAppService:
                 'success': False,
                 'error': 'Request timed out. Please try again.'
             }
+        except requests.exceptions.RequestException as e:
+            return {
+                'success': False,
+                'error': f'Network error: {str(e)}'
+            }
+        except Exception as e:
             return {
                 'success': False,
                 'error': f'Unexpected error: {str(e)}'

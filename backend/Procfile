@@ -1,1 +1,37 @@
-web: gunicorn app:app --bind 0.0.0.0:$PORT --workers 2 --threads 4 --timeout 120
+# =============================================================================
+
+# Production Procfile for WhatsApp Chatbot API
+
+# Optimized for high-performance with Gunicorn
+
+# =============================================================================
+
+# Main web process
+
+# - 4 workers (adjust based on CPU cores: 2-4 per core)
+
+# - gthread for threaded async (works on all platforms including Windows)
+
+# - 4 threads per worker for concurrent handling
+
+# - 120s timeout for long-running AI operations
+
+# - max-requests to prevent memory leaks
+
+web: gunicorn app:app --bind 0.0.0.0:$PORT --workers 4 --threads 4 --worker-class gthread --timeout 120 --keep-alive 5 --max-requests 1000 --max-requests-jitter 50 --log-level info --access-logfile - --error-logfile -
+
+# Alternative: Use gevent on Linux/macOS for maximum concurrency (uncomment below, comment above)
+
+# web: gunicorn app:app --bind 0.0.0.0:$PORT --workers 4 --worker-class gevent --timeout 120 --keep-alive 5 --max-requests 1000 --max-requests-jitter 50 --log-level info --access-logfile - --error-logfile -
+
+# Background worker for Celery tasks (optional - scale separately)
+
+# Uncomment when using Celery for background processing
+
+# worker: celery -A celery_app worker --loglevel=info --concurrency=4 -Q high,default,low
+
+# Beat scheduler for periodic tasks (optional)
+
+# Uncomment for scheduled tasks like analytics aggregation
+
+# beat: celery -A celery_app beat --loglevel=info

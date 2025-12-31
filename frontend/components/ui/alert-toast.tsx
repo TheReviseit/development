@@ -6,7 +6,7 @@ import { CheckCircle2, AlertTriangle, Info, XOctagon, X } from "lucide-react";
 
 // Define variants for the alert toast using cva
 const alertToastVariants = cva(
-  "relative w-full max-w-sm overflow-hidden rounded-lg shadow-lg flex items-center p-4 gap-3",
+  "relative w-full max-w-sm overflow-hidden rounded-lg shadow-lg flex items-center pl-5 pr-4 py-4 gap-3",
   {
     variants: {
       variant: {

@@ -9,6 +9,7 @@ from .analytics import analytics_bp
 from .campaigns import campaigns_bp
 from .bulk_campaigns import bulk_campaigns_bp
 from .test_push import register_test_routes
+from .appointments import appointments_bp
 
 __all__ = [
     'templates_bp',
@@ -16,7 +17,8 @@ __all__ = [
     'analytics_bp',
     'campaigns_bp',
     'bulk_campaigns_bp',
-    'register_test_routes'
+    'register_test_routes',
+    'appointments_bp'
 ]
 
 
@@ -27,6 +29,8 @@ def register_routes(app):
     app.register_blueprint(analytics_bp)
     app.register_blueprint(campaigns_bp)
     app.register_blueprint(bulk_campaigns_bp)
+    app.register_blueprint(appointments_bp)
     register_test_routes(app)  # Register test push endpoint
-    print("✅ Registered API routes: templates, contacts, analytics, campaigns, bulk-campaigns, test-push")
+    print("✅ Registered API routes: templates, contacts, analytics, campaigns, bulk-campaigns, appointments, test-push")
+
 
