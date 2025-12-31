@@ -5,7 +5,9 @@ import styles from "./BotSettingsView.module.css";
 import CustomDropdown, { DropdownOption } from "./CustomDropdown";
 import SearchableDropdown from "./SearchableDropdown";
 import { AlertToast } from "@/components/ui/alert-toast";
-import { AnimatePresence } from "framer-motion";
+import alertStyles from "@/components/ui/alert.module.css";
+import { AnimatePresence, motion } from "framer-motion";
+import { CircleCheck, CircleX, AlertTriangle } from "lucide-react";
 
 // Types for business data
 interface ProductService {
@@ -33,6 +35,24 @@ interface FAQ {
   id: string;
   question: string;
   answer: string;
+}
+
+// Appointment configuration types
+interface AppointmentField {
+  id: string;
+  label: string;
+  type: "text" | "phone" | "email" | "date" | "time" | "textarea" | "select";
+  required: boolean;
+  order: number;
+  options?: string[];
+  placeholder?: string;
+}
+
+interface BusinessHours {
+  start: string;
+  end: string;
+  duration: number;
+  buffer?: number;
 }
 
 interface SocialMediaLinks {
@@ -290,6 +310,42 @@ export default function BotSettingsView() {
     description: string;
   } | null>(null);
 
+  // Appointment configuration state
+  const [appointmentFields, setAppointmentFields] = useState<
+    AppointmentField[]
+  >([
+    { id: "name", label: "Full Name", type: "text", required: true, order: 1 },
+    {
+      id: "phone",
+      label: "Phone Number",
+      type: "phone",
+      required: true,
+      order: 2,
+    },
+    {
+      id: "date",
+      label: "Appointment Date",
+      type: "date",
+      required: true,
+      order: 3,
+    },
+    {
+      id: "time",
+      label: "Appointment Time",
+      type: "time",
+      required: true,
+      order: 4,
+    },
+  ]);
+  const [businessHours, setBusinessHours] = useState<BusinessHours>({
+    start: "09:00",
+    end: "18:00",
+    duration: 60,
+    buffer: 0,
+  });
+  const [minimalMode, setMinimalMode] = useState(false);
+  const [configExpanded, setConfigExpanded] = useState(false);
+
   // Initialize chat with welcome message if empty
   useEffect(() => {
     if (activeTab === "preview" && chatMessages.length === 0) {
@@ -344,6 +400,16 @@ export default function BotSettingsView() {
             setAppointmentBookingEnabled(
               result.data.appointment_booking_enabled || false
             );
+            // Load appointment configuration
+            if (result.data.appointment_fields) {
+              setAppointmentFields(result.data.appointment_fields);
+            }
+            if (result.data.appointment_business_hours) {
+              setBusinessHours(result.data.appointment_business_hours);
+            }
+            if (result.data.appointment_minimal_mode !== undefined) {
+              setMinimalMode(result.data.appointment_minimal_mode);
+            }
           }
         }
       } catch (error) {
@@ -379,19 +445,15 @@ export default function BotSettingsView() {
         setAlertToast({
           show: true,
           variant: "success",
-          title: newValue
-            ? "Appointment Booking Enabled"
-            : "Appointment Booking Disabled",
-          description: newValue
-            ? "Check the sidebar for the new Appointments menu."
-            : "The Appointments menu has been removed from the sidebar.",
+          title: newValue ? "Booking Enabled!" : "Booking Disabled!",
+          description: "",
         });
       } else {
         setAlertToast({
           show: true,
           variant: "warning",
           title: newValue ? "Enabled Locally" : "Disabled Locally",
-          description: "Sync may be pending. Changes saved locally.",
+          description: "",
         });
       }
     } catch (error) {
@@ -399,7 +461,113 @@ export default function BotSettingsView() {
         show: true,
         variant: "warning",
         title: newValue ? "Enabled Locally" : "Disabled Locally",
-        description: "Database sync pending. Feature works locally.",
+        description: "",
+      });
+    } finally {
+      setCapabilitiesLoading(false);
+    }
+  };
+
+  // Appointment field management functions
+  const addAppointmentField = () => {
+    const newField: AppointmentField = {
+      id: `custom_${Date.now()}`,
+      label: "",
+      type: "text",
+      required: false,
+      order: appointmentFields.length + 1,
+      placeholder: "",
+    };
+    setAppointmentFields([...appointmentFields, newField]);
+  };
+
+  const updateAppointmentField = (
+    id: string,
+    updates: Partial<AppointmentField>
+  ) => {
+    setAppointmentFields(
+      appointmentFields.map((field) =>
+        field.id === id ? { ...field, ...updates } : field
+      )
+    );
+  };
+
+  const removeAppointmentField = (id: string) => {
+    // Don't allow removing core fields
+    const coreFields = ["name", "phone", "date", "time"];
+    if (coreFields.includes(id)) {
+      setAlertToast({
+        show: true,
+        variant: "warning",
+        title: "Cannot Remove",
+        description: "Core fields cannot be removed",
+      });
+      return;
+    }
+    setAppointmentFields(
+      appointmentFields
+        .filter((field) => field.id !== id)
+        .map((field, index) => ({ ...field, order: index + 1 }))
+    );
+  };
+
+  const moveFieldUp = (id: string) => {
+    const index = appointmentFields.findIndex((f) => f.id === id);
+    if (index <= 0) return;
+    const newFields = [...appointmentFields];
+    [newFields[index - 1], newFields[index]] = [
+      newFields[index],
+      newFields[index - 1],
+    ];
+    setAppointmentFields(newFields.map((f, i) => ({ ...f, order: i + 1 })));
+  };
+
+  const moveFieldDown = (id: string) => {
+    const index = appointmentFields.findIndex((f) => f.id === id);
+    if (index >= appointmentFields.length - 1) return;
+    const newFields = [...appointmentFields];
+    [newFields[index], newFields[index + 1]] = [
+      newFields[index + 1],
+      newFields[index],
+    ];
+    setAppointmentFields(newFields.map((f, i) => ({ ...f, order: i + 1 })));
+  };
+
+  // Save appointment configuration
+  const saveAppointmentConfig = async () => {
+    setCapabilitiesLoading(true);
+    try {
+      const response = await fetch("/api/ai-capabilities", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          appointment_fields: appointmentFields,
+          appointment_business_hours: businessHours,
+          appointment_minimal_mode: minimalMode,
+        }),
+      });
+
+      if (response.ok) {
+        setAlertToast({
+          show: true,
+          variant: "success",
+          title: "Configuration Saved!",
+          description: "",
+        });
+      } else {
+        setAlertToast({
+          show: true,
+          variant: "error",
+          title: "Save Failed",
+          description: "",
+        });
+      }
+    } catch (error) {
+      setAlertToast({
+        show: true,
+        variant: "error",
+        title: "Save Failed",
+        description: "",
       });
     } finally {
       setCapabilitiesLoading(false);
@@ -797,13 +965,44 @@ export default function BotSettingsView() {
       <div style={{ position: "fixed", top: 20, right: 20, zIndex: 9999 }}>
         <AnimatePresence>
           {alertToast?.show && (
-            <AlertToast
-              variant={alertToast.variant}
-              styleVariant="default"
-              title={alertToast.title}
-              description={alertToast.description}
-              onClose={() => setAlertToast(null)}
-            />
+            <motion.div
+              initial={{ opacity: 0, y: -20, scale: 0.95 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: -10, scale: 0.95 }}
+              transition={{ duration: 0.2 }}
+              className={`${alertStyles.alertNotification} ${
+                alertToast.variant === "success"
+                  ? alertStyles.alertSuccess
+                  : alertToast.variant === "warning"
+                  ? alertStyles.alertWarning
+                  : alertStyles.alertError
+              }`}
+            >
+              <div className={alertStyles.alertRow}>
+                <span className={alertStyles.alertIcon}>
+                  {alertToast.variant === "success" ? (
+                    <CircleCheck
+                      className={alertStyles.iconSuccess}
+                      size={20}
+                      strokeWidth={2}
+                    />
+                  ) : alertToast.variant === "warning" ? (
+                    <AlertTriangle
+                      className={alertStyles.iconWarning}
+                      size={20}
+                      strokeWidth={2}
+                    />
+                  ) : (
+                    <CircleX
+                      className={alertStyles.iconError}
+                      size={20}
+                      strokeWidth={2}
+                    />
+                  )}
+                </span>
+                <p className={alertStyles.alertText}>{alertToast.title}</p>
+              </div>
+            </motion.div>
           )}
         </AnimatePresence>
       </div>
@@ -1703,6 +1902,7 @@ export default function BotSettingsView() {
               Enable or disable AI-powered features for your business.
             </p>
 
+            {/* Appointment Booking Toggle */}
             <div
               className={`${styles.capabilitiesSection} ${
                 capabilityExpanded ? styles.capabilitiesExpanded : ""
@@ -1755,6 +1955,195 @@ export default function BotSettingsView() {
                 </p>
               </div>
             </div>
+
+            {/* Appointment Configuration - Only show when enabled */}
+            {appointmentBookingEnabled && (
+              <div className={styles.appointmentConfig}>
+                {/* Business Hours Configuration */}
+                <div
+                  className={styles.configCard}
+                  style={{ marginTop: "1.5rem" }}
+                >
+                  <h3 className={styles.configCardTitle}>Business Hours</h3>
+                  <p className={styles.configCardDescription}>
+                    Set your available hours for appointments
+                  </p>
+                  <div className={styles.businessHoursGrid}>
+                    <div className={styles.formGroup}>
+                      <label>Opens At</label>
+                      <input
+                        type="time"
+                        value={businessHours.start}
+                        onChange={(e) =>
+                          setBusinessHours({
+                            ...businessHours,
+                            start: e.target.value,
+                          })
+                        }
+                      />
+                    </div>
+                    <div className={styles.formGroup}>
+                      <label>Closes At</label>
+                      <input
+                        type="time"
+                        value={businessHours.end}
+                        onChange={(e) =>
+                          setBusinessHours({
+                            ...businessHours,
+                            end: e.target.value,
+                          })
+                        }
+                      />
+                    </div>
+                    <div className={styles.formGroup}>
+                      <label>Slot Duration</label>
+                      <select
+                        value={businessHours.duration}
+                        onChange={(e) =>
+                          setBusinessHours({
+                            ...businessHours,
+                            duration: parseInt(e.target.value),
+                          })
+                        }
+                      >
+                        <option value={15}>15 minutes</option>
+                        <option value={30}>30 minutes</option>
+                        <option value={45}>45 minutes</option>
+                        <option value={60}>1 hour</option>
+                        <option value={90}>1.5 hours</option>
+                        <option value={120}>2 hours</option>
+                      </select>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Field Builder - Appointment Questions */}
+                <div
+                  className={styles.configCard}
+                  style={{ marginTop: "1rem" }}
+                >
+                  <div className={styles.configCardHeader}>
+                    <div>
+                      <h3 className={styles.configCardTitle}>
+                        Appointment Questions
+                      </h3>
+                      <p className={styles.configCardDescription}>
+                        Configure what information the AI will collect from
+                        customers
+                      </p>
+                    </div>
+                    <button
+                      className={styles.addButton}
+                      onClick={addAppointmentField}
+                    >
+                      + Add Question
+                    </button>
+                  </div>
+
+                  <div className={styles.fieldBuilderList}>
+                    {appointmentFields
+                      .sort((a, b) => a.order - b.order)
+                      .map((field, index) => {
+                        return (
+                          <div
+                            key={field.id}
+                            className={styles.fieldBuilderItem}
+                          >
+                            <div className={styles.fieldBuilderOrder}>
+                              <button
+                                className={styles.orderBtn}
+                                onClick={() => moveFieldUp(field.id)}
+                                disabled={index === 0}
+                                title="Move up"
+                              >
+                                ↑
+                              </button>
+                              <span className={styles.orderNumber}>
+                                {field.order}
+                              </span>
+                              <button
+                                className={styles.orderBtn}
+                                onClick={() => moveFieldDown(field.id)}
+                                disabled={
+                                  index === appointmentFields.length - 1
+                                }
+                                title="Move down"
+                              >
+                                ↓
+                              </button>
+                            </div>
+
+                            <div className={styles.fieldBuilderContent}>
+                              <div className={styles.fieldBuilderRow}>
+                                <input
+                                  type="text"
+                                  placeholder="Question/Field Label"
+                                  value={field.label}
+                                  onChange={(e) =>
+                                    updateAppointmentField(field.id, {
+                                      label: e.target.value,
+                                    })
+                                  }
+                                  className={styles.fieldLabelInput}
+                                />
+                                <select
+                                  value={field.type}
+                                  onChange={(e) =>
+                                    updateAppointmentField(field.id, {
+                                      type: e.target
+                                        .value as AppointmentField["type"],
+                                    })
+                                  }
+                                  className={styles.fieldTypeSelect}
+                                >
+                                  <option value="text">Text</option>
+                                  <option value="phone">Phone</option>
+                                  <option value="email">Email</option>
+                                  <option value="date">Date</option>
+                                  <option value="time">Time</option>
+                                  <option value="textarea">Long Text</option>
+                                  <option value="select">Dropdown</option>
+                                </select>
+                                <label className={styles.requiredToggle}>
+                                  <input
+                                    type="checkbox"
+                                    checked={field.required}
+                                    onChange={(e) =>
+                                      updateAppointmentField(field.id, {
+                                        required: e.target.checked,
+                                      })
+                                    }
+                                  />
+                                  <span>Required</span>
+                                </label>
+                              </div>
+                            </div>
+
+                            <button
+                              className={styles.removeFieldBtn}
+                              onClick={() => removeAppointmentField(field.id)}
+                              title="Remove field"
+                            >
+                              ✕
+                            </button>
+                          </div>
+                        );
+                      })}
+                  </div>
+                </div>
+
+                {/* Save Configuration Button */}
+                <div style={{ marginTop: "1.5rem", textAlign: "right" }}>
+                  <button
+                    className={styles.primaryButton}
+                    onClick={saveAppointmentConfig}
+                    disabled={capabilitiesLoading}
+                  >
+                    {capabilitiesLoading ? "Saving..." : "Save Configuration"}
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         )}
 

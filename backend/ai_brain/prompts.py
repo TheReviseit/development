@@ -312,45 +312,50 @@ def build_full_prompt(
     intent: str,
     user_message: str,
     conversation_history: list = None,
-    language: str = "en"
+    language: str = "en",
+    conversation_state_summary: str = ""  # New parameter
 ) -> str:
     """Build the complete prompt for response generation."""
     
-    business_name = business_data.get("business_name", "Our Business")
-    industry = business_data.get("industry", "other")
+    # 1. Get base system prompt with industry tone
+    system_prompt = get_response_generator_prompt(
+        business_name=business_data.get('business_name', 'our business'),
+        industry=business_data.get('industry', 'other'),
+        language=language
+    )
     
-    # Get base system prompt
-    system_prompt = get_response_generator_prompt(business_name, industry, language)
+    # 2. Format business data
+    biz_context = format_business_data_for_prompt(business_data)
     
-    # Add hallucination prevention
-    system_prompt += "\n\n" + HALLUCINATION_PREVENTION_PROMPT
-    
-    # Format business data
-    business_context = format_business_data_for_prompt(business_data)
-    
-    # Format conversation history
+    # 3. Format history (if provided as list of dicts)
     history_text = ""
     if conversation_history:
-        recent = conversation_history[-5:]  # Last 5 messages
-        history_lines = []
-        for msg in recent:
-            role = msg.get("role", "user").upper()
-            content = msg.get("content", "")
-            history_lines.append(f"{role}: {content}")
-        history_text = "\n\nCONVERSATION HISTORY:\n" + "\n".join(history_lines)
+        messages = []
+        for msg in conversation_history[-5:]:  # Last 5 messages
+            role = msg.get('role', 'user').upper()
+            content = msg.get('content', '')
+            messages.append(f"{role}: {content}")
+        history_text = "\n".join(messages)
     
-    # Build user prompt
-    user_prompt = f"""BUSINESS DATA:
-{business_context}
+    # 4. Combine everything
+    full_prompt = f"""{system_prompt}
+
+BUSINESS KNOWLEDGE BASE:
+{biz_context}
+
+{HALLUCINATION_PREVENTION_PROMPT}
+
+CONVERSATION HISTORY:
 {history_text}
 
-DETECTED INTENT: {intent}
+{conversation_state_summary}  # Inject state summary here
 
-CUSTOMER MESSAGE: {user_message}
+User's Last Message: "{user_message}"
+detected_intent: {intent}
 
-Generate a helpful, accurate response following all the rules above. Remember - ONLY use information from the BUSINESS DATA provided."""
+Your Reply:"""
     
-    return system_prompt, user_prompt
+    return full_prompt
 
 
 def format_business_data_for_prompt(data: Dict[str, Any], max_chars: int = 2500) -> str:

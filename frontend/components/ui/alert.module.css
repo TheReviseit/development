@@ -1,0 +1,79 @@
+.alertNotification {
+  position: relative;
+  z-index: 100;
+  min-width: 280px;
+  max-width: 400px;
+  background-color: #ffffff;
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.15);
+  padding: 16px 20px;
+  border-radius: 12px;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+}
+
+.alertRow {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.alertContent {
+  flex-grow: 1;
+  display: flex;
+  align-items: center;
+}
+
+.alertIcon {
+  margin-right: 12px;
+  display: inline-flex;
+  flex-shrink: 0;
+}
+
+.alertAction {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.alertText {
+  font-size: 14px;
+  font-weight: 500;
+  color: #1a1a1a;
+  margin: 0;
+}
+
+/* Success variant */
+.alertSuccess {
+  border-color: rgba(16, 185, 129, 0.3);
+}
+
+/* Warning variant */
+.alertWarning {
+  border-color: rgba(245, 158, 11, 0.3);
+}
+
+/* Error variant */
+.alertError {
+  border-color: rgba(239, 68, 68, 0.3);
+}
+
+/* Info variant */
+.alertInfo {
+  border-color: rgba(59, 130, 246, 0.3);
+}
+
+/* Icon colors */
+.iconSuccess {
+  color: #10b981;
+}
+
+.iconWarning {
+  color: #f59e0b;
+}
+
+.iconError {
+  color: #ef4444;
+}
+
+.iconInfo {
+  color: #3b82f6;
+}

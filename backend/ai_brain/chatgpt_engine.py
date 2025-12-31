@@ -205,7 +205,8 @@ class ChatGPTEngine:
         intent_result: IntentResult,
         business_data: Dict[str, Any],
         conversation_history: List[Dict[str, str]] = None,
-        use_tools: bool = True
+        use_tools: bool = True,
+        conversation_state_summary: str = ""
     ) -> GenerationResult:
         """
         Generate a response to the user message.
@@ -216,6 +217,7 @@ class ChatGPTEngine:
             business_data: Business profile data
             conversation_history: Previous conversation
             use_tools: Whether to enable function calling
+            conversation_state_summary: Summary of active conversation state
             
         Returns:
             GenerationResult with reply and metadata
@@ -239,18 +241,18 @@ class ChatGPTEngine:
                 }
             )
         
-        # Build system and user prompts
-        system_prompt, user_prompt = build_full_prompt(
+        # Build prompt (now returns single string)
+        full_prompt = build_full_prompt(
             business_data=business_data,
             intent=intent_result.intent.value,
             user_message=message,
             conversation_history=conversation_history,
-            language=intent_result.language
+            language=intent_result.language,
+            conversation_state_summary=conversation_state_summary
         )
         
         messages = [
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": user_prompt}
+            {"role": "user", "content": full_prompt}
         ]
         
         # Prepare tools if enabled
@@ -493,7 +495,8 @@ class ChatGPTEngine:
         message: str,
         business_data: Dict[str, Any],
         conversation_history: List[Dict[str, str]] = None,
-        user_id: str = None
+        user_id: str = None,
+        conversation_state_summary: str = ""
     ) -> GenerationResult:
         """
         Complete message processing flow:
@@ -522,7 +525,8 @@ class ChatGPTEngine:
             intent_result=intent_result,
             business_data=business_data,
             conversation_history=conversation_history,
-            use_tools=self.config.enable_function_calling
+            use_tools=self.config.enable_function_calling,
+            conversation_state_summary=conversation_state_summary
         )
         
         # Get generation tokens from metadata

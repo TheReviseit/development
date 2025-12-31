@@ -19,7 +19,12 @@ from .config import AIBrainConfig, default_config, validate_config
 
 # v2.0 Components
 from .chatgpt_engine import ChatGPTEngine, IntentResult, GenerationResult
-from .conversation_manager import ConversationManager, get_conversation_manager
+from .conversation_manager import (
+    ConversationManager, 
+    get_conversation_manager,
+    ConversationState,
+    FlowStatus
+)
 from .response_cache import ResponseCache, get_response_cache
 from .whatsapp_formatter import WhatsAppFormatter, format_for_whatsapp
 from .language_detector import LanguageDetector, detect_language, Language

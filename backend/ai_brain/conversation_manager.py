@@ -1,18 +1,127 @@
 """
 Conversation Manager for AI Brain.
 Handles session state, message history, and context management.
+Now includes structured conversation state for deterministic flow handling.
 """
 
 import time
 from typing import Dict, List, Any, Optional
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, asdict
 from collections import defaultdict
 from threading import Lock
+from enum import Enum
+
+
+class FlowStatus(str, Enum):
+    """Status of a conversation flow."""
+    IDLE = "idle"
+    IN_PROGRESS = "in_progress"
+    AWAITING_CONFIRMATION = "awaiting_confirmation"
+    COMPLETE = "complete"
+    CANCELLED = "cancelled"
+
+
+@dataclass
+class ConversationState:
+    """
+    Structured state for deterministic conversation flows.
+    
+    This is the core fix for context loss - instead of relying on LLM memory,
+    we maintain an explicit state object that tracks exactly what has been
+    collected and what is still needed.
+    """
+    # Current active flow (e.g., "appointment_booking", "lead_capture", None)
+    active_flow: Optional[str] = None
+    
+    # Flow status
+    flow_status: FlowStatus = FlowStatus.IDLE
+    
+    # Fields already collected (e.g., {"name": "John", "phone": "9876543210"})
+    collected_fields: Dict[str, Any] = field(default_factory=dict)
+    
+    # Fields still needed (e.g., ["date", "time"])
+    missing_fields: List[str] = field(default_factory=list)
+    
+    # Current field being asked
+    current_field: Optional[str] = None
+    
+    # Last question asked (to avoid repeating)
+    last_question: Optional[str] = None
+    
+    # Flow-specific configuration (e.g., appointment settings)
+    flow_config: Dict[str, Any] = field(default_factory=dict)
+    
+    # Timestamp when flow was started
+    flow_started_at: Optional[float] = None
+    
+    def start_flow(self, flow_name: str, required_fields: List[str], config: Dict = None):
+        """Start a new conversation flow."""
+        self.active_flow = flow_name
+        self.flow_status = FlowStatus.IN_PROGRESS
+        self.collected_fields = {}
+        self.missing_fields = required_fields.copy()
+        self.current_field = required_fields[0] if required_fields else None
+        self.flow_config = config or {}
+        self.flow_started_at = time.time()
+    
+    def collect_field(self, field_name: str, value: Any) -> Optional[str]:
+        """
+        Collect a field value and return the next field to ask.
+        Returns None if all fields are collected.
+        """
+        self.collected_fields[field_name] = value
+        if field_name in self.missing_fields:
+            self.missing_fields.remove(field_name)
+        
+        if self.missing_fields:
+            self.current_field = self.missing_fields[0]
+            return self.current_field
+        else:
+            self.current_field = None
+            self.flow_status = FlowStatus.AWAITING_CONFIRMATION
+            return None
+    
+    def cancel_flow(self):
+        """Cancel the current flow."""
+        self.active_flow = None
+        self.flow_status = FlowStatus.CANCELLED
+        self.collected_fields = {}
+        self.missing_fields = []
+        self.current_field = None
+        self.flow_config = {}
+    
+    def complete_flow(self):
+        """Mark flow as complete."""
+        self.flow_status = FlowStatus.COMPLETE
+        # Keep collected_fields for reference, clear flow state
+        self.active_flow = None
+        self.missing_fields = []
+        self.current_field = None
+    
+    def is_active(self) -> bool:
+        """Check if a flow is currently active."""
+        return self.active_flow is not None and self.flow_status == FlowStatus.IN_PROGRESS
+    
+    def has_field(self, field_name: str) -> bool:
+        """Check if a field has already been collected."""
+        return field_name in self.collected_fields and self.collected_fields[field_name]
+    
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert to dictionary for serialization."""
+        return {
+            "active_flow": self.active_flow,
+            "flow_status": self.flow_status.value if self.flow_status else None,
+            "collected_fields": self.collected_fields.copy(),
+            "missing_fields": self.missing_fields.copy(),
+            "current_field": self.current_field
+        }
+
+
 
 
 @dataclass
 class ConversationSession:
-    """A single user's conversation session."""
+    """A single user's conversation session with structured state tracking."""
     user_id: str
     messages: List[Dict[str, str]] = field(default_factory=list)
     created_at: float = field(default_factory=time.time)
@@ -24,6 +133,9 @@ class ConversationSession:
     
     # Last detected intent for continuity
     last_intent: Optional[str] = None
+    
+    # ADDED: Structured conversation state for flows like appointment booking
+    conversation_state: ConversationState = field(default_factory=ConversationState)
     
     def add_message(self, role: str, content: str):
         """Add a message to the session."""
@@ -237,6 +349,156 @@ class ConversationManager:
             parts.append(f"\nLast topic discussed: {session.last_intent}")
         
         return "\n".join(parts) if parts else ""
+    
+    # =========================================================================
+    # CONVERSATION STATE MANAGEMENT (for flows like appointment booking)
+    # =========================================================================
+    
+    def get_state(self, user_id: str) -> Optional[ConversationState]:
+        """Get the structured conversation state for a user."""
+        session = self.get_session(user_id)
+        if session:
+            return session.conversation_state
+        return None
+    
+    def start_flow(
+        self,
+        user_id: str,
+        flow_name: str,
+        required_fields: List[str],
+        config: Dict = None
+    ) -> ConversationState:
+        """
+        Start a structured conversation flow for a user.
+        
+        Args:
+            user_id: User identifier
+            flow_name: Name of the flow (e.g., "appointment_booking")
+            required_fields: List of field names to collect
+            config: Flow-specific configuration
+            
+        Returns:
+            The conversation state object
+        """
+        session = self.get_or_create_session(user_id)
+        session.conversation_state.start_flow(flow_name, required_fields, config)
+        return session.conversation_state
+    
+    def update_flow_field(
+        self,
+        user_id: str,
+        field_name: str,
+        value: Any
+    ) -> Optional[str]:
+        """
+        Collect a field value in the current flow.
+        
+        Args:
+            user_id: User identifier
+            field_name: Name of the field being collected
+            value: Validated value for the field
+            
+        Returns:
+            Next field to ask for, or None if all fields collected
+        """
+        session = self.get_session(user_id)
+        if session and session.conversation_state.is_active():
+            return session.conversation_state.collect_field(field_name, value)
+        return None
+    
+    def cancel_flow(self, user_id: str) -> bool:
+        """
+        Cancel the current conversation flow.
+        
+        Returns:
+            True if there was an active flow that was cancelled
+        """
+        session = self.get_session(user_id)
+        if session and session.conversation_state.is_active():
+            session.conversation_state.cancel_flow()
+            return True
+        return False
+    
+    def complete_flow(self, user_id: str) -> Dict[str, Any]:
+        """
+        Complete the current flow and return collected data.
+        
+        Returns:
+            Dictionary of collected fields
+        """
+        session = self.get_session(user_id)
+        if session:
+            collected = session.conversation_state.collected_fields.copy()
+            session.conversation_state.complete_flow()
+            return collected
+        return {}
+    
+    def is_flow_active(self, user_id: str) -> bool:
+        """Check if user has an active conversation flow."""
+        session = self.get_session(user_id)
+        return session is not None and session.conversation_state.is_active()
+    
+    def get_active_flow(self, user_id: str) -> Optional[str]:
+        """Get the name of the currently active flow, if any."""
+        session = self.get_session(user_id)
+        if session and session.conversation_state.is_active():
+            return session.conversation_state.active_flow
+        return None
+    
+    def build_state_context(self, user_id: str) -> str:
+        """
+        Build a state-aware context string for LLM prompts.
+        
+        This is CRITICAL for preventing re-asking - the LLM needs to know
+        exactly what has been collected and what is still missing.
+        """
+        session = self.get_session(user_id)
+        if not session:
+            return ""
+        
+        parts = []
+        state = session.conversation_state
+        
+        # Add conversation state information
+        if state.is_active():
+            parts.append(f"\n=== ACTIVE FLOW: {state.active_flow} ===")
+            parts.append("STATUS: Collecting information from user")
+            
+            # CRITICAL: Show what's already collected
+            if state.collected_fields:
+                parts.append("\nALREADY COLLECTED (DO NOT ASK AGAIN):")
+                for field, value in state.collected_fields.items():
+                    parts.append(f"  ✓ {field}: {value}")
+            
+            # Show what's still needed
+            if state.missing_fields:
+                parts.append("\nSTILL NEEDED (ask for these one at a time):")
+                for field in state.missing_fields:
+                    parts.append(f"  ○ {field}")
+            
+            # Show what to ask next
+            if state.current_field:
+                parts.append(f"\nNEXT QUESTION: Ask for '{state.current_field}'")
+            
+            parts.append("\n=== END FLOW STATE ===")
+        
+        elif state.flow_status == FlowStatus.AWAITING_CONFIRMATION:
+            parts.append("\n=== AWAITING CONFIRMATION ===")
+            parts.append("All fields collected. Ask user to confirm booking.")
+            if state.collected_fields:
+                parts.append("\nSummary:")
+                for field, value in state.collected_fields.items():
+                    parts.append(f"  • {field}: {value}")
+            parts.append("=== END FLOW STATE ===")
+        
+        # Add general context
+        if session.context:
+            parts.append("\nKnown customer information:")
+            for key, value in session.context.items():
+                if value:
+                    parts.append(f"  - {key}: {value}")
+        
+        return "\n".join(parts)
 
 
 # =============================================================================

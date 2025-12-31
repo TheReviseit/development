@@ -17,7 +17,7 @@ from .schemas import BusinessData, ConversationMessage, GenerateReplyResponse
 from .intents import IntentType, IntentDetector
 from .config import AIBrainConfig, default_config
 from .chatgpt_engine import ChatGPTEngine, IntentResult, GenerationResult
-from .conversation_manager import ConversationManager, get_conversation_manager
+from .conversation_manager import ConversationManager, get_conversation_manager, FlowStatus
 from .response_cache import ResponseCache, get_response_cache, get_cache_ttl
 from .whatsapp_formatter import WhatsAppFormatter, get_formatter
 from .language_detector import LanguageDetector, get_language_detector, Language
@@ -30,6 +30,7 @@ from .analytics import (
 )
 from .cost_optimizer import CostOptimizer, get_cost_optimizer, CostDecision
 from .business_retriever import BusinessRetriever, get_retriever
+from .appointment_handler import AppointmentHandler
 
 # LLM Usage tracking for per-business budgets
 try:
@@ -121,11 +122,24 @@ class AIBrain:
         
         # LLM Usage tracking (for per-business budgets)
         self.usage_tracker = None
+        self.supabase_client = supabase_client  # Store for appointment handler
         if USAGE_TRACKER_AVAILABLE and get_usage_tracker:
             self.usage_tracker = get_usage_tracker(supabase_client)
         
         # Legacy fallback (always enabled for template mode)
         self.legacy_intent_detector = IntentDetector()
+        
+        # Appointment handler for state-driven booking flow
+        self.appointment_handler = None
+        if supabase_client:
+            self.appointment_handler = AppointmentHandler(supabase_client)
+        
+        # Cancellation keywords for detecting flow cancellation intent
+        self.CANCELLATION_KEYWORDS = [
+            'cancel', 'stop', 'nevermind', 'never mind', 'dont want', "don't want",
+            'no thanks', 'forget it', 'quit', 'exit', 'nahi chahiye', 'rehne do',
+            'mat karo', 'bandh karo', 'nako', 'beku illa', 'venda'
+        ]
     
     def generate_reply(
         self,
@@ -197,6 +211,43 @@ class AIBrain:
         if not self._is_in_scope(user_message, business):
             business_name = business.get('business_name', 'our business')
             return self._out_of_scope_response(business_name)
+        
+        # =====================================================
+        # CANCELLATION CHECK - Handle "stop", "cancel", etc.
+        # =====================================================
+        # If user wants to cancel a flow, handle it immediately
+        if user_id and any(word in user_message.lower() for word in self.CANCELLATION_KEYWORDS):
+            if self.conversation_manager.is_flow_active(user_id):
+                self.conversation_manager.cancel_flow(user_id)
+                response = {
+                    "reply": "No problem, I've cancelled that. How else can I help you? 😊",
+                    "intent": "cancel_flow",
+                    "confidence": 1.0,
+                    "needs_human": False,
+                    "suggested_actions": ["Services", "Book Appointment"],
+                    "metadata": {"generation_method": "flow_cancellation"}
+                }
+                # Add to history
+                self.conversation_manager.add_message(user_id, "user", user_message)
+                self.conversation_manager.add_message(user_id, "assistant", response["reply"])
+                return response
+
+        # =====================================================
+        # STATE-DRIVEN FLOW CHECK - Deterministic Appointment Booking
+        # =====================================================
+        # If user is in an active appointment flow, let the handler process it
+        if user_id and self.conversation_manager.is_flow_active(user_id):
+            # Check if this is a question/interruption (optional heuristic)
+            is_question = "?" in user_message or any(w in user_message.lower() for w in ["what", "how", "where", "price", "cost"])
+            
+            # Use LLM to check if it's an answer or a question if ambiguous
+            if is_question:
+                # Let LLM decide - handled in _handle_appointment_flow
+                pass
+                
+            flow_response = self._handle_appointment_flow(user_id, user_message, business)
+            if flow_response:
+                return flow_response
         
         
         # Get conversation history
@@ -291,13 +342,19 @@ class AIBrain:
         except Exception as e:
             print(f"⚠️ Usage tracking failed, proceeding without: {e}")
         
+        # Get state summary to include in prompt (PREVENTS RE-ASKING)
+        state_summary = ""
+        if user_id:
+            state_summary = self.conversation_manager.build_state_context(user_id)
+        
         # Process message with ChatGPT engine
         try:
             result = self.engine.process_message(
                 message=user_message,
                 business_data=business,
                 conversation_history=optimized_history,
-                user_id=user_id
+                user_id=user_id,
+                conversation_state_summary=state_summary
             )
             
             # TRACK LLM USAGE after successful call (non-blocking)
@@ -397,6 +454,105 @@ class AIBrain:
             "needs_clarification": intent_result.needs_clarification,
             "clarification_question": intent_result.clarification_question
         }
+    
+    def _handle_appointment_flow(
+        self,
+        user_id: str,
+        message: str,
+        business_data: Dict[str, Any]
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Handle deterministic appointment booking flow.
+        
+        This manages the state machine for collecting appointment details.
+        If the user asks a question instead of answering, it uses the LLM 
+        to answer, then re-prompts for the missing field.
+        """
+        if not self.appointment_handler:
+            return None
+            
+        start_time = time.time()
+        
+        # 1. Process response with handler logic
+        # Note: In real app, we need to pass the business owner ID, not customer ID
+        # Here we assume business_id is the owner ID for simplicity
+        business_owner_id = business_data.get("business_id")
+        
+        # Get current state to see what we're asking for
+        state = self.conversation_manager.get_state(user_id)
+        current_field = state.current_field
+        
+        # 2. Check if this is a question/interruption (Mid-flow Intelligence)
+        # We use a quick prompt to check if the user answered the question or asked something else
+        is_interruption = False
+        
+        # Simple heuristic first
+        if "?" in message and len(message.split()) > 3:
+            is_interruption = True
+        
+        # If ambiguous, could use LLM here to classify "Answer vs Question"
+        
+        if is_interruption:
+            # Handle the interruption with normal LLM flow (but keep state active)
+            # The normal generate_response will run, but we need to inject state context
+            # so the LLM knows to append "Now, back to your appointment..."
+            return None  # Return None to fall back to normal LLM processing
+            
+        # 3. Validate and process the answer
+        result = self.appointment_handler.process_response(
+            user_id=business_owner_id, 
+            customer_phone=user_id, # Using user_id as phone for now
+            response=message,
+            conversation_state=state # Pass the state object!
+        )
+        
+        # 4. Update state based on result
+        if result.get("valid"):
+            # Success - update state
+            if result.get("complete"):
+                # All done!
+                return {
+                    "reply": result["confirmation_message"],
+                    "intent": "booking_confirmation",
+                    "confidence": 1.0,
+                    "needs_human": False,
+                    "suggested_actions": ["Confirm", "Cancel"],
+                    "metadata": {"generation_method": "flow_complete"}
+                }
+            else:
+                # Next question
+                next_q = result["question"]
+                self.conversation_manager.add_message(user_id, "user", message)
+                self.conversation_manager.add_message(user_id, "assistant", next_q)
+                
+                return {
+                    "reply": next_q,
+                    "intent": "booking_in_progress",
+                    "confidence": 1.0,
+                    "needs_human": False,
+                    "suggested_actions": ["Cancel"],
+                    "metadata": {"generation_method": "flow_next_step"}
+                }
+        else:
+            # Validation error
+            error_msg = result.get("error", "I didn't understand that.")
+            retry_msg = f"{error_msg} {result.get('retry_question', '')}"
+            
+            self.conversation_manager.add_message(user_id, "user", message)
+            self.conversation_manager.add_message(user_id, "assistant", retry_msg)
+            
+            return {
+                "reply": retry_msg,
+                "intent": "booking_validation_error",
+                "confidence": 1.0,
+                "needs_human": False,
+                "suggested_actions": ["Cancel"],
+                "metadata": {
+                    "generation_method": "flow_validation_error",
+                    "error": error_msg
+                }
+            }
+
     
     def _normalize_business_data(
         self,
