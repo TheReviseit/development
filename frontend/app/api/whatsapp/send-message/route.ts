@@ -110,7 +110,18 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const { to, message, phoneNumberId } = body;
 
+    console.log("📤 Send message request:", {
+      to,
+      message,
+      phoneNumberId,
+      bodyKeys: Object.keys(body),
+    });
+
     if (!to || !message) {
+      console.error("❌ Missing required fields:", {
+        to: !!to,
+        message: !!message,
+      });
       return NextResponse.json(
         { error: "Missing required fields: to, message" },
         { status: 400 }
@@ -157,12 +168,19 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Check if phone number can send messages
-    if (!phoneNumber.can_send_messages || !phoneNumber.is_active) {
+    // Check if phone number is active
+    console.log("📱 Phone number status:", {
+      phoneNumberId: phoneNumber.phone_number_id,
+      displayPhone: phoneNumber.display_phone_number,
+      isActive: phoneNumber.is_active,
+    });
+
+    if (!phoneNumber.is_active) {
       return NextResponse.json(
         {
           error: "Phone number not active",
-          message: "This phone number cannot send messages",
+          message:
+            "This phone number is not active. Please activate it in settings.",
         },
         { status: 400 }
       );

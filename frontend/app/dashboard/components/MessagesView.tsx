@@ -787,7 +787,8 @@ export default function MessagesView() {
         setMessages((prev) =>
           prev.filter((msg) => msg.id !== optimisticMessage.id)
         );
-        alert(data.message || "Failed to send message");
+        console.error("Send message failed:", data);
+        alert(data.message || data.error || "Failed to send message");
       }
     } catch (err) {
       console.error("Error sending message:", err);
