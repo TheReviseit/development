@@ -52,10 +52,11 @@ def setup_structured_logging(
     handler.setLevel(getattr(logging, level.upper()))
     
     if format_type == "json" and JSON_LOGGER_AVAILABLE:
-        # JSON formatter for production
+        # JSON formatter for production - with readable emojis
         formatter = jsonlogger.JsonFormatter(
             fmt="%(asctime)s %(levelname)s %(name)s %(message)s",
             datefmt="%Y-%m-%dT%H:%M:%S%z",
+            json_ensure_ascii=False  # Allow emojis and Unicode characters
         )
     else:
         # Human-readable format for development
@@ -93,7 +94,7 @@ def _configure_structlog(format_type: str):
     ]
     
     if format_type == "json":
-        processors.append(structlog.processors.JSONRenderer())
+        processors.append(structlog.processors.JSONRenderer(ensure_ascii=False))
     else:
         processors.append(structlog.dev.ConsoleRenderer())
     
