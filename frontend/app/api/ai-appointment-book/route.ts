@@ -156,7 +156,7 @@ export async function POST(request: NextRequest) {
       date,
       time,
       duration,
-      status: "pending",
+      status: "confirmed", // AI bookings are instantly confirmed
       source: "ai",
       service: service || null,
       notes: notes || null,

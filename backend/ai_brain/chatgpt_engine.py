@@ -206,7 +206,8 @@ class ChatGPTEngine:
         business_data: Dict[str, Any],
         conversation_history: List[Dict[str, str]] = None,
         use_tools: bool = True,
-        conversation_state_summary: str = ""
+        conversation_state_summary: str = "",
+        user_id: str = None
     ) -> GenerationResult:
         """
         Generate a response to the user message.
@@ -286,8 +287,8 @@ class ChatGPTEngine:
                 tool_called = tool_call.function.name
                 tool_args = json.loads(tool_call.function.arguments)
                 
-                # Execute tool
-                executor = ToolExecutor(business_data)
+                # Execute tool with user_id for booking operations
+                executor = ToolExecutor(business_data, user_id=user_id)
                 result = executor.execute(tool_called, tool_args)
                 tool_result = {
                     "success": result.success,
@@ -431,13 +432,29 @@ class ChatGPTEngine:
             return "\n".join(lines)
         
         elif tool_name == "book_appointment":
-            booking = result.data.get("booking", {})
-            lines = ["✅ Booking request received!\n"]
-            lines.append(f"📅 Date: {booking.get('date', 'TBD')}")
-            lines.append(f"⏰ Time: {booking.get('time', 'TBD')}")
-            lines.append(f"💇 Service: {booking.get('service', 'TBD')}")
-            lines.append("\nOur team will confirm your booking shortly!")
-            return "\n".join(lines)
+            # Check if booking was successful
+            if result.success:
+                booking = result.data.get("booking", {})
+                # Format time for display
+                time_str = booking.get('time', '')
+                try:
+                    hour, minute = map(int, time_str.split(':'))
+                    period = 'PM' if hour >= 12 else 'AM'
+                    display_hour = hour - 12 if hour > 12 else (12 if hour == 0 else hour)
+                    time_display = f"{display_hour}:{minute:02d} {period}"
+                except:
+                    time_display = time_str
+                
+                lines = ["✅ Your appointment is confirmed!\n"]
+                lines.append(f"📅 Date: {booking.get('date', 'TBD')}")
+                lines.append(f"⏰ Time: {time_display}")
+                if booking.get('service'):
+                    lines.append(f"💇 Service: {booking.get('service')}")
+                lines.append("\nWe look forward to seeing you! 🎉")
+                return "\n".join(lines)
+            else:
+                # Booking failed - return the error message from tool
+                return result.message
         
         elif tool_name == "escalate_to_human":
             contact = result.data.get("contact")
@@ -519,14 +536,15 @@ class ChatGPTEngine:
         intent_prompt_tokens = intent_result.raw_response.get("_intent_prompt_tokens", 0)
         intent_completion_tokens = intent_result.raw_response.get("_intent_completion_tokens", 0)
         
-        # Step 2: Generate response
+        # Step 2: Generate response (pass user_id for booking operations)
         generation_result = self.generate_response(
             message=message,
             intent_result=intent_result,
             business_data=business_data,
             conversation_history=conversation_history,
             use_tools=self.config.enable_function_calling,
-            conversation_state_summary=conversation_state_summary
+            conversation_state_summary=conversation_state_summary,
+            user_id=user_id
         )
         
         # Get generation tokens from metadata
