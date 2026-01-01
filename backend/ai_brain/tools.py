@@ -251,13 +251,15 @@ class ToolExecutor:
     Each tool function takes business_data and arguments, returns ToolResult.
     """
     
-    # Backend API URL for internal calls
-    BACKEND_API_URL = os.environ.get('BACKEND_URL', 'http://localhost:5000')
+    # Frontend API URL for booking (booking endpoint is on frontend)
+    FRONTEND_API_URL = os.environ.get('FRONTEND_URL', 'http://localhost:3000')
     INTERNAL_API_KEY = os.environ.get('INTERNAL_API_KEY', 'reviseit-internal-key')
     
-    def __init__(self, business_data: Dict[str, Any], user_id: str = None):
+    def __init__(self, business_data: Dict[str, Any], user_id: str = None, business_owner_id: str = None):
         self.business_data = business_data
-        self.user_id = user_id
+        self.user_id = user_id  # Customer's WhatsApp ID
+        # Business owner's Firebase UID - use from business_data or explicit parameter
+        self.business_owner_id = business_owner_id or business_data.get("business_id") or business_data.get("user_id")
         self._handlers: Dict[str, Callable] = {
             ToolName.GET_PRICING: self._get_pricing,
             ToolName.SEARCH_PRODUCTS: self._search_products,
@@ -357,22 +359,200 @@ class ToolExecutor:
         )
     
     def _check_availability(self, args: Dict[str, Any]) -> ToolResult:
-        """Check availability for a date/time."""
-        # This is a placeholder - in production, this would check a booking system
-        date = args.get("date", "")
-        time = args.get("time", "")
+        """Check availability for a date/time by calling the actual booking API."""
+        # Normalize date and time
+        date = self._normalize_date(args.get("date", ""))
+        time = self._normalize_time(args.get("time", "")) if args.get("time") else ""
         
-        # For now, always return available and suggest collecting info
-        return ToolResult(
-            success=True,
-            data={
-                "date": date,
-                "time": time,
-                "available": True,
-                "note": "Availability check is simulated - integrate with booking system"
-            },
-            message="Slot appears to be available. Please provide your details to confirm booking."
-        )
+        logger.info(f"📅 Checking availability for date: {args.get('date')} → {date}, time: {args.get('time')} → {time}")
+        
+        if not self.business_owner_id:
+            logger.error("No business_owner_id available for availability check")
+            return ToolResult(
+                success=True,  # Assume available if we can't check
+                data={"date": date, "time": time, "available": True},
+                message="Slot appears to be available. Please provide your details to confirm booking."
+            )
+        
+        try:
+            # Call the frontend API to check actual availability
+            api_url = f"{self.FRONTEND_API_URL}/api/ai-appointment-book"
+            params = {"user_id": self.business_owner_id, "date": date}
+            
+            response = requests.get(
+                api_url,
+                params=params,
+                headers={
+                    "Content-Type": "application/json",
+                    "x-api-key": self.INTERNAL_API_KEY
+                },
+                timeout=10
+            )
+            
+            if response.status_code == 200:
+                result = response.json()
+                available_slots = result.get("available_slots", [])
+                
+                # Format date for display (DD-MM-YY)
+                try:
+                    from datetime import datetime
+                    parsed = datetime.strptime(date, "%Y-%m-%d")
+                    display_date = parsed.strftime("%d-%m-%y")
+                except:
+                    display_date = date
+                
+                # Format time for display
+                def format_time_12h(t):
+                    try:
+                        parts = t.split(':')
+                        h, m = int(parts[0]), int(parts[1]) if len(parts) > 1 else 0
+                        period = 'PM' if h >= 12 else 'AM'
+                        display_h = h - 12 if h > 12 else (12 if h == 0 else h)
+                        return f"{display_h}:{m:02d} {period}"
+                    except:
+                        return t
+                
+                if time:
+                    time_display = format_time_12h(time)
+                    # Check if specific time is available
+                    is_available = time in available_slots
+                    if is_available:
+                        return ToolResult(
+                            success=True,
+                            data={"date": date, "time": time, "available": True, "available_slots": available_slots},
+                            message=f"Great news! {time_display} on {display_date} is available. Please provide your name and phone number to confirm the booking."
+                        )
+                    else:
+                        slots_display = [format_time_12h(s) for s in available_slots[:5]]
+                        slots_str = ", ".join(slots_display) if slots_display else "No slots"
+                        return ToolResult(
+                            success=True,
+                            data={"date": date, "time": time, "available": False, "available_slots": available_slots},
+                            message=f"Sorry, {time_display} is not available on {display_date}. Available times: {slots_str}. Please choose another time."
+                        )
+                else:
+                    # Return all available slots for the date
+                    if available_slots:
+                        slots_display = [format_time_12h(s) for s in available_slots[:5]]
+                        slots_str = ", ".join(slots_display)
+                        return ToolResult(
+                            success=True,
+                            data={"date": date, "available_slots": available_slots},
+                            message=f"Available times on {display_date}: {slots_str}. Which time works best for you?"
+                        )
+                    else:
+                        return ToolResult(
+                            success=True,
+                            data={"date": date, "available_slots": []},
+                            message=f"Sorry, no slots available on {display_date}. Would you like to try a different date?"
+                        )
+            else:
+                logger.warning(f"Availability check failed: {response.status_code}")
+                # Fall back to assuming available
+                return ToolResult(
+                    success=True,
+                    data={"date": date, "time": time, "available": True},
+                    message="Slot appears to be available. Please provide your details to confirm booking."
+                )
+                
+        except Exception as e:
+            logger.error(f"Error checking availability: {e}")
+            # Fall back to assuming available
+            return ToolResult(
+                success=True,
+                data={"date": date, "time": time, "available": True},
+                message="Slot appears to be available. Please provide your details to confirm booking."
+            )
+    
+    def _normalize_date(self, date_str: str) -> str:
+        """Normalize date to YYYY-MM-DD format. Expects DD-MM-YY input."""
+        import re
+        from datetime import datetime, timedelta
+        
+        if not date_str:
+            return date_str
+        
+        date_str = date_str.strip()
+        
+        # Already in YYYY-MM-DD format
+        if re.match(r'^\d{4}-\d{2}-\d{2}$', date_str):
+            return date_str
+        
+        # Handle natural language
+        lower = date_str.lower()
+        today = datetime.now().date()
+        if lower == 'today':
+            return today.strftime("%Y-%m-%d")
+        elif lower == 'tomorrow':
+            return (today + timedelta(days=1)).strftime("%Y-%m-%d")
+        
+        # Parse DD-MM-YY format (e.g., 01-02-26 = 1st Feb 2026)
+        match = re.match(r'^(\d{1,2})[-/](\d{1,2})[-/](\d{2,4})$', date_str)
+        if match:
+            day, month, year = match.groups()
+            day = int(day)
+            month = int(month)
+            year = int(year)
+            
+            # Handle 2-digit year
+            if year < 100:
+                year = 2000 + year if year < 50 else 1900 + year
+            
+            # Validate day and month
+            if 1 <= day <= 31 and 1 <= month <= 12:
+                try:
+                    from datetime import date as date_class
+                    parsed_date = date_class(year, month, day)
+                    result = parsed_date.strftime("%Y-%m-%d")
+                    logger.info(f"📅 Parsed DD-MM-YY: {date_str} → day={day}, month={month}, year={year} → {result}")
+                    return result
+                except ValueError as e:
+                    logger.warning(f"Invalid date: {date_str} - {e}")
+        
+        logger.warning(f"Could not normalize date: {date_str}")
+        return date_str
+    
+    def _normalize_time(self, time_str: str) -> str:
+        """Normalize time to HH:MM format."""
+        import re
+        from datetime import datetime
+        
+        if not time_str:
+            return time_str
+        
+        time_str = time_str.strip().upper()
+        
+        # Already in HH:MM format
+        if re.match(r'^\d{2}:\d{2}$', time_str):
+            return time_str
+        
+        # Handle "10:00 AM" or "2:30 PM" format
+        match = re.match(r'^(\d{1,2}):(\d{2})\s*(AM|PM)$', time_str)
+        if match:
+            hour, minute, period = int(match.group(1)), match.group(2), match.group(3)
+            if period == 'PM' and hour != 12:
+                hour += 12
+            elif period == 'AM' and hour == 12:
+                hour = 0
+            return f"{hour:02d}:{minute}"
+        
+        # Handle "10AM" or "2PM" format
+        match = re.match(r'^(\d{1,2})\s*(AM|PM)$', time_str)
+        if match:
+            hour, period = int(match.group(1)), match.group(2)
+            if period == 'PM' and hour != 12:
+                hour += 12
+            elif period == 'AM' and hour == 12:
+                hour = 0
+            return f"{hour:02d}:00"
+        
+        # Handle 24-hour format without colon
+        match = re.match(r'^(\d{1,2})(\d{2})$', time_str)
+        if match:
+            return f"{match.group(1).zfill(2)}:{match.group(2)}"
+        
+        logger.warning(f"Could not normalize time: {time_str}")
+        return time_str
     
     def _book_appointment(self, args: Dict[str, Any]) -> ToolResult:
         """Create a booking by calling the actual booking API."""
@@ -387,39 +567,69 @@ class ToolExecutor:
                 message=f"Missing required information: {', '.join(missing)}"
             )
         
-        # Check if user_id is available
-        if not self.user_id:
-            logger.error("No user_id provided to ToolExecutor for booking")
+        # Check if business_owner_id is available (this is the Firebase UID of the business owner)
+        if not self.business_owner_id:
+            logger.error("No business_owner_id available for booking")
             return ToolResult(
                 success=False,
                 data={"error": "configuration_error"},
-                message="Unable to process booking. Please try again."
+                message="Unable to process booking. Please try again or contact us directly."
             )
         
+        # Normalize date and time formats
+        normalized_date = self._normalize_date(args.get("date", ""))
+        normalized_time = self._normalize_time(args.get("time", ""))
+        
+        logger.info(f"📅 Date normalization: {args.get('date')} → {normalized_date}")
+        logger.info(f"⏰ Time normalization: {args.get('time')} → {normalized_time}")
+        
         # Prepare booking data for the API
+        # user_id in the API is the business owner's Firebase UID, NOT the customer's WhatsApp number
         booking_payload = {
-            "user_id": self.user_id,
+            "user_id": self.business_owner_id,  # Business owner's Firebase UID
             "customer_name": args.get("customer_name"),
             "customer_phone": args.get("phone"),
-            "date": args.get("date"),
-            "time": args.get("time"),
+            "date": normalized_date,
+            "time": normalized_time,
             "service": args.get("service", "General Appointment"),
             "notes": args.get("notes", ""),
         }
         
         try:
-            # Call the backend booking API
+            # Call the frontend booking API (ai-appointment-book endpoint)
+            api_url = f"{self.FRONTEND_API_URL}/api/ai-appointment-book"
+            headers = {
+                "Content-Type": "application/json",
+                "x-api-key": self.INTERNAL_API_KEY
+            }
+            
+            logger.info(f"📅 Booking API call: {api_url}")
+            logger.info(f"   Business Owner ID: {self.business_owner_id}")
+            logger.info(f"   Business Owner ID length: {len(self.business_owner_id) if self.business_owner_id else 0}")
+            logger.info(f"   Business Owner ID format: {'UUID' if self.business_owner_id and '-' in self.business_owner_id else 'Firebase UID'}")
+            logger.info(f"   Payload: {booking_payload}")
+            logger.info(f"   API Key present: {bool(self.INTERNAL_API_KEY)}")
+            
             response = requests.post(
-                f"{self.BACKEND_API_URL}/api/appointments/book",
+                api_url,
                 json=booking_payload,
-                headers={
-                    "Content-Type": "application/json",
-                    "x-api-key": self.INTERNAL_API_KEY
-                },
+                headers=headers,
                 timeout=15
             )
             
-            result = response.json()
+            logger.info(f"📅 Booking API response status: {response.status_code}")
+            
+            try:
+                result = response.json()
+                logger.info(f"📅 Booking API response: {result}")
+            except Exception as json_err:
+                logger.error(f"📅 Failed to parse response JSON: {json_err}")
+                logger.error(f"📅 Raw response: {response.text[:500]}")
+                return ToolResult(
+                    success=False,
+                    data={"error": "invalid_response"},
+                    message="Unable to process booking response. Please try again."
+                )
             
             if response.status_code == 200 and result.get("success"):
                 # Booking successful!

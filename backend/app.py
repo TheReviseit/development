@@ -48,6 +48,12 @@ except ImportError:
     logger = logging.getLogger('reviseit.app')
     LOGGING_CONFIGURED = False
 
+# Suppress noisy third-party loggers
+import logging
+logging.getLogger('httpx').setLevel(logging.WARNING)
+logging.getLogger('httpcore').setLevel(logging.WARNING)
+logging.getLogger('hpack').setLevel(logging.WARNING)
+
 # =============================================================================
 # Service Imports
 # =============================================================================
@@ -453,6 +459,33 @@ def webhook():
         media_id = None
         if message_type == 'text':
             message_text = message.get('text', {}).get('body', '')
+        elif message_type == 'interactive':
+            # Handle button responses
+            interactive = message.get('interactive', {})
+            interactive_type = interactive.get('type')
+            
+            if interactive_type == 'button_reply':
+                # User clicked a button
+                button_reply = interactive.get('button_reply', {})
+                button_id = button_reply.get('id', '')
+                button_title = button_reply.get('title', '')
+                
+                # Map button clicks to text responses for the AI
+                if button_id in ['confirm_yes', 'yes'] or 'yes' in button_title.lower():
+                    message_text = 'yes'
+                elif button_id in ['confirm_no', 'no'] or 'no' in button_title.lower() or 'cancel' in button_title.lower():
+                    message_text = 'no'
+                else:
+                    message_text = button_title  # Use button title as the response
+                
+                logger.info(f"🔘 Button clicked: {button_id} ({button_title}) → '{message_text}'")
+                # Treat as text message for AI processing
+                message_type = 'text'
+            elif interactive_type == 'list_reply':
+                # User selected from a list
+                list_reply = interactive.get('list_reply', {})
+                message_text = list_reply.get('title', list_reply.get('id', ''))
+                message_type = 'text'
         elif message_type in ['image', 'video', 'audio', 'document']:
             media_data = message.get(message_type, {})
             media_id = media_data.get('id')
@@ -492,11 +525,23 @@ def webhook():
         if not business_data:
             business_data = BUSINESS_DATA_CACHE.get('current', DEFAULT_BUSINESS_DATA)
 
-        # Override business_id for consistent tracking
+        # IMPORTANT: Keep Firebase UID as business_id for appointment booking consistency
+        # The business_data['business_id'] is set to Firebase UID in firebase_client.py
+        # This ensures AI-booked appointments appear in the dashboard correctly
+        # For Supabase operations that need business manager ID, use user_id or fetch separately
+        if SUPABASE_AVAILABLE and user_id and not business_data.get('business_id'):
+            # Only set if not already set by firebase_client
+            firebase_uid = get_firebase_uid_from_user_id(user_id) if get_firebase_uid_from_user_id else None
+            if firebase_uid:
+                business_data['business_id'] = firebase_uid
+                logger.info(f"📝 Set business_id from Firebase UID: {firebase_uid[:10]}...")
+        
+        # Store Supabase business manager ID separately for analytics/message tracking
         if SUPABASE_AVAILABLE and user_id:
             supabase_business_id = get_business_id_for_user(user_id)
             if supabase_business_id:
-                business_data['business_id'] = supabase_business_id
+                business_data['supabase_business_manager_id'] = supabase_business_id
+                logger.info(f"📝 Stored Supabase business manager ID: {supabase_business_id[:10]}...")
 
         # Store incoming message
         if SUPABASE_AVAILABLE and store_message and user_id:
@@ -549,6 +594,9 @@ def webhook():
             whatsapp_service.mark_message_as_read(wa_id, token, msg_id, show_typing=True)
         
         # Generate AI response
+        # Track button metadata for interactive messages
+        ai_metadata = {}
+        
         if message_type == 'text':
             if AI_BRAIN_AVAILABLE and ai_brain:
                 try:
@@ -563,6 +611,7 @@ def webhook():
                     reply_text = result.get('reply', "I'll connect you with our team shortly.")
                     intent = result.get('intent', 'unknown')
                     needs_human = result.get('needs_human', False)
+                    ai_metadata = result.get('metadata', {})
                     
                     # Track metrics
                     if METRICS_AVAILABLE:
@@ -571,7 +620,7 @@ def webhook():
                         track_ai_response(
                             latency_ms=elapsed_ms,
                             intent=intent,
-                            cached=result.get('metadata', {}).get('from_cache', False)
+                            cached=ai_metadata.get('from_cache', False)
                         )
                     
                     logger.info(f"🤖 AI Response (intent: {intent}): {reply_text[:50]}...")
@@ -626,15 +675,33 @@ def webhook():
             
             return jsonify({'status': 'ok'}), 200
         
-        # Send reply
+        # Send reply - check if we should use interactive buttons
+        use_buttons = ai_metadata.get('use_buttons', False)
+        buttons = ai_metadata.get('buttons', [])
+        
         if credentials and credentials.get('access_token'):
             logger.info(f"🏢 Using credentials for: {credentials.get('business_name')}")
-            send_result = whatsapp_service.send_message_with_credentials(
-                phone_number_id=credentials['phone_number_id'],
-                access_token=credentials['access_token'],
-                to=from_number,
-                message=reply_text
-            )
+            
+            if use_buttons and buttons:
+                # Send interactive message with buttons
+                logger.info(f"🔘 Sending interactive buttons: {[b.get('title') for b in buttons]}")
+                send_result = whatsapp_service.send_interactive_buttons(
+                    phone_number_id=credentials['phone_number_id'],
+                    access_token=credentials['access_token'],
+                    to=from_number,
+                    body_text=reply_text,
+                    buttons=buttons,
+                    header_text="Confirm Booking",
+                    footer_text="Tap a button to respond"
+                )
+            else:
+                # Send regular text message
+                send_result = whatsapp_service.send_message_with_credentials(
+                    phone_number_id=credentials['phone_number_id'],
+                    access_token=credentials['access_token'],
+                    to=from_number,
+                    message=reply_text
+                )
         else:
             logger.warning("⚠️ Using fallback .env credentials")
             send_result = whatsapp_service.send_text_message(from_number, reply_text)

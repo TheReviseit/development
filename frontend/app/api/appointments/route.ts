@@ -53,8 +53,11 @@ export async function GET(request: NextRequest) {
     const userId = await getUserId(request);
 
     if (!userId) {
+      console.log("📅 Appointments API: No userId from session");
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
+
+    console.log(`📅 Appointments API: Fetching for user: ${userId}`);
 
     const supabase = getSupabase();
     const { searchParams } = new URL(request.url);
@@ -64,6 +67,8 @@ export async function GET(request: NextRequest) {
     const date = searchParams.get("date");
     const startDate = searchParams.get("startDate");
     const endDate = searchParams.get("endDate");
+
+    console.log(`📅 Appointments API: Filters - startDate: ${startDate}, endDate: ${endDate}, status: ${status}`);
 
     let query = supabase
       .from("appointments")
@@ -94,6 +99,21 @@ export async function GET(request: NextRequest) {
         { error: "Failed to fetch appointments" },
         { status: 500 }
       );
+    }
+
+    console.log(`📅 Appointments API: Found ${data?.length || 0} appointments for user ${userId}`);
+    
+    // Debug: If no appointments found, check if any exist without date filter
+    if (!data || data.length === 0) {
+      const { data: allUserAppointments, error: debugError } = await supabase
+        .from("appointments")
+        .select("id, date, status, source")
+        .eq("user_id", userId);
+      
+      if (allUserAppointments && allUserAppointments.length > 0) {
+        console.log(`📅 Appointments API: User has ${allUserAppointments.length} total appointments (outside date range)`);
+        console.log(`   Dates: ${allUserAppointments.map(a => a.date).join(", ")}`);
+      }
     }
 
     return NextResponse.json({

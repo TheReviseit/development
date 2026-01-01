@@ -287,8 +287,10 @@ class ChatGPTEngine:
                 tool_called = tool_call.function.name
                 tool_args = json.loads(tool_call.function.arguments)
                 
-                # Execute tool with user_id for booking operations
-                executor = ToolExecutor(business_data, user_id=user_id)
+                # Execute tool with user_id (customer) and business_owner_id (from business_data)
+                # The business_owner_id is the Firebase UID needed for booking operations
+                business_owner_id = business_data.get("business_id") or business_data.get("user_id")
+                executor = ToolExecutor(business_data, user_id=user_id, business_owner_id=business_owner_id)
                 result = executor.execute(tool_called, tool_args)
                 tool_result = {
                     "success": result.success,
@@ -435,10 +437,22 @@ class ChatGPTEngine:
             # Check if booking was successful
             if result.success:
                 booking = result.data.get("booking", {})
-                # Format time for display
+                
+                # Format date for display (DD-MM-YY)
+                date_str = booking.get('date', '')
+                try:
+                    from datetime import datetime
+                    parsed_date = datetime.strptime(date_str, "%Y-%m-%d")
+                    date_display = parsed_date.strftime("%d-%m-%y")  # DD-MM-YY format
+                except:
+                    date_display = date_str
+                
+                # Format time for display (12-hour format)
                 time_str = booking.get('time', '')
                 try:
-                    hour, minute = map(int, time_str.split(':'))
+                    # Handle both HH:MM and HH:MM:SS formats
+                    time_parts = time_str.split(':')
+                    hour, minute = int(time_parts[0]), int(time_parts[1])
                     period = 'PM' if hour >= 12 else 'AM'
                     display_hour = hour - 12 if hour > 12 else (12 if hour == 0 else hour)
                     time_display = f"{display_hour}:{minute:02d} {period}"
@@ -446,7 +460,7 @@ class ChatGPTEngine:
                     time_display = time_str
                 
                 lines = ["✅ Your appointment is confirmed!\n"]
-                lines.append(f"📅 Date: {booking.get('date', 'TBD')}")
+                lines.append(f"📅 Date: {date_display}")
                 lines.append(f"⏰ Time: {time_display}")
                 if booking.get('service'):
                     lines.append(f"💇 Service: {booking.get('service')}")

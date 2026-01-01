@@ -17,7 +17,7 @@ from .schemas import BusinessData, ConversationMessage, GenerateReplyResponse
 from .intents import IntentType, IntentDetector
 from .config import AIBrainConfig, default_config
 from .chatgpt_engine import ChatGPTEngine, IntentResult, GenerationResult
-from .conversation_manager import ConversationManager, get_conversation_manager, FlowStatus
+from .conversation_manager import ConversationManager, get_conversation_manager, FlowStatus, ConversationState
 from .response_cache import ResponseCache, get_response_cache, get_cache_ttl
 from .whatsapp_formatter import WhatsAppFormatter, get_formatter
 from .language_detector import LanguageDetector, get_language_detector, Language
@@ -236,7 +236,10 @@ class AIBrain:
         # STATE-DRIVEN FLOW CHECK - Deterministic Appointment Booking
         # =====================================================
         # If user is in an active appointment flow, let the handler process it
-        if user_id and self.conversation_manager.is_flow_active(user_id):
+        is_flow_active = user_id and self.conversation_manager.is_flow_active(user_id)
+        logger.info(f"📋 Flow check - user_id: {user_id}, is_flow_active: {is_flow_active}")
+        
+        if is_flow_active:
             # Check if this is a question/interruption (optional heuristic)
             is_question = "?" in user_message or any(w in user_message.lower() for w in ["what", "how", "where", "price", "cost"])
             
@@ -246,8 +249,31 @@ class AIBrain:
                 pass
                 
             flow_response = self._handle_appointment_flow(user_id, user_message, business)
+            logger.info(f"📋 Flow response: {flow_response is not None}")
             if flow_response:
                 return flow_response
+        
+        # =====================================================
+        # BOOKING INTENT DETECTION - Start flow if booking requested
+        # =====================================================
+        booking_keywords = [
+            "book", "appointment", "schedule", "reserve", "booking", 
+            "slot", "time slot", "appoint", "book a", "want to book",
+            "i want to book", "can i book", "need appointment"
+        ]
+        
+        is_booking_request = any(kw in user_message.lower() for kw in booking_keywords)
+        
+        if is_booking_request and user_id and not self.conversation_manager.is_flow_active(user_id):
+            # Check if appointment booking is enabled for this business
+            if self.appointment_handler:
+                config = self.appointment_handler.get_config(biz_id)
+                if config.get("enabled", False):
+                    # Start the structured appointment booking flow
+                    # Pass the initial message to extract any pre-provided data
+                    flow_response = self._start_appointment_flow(user_id, biz_id, config, user_message)
+                    if flow_response:
+                        return flow_response
         
         
         # Get conversation history
@@ -455,6 +481,241 @@ class AIBrain:
             "clarification_question": intent_result.clarification_question
         }
     
+    def _start_appointment_flow(
+        self,
+        user_id: str,
+        business_owner_id: str,
+        config: Dict[str, Any],
+        initial_message: str = ""
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Start a new appointment booking flow.
+        
+        This initializes the state machine and asks the first question.
+        If the initial_message contains booking details, extract them first.
+        """
+        if not self.appointment_handler:
+            return None
+        
+        # Get fields to collect from config (or use defaults)
+        # Order: service → date → time → name → phone (or custom fields)
+        if config.get("minimal_mode"):
+            required_fields = ["service", "date", "time", "name", "phone"]
+        else:
+            fields = sorted(config.get("fields", []), key=lambda x: x.get("order", 0))
+            required_fields = [f["id"] for f in fields]
+            
+            # IMPORTANT: Always include service if not already present
+            # Service is commonly mentioned in natural booking requests
+            if "service" not in required_fields:
+                required_fields.insert(0, "service")
+            
+            # Ensure we have service, date, time first if they exist
+            priority_order = ["service", "date", "time"]
+            for field in reversed(priority_order):
+                if field in required_fields:
+                    required_fields.remove(field)
+                    required_fields.insert(0, field)
+        
+        # Start the conversation flow
+        logger.info(f"📅 Starting flow with required_fields: {required_fields}")
+        state = self.conversation_manager.start_flow(
+            user_id=user_id,
+            flow_name="appointment_booking",
+            required_fields=required_fields,
+            config={**config, "business_owner_id": business_owner_id}
+        )
+        
+        # =====================================================
+        # SMART EXTRACTION: Try to extract data from initial message
+        # =====================================================
+        if initial_message:
+            logger.info(f"📅 Extracting data from initial message: '{initial_message}'")
+            extracted = self._extract_booking_data_from_message(initial_message)
+            logger.info(f"📅 Extracted data: {extracted}")
+            logger.info(f"📅 Missing fields before extraction: {state.missing_fields}")
+            
+            # Pre-populate any extracted fields (process in order of missing_fields)
+            for field_id in list(state.missing_fields):  # Use list() to avoid modification during iteration
+                if field_id in extracted:
+                    value = extracted[field_id]
+                    # Validate the extracted value
+                    field_def = self.appointment_handler._get_field_definition(field_id, config)
+                    logger.info(f"📅 Validating {field_id}: '{value}' (type: {field_def.get('type', 'text')})")
+                    validation = self.appointment_handler.validate_field(field_def["type"], value)
+                    
+                    if validation["valid"]:
+                        state.collect_field(field_id, validation["value"])
+                        logger.info(f"📅 ✓ Pre-filled {field_id}: {validation['value']}")
+                    else:
+                        logger.info(f"📅 ✗ Validation failed for {field_id}: {validation.get('error', 'unknown')}")
+        
+        # Check if we still need fields
+        if not state.missing_fields:
+            # All fields extracted from initial message! Show confirmation
+            state.flow_status = FlowStatus.AWAITING_CONFIRMATION
+            confirmation_msg = self.appointment_handler._generate_confirmation(state.collected_fields)
+            self.conversation_manager.add_message(user_id, "user", initial_message)
+            self.conversation_manager.add_message(user_id, "assistant", confirmation_msg)
+            
+            return {
+                "reply": confirmation_msg,
+                "intent": "booking_confirmation",
+                "confidence": 1.0,
+                "needs_human": False,
+                "suggested_actions": ["Yes, confirm", "No, cancel"],
+                "metadata": {
+                    "generation_method": "flow_smart_extraction",
+                    "flow": "appointment_booking",
+                    "extracted_fields": list(state.collected_fields.keys()),
+                    "use_buttons": True,
+                    "buttons": [
+                        {"id": "confirm_yes", "title": "✅ Yes, Confirm"},
+                        {"id": "confirm_no", "title": "❌ No, Cancel"}
+                    ]
+                }
+            }
+        
+        # Get first missing field and generate question
+        first_field_id = state.current_field
+        first_field_def = self.appointment_handler._get_field_definition(first_field_id, config)
+        
+        # Check for date - if extracted, get available slots for time question
+        available_slots = None
+        if first_field_id == "time" and state.has_field("date"):
+            available_slots = self.appointment_handler.get_available_slots(
+                business_owner_id, 
+                state.collected_fields["date"]
+            )
+            state.flow_config["_available_slots"] = available_slots
+        
+        question = self.appointment_handler._generate_question(
+            first_field_def, 
+            is_first=True, 
+            available_slots=available_slots
+        )
+        
+        # If we extracted some data, acknowledge it
+        if state.collected_fields:
+            extracted_summary = ", ".join([f"{k}: {v}" for k, v in state.collected_fields.items()])
+            question = f"Great! I got: {extracted_summary} ✓\n\n{question}"
+        
+        # Add to conversation history
+        self.conversation_manager.add_message(user_id, "user", initial_message)
+        self.conversation_manager.add_message(user_id, "assistant", question)
+        
+        return {
+            "reply": question,
+            "intent": "booking_started",
+            "confidence": 1.0,
+            "needs_human": False,
+            "suggested_actions": ["Cancel booking"],
+            "metadata": {
+                "generation_method": "flow_started",
+                "flow": "appointment_booking",
+                "current_field": first_field_id,
+                "pre_extracted": list(state.collected_fields.keys())
+            }
+        }
+    
+    def _extract_booking_data_from_message(self, message: str) -> Dict[str, str]:
+        """
+        Extract booking information from a natural language message.
+        
+        Handles messages like:
+        - "book appointment for haircut on 05-01-26 at 9am"
+        - "I want to schedule a consultation tomorrow at 2pm"
+        - "Book me in for a massage on Monday 10am"
+        """
+        import re
+        extracted = {}
+        msg_lower = message.lower()
+        
+        # ==========================================
+        # EXTRACT SERVICE
+        # ==========================================
+        service_keywords = [
+            "haircut", "hair cut", "facial", "massage", "manicure", "pedicure",
+            "waxing", "threading", "spa", "treatment", "consultation", "checkup",
+            "check up", "cleaning", "trim", "shave", "color", "coloring", "styling",
+            "blowout", "blow out", "highlights", "keratin", "rebonding", "straightening",
+            "appointment", "meeting", "session"
+        ]
+        
+        # First check for "for X" pattern - more specific
+        for_patterns = [
+            r'for\s+(?:a\s+)?(\w+(?:\s+\w+)?)\s+(?:on|at|tomorrow|today)',  # "for haircut on", "for a facial at"
+            r'for\s+(?:a\s+)?(\w+(?:\s+\w+)?)\s*$',  # "for haircut" at end
+            r'book\s+(?:a\s+)?(\w+(?:\s+\w+)?)\s+(?:on|at|for)',  # "book haircut on"
+        ]
+        
+        for pattern in for_patterns:
+            for_match = re.search(pattern, msg_lower)
+            if for_match:
+                potential_service = for_match.group(1).strip()
+                # Filter out common non-service words
+                skip_words = ["a", "an", "the", "my", "me", "appointment", "booking", "slot", "time"]
+                if potential_service not in skip_words and len(potential_service) > 2:
+                    extracted["service"] = potential_service.title()
+                    break
+            if "service" in extracted:
+                break
+        
+        # Fallback: check for known service keywords
+        if "service" not in extracted:
+            for keyword in service_keywords:
+                if keyword in msg_lower and keyword not in ["appointment", "meeting", "session"]:
+                    extracted["service"] = keyword.title()
+                    break
+        
+        # ==========================================
+        # EXTRACT DATE
+        # ==========================================
+        # Pattern: DD-MM-YY or DD/MM/YY or DD-MM-YYYY
+        date_pattern = r'(\d{1,2}[-/]\d{1,2}[-/]\d{2,4})'
+        date_match = re.search(date_pattern, message)
+        if date_match:
+            extracted["date"] = date_match.group(1)
+        else:
+            # Natural language dates
+            if "today" in msg_lower:
+                from datetime import date
+                extracted["date"] = date.today().strftime("%Y-%m-%d")
+            elif "tomorrow" in msg_lower:
+                from datetime import date, timedelta
+                extracted["date"] = (date.today() + timedelta(days=1)).strftime("%Y-%m-%d")
+        
+        # ==========================================
+        # EXTRACT TIME
+        # ==========================================
+        # Pattern: 9am, 10:30am, 2 pm, 14:00
+        time_patterns = [
+            r'(\d{1,2}:\d{2}\s*(?:am|pm))',  # 10:30 AM
+            r'(\d{1,2}\s*(?:am|pm))',          # 9am, 2 pm
+            r'at\s+(\d{1,2}:\d{2})',           # at 14:00
+            r'at\s+(\d{1,2})\s*(?:o.?clock)?', # at 9, at 9 o'clock
+        ]
+        
+        for pattern in time_patterns:
+            time_match = re.search(pattern, msg_lower)
+            if time_match:
+                extracted["time"] = time_match.group(1).strip()
+                break
+        
+        # ==========================================
+        # EXTRACT PHONE (if present)
+        # ==========================================
+        phone_match = re.search(r'\b(\d{10,})\b', message)
+        if phone_match:
+            extracted["phone"] = phone_match.group(1)
+        
+        # ==========================================
+        # EXTRACT NAME (if present) - usually not in initial message
+        # ==========================================
+        # Names are harder to extract, skip for now
+        
+        return extracted
+
     def _handle_appointment_flow(
         self,
         user_id: str,
@@ -468,56 +729,99 @@ class AIBrain:
         If the user asks a question instead of answering, it uses the LLM 
         to answer, then re-prompts for the missing field.
         """
+        logger.info(f"📅 _handle_appointment_flow called for user: {user_id}, message: '{message}'")
+        
         if not self.appointment_handler:
+            logger.warning("📅 No appointment_handler available")
             return None
             
         start_time = time.time()
         
-        # 1. Process response with handler logic
-        # Note: In real app, we need to pass the business owner ID, not customer ID
-        # Here we assume business_id is the owner ID for simplicity
-        business_owner_id = business_data.get("business_id")
+        # Get business owner ID from flow config or business_data
+        business_owner_id = business_data.get("business_id") or business_data.get("user_id")
+        logger.info(f"📅 business_owner_id from business_data: {business_owner_id}")
         
         # Get current state to see what we're asking for
         state = self.conversation_manager.get_state(user_id)
+        if not state:
+            logger.warning(f"📅 No state found for user: {user_id}")
+            return None
+        
+        logger.info(f"📅 State: active_flow={state.active_flow}, flow_status={state.flow_status}")
+            
+        # Get business_owner_id from flow config if available
+        if state.flow_config.get("business_owner_id"):
+            business_owner_id = state.flow_config["business_owner_id"]
+            
         current_field = state.current_field
         
+        # Check if this is a confirmation response
+        msg_lower = message.lower().strip()
+        logger.info(f"📅 Appointment flow - Status: {state.flow_status}, Message: '{msg_lower}'")
+        
+        if state.flow_status == FlowStatus.AWAITING_CONFIRMATION:
+            logger.info(f"📅 Awaiting confirmation - checking user response: '{msg_lower}'")
+            if msg_lower in ["yes", "confirm", "ok", "okay", "sure", "book it", "book", "haan", "ha", "ji", "y"]:
+                # User confirmed - book the appointment!
+                logger.info(f"📅 User confirmed! Calling _complete_booking with business_owner_id: {business_owner_id}")
+                return self._complete_booking(user_id, state, business_owner_id)
+            elif msg_lower in ["no", "cancel", "nahi", "nako", "na", "n"]:
+                # User cancelled
+                self.conversation_manager.cancel_flow(user_id)
+                self.conversation_manager.add_message(user_id, "user", message)
+                cancel_msg = "No problem! I've cancelled the booking. Is there anything else I can help you with? 😊"
+                self.conversation_manager.add_message(user_id, "assistant", cancel_msg)
+                return {
+                    "reply": cancel_msg,
+                    "intent": "booking_cancelled",
+                    "confidence": 1.0,
+                    "needs_human": False,
+                    "suggested_actions": ["Book again", "Services", "Contact"],
+                    "metadata": {"generation_method": "flow_cancelled"}
+                }
+        
         # 2. Check if this is a question/interruption (Mid-flow Intelligence)
-        # We use a quick prompt to check if the user answered the question or asked something else
         is_interruption = False
         
         # Simple heuristic first
         if "?" in message and len(message.split()) > 3:
             is_interruption = True
         
-        # If ambiguous, could use LLM here to classify "Answer vs Question"
-        
         if is_interruption:
             # Handle the interruption with normal LLM flow (but keep state active)
-            # The normal generate_response will run, but we need to inject state context
-            # so the LLM knows to append "Now, back to your appointment..."
             return None  # Return None to fall back to normal LLM processing
             
         # 3. Validate and process the answer
         result = self.appointment_handler.process_response(
             user_id=business_owner_id, 
-            customer_phone=user_id, # Using user_id as phone for now
+            customer_phone=user_id,
             response=message,
-            conversation_state=state # Pass the state object!
+            conversation_state=state
         )
         
         # 4. Update state based on result
         if result.get("valid"):
             # Success - update state
             if result.get("complete"):
-                # All done!
+                # All fields collected - show confirmation
+                confirmation_msg = result["confirmation_message"]
+                self.conversation_manager.add_message(user_id, "user", message)
+                self.conversation_manager.add_message(user_id, "assistant", confirmation_msg)
+                
                 return {
-                    "reply": result["confirmation_message"],
+                    "reply": confirmation_msg,
                     "intent": "booking_confirmation",
                     "confidence": 1.0,
                     "needs_human": False,
-                    "suggested_actions": ["Confirm", "Cancel"],
-                    "metadata": {"generation_method": "flow_complete"}
+                    "suggested_actions": ["Yes, confirm", "No, cancel"],
+                    "metadata": {
+                        "generation_method": "flow_awaiting_confirmation",
+                        "use_buttons": result.get("use_buttons", True),
+                        "buttons": result.get("buttons", [
+                            {"id": "confirm_yes", "title": "✅ Yes, Confirm"},
+                            {"id": "confirm_no", "title": "❌ No, Cancel"}
+                        ])
+                    }
                 }
             else:
                 # Next question
@@ -530,26 +834,110 @@ class AIBrain:
                     "intent": "booking_in_progress",
                     "confidence": 1.0,
                     "needs_human": False,
-                    "suggested_actions": ["Cancel"],
+                    "suggested_actions": ["Cancel booking"],
                     "metadata": {"generation_method": "flow_next_step"}
                 }
         else:
-            # Validation error
+            # Validation error or conflict
             error_msg = result.get("error", "I didn't understand that.")
-            retry_msg = f"{error_msg} {result.get('retry_question', '')}"
+            retry_question = result.get("retry_question", "")
+            
+            if result.get("conflict"):
+                # Time slot conflict - just show the error with available slots
+                full_msg = error_msg
+            else:
+                full_msg = f"{error_msg}\n\n{retry_question}" if retry_question else error_msg
             
             self.conversation_manager.add_message(user_id, "user", message)
-            self.conversation_manager.add_message(user_id, "assistant", retry_msg)
+            self.conversation_manager.add_message(user_id, "assistant", full_msg)
             
             return {
-                "reply": retry_msg,
+                "reply": full_msg,
                 "intent": "booking_validation_error",
                 "confidence": 1.0,
                 "needs_human": False,
-                "suggested_actions": ["Cancel"],
+                "suggested_actions": ["Cancel booking"],
                 "metadata": {
                     "generation_method": "flow_validation_error",
                     "error": error_msg
+                }
+            }
+    
+    def _complete_booking(
+        self,
+        user_id: str,
+        state: ConversationState,
+        business_owner_id: str
+    ) -> Dict[str, Any]:
+        """
+        Complete the booking by calling the booking API.
+        """
+        logger.info(f"📅 _complete_booking called for user: {user_id}")
+        logger.info(f"📅 Business owner ID: {business_owner_id}")
+        logger.info(f"📅 Collected fields: {state.collected_fields}")
+        
+        collected = state.collected_fields
+        
+        # Prepare booking data
+        booking_args = {
+            "customer_name": collected.get("name", "Customer"),
+            "phone": collected.get("phone", user_id),
+            "date": collected.get("date"),
+            "time": collected.get("time"),
+            "service": collected.get("service", "General Appointment"),
+            "notes": "",
+        }
+        
+        logger.info(f"📅 Booking args: {booking_args}")
+        
+        # Add any custom fields to notes
+        custom_notes = []
+        for key, value in collected.items():
+            if key not in ["name", "phone", "date", "time", "service"]:
+                custom_notes.append(f"{key}: {value}")
+        if custom_notes:
+            booking_args["notes"] = "\n".join(custom_notes)
+        
+        # Call the booking tool
+        from .tools import ToolExecutor
+        executor = ToolExecutor(
+            business_data={"business_id": business_owner_id},
+            user_id=user_id,
+            business_owner_id=business_owner_id
+        )
+        result = executor.execute("book_appointment", booking_args)
+        
+        # Complete the flow
+        self.conversation_manager.complete_flow(user_id)
+        
+        if result.success:
+            success_msg = result.message
+            self.conversation_manager.add_message(user_id, "assistant", success_msg)
+            
+            return {
+                "reply": success_msg,
+                "intent": "booking_complete",
+                "confidence": 1.0,
+                "needs_human": False,
+                "suggested_actions": ["View services", "Contact us"],
+                "metadata": {
+                    "generation_method": "booking_success",
+                    "booking": result.data.get("booking", {})
+                }
+            }
+        else:
+            error_msg = f"😔 {result.message}\n\nWould you like to try again with a different time?"
+            self.conversation_manager.add_message(user_id, "assistant", error_msg)
+            
+            return {
+                "reply": error_msg,
+                "intent": "booking_failed",
+                "confidence": 1.0,
+                "needs_human": True,
+                "suggested_actions": ["Try again", "Contact us"],
+                "metadata": {
+                    "generation_method": "booking_failed",
+                    "error": result.message
                 }
             }
 

@@ -30,6 +30,21 @@ interface BusinessHours {
   buffer?: number;
 }
 
+// Service configuration type
+interface ServiceConfig {
+  id: string;
+  name: string;
+  duration: number; // in minutes
+  capacity: number; // max customers per slot
+  price?: number;
+  description?: string;
+}
+
+// Default services
+const DEFAULT_SERVICES: ServiceConfig[] = [
+  { id: "default", name: "General Appointment", duration: 60, capacity: 1 }
+];
+
 // Default appointment fields
 const DEFAULT_APPOINTMENT_FIELDS: AppointmentField[] = [
   { id: "name", label: "Full Name", type: "text", required: true, order: 1 },
@@ -118,6 +133,7 @@ export async function GET(request: NextRequest) {
       appointment_fields: DEFAULT_APPOINTMENT_FIELDS,
       appointment_business_hours: DEFAULT_BUSINESS_HOURS,
       appointment_minimal_mode: false,
+      appointment_services: DEFAULT_SERVICES,
     };
 
     // Ensure defaults are set for any missing fields
@@ -129,6 +145,9 @@ export async function GET(request: NextRequest) {
     }
     if (capabilities.appointment_minimal_mode === undefined) {
       capabilities.appointment_minimal_mode = false;
+    }
+    if (!capabilities.appointment_services || capabilities.appointment_services.length === 0) {
+      capabilities.appointment_services = DEFAULT_SERVICES;
     }
 
     return NextResponse.json({
@@ -159,6 +178,7 @@ export async function POST(request: NextRequest) {
       appointment_fields,
       appointment_business_hours,
       appointment_minimal_mode,
+      appointment_services,
     } = body;
 
     // Build update object with only provided fields
@@ -202,6 +222,22 @@ export async function POST(request: NextRequest) {
     // Validate and add appointment_minimal_mode
     if (typeof appointment_minimal_mode === "boolean") {
       updateData.appointment_minimal_mode = appointment_minimal_mode;
+    }
+
+    // Validate and add appointment_services
+    if (Array.isArray(appointment_services)) {
+      // Validate each service has required properties
+      const isValid = appointment_services.every(
+        (service: ServiceConfig) =>
+          service.id &&
+          service.name !== undefined &&
+          typeof service.duration === "number" &&
+          typeof service.capacity === "number" &&
+          service.capacity >= 1
+      );
+      if (isValid) {
+        updateData.appointment_services = appointment_services;
+      }
     }
 
     // Check if we have at least one valid field to update
