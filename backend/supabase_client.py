@@ -148,6 +148,43 @@ def get_credentials_by_phone_number_id(phone_number_id: str) -> Optional[Dict[st
         return None
 
 
+def get_credentials_for_user(user_id: str) -> Optional[Dict[str, Any]]:
+    """
+    Fetch WhatsApp credentials for a given user_id.
+    This is used when sending messages from the dashboard.
+    
+    Args:
+        user_id: The Supabase user UUID
+        
+    Returns:
+        Dict with 'access_token', 'phone_number_id', etc. or None if not found
+    """
+    client = get_supabase_client()
+    if not client:
+        return None
+    
+    try:
+        # Step 1: Find active phone number for this user
+        phone_result = client.table('connected_phone_numbers').select(
+            'id, phone_number_id, display_phone_number, whatsapp_account_id'
+        ).eq('user_id', user_id).eq('is_active', True).limit(1).execute()
+        
+        if not phone_result.data or len(phone_result.data) == 0:
+            print(f"⚠️ No active phone number found for user {user_id}")
+            return None
+        
+        phone_data = phone_result.data[0]
+        phone_number_id = phone_data.get('phone_number_id')
+        
+        # Use the existing function to get full credentials
+        return get_credentials_by_phone_number_id(phone_number_id)
+        
+    except Exception as e:
+        print(f"❌ Error fetching credentials for user: {e}")
+        return None
+
+
+
 def get_firebase_uid_from_user_id(user_id: str) -> Optional[str]:
     """
     Get Firebase UID from Supabase internal user_id.
