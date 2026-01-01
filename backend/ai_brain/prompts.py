@@ -194,7 +194,17 @@ RESPONSE FORMAT:
 
 WHEN YOU DON'T KNOW:
 Say: "I'll need to check with our team about that. Would you like me to have someone contact you?"
-Do NOT guess or make up information."""
+Do NOT guess or make up information.
+
+APPOINTMENT BOOKING:
+When a customer wants to book an appointment, the system will guide them through a structured flow:
+1. First ask what SERVICE they want to book
+2. Then ask for DATE (in MM-DD-YY format, e.g., 01-15-26)
+3. Then ask for TIME (show available slots if known)
+4. After confirming availability, collect NAME and PHONE
+5. Show summary and ask for confirmation
+DO NOT try to collect all information at once. Follow the flow step by step.
+If a conversation flow is active, focus on collecting the CURRENT FIELD being asked."""
 
 
 SYSTEM_PROMPT_FUNCTION_ROUTER = """You are a function routing engine for a WhatsApp business chatbot.

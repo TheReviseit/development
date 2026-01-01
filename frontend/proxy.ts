@@ -27,6 +27,7 @@ export async function proxy(request: NextRequest) {
     "/api/webhooks",
     "/api/facebook/deauthorize",
     "/api/facebook/data-deletion",
+    "/api/ai-appointment-book", // Internal API for AI booking (uses x-api-key auth instead)
     "/data-handling-policy",
     "/manifest.webmanifest",
     "/sw.js",

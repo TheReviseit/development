@@ -115,7 +115,8 @@ def get_business_data_from_firestore(user_id: str) -> Optional[Dict[str, Any]]:
             print(f"📊 Loaded business data from Firestore for user: {user_id}")
             print(f"   Business: {data.get('businessName', 'Unknown')}")
             print(f"   Products: {len(data.get('products', []))} items")
-            return convert_firestore_to_ai_format(data)
+            # Pass the Firebase UID explicitly to ensure correct business_id
+            return convert_firestore_to_ai_format(data, firebase_uid=user_id)
         else:
             print(f"⚠️ No business data found in Firestore for user: {user_id}")
             return None
@@ -125,17 +126,25 @@ def get_business_data_from_firestore(user_id: str) -> Optional[Dict[str, Any]]:
         return None
 
 
-def convert_firestore_to_ai_format(data: Dict[str, Any]) -> Dict[str, Any]:
+def convert_firestore_to_ai_format(data: Dict[str, Any], firebase_uid: str = None) -> Dict[str, Any]:
     """
     Convert Firestore document format to AI Brain expected format.
     
     Firestore uses camelCase, AI Brain expects snake_case.
+    
+    Args:
+        data: Firestore document data
+        firebase_uid: Firebase UID to use as business_id (for booking operations)
     """
     # Get socialMedia from Firestore (camelCase)
     social_media_data = data.get('socialMedia', {})
     
+    # Use Firebase UID as business_id for consistency with booking operations
+    # This ensures AI bookings are associated with the correct dashboard user
+    business_id = firebase_uid or data.get('businessId') or data.get('userId', 'unknown')
+    
     return {
-        'business_id': data.get('businessId') or data.get('userId', 'unknown'),
+        'business_id': business_id,
         'business_name': data.get('businessName', 'Our Business'),
         'industry': data.get('industry', 'other'),
         'description': data.get('description', ''),

@@ -99,8 +99,11 @@ class ConversationState:
         self.current_field = None
     
     def is_active(self) -> bool:
-        """Check if a flow is currently active."""
-        return self.active_flow is not None and self.flow_status == FlowStatus.IN_PROGRESS
+        """Check if a flow is currently active (including awaiting confirmation)."""
+        return self.active_flow is not None and self.flow_status in (
+            FlowStatus.IN_PROGRESS, 
+            FlowStatus.AWAITING_CONFIRMATION
+        )
     
     def has_field(self, field_name: str) -> bool:
         """Check if a field has already been collected."""

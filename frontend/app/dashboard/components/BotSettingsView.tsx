@@ -55,6 +55,16 @@ interface BusinessHours {
   buffer?: number;
 }
 
+// Service configuration for appointments
+interface ServiceConfig {
+  id: string;
+  name: string;
+  duration: number; // in minutes
+  capacity: number; // max customers per slot
+  price?: number;
+  description?: string;
+}
+
 interface SocialMediaLinks {
   instagram: string;
   facebook: string;
@@ -344,6 +354,11 @@ export default function BotSettingsView() {
     buffer: 0,
   });
   const [minimalMode, setMinimalMode] = useState(false);
+  
+  // Services configuration state
+  const [services, setServices] = useState<ServiceConfig[]>([
+    { id: "default", name: "General Appointment", duration: 60, capacity: 1 }
+  ]);
   const [configExpanded, setConfigExpanded] = useState(false);
 
   // Initialize chat with welcome message if empty
@@ -409,6 +424,9 @@ export default function BotSettingsView() {
             }
             if (result.data.appointment_minimal_mode !== undefined) {
               setMinimalMode(result.data.appointment_minimal_mode);
+            }
+            if (result.data.appointment_services && result.data.appointment_services.length > 0) {
+              setServices(result.data.appointment_services);
             }
           }
         }
@@ -533,6 +551,38 @@ export default function BotSettingsView() {
     setAppointmentFields(newFields.map((f, i) => ({ ...f, order: i + 1 })));
   };
 
+  // Service management functions
+  const addService = () => {
+    const newService: ServiceConfig = {
+      id: `service_${Date.now()}`,
+      name: "",
+      duration: 60,
+      capacity: 1
+    };
+    setServices([...services, newService]);
+  };
+
+  const updateService = (id: string, updates: Partial<ServiceConfig>) => {
+    setServices(
+      services.map((service) =>
+        service.id === id ? { ...service, ...updates } : service
+      )
+    );
+  };
+
+  const removeService = (id: string) => {
+    if (services.length <= 1) {
+      setAlertToast({
+        show: true,
+        variant: "warning",
+        title: "Cannot Remove",
+        description: "At least one service is required",
+      });
+      return;
+    }
+    setServices(services.filter((service) => service.id !== id));
+  };
+
   // Save appointment configuration
   const saveAppointmentConfig = async () => {
     setCapabilitiesLoading(true);
@@ -544,6 +594,7 @@ export default function BotSettingsView() {
           appointment_fields: appointmentFields,
           appointment_business_hours: businessHours,
           appointment_minimal_mode: minimalMode,
+          appointment_services: services,
         }),
       });
 
@@ -2014,6 +2065,102 @@ export default function BotSettingsView() {
                         <option value={120}>2 hours</option>
                       </select>
                     </div>
+                  </div>
+                </div>
+
+                {/* Services Configuration */}
+                <div
+                  className={styles.configCard}
+                  style={{ marginTop: "1rem" }}
+                >
+                  <div className={styles.configCardHeader}>
+                    <div>
+                      <h3 className={styles.configCardTitle}>
+                        Services
+                      </h3>
+                      <p className={styles.configCardDescription}>
+                        Configure your services with duration and capacity per slot
+                      </p>
+                    </div>
+                    <button
+                      className={styles.addButton}
+                      onClick={addService}
+                    >
+                      + Add Service
+                    </button>
+                  </div>
+
+                  <div className={styles.fieldBuilderList}>
+                    {services.map((service, index) => (
+                      <div
+                        key={service.id}
+                        className={styles.fieldBuilderItem}
+                      >
+                        <div className={styles.fieldBuilderContent} style={{ flex: 1 }}>
+                          <div className={styles.fieldBuilderRow}>
+                            <input
+                              type="text"
+                              placeholder="Service Name (e.g., Haircut, Consultation)"
+                              value={service.name}
+                              onChange={(e) =>
+                                updateService(service.id, {
+                                  name: e.target.value,
+                                })
+                              }
+                              className={styles.fieldLabelInput}
+                              style={{ flex: 2 }}
+                            />
+                            <div className={styles.formGroup} style={{ flex: 1, minWidth: '120px' }}>
+                              <label style={{ fontSize: '12px', marginBottom: '4px' }}>Duration</label>
+                              <select
+                                value={service.duration}
+                                onChange={(e) =>
+                                  updateService(service.id, {
+                                    duration: parseInt(e.target.value),
+                                  })
+                                }
+                                className={styles.fieldTypeSelect}
+                              >
+                                <option value={15}>15 min</option>
+                                <option value={30}>30 min</option>
+                                <option value={45}>45 min</option>
+                                <option value={60}>1 hour</option>
+                                <option value={90}>1.5 hours</option>
+                                <option value={120}>2 hours</option>
+                              </select>
+                            </div>
+                            <div className={styles.formGroup} style={{ flex: 1, minWidth: '120px' }}>
+                              <label style={{ fontSize: '12px', marginBottom: '4px' }}>Capacity/Slot</label>
+                              <input
+                                type="number"
+                                min={1}
+                                max={100}
+                                value={service.capacity}
+                                onChange={(e) =>
+                                  updateService(service.id, {
+                                    capacity: Math.max(1, parseInt(e.target.value) || 1),
+                                  })
+                                }
+                                className={styles.fieldTypeSelect}
+                                style={{ width: '100%' }}
+                              />
+                            </div>
+                            <button
+                              className={styles.removeFieldBtn}
+                              onClick={() => removeService(service.id)}
+                              title="Remove service"
+                            >
+                              ×
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                    {services.length === 0 && (
+                      <p style={{ color: '#888', textAlign: 'center', padding: '1rem' }}>
+                        No services configured. Add at least one service.
+                      </p>
+                    )}
                   </div>
                 </div>
 

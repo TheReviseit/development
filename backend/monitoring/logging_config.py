@@ -38,7 +38,8 @@ def setup_structured_logging(
         Configured root logger
     """
     level = level or os.getenv("LOG_LEVEL", "INFO")
-    format_type = format_type or os.getenv("LOG_FORMAT", "json")
+    # Use text format by default in development for cleaner logs
+    format_type = format_type or os.getenv("LOG_FORMAT", "text")
     
     # Set up root logger
     root_logger = logging.getLogger()

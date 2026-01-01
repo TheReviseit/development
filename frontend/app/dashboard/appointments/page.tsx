@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import styles from "./appointments.module.css";
+import { useRealtimeAppointments } from "@/lib/hooks/useRealtimeAppointments";
 
 interface Appointment {
   id: string;
@@ -52,6 +53,7 @@ export default function AppointmentsPage() {
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<"month" | "week" | "day">("month");
   const [showModal, setShowModal] = useState(false);
+  const [showListModal, setShowListModal] = useState(false);
   const [editingAppointment, setEditingAppointment] =
     useState<Appointment | null>(null);
   const [filter, setFilter] = useState<string>("all");
@@ -63,6 +65,68 @@ export default function AppointmentsPage() {
     duration: 60,
     service: "",
     notes: "",
+  });
+  const [userId, setUserId] = useState<string | null>(null);
+
+  // Fetch user ID for realtime subscription
+  useEffect(() => {
+    const fetchUserId = async () => {
+      try {
+        const response = await fetch("/api/me");
+        const data = await response.json();
+        if (data.success && data.user?.uid) {
+          setUserId(data.user.uid);
+          console.log("🔑 Got user ID for realtime:", data.user.uid);
+        }
+      } catch (error) {
+        console.error("Error fetching user ID:", error);
+      }
+    };
+    fetchUserId();
+  }, []);
+
+  // Real-time appointment handlers
+  const handleRealtimeInsert = useCallback((newAppointment: Appointment) => {
+    console.log("📥 Realtime: New appointment added");
+    setAppointments((prev) => {
+      // Check if appointment already exists (avoid duplicates)
+      if (prev.some((apt) => apt.id === newAppointment.id)) {
+        return prev;
+      }
+      // Add to list and sort by date/time
+      const updated = [...prev, newAppointment];
+      return updated.sort((a, b) => {
+        const dateCompare = a.date.localeCompare(b.date);
+        if (dateCompare !== 0) return dateCompare;
+        return a.time.localeCompare(b.time);
+      });
+    });
+  }, []);
+
+  const handleRealtimeUpdate = useCallback(
+    (updatedAppointment: Appointment) => {
+      console.log("📝 Realtime: Appointment updated");
+      setAppointments((prev) =>
+        prev.map((apt) =>
+          apt.id === updatedAppointment.id ? updatedAppointment : apt
+        )
+      );
+    },
+    []
+  );
+
+  const handleRealtimeDelete = useCallback((deleted: { id: string }) => {
+    console.log("🗑️ Realtime: Appointment deleted");
+    setAppointments((prev) => prev.filter((apt) => apt.id !== deleted.id));
+  }, []);
+
+  // Subscribe to realtime updates
+  const { isConnected: realtimeActive } = useRealtimeAppointments({
+    userId,
+    onInsert: handleRealtimeInsert,
+    onUpdate: handleRealtimeUpdate,
+    onDelete: handleRealtimeDelete,
+    enabled: !!userId,
   });
 
   // Check if appointment feature is enabled
@@ -81,6 +145,15 @@ export default function AppointmentsPage() {
     checkCapabilities();
   }, [router]);
 
+  // Helper to format date as YYYY-MM-DD in LOCAL timezone (not UTC)
+  // This prevents timezone issues where dates shift by a day
+  const formatDateLocal = (date: Date): string => {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, "0");
+    const day = String(date.getDate()).padStart(2, "0");
+    return `${year}-${month}-${day}`;
+  };
+
   // Fetch appointments
   const fetchAppointments = useCallback(async () => {
     try {
@@ -97,15 +170,35 @@ export default function AppointmentsPage() {
       );
 
       const params = new URLSearchParams({
-        startDate: startDate.toISOString().split("T")[0],
-        endDate: endDate.toISOString().split("T")[0],
+        startDate: formatDateLocal(startDate),
+        endDate: formatDateLocal(endDate),
       });
+
+      console.log(`📅 Fetching appointments: ${params.toString()}`);
 
       const response = await fetch(`/api/appointments?${params}`);
       const data = await response.json();
 
+      console.log(`📅 Appointments response:`, {
+        success: data.success,
+        count: data.data?.length || 0,
+        error: data.error,
+      });
+
       if (data.success) {
         setAppointments(data.data);
+
+        // Debug: Log if we got data but it might be for wrong dates
+        if (data.data.length === 0) {
+          console.log(
+            `📅 No appointments in range ${formatDateLocal(
+              startDate
+            )} to ${formatDateLocal(endDate)}`
+          );
+          console.log(`📅 Tip: Use /api/appointments/debug to diagnose issues`);
+        }
+      } else {
+        console.error("📅 Failed to fetch appointments:", data.error);
       }
     } catch (error) {
       console.error("Error fetching appointments:", error);
@@ -116,6 +209,8 @@ export default function AppointmentsPage() {
 
   useEffect(() => {
     fetchAppointments();
+    // Real-time updates are now handled by useRealtimeAppointments hook
+    // No need for polling anymore!
   }, [fetchAppointments]);
 
   // Calendar helpers
@@ -159,7 +254,7 @@ export default function AppointmentsPage() {
   };
 
   const getAppointmentsForDate = (date: Date) => {
-    const dateStr = date.toISOString().split("T")[0];
+    const dateStr = formatDateLocal(date);
     return appointments.filter((apt) => apt.date === dateStr);
   };
 
@@ -194,6 +289,87 @@ export default function AppointmentsPage() {
     );
   };
 
+  const navigateWeek = (direction: number) => {
+    const newDate = new Date(currentDate);
+    newDate.setDate(newDate.getDate() + direction * 7);
+    setCurrentDate(newDate);
+  };
+
+  const navigateDay = (direction: number) => {
+    const newDate = new Date(currentDate);
+    newDate.setDate(newDate.getDate() + direction);
+    setCurrentDate(newDate);
+  };
+
+  const navigate = (direction: number) => {
+    if (viewMode === "month") navigateMonth(direction);
+    else if (viewMode === "week") navigateWeek(direction);
+    else navigateDay(direction);
+  };
+
+  // Get days for week view
+  const getWeekDays = (date: Date) => {
+    const startOfWeek = new Date(date);
+    const day = startOfWeek.getDay();
+    startOfWeek.setDate(startOfWeek.getDate() - day); // Start from Sunday
+
+    const days: Date[] = [];
+    for (let i = 0; i < 7; i++) {
+      const d = new Date(startOfWeek);
+      d.setDate(startOfWeek.getDate() + i);
+      days.push(d);
+    }
+    return days;
+  };
+
+  // Time slots for day/week view
+  const TIME_SLOTS = [
+    "09:00",
+    "10:00",
+    "11:00",
+    "12:00",
+    "13:00",
+    "14:00",
+    "15:00",
+    "16:00",
+    "17:00",
+    "18:00",
+  ];
+
+  const getAppointmentsForTimeSlot = (date: Date, timeSlot: string) => {
+    const dateStr = formatDateLocal(date);
+    return appointments.filter(
+      (apt) =>
+        apt.date === dateStr && apt.time.startsWith(timeSlot.split(":")[0])
+    );
+  };
+
+  // Get display title based on view mode
+  const getViewTitle = () => {
+    if (viewMode === "month") {
+      return `${MONTHS[currentDate.getMonth()]} ${currentDate.getFullYear()}`;
+    } else if (viewMode === "week") {
+      const weekDays = getWeekDays(currentDate);
+      const startDate = weekDays[0];
+      const endDate = weekDays[6];
+      if (startDate.getMonth() === endDate.getMonth()) {
+        return `${
+          MONTHS[startDate.getMonth()]
+        } ${startDate.getDate()} - ${endDate.getDate()}, ${startDate.getFullYear()}`;
+      }
+      return `${MONTHS[startDate.getMonth()]} ${startDate.getDate()} - ${
+        MONTHS[endDate.getMonth()]
+      } ${endDate.getDate()}, ${endDate.getFullYear()}`;
+    } else {
+      return currentDate.toLocaleDateString("en-US", {
+        weekday: "long",
+        year: "numeric",
+        month: "long",
+        day: "numeric",
+      });
+    }
+  };
+
   // Form handlers
   const handleOpenModal = (appointment?: Appointment) => {
     if (appointment) {
@@ -212,7 +388,7 @@ export default function AppointmentsPage() {
       setFormData({
         customer_name: "",
         customer_phone: "",
-        date: selectedDate || new Date().toISOString().split("T")[0],
+        date: selectedDate || formatDateLocal(new Date()),
         time: "09:00",
         duration: 60,
         service: "",
@@ -318,12 +494,49 @@ export default function AppointmentsPage() {
       {/* Header */}
       <div className={styles.viewHeader}>
         <div className={styles.headerInfo}>
-          <h1 className={styles.viewTitle}>📅 Appointments</h1>
+          <h1 className={styles.viewTitle}>
+            📅 Appointments
+            {realtimeActive && (
+              <span
+                className={styles.liveIndicator}
+                title="Real-time updates active"
+              >
+                <span className={styles.liveDot}></span>
+                LIVE
+              </span>
+            )}
+          </h1>
           <p className={styles.viewSubtitle}>
             Manage bookings from AI and manual entries
           </p>
         </div>
         <div className={styles.headerActions}>
+          <button
+            className={styles.secondaryBtn}
+            onClick={() => fetchAppointments()}
+            title="Refresh appointments"
+          >
+            <svg
+              width="16"
+              height="16"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+            >
+              <path
+                d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+              <path
+                d="M21 3v5h-5"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            </svg>
+            Refresh
+          </button>
           <button
             className={styles.primaryBtn}
             onClick={() => handleOpenModal()}
@@ -382,10 +595,7 @@ export default function AppointmentsPage() {
         <div className={styles.calendarCard}>
           <div className={styles.calendarHeader}>
             <div className={styles.calendarNav}>
-              <button
-                className={styles.navBtn}
-                onClick={() => navigateMonth(-1)}
-              >
+              <button className={styles.navBtn} onClick={() => navigate(-1)}>
                 <svg
                   width="16"
                   height="16"
@@ -401,13 +611,8 @@ export default function AppointmentsPage() {
                   />
                 </svg>
               </button>
-              <span className={styles.currentMonth}>
-                {MONTHS[currentDate.getMonth()]} {currentDate.getFullYear()}
-              </span>
-              <button
-                className={styles.navBtn}
-                onClick={() => navigateMonth(1)}
-              >
+              <span className={styles.currentMonth}>{getViewTitle()}</span>
+              <button className={styles.navBtn} onClick={() => navigate(1)}>
                 <svg
                   width="16"
                   height="16"
@@ -452,55 +657,232 @@ export default function AppointmentsPage() {
             </div>
           </div>
 
-          <div className={styles.calendarGrid}>
-            {/* Day headers */}
-            {DAYS.map((day) => (
-              <div key={day} className={styles.calendarDayHeader}>
-                {day}
-              </div>
-            ))}
+          {/* Month View */}
+          {viewMode === "month" && (
+            <div className={styles.calendarGrid}>
+              {/* Day headers */}
+              {DAYS.map((day) => (
+                <div key={day} className={styles.calendarDayHeader}>
+                  {day}
+                </div>
+              ))}
 
-            {/* Calendar days */}
-            {getDaysInMonth(currentDate).map(
-              ({ date, isCurrentMonth }, index) => {
-                const dateStr = date.toISOString().split("T")[0];
-                const dayAppointments = getAppointmentsForDate(date);
-                const isSelected = selectedDate === dateStr;
+              {/* Calendar days */}
+              {getDaysInMonth(currentDate).map(
+                ({ date, isCurrentMonth }, index) => {
+                  const dateStr = formatDateLocal(date);
+                  const dayAppointments = getAppointmentsForDate(date);
+                  const isSelected = selectedDate === dateStr;
 
-                return (
+                  return (
+                    <div
+                      key={index}
+                      className={`${styles.calendarDay} ${
+                        !isCurrentMonth ? styles.calendarDayOther : ""
+                      } ${isToday(date) ? styles.calendarDayToday : ""} ${
+                        isSelected ? styles.calendarDaySelected : ""
+                      }`}
+                      onClick={() =>
+                        setSelectedDate(isSelected ? null : dateStr)
+                      }
+                    >
+                      <div className={styles.dayNumber}>{date.getDate()}</div>
+                      <div className={styles.dayAppointments}>
+                        {dayAppointments.slice(0, 3).map((apt) => (
+                          <div
+                            key={apt.id}
+                            className={`${styles.appointmentBar} ${
+                              styles[`bar_${apt.status}`]
+                            }`}
+                            title={`${apt.customer_name} - ${
+                              apt.service || "Appointment"
+                            }`}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleOpenModal(apt);
+                            }}
+                          >
+                            <span className={styles.appointmentTime}>
+                              {formatTime(apt.time)}
+                            </span>
+                          </div>
+                        ))}
+                        {dayAppointments.length > 3 && (
+                          <span className={styles.moreAppointments}>
+                            +{dayAppointments.length - 3} more
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  );
+                }
+              )}
+            </div>
+          )}
+
+          {/* Week View */}
+          {viewMode === "week" && (
+            <div className={styles.weekView}>
+              {/* Week header */}
+              <div className={styles.weekHeader}>
+                <div className={styles.timeColumn}></div>
+                {getWeekDays(currentDate).map((date, index) => (
                   <div
                     key={index}
-                    className={`${styles.calendarDay} ${
-                      !isCurrentMonth ? styles.calendarDayOther : ""
-                    } ${isToday(date) ? styles.calendarDayToday : ""} ${
-                      isSelected ? styles.calendarDaySelected : ""
+                    className={`${styles.weekDayHeader} ${
+                      isToday(date) ? styles.weekDayToday : ""
                     }`}
-                    onClick={() => setSelectedDate(isSelected ? null : dateStr)}
+                    onClick={() => {
+                      setCurrentDate(date);
+                      setViewMode("day");
+                    }}
                   >
-                    <div className={styles.dayNumber}>{date.getDate()}</div>
-                    <div className={styles.dayAppointments}>
-                      {dayAppointments.slice(0, 3).map((apt) => (
-                        <div
-                          key={apt.id}
-                          className={`${styles.appointmentDot} ${
-                            styles[apt.status]
-                          }`}
-                          title={`${apt.customer_name} - ${formatTime(
-                            apt.time
-                          )}`}
-                        />
-                      ))}
-                      {dayAppointments.length > 3 && (
-                        <span className={styles.moreAppointments}>
-                          +{dayAppointments.length - 3} more
-                        </span>
-                      )}
+                    <div className={styles.weekDayName}>
+                      {DAYS[date.getDay()]}
                     </div>
+                    <div className={styles.weekDayDate}>{date.getDate()}</div>
                   </div>
-                );
-              }
-            )}
-          </div>
+                ))}
+              </div>
+
+              {/* Time slots */}
+              <div className={styles.weekBody}>
+                {TIME_SLOTS.map((timeSlot) => (
+                  <div key={timeSlot} className={styles.weekRow}>
+                    <div className={styles.timeLabel}>
+                      {formatTime(timeSlot)}
+                    </div>
+                    {getWeekDays(currentDate).map((date, dayIndex) => {
+                      const slotAppointments = getAppointmentsForTimeSlot(
+                        date,
+                        timeSlot
+                      );
+                      return (
+                        <div
+                          key={dayIndex}
+                          className={styles.weekCell}
+                          onClick={() => {
+                            const dateStr = formatDateLocal(date);
+                            setFormData((prev) => ({
+                              ...prev,
+                              date: dateStr,
+                              time: timeSlot,
+                            }));
+                            setShowModal(true);
+                          }}
+                        >
+                          {slotAppointments.map((apt) => (
+                            <div
+                              key={apt.id}
+                              className={`${styles.weekAppointment} ${
+                                styles[`week_${apt.status}`]
+                              }`}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleOpenModal(apt);
+                              }}
+                            >
+                              <div className={styles.weekAptName}>
+                                {apt.customer_name}
+                              </div>
+                              <div className={styles.weekAptService}>
+                                {apt.service || "Appointment"}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      );
+                    })}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Day View */}
+          {viewMode === "day" && (
+            <div className={styles.dayView}>
+              <div className={styles.dayViewHeader}>
+                <span className={styles.dayViewDate}>
+                  {currentDate.toLocaleDateString("en-US", {
+                    weekday: "short",
+                    month: "short",
+                    day: "numeric",
+                  })}
+                </span>
+                {isToday(currentDate) && (
+                  <span className={styles.todayBadge}>Today</span>
+                )}
+              </div>
+
+              <div className={styles.dayViewBody}>
+                {TIME_SLOTS.map((timeSlot) => {
+                  const slotAppointments = getAppointmentsForTimeSlot(
+                    currentDate,
+                    timeSlot
+                  );
+                  return (
+                    <div key={timeSlot} className={styles.dayTimeRow}>
+                      <div className={styles.dayTimeLabel}>
+                        {formatTime(timeSlot)}
+                      </div>
+                      <div
+                        className={styles.dayTimeSlot}
+                        onClick={() => {
+                          const dateStr = formatDateLocal(currentDate);
+                          setFormData((prev) => ({
+                            ...prev,
+                            date: dateStr,
+                            time: timeSlot,
+                          }));
+                          setShowModal(true);
+                        }}
+                      >
+                        {slotAppointments.length === 0 ? (
+                          <div className={styles.emptySlot}>
+                            <span>+ Click to book</span>
+                          </div>
+                        ) : (
+                          slotAppointments.map((apt) => (
+                            <div
+                              key={apt.id}
+                              className={`${styles.dayAppointmentCard} ${
+                                styles[`dayCard_${apt.status}`]
+                              }`}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleOpenModal(apt);
+                              }}
+                            >
+                              <div className={styles.dayAptHeader}>
+                                <span className={styles.dayAptTime}>
+                                  {formatTime(apt.time)}
+                                </span>
+                                <span
+                                  className={`${styles.dayAptStatus} ${
+                                    styles[`status_${apt.status}`]
+                                  }`}
+                                >
+                                  {apt.status}
+                                </span>
+                              </div>
+                              <div className={styles.dayAptName}>
+                                {apt.customer_name}
+                              </div>
+                              <div className={styles.dayAptDetails}>
+                                <span>{apt.service || "General"}</span>
+                                <span>{apt.customer_phone}</span>
+                              </div>
+                            </div>
+                          ))
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Appointments List */}
@@ -543,6 +925,18 @@ export default function AppointmentsPage() {
               >
                 Add Appointment
               </button>
+              {process.env.NODE_ENV === "development" && (
+                <p
+                  className={styles.emptyText}
+                  style={{
+                    marginTop: "1rem",
+                    fontSize: "0.75rem",
+                    opacity: 0.6,
+                  }}
+                >
+                  Debug: Check /api/appointments/debug for diagnosis
+                </p>
+              )}
             </div>
           ) : (
             filteredAppointments.map((appointment) => (
@@ -771,6 +1165,152 @@ export default function AppointmentsPage() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Floating Action Button - Mobile Only */}
+      <button
+        className={styles.fab}
+        onClick={() => handleOpenModal()}
+        aria-label="Create new appointment"
+      >
+        <svg
+          width="24"
+          height="24"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2.5"
+        >
+          <line x1="12" y1="5" x2="12" y2="19" strokeLinecap="round" />
+          <line x1="5" y1="12" x2="19" y2="12" strokeLinecap="round" />
+        </svg>
+      </button>
+
+      {/* List Button - Mobile Only (Calendar Icon) */}
+      <button
+        className={styles.listFab}
+        onClick={() => setShowListModal(true)}
+        aria-label="View all appointments"
+      >
+        <svg
+          width="22"
+          height="22"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+        >
+          <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
+          <line x1="16" y1="2" x2="16" y2="6" />
+          <line x1="8" y1="2" x2="8" y2="6" />
+          <line x1="3" y1="10" x2="21" y2="10" />
+        </svg>
+      </button>
+
+      {/* Appointments List Modal - Mobile Only */}
+      {showListModal && (
+        <div
+          className={styles.modalOverlay}
+          onClick={() => setShowListModal(false)}
+        >
+          <div
+            className={styles.listModal}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className={styles.modalHeader}>
+              <h3 className={styles.modalTitle}>All Appointments</h3>
+              <button
+                className={styles.modalClose}
+                onClick={() => setShowListModal(false)}
+              >
+                ✕
+              </button>
+            </div>
+            <div className={styles.listModalBody}>
+              <select
+                className={styles.filterSelect}
+                value={filter}
+                onChange={(e) => setFilter(e.target.value)}
+                style={{ marginBottom: "1rem", width: "100%" }}
+              >
+                <option value="all">All Status</option>
+                <option value="pending">Pending</option>
+                <option value="confirmed">Confirmed</option>
+                <option value="cancelled">Cancelled</option>
+                <option value="completed">Completed</option>
+              </select>
+
+              {filteredAppointments.length === 0 ? (
+                <div className={styles.emptyState}>
+                  <div className={styles.emptyIcon}>📅</div>
+                  <h4 className={styles.emptyTitle}>No appointments</h4>
+                  <p className={styles.emptyText}>
+                    {selectedDate
+                      ? "No appointments on this date"
+                      : "No appointments found for this month"}
+                  </p>
+                </div>
+              ) : (
+                filteredAppointments.map((appointment) => (
+                  <div
+                    key={appointment.id}
+                    className={styles.appointmentCard}
+                    onClick={() => {
+                      setShowListModal(false);
+                      handleOpenModal(appointment);
+                    }}
+                  >
+                    <div className={styles.appointmentCardHeader}>
+                      <span className={styles.customerName}>
+                        {appointment.customer_name}
+                      </span>
+                      <span
+                        className={`${styles.statusBadge} ${
+                          styles[appointment.status]
+                        }`}
+                      >
+                        {appointment.status}
+                      </span>
+                    </div>
+                    <div className={styles.appointmentDetails}>
+                      <div className={styles.detailRow}>
+                        <svg
+                          className={styles.detailIcon}
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="2"
+                        >
+                          <circle cx="12" cy="12" r="10" />
+                          <polyline points="12 6 12 12 16 14" />
+                        </svg>
+                        {formatTime(appointment.time)} ({appointment.duration}{" "}
+                        min)
+                      </div>
+                      <div className={styles.detailRow}>
+                        <svg
+                          className={styles.detailIcon}
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="2"
+                        >
+                          <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72" />
+                        </svg>
+                        {appointment.customer_phone}
+                      </div>
+                      {appointment.service && (
+                        <div className={styles.detailRow}>
+                          {appointment.service}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
           </div>
         </div>
       )}
