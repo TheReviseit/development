@@ -3,9 +3,14 @@ Function/Tool definitions for ChatGPT function-calling.
 Defines structured tools for actionable intents like booking, pricing, and location queries.
 """
 
+import os
+import logging
+import requests
 from typing import Dict, List, Any, Optional, Callable
 from dataclasses import dataclass
 from enum import Enum
+
+logger = logging.getLogger(__name__)
 
 
 class ToolName(str, Enum):
@@ -246,8 +251,13 @@ class ToolExecutor:
     Each tool function takes business_data and arguments, returns ToolResult.
     """
     
-    def __init__(self, business_data: Dict[str, Any]):
+    # Backend API URL for internal calls
+    BACKEND_API_URL = os.environ.get('BACKEND_URL', 'http://localhost:5000')
+    INTERNAL_API_KEY = os.environ.get('INTERNAL_API_KEY', 'reviseit-internal-key')
+    
+    def __init__(self, business_data: Dict[str, Any], user_id: str = None):
         self.business_data = business_data
+        self.user_id = user_id
         self._handlers: Dict[str, Callable] = {
             ToolName.GET_PRICING: self._get_pricing,
             ToolName.SEARCH_PRODUCTS: self._search_products,
@@ -365,8 +375,9 @@ class ToolExecutor:
         )
     
     def _book_appointment(self, args: Dict[str, Any]) -> ToolResult:
-        """Create a booking."""
-        required_fields = ["customer_name", "phone", "date", "time", "service"]
+        """Create a booking by calling the actual booking API."""
+        # Service is optional for booking - remove from required fields
+        required_fields = ["customer_name", "phone", "date", "time"]
         missing = [f for f in required_fields if not args.get(f)]
         
         if missing:
@@ -376,22 +387,99 @@ class ToolExecutor:
                 message=f"Missing required information: {', '.join(missing)}"
             )
         
-        # In production, this would create a booking in the system
-        booking_data = {
+        # Check if user_id is available
+        if not self.user_id:
+            logger.error("No user_id provided to ToolExecutor for booking")
+            return ToolResult(
+                success=False,
+                data={"error": "configuration_error"},
+                message="Unable to process booking. Please try again."
+            )
+        
+        # Prepare booking data for the API
+        booking_payload = {
+            "user_id": self.user_id,
             "customer_name": args.get("customer_name"),
-            "phone": args.get("phone"),
+            "customer_phone": args.get("phone"),
             "date": args.get("date"),
             "time": args.get("time"),
-            "service": args.get("service"),
+            "service": args.get("service", "General Appointment"),
             "notes": args.get("notes", ""),
-            "status": "pending_confirmation"
         }
         
-        return ToolResult(
-            success=True,
-            data={"booking": booking_data},
-            message="Booking request created! Our team will confirm shortly."
-        )
+        try:
+            # Call the backend booking API
+            response = requests.post(
+                f"{self.BACKEND_API_URL}/api/appointments/book",
+                json=booking_payload,
+                headers={
+                    "Content-Type": "application/json",
+                    "x-api-key": self.INTERNAL_API_KEY
+                },
+                timeout=15
+            )
+            
+            result = response.json()
+            
+            if response.status_code == 200 and result.get("success"):
+                # Booking successful!
+                appointment = result.get("appointment", {})
+                return ToolResult(
+                    success=True,
+                    data={
+                        "booking": appointment,
+                        "status": "confirmed",
+                        "confirmation_message": result.get("confirmation_message", "")
+                    },
+                    message=result.get("confirmation_message", "Your appointment has been confirmed!")
+                )
+            
+            elif response.status_code == 409:
+                # Time slot conflict
+                available_slots = result.get("available_slots", [])
+                slots_str = ", ".join(available_slots[:5]) if available_slots else "No slots available"
+                return ToolResult(
+                    success=False,
+                    data={
+                        "conflict": True,
+                        "available_slots": available_slots,
+                        "requested_date": args.get("date"),
+                        "requested_time": args.get("time")
+                    },
+                    message=f"Sorry, that time slot is already booked. Available times: {slots_str}. Please choose another time."
+                )
+            
+            else:
+                # Other error
+                error_msg = result.get("error", "Failed to book appointment")
+                logger.error(f"Booking API error: {error_msg}")
+                return ToolResult(
+                    success=False,
+                    data={"error": error_msg},
+                    message=f"Unable to complete booking: {error_msg}"
+                )
+                
+        except requests.Timeout:
+            logger.error("Booking API timeout")
+            return ToolResult(
+                success=False,
+                data={"error": "timeout"},
+                message="The booking system is taking too long. Please try again."
+            )
+        except requests.RequestException as e:
+            logger.error(f"Booking API request error: {e}")
+            return ToolResult(
+                success=False,
+                data={"error": str(e)},
+                message="Unable to connect to booking system. Please try again later."
+            )
+        except Exception as e:
+            logger.error(f"Unexpected error in _book_appointment: {e}")
+            return ToolResult(
+                success=False,
+                data={"error": str(e)},
+                message="An unexpected error occurred. Please try again."
+            )
     
     def _get_business_hours(self, args: Dict[str, Any]) -> ToolResult:
         """Get business operating hours."""
