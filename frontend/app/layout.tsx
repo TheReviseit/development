@@ -22,6 +22,21 @@ const outfit = Outfit({
   preload: true,
 });
 
+import type { Viewport } from "next";
+
+// Viewport Configuration for Mobile Responsiveness
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 5,
+  userScalable: true,
+  viewportFit: "cover",
+  themeColor: [
+    { media: "(prefers-color-scheme: light)", color: "#22C15A" },
+    { media: "(prefers-color-scheme: dark)", color: "#0f0f0f" },
+  ],
+};
+
 // Comprehensive SEO Metadata Configuration
 export const metadata: Metadata = {
   metadataBase: new URL("https://www.reviseit.in"),

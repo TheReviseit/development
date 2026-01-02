@@ -284,7 +284,20 @@
 }
 
 .calendarDayToday {
-  border: 1px solid #22c15a;
+  /* Today indicator - cell keeps normal styling, only dayNumber is highlighted */
+  background: #1a1a1a;
+}
+
+.calendarDayToday .dayNumber {
+  background: #22c15a;
+  color: #000;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 600;
 }
 
 .calendarDaySelected {
@@ -678,6 +691,8 @@
   align-items: center;
   justify-content: center;
   padding: 4rem 2rem;
+  min-height: calc(100vh - 200px);
+  width: 100%;
 }
 
 .spinner {
@@ -699,21 +714,6 @@
   margin-top: 1rem;
   font-size: 0.875rem;
   color: #808080;
-}
-
-/* Responsive */
-@media (max-width: 1024px) {
-  .calendarSection {
-    grid-template-columns: 1fr;
-  }
-
-  .appointmentsList {
-    max-height: none;
-  }
-
-  .statsRow {
-    grid-template-columns: repeat(2, 1fr);
-  }
 }
 
 /* ============================================
@@ -1163,16 +1163,39 @@
   display: none;
 }
 
-/* ============================================
-   Tablet Breakpoint (641px - 1024px)
-   ============================================ */
-@media (max-width: 1024px) and (min-width: 641px) {
+/* ════════════════════════════════════════════════════════════════════════════════
+   RESPONSIVE BREAKPOINT ARCHITECTURE (Strict Isolation)
+   ════════════════════════════════════════════════════════════════════════════════
+   
+   Desktop:      ≥1280px  - Default styles (no media query needed)
+   Laptop:       1024px – 1279px
+   Tablet:       768px – 1023px  
+   Mobile:       ≤767px
+   
+   iPhone Specific Breakpoints:
+   iPhone 15 Pro Max / 14 Plus:    430px width
+   iPhone 15 Pro / 14/15:          393px width  
+   iPhone 15 / 14:                 390px width
+   iPhone 13 mini / 12 mini:       375px width
+   iPhone SE (3rd gen):            375px width
+   iPhone SE (2nd gen):            375px width
+   
+   ════════════════════════════════════════════════════════════════════════════════ */
+
+/* ════════ Tablet (768px - 1023px) ════════ */
+@media (min-width: 768px) and (max-width: 1023px) {
   .calendarSection {
     grid-template-columns: 1fr;
+    gap: 1.5rem;
   }
 
   .appointmentsList {
     max-height: none;
+    display: block;
+  }
+
+  .appointmentCard {
+    margin-bottom: 0.75rem;
   }
 
   .statsRow {
@@ -1180,33 +1203,66 @@
   }
 
   .calendarDay {
-    min-height: 75px;
+    min-height: 85px;
+    padding: 0.625rem;
+  }
+
+  .appointmentBar {
+    padding: 3px 8px;
   }
 
   .modal {
-    max-width: 90%;
-    margin: 1rem;
+    max-width: 80%;
+    max-height: 85vh;
+    margin: auto;
+    border-radius: 16px;
+  }
+
+  /* Use desktop-style modals, not bottom sheets on tablet */
+  .modalOverlay {
+    align-items: center;
+    padding: 2rem;
+  }
+
+  /* Keep header actions visible on tablet */
+  .headerActions {
+    display: flex;
+  }
+
+  /* Hide FABs on tablet - use header buttons instead */
+  .fab,
+  .listFab {
+    display: none;
+  }
+
+  /* Week view optimizations for tablet */
+  .weekHeader {
+    grid-template-columns: 70px repeat(7, 1fr);
+  }
+
+  .weekRow {
+    grid-template-columns: 70px repeat(7, 1fr);
   }
 }
 
-/* ============================================
-   Mobile Breakpoint (≤640px)
-   Premium Mobile Experience
-   ============================================ */
-@media (max-width: 640px) {
+/* ════════ Mobile (≤767px) ════════ */
+@media (max-width: 767px) {
   /* Page Container - Full width with minimal padding */
   .appointmentsView {
     padding: 0;
     width: 100%;
     max-width: 100vw;
     overflow-x: hidden;
+    /* Prevent iOS bounce/rubber-banding issues */
+    -webkit-overflow-scrolling: touch;
   }
 
   /* Header - Stacked Layout */
   .viewHeader {
     flex-direction: column;
     gap: 1rem;
-    margin-bottom: 1.25rem;
+    margin-bottom: 1rem;
+    padding: 0 0.5rem;
   }
 
   .headerInfo {
@@ -1237,23 +1293,29 @@
   }
 
   /* Floating Action Button - Show on Mobile */
+  /* iOS HIG: Minimum touch target 44x44pt */
   .fab {
     display: flex;
     position: fixed;
-    bottom: 24px;
-    right: 20px;
+    bottom: calc(24px + env(safe-area-inset-bottom, 0px));
+    right: calc(20px + env(safe-area-inset-right, 0px));
     width: 56px;
     height: 56px;
+    min-width: 56px;
+    min-height: 56px;
     border-radius: 50%;
-    background: linear-gradient(135deg, #22c15a 0%, #1a9e4a 100%);
-    color: #fff;
+    background: #ffffff;
+    color: #000000;
     border: none;
-    box-shadow: 0 6px 20px rgba(34, 193, 90, 0.4);
+    box-shadow: 0 6px 20px rgba(255, 255, 255, 0.4);
     cursor: pointer;
     z-index: 100;
     align-items: center;
     justify-content: center;
     transition: transform 0.2s ease, box-shadow 0.2s ease;
+    /* iOS haptic-like feedback feel */
+    -webkit-tap-highlight-color: transparent;
+    touch-action: manipulation;
   }
 
   .fab:hover,
@@ -1267,14 +1329,15 @@
     height: 24px;
   }
 
-  /* List FAB Button - Calendar Icon */
   .listFab {
     display: flex;
     position: fixed;
-    bottom: 24px;
-    right: 88px;
-    width: 52px;
-    height: 52px;
+    bottom: calc(88px + env(safe-area-inset-bottom, 0px));
+    right: calc(20px + env(safe-area-inset-right, 0px));
+    width: 48px;
+    height: 48px;
+    min-width: 48px;
+    min-height: 48px;
     border-radius: 50%;
     background: #1a1a1a;
     color: #fff;
@@ -1285,6 +1348,8 @@
     align-items: center;
     justify-content: center;
     transition: transform 0.2s ease, box-shadow 0.2s ease;
+    -webkit-tap-highlight-color: transparent;
+    touch-action: manipulation;
   }
 
   .listFab:hover,
@@ -1304,19 +1369,20 @@
     display: block;
     width: 100%;
     max-width: 100%;
-    max-height: 90vh;
+    max-height: calc(90vh - env(safe-area-inset-bottom, 0px));
     background: #0f0f0f;
     border: 1px solid rgba(255, 255, 255, 0.1);
     border-radius: 20px 20px 0 0;
     overflow: hidden;
-    animation: slideUpMobile 0.3s ease;
+    animation: slideUpMobile 0.3s cubic-bezier(0.32, 0.72, 0, 1);
   }
 
   .listModalBody {
     padding: 1rem 1.25rem;
-    padding-bottom: 2rem;
+    padding-bottom: calc(2rem + env(safe-area-inset-bottom, 0px));
     max-height: 70vh;
     overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
   }
 
   /* Stats Row - Hide on Mobile like Reference Design */
@@ -1330,23 +1396,29 @@
     flex-direction: column;
     gap: 1rem;
     width: 100%;
+    padding: 0;
+    overflow: hidden;
   }
 
   /* Calendar Card - Full width edge to edge */
   .calendarCard {
-    padding: 0.5rem 0;
-    border-radius: 0;
-    background: transparent;
-    border: none;
+    padding: 1.25rem 0;
+    border-radius: 16px;
+    background: #0f0f0f;
+    border: 1px solid rgba(255, 255, 255, 0.08);
     width: 100%;
+    max-width: 100%;
+    margin: 0;
     box-sizing: border-box;
+    overflow: hidden;
   }
 
   /* Calendar Header - Mobile Optimized */
   .calendarHeader {
     flex-direction: column;
-    gap: 0.875rem;
-    margin-bottom: 1rem;
+    gap: 1rem;
+    margin-bottom: 1.25rem;
+    padding: 0 1rem;
   }
 
   .calendarNav {
@@ -1356,35 +1428,50 @@
   }
 
   .todayBtn {
-    padding: 0.4375rem 0.75rem;
-    font-size: 0.75rem;
+    padding: 0.5rem 0.875rem;
+    font-size: 0.8125rem;
     margin-right: 0;
-  }
-
-  .navBtn {
-    width: 40px;
-    height: 40px;
-    min-width: 40px;
-  }
-
-  .currentMonth {
-    font-size: 1rem;
-    min-width: auto;
-    flex: 1;
-  }
-
-  /* View Tabs - Compact */
-  .viewTabs {
-    width: 100%;
+    /* iOS touch target compliance */
+    min-height: 44px;
+    display: flex;
+    align-items: center;
     justify-content: center;
   }
 
+  /* Navigation buttons - iOS 44pt minimum touch target */
+  .navBtn {
+    width: 44px;
+    height: 44px;
+    min-width: 44px;
+    min-height: 44px;
+  }
+
+  .currentMonth {
+    font-size: 1.0625rem;
+    min-width: auto;
+    flex: 1;
+    font-weight: 600;
+  }
+
+  /* View Tabs - Compact with rounded corners */
+  .viewTabs {
+    width: 100%;
+    justify-content: center;
+    border-radius: 12px;
+    overflow: hidden;
+  }
+
+  /* Each tab should meet touch target minimum */
   .viewTab {
     flex: 1;
-    padding: 0.625rem 0.75rem;
+    padding: 0.75rem 0.875rem;
     font-size: 0.875rem;
     text-align: center;
     font-weight: 500;
+    min-height: 44px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
   }
 
   /* Mobile View Toggle - Show as Pills */
@@ -1396,67 +1483,137 @@
     padding: 0.25rem;
   }
 
-  /* Calendar Grid - Full width spacious layout */
+  /* Calendar Grid - Full width with equal spacing */
   .calendarGrid {
     display: grid;
     grid-template-columns: repeat(7, 1fr);
-    gap: 4px;
+    gap: clamp(4px, 2vw, 10px);
     width: 100%;
-    padding: 0 0.25rem;
+    padding: 0 0.75rem;
+    box-sizing: border-box;
   }
 
   .calendarDayHeader {
     padding: 0.625rem 0;
-    font-size: 0.75rem;
+    font-size: clamp(0.6875rem, 2.5vw, 0.8125rem);
     font-weight: 600;
-    color: #666;
-    letter-spacing: 0.03em;
+    color: #888;
+    letter-spacing: 0.02em;
     text-align: center;
     text-transform: uppercase;
   }
 
+  /* Calendar Days - Touch-friendly circular cells */
   .calendarDay {
-    min-height: 85px;
-    aspect-ratio: 1 / 1.3;
-    padding: 0.5rem;
-    border-radius: 12px;
+    aspect-ratio: 1;
+    width: 100%;
+    min-height: 0;
+    padding: 0;
+    border-radius: 50%;
     background: #1a1a1a;
     display: flex;
     flex-direction: column;
-    overflow: hidden;
+    align-items: center;
+    justify-content: center;
+    overflow: visible;
+    position: relative;
+    transition: transform 0.15s ease, background 0.2s ease;
+    box-sizing: border-box;
+    /* Prevent text selection on touch */
+    -webkit-user-select: none;
+    user-select: none;
+    -webkit-tap-highlight-color: transparent;
   }
 
   .calendarDay:active {
-    transform: scale(0.98);
+    transform: scale(0.92);
     background: #252525;
   }
 
   .calendarDayToday {
-    border: 2px solid #22c15a;
-    background: rgba(34, 193, 90, 0.08);
+    /* No border for today - the green filled number shows it's today */
+    background: transparent;
+  }
+
+  .calendarDayToday .dayNumber {
+    background: #22c15a;
+    color: #000;
+    width: 88%;
+    height: 88%;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: clamp(0.875rem, 3.5vw, 1rem);
+    font-weight: 700;
   }
 
   .calendarDaySelected {
-    background: rgba(34, 193, 90, 0.15);
+    background: rgba(34, 193, 90, 0.2);
     border: 2px solid #22c15a;
+    border-radius: 50%;
+  }
+
+  /* Booked date indicator - no special background, just the dot shows */
+  .calendarDayBooked {
+    background: #1a1a1a;
   }
 
   .dayNumber {
-    font-size: 1rem;
+    font-size: clamp(0.875rem, 3.5vw, 1rem);
     font-weight: 600;
     color: #fff;
-    margin-bottom: 0.25rem;
+    margin-bottom: 0;
+    line-height: 1;
   }
 
   .calendarDayOther .dayNumber {
     color: #555;
   }
 
+  /* Hide appointment bars on mobile - replaced with dot indicator */
   .dayAppointments {
+    display: none !important;
+  }
+
+  /* Dot indicator for booked dates */
+  .dayDotIndicator {
+    display: flex;
+    align-items: center;
+    justify-content: center;
     gap: 3px;
     margin-top: 4px;
-    flex: 1;
-    overflow: hidden;
+    position: absolute;
+    bottom: 4px;
+    left: 50%;
+    transform: translateX(-50%);
+  }
+
+  .dayDot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: #22c15a;
+  }
+
+  .dayDot.pending {
+    background: #ffaa00;
+  }
+
+  .dayDot.confirmed {
+    background: #22c15a;
+  }
+
+  .dayDot.cancelled {
+    background: #666;
+  }
+
+  /* Booking count badge */
+  .dayBookingCount {
+    font-size: 0.5625rem;
+    font-weight: 700;
+    color: #22c15a;
+    margin-top: 2px;
   }
 
   /* Appointment Bars - Colorful Cards Like Reference */
@@ -1501,7 +1658,7 @@
   }
 
   .appointmentTime {
-    font-size: 0.625rem;
+    font-size: 0.6875rem;
     font-weight: 600;
     color: #fff;
     text-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
@@ -1514,134 +1671,312 @@
     margin-top: 2px;
   }
 
-  /* Week View - Mobile Optimized */
+  /* Week View - Mobile: Days as rows (left), Times as columns (top) */
   .weekView {
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    width: 100%;
+  }
+
+  /* Hide desktop week view elements on mobile */
+  .weekHeader,
+  .weekBody {
+    display: none;
+  }
+
+  /* Mobile Week Header - Times in horizontal row - STICKY */
+  .weekHeaderMobile {
+    display: flex;
+    flex-direction: row;
+    gap: 8px;
+    padding: 0.875rem 0.5rem;
+    background: #0f0f0f;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    position: sticky;
+    top: 0;
+    z-index: 10;
     overflow-x: auto;
     -webkit-overflow-scrolling: touch;
+    /* Hide scrollbar */
+    scrollbar-width: none;
+    -ms-overflow-style: none;
   }
 
-  .weekHeader {
-    grid-template-columns: 45px repeat(7, minmax(45px, 1fr));
-    min-width: 360px;
-  }
-
-  .timeColumn {
-    min-width: 45px;
-  }
-
-  .weekDayHeader {
-    padding: 0.5rem 0.25rem;
-  }
-
-  .weekDayName {
-    font-size: 0.5625rem;
-  }
-
-  .weekDayDate {
-    font-size: 0.8125rem;
-  }
-
-  .weekDayToday .weekDayDate {
-    width: 24px;
-    height: 24px;
-    font-size: 0.75rem;
-  }
-
-  .weekBody {
-    max-height: 400px;
-    min-width: 360px;
-  }
-
-  .weekRow {
-    grid-template-columns: 45px repeat(7, minmax(45px, 1fr));
-    min-height: 50px;
-  }
-
-  .timeLabel {
-    font-size: 0.625rem;
-    padding: 0.25rem;
-  }
-
-  .weekCell {
-    min-height: 50px;
-    padding: 0.125rem;
-  }
-
-  .weekAppointment {
-    padding: 0.25rem 0.375rem;
-    border-left-width: 2px;
-  }
-
-  .weekAptName {
-    font-size: 0.5625rem;
-  }
-
-  .weekAptService {
+  .weekHeaderMobile::-webkit-scrollbar {
     display: none;
+  }
+
+  .weekCornerCell {
+    min-width: 65px;
+    flex-shrink: 0;
+  }
+
+  .weekTimeHeader {
+    min-width: 120px;
+    flex-shrink: 0;
+    padding: 0.5rem 0.25rem;
+    text-align: center;
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: #888;
+    white-space: nowrap;
+    line-height: 1.2;
+  }
+
+  /* Mobile Week Body - Days as rows */
+  .weekBodyMobile {
+    flex: 1;
+    overflow-y: auto;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    padding: 0;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+
+  .weekBodyMobile::-webkit-scrollbar {
+    display: none;
+  }
+
+  .weekDayRow {
+    display: flex;
+    flex-direction: row;
+    gap: 8px;
+    padding: 0.625rem 0;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    align-items: stretch;
+    min-height: 65px;
+  }
+
+  .weekDayRowToday {
+    background: rgba(34, 193, 90, 0.08);
+    border-radius: 12px;
+  }
+
+  .weekDayCell {
+    min-width: 65px;
+    flex-shrink: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 0.5rem;
+    cursor: pointer;
+    transition: opacity 0.2s ease;
+    position: sticky;
+    left: 0;
+    background: #0f0f0f;
+    z-index: 2;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .weekDayCell:active {
+    opacity: 0.7;
+  }
+
+  .weekDayCellName {
+    font-size: 0.6875rem;
+    font-weight: 600;
+    color: #888;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+  }
+
+  .weekDayCellDate {
+    font-size: 1.0625rem;
+    font-weight: 700;
+    color: #fff;
+    margin-top: 0.25rem;
+  }
+
+  .weekDayCellToday {
+    background: #22c15a;
+    color: #000;
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.9375rem;
+    font-weight: 700;
+  }
+
+  .weekTimeCellMobile {
+    min-width: 120px;
+    min-height: 60px;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: flex-start;
+    padding: 0.375rem;
+    cursor: pointer;
+    transition: background 0.2s ease;
+    border-radius: 8px;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .weekTimeCellMobile:active {
+    background: rgba(255, 255, 255, 0.05);
+  }
+
+  /* Mobile Appointment Bar - White background with colored border */
+  .weekAppointmentMobile {
+    width: 100%;
+    min-width: 110px;
+    padding: 0.75rem 0.875rem;
+    border-radius: 10px;
+    background: rgba(255, 255, 255, 0.95);
+    border-left: 4px solid #22c15a;
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+    cursor: pointer;
+    transition: transform 0.15s ease, opacity 0.15s ease;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .weekAppointmentMobile:active {
+    transform: scale(0.97);
+    opacity: 0.85;
+  }
+
+  .week_pending {
+    background: rgba(255, 255, 255, 0.95);
+    border-left-color: #ffaa00;
+  }
+
+  .week_confirmed {
+    background: rgba(255, 255, 255, 0.95);
+    border-left-color: #22c15a;
+  }
+
+  .week_cancelled {
+    background: rgba(255, 255, 255, 0.95);
+    border-left-color: #666;
+    opacity: 0.6;
+  }
+
+  .week_completed {
+    background: rgba(255, 255, 255, 0.95);
+    border-left-color: #3b82f6;
+  }
+
+  .weekAptNameMobile {
+    font-size: 0.8125rem;
+    font-weight: 600;
+    color: #111;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .weekAptServiceMobile {
+    font-size: 0.6875rem;
+    color: #555;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  /* Dot indicator kept for fallback */
+  .weekDotIndicator {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: #22c15a;
+  }
+
+  .weekDotIndicator.pending {
+    background: #ffaa00;
+  }
+
+  .weekDotIndicator.confirmed {
+    background: #22c15a;
+  }
+
+  .weekDotIndicator.cancelled {
+    background: #666;
+  }
+
+  .weekDotIndicator.completed {
+    background: #3b82f6;
   }
 
   /* Day View - Mobile Optimized */
   .dayViewHeader {
-    padding: 0.75rem;
-    margin-bottom: 0.75rem;
+    padding: 0.875rem 1rem;
+    margin: 0 0.75rem 0.875rem;
+    border-radius: 12px;
   }
 
   .dayViewDate {
-    font-size: 1rem;
+    font-size: 1.0625rem;
+    font-weight: 600;
   }
 
   .todayBadge {
+    font-size: 0.6875rem;
+    padding: 0.25rem 0.625rem;
+  }
+
+  .dayViewBody {
+    gap: 0.5rem;
+    padding: 0 0.75rem;
+  }
+
+  .dayTimeRow {
+    grid-template-columns: 60px 1fr;
+    gap: 0.625rem;
+    min-height: 75px;
+  }
+
+  .dayTimeLabel {
+    font-size: 0.75rem;
+    font-weight: 500;
+  }
+
+  /* Day Time Slots - Touch friendly */
+  .dayTimeSlot {
+    min-height: 75px;
+    padding: 0.5rem;
+    border-radius: 10px;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .emptySlot {
+    font-size: 0.8125rem;
+    min-height: 44px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .dayAppointmentCard {
+    padding: 0.75rem;
+    border-radius: 10px;
+    border-left-width: 4px;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .dayAptTime {
+    font-size: 0.8125rem;
+  }
+
+  .dayAptStatus {
     font-size: 0.625rem;
     padding: 0.1875rem 0.5rem;
   }
 
-  .dayViewBody {
-    gap: 0.375rem;
-  }
-
-  .dayTimeRow {
-    grid-template-columns: 55px 1fr;
-    gap: 0.5rem;
-    min-height: 70px;
-  }
-
-  .dayTimeLabel {
-    font-size: 0.6875rem;
-  }
-
-  .dayTimeSlot {
-    min-height: 70px;
-    padding: 0.375rem;
-    border-radius: 6px;
-  }
-
-  .emptySlot {
-    font-size: 0.75rem;
-  }
-
-  .dayAppointmentCard {
-    padding: 0.625rem;
-    border-radius: 6px;
-    border-left-width: 3px;
-  }
-
-  .dayAptTime {
-    font-size: 0.75rem;
-  }
-
-  .dayAptStatus {
-    font-size: 0.5625rem;
-    padding: 0.125rem 0.375rem;
-  }
-
   .dayAptName {
-    font-size: 0.875rem;
+    font-size: 0.9375rem;
   }
 
   .dayAptDetails {
     flex-direction: column;
-    gap: 0.25rem;
-    font-size: 0.75rem;
+    gap: 0.375rem;
+    font-size: 0.8125rem;
   }
 
   /* Appointments List - Mobile Cards */
@@ -1659,74 +1994,86 @@
   }
 
   .listTitle {
-    font-size: 0.9375rem;
+    font-size: 1rem;
   }
 
+  /* Filter Select - iOS friendly sizing */
   .filterSelect {
     width: 100%;
-    padding: 0.625rem 0.75rem;
-    font-size: 0.875rem;
+    padding: 0.75rem 1rem;
+    font-size: 1rem;
+    min-height: 44px;
+    border-radius: 10px;
+    -webkit-appearance: none;
+    appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23808080' d='M6 8L1 3h10z'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 1rem center;
+    padding-right: 2.5rem;
   }
 
   .appointmentCard {
-    padding: 0.875rem;
-    border-radius: 8px;
-    margin-bottom: 0.625rem;
+    padding: 1rem;
+    border-radius: 12px;
+    margin-bottom: 0.75rem;
+    -webkit-tap-highlight-color: transparent;
   }
 
   .customerName {
-    font-size: 0.875rem;
+    font-size: 0.9375rem;
   }
 
   .statusBadge {
+    font-size: 0.6875rem;
+    padding: 0.25rem 0.5rem;
+  }
+
+  .detailRow {
+    font-size: 0.8125rem;
+    gap: 0.5rem;
+    min-height: 24px;
+  }
+
+  .detailIcon {
+    width: 14px;
+    height: 14px;
+  }
+
+  .sourceBadge {
     font-size: 0.625rem;
     padding: 0.1875rem 0.375rem;
   }
 
-  .detailRow {
-    font-size: 0.75rem;
-    gap: 0.375rem;
-  }
-
-  .detailIcon {
-    width: 12px;
-    height: 12px;
-  }
-
-  .sourceBadge {
-    font-size: 0.5625rem;
-    padding: 0.125rem 0.3125rem;
-  }
-
   /* Empty State - Mobile */
   .emptyState {
-    padding: 2rem 1rem;
+    padding: 2.5rem 1.25rem;
   }
 
   .emptyIcon {
-    font-size: 2.5rem;
+    font-size: 3rem;
   }
 
   .emptyTitle {
-    font-size: 1rem;
+    font-size: 1.0625rem;
   }
 
   .emptyText {
-    font-size: 0.8125rem;
-    margin-bottom: 1rem;
+    font-size: 0.875rem;
+    margin-bottom: 1.25rem;
   }
 
-  /* Modal - Fullscreen on Mobile */
+  /* Modal - Bottom Sheet Style on Mobile */
   .modalOverlay {
     align-items: flex-end;
     padding: 0;
   }
 
   .modal {
+    width: 100%;
     max-width: 100%;
-    max-height: 95vh;
+    max-height: calc(95vh - env(safe-area-inset-top, 0px));
     border-radius: 20px 20px 0 0;
-    animation: slideUpMobile 0.3s ease;
+    animation: slideUpMobile 0.35s cubic-bezier(0.32, 0.72, 0, 1);
   }
 
   @keyframes slideUpMobile {
@@ -1746,50 +2093,92 @@
     top: 0;
     background: #0f0f0f;
     z-index: 1;
+    /* Add drag handle indicator */
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+
+  .modalHeader::before {
+    content: "";
+    position: absolute;
+    top: 8px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 36px;
+    height: 4px;
+    background: rgba(255, 255, 255, 0.3);
+    border-radius: 2px;
   }
 
   .modalTitle {
-    font-size: 1rem;
+    font-size: 1.0625rem;
+    margin-top: 8px;
   }
 
+  /* Modal Close - iOS touch target */
   .modalClose {
-    width: 36px;
-    height: 36px;
-    min-width: 36px;
+    width: 44px;
+    height: 44px;
+    min-width: 44px;
+    min-height: 44px;
+    margin-top: 4px;
   }
 
   .modalBody {
-    padding: 1rem 1.25rem;
-    padding-bottom: 6rem;
+    padding: 1.25rem 1.25rem;
+    padding-bottom: calc(6.5rem + env(safe-area-inset-bottom, 0px));
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
   }
 
   .formGroup {
-    margin-bottom: 1rem;
+    margin-bottom: 1.25rem;
   }
 
   .formLabel {
-    font-size: 0.75rem;
-    margin-bottom: 0.375rem;
+    font-size: 0.8125rem;
+    margin-bottom: 0.5rem;
+    color: #aaa;
   }
 
+  /* Form inputs - iOS friendly with proper sizing */
   .formInput,
   .formTextarea {
-    padding: 0.875rem 1rem;
+    padding: 1rem 1rem;
     font-size: 1rem;
-    border-radius: 10px;
+    border-radius: 12px;
+    min-height: 48px;
+    /* Prevent iOS zoom on focus */
+    font-size: 16px;
+    -webkit-appearance: none;
+    appearance: none;
+  }
+
+  .formInput:focus,
+  .formTextarea:focus {
+    /* Stronger focus state for accessibility */
+    border-color: #22c15a;
+    box-shadow: 0 0 0 3px rgba(34, 193, 90, 0.15);
+  }
+
+  .formTextarea {
+    min-height: 100px;
   }
 
   .formRow {
     grid-template-columns: 1fr;
-    gap: 1rem;
+    gap: 1.25rem;
   }
 
+  /* Modal Footer - Fixed with safe area */
   .modalFooter {
     position: fixed;
     bottom: 0;
     left: 0;
     right: 0;
     padding: 1rem 1.25rem;
+    padding-bottom: calc(1rem + env(safe-area-inset-bottom, 0px));
     background: #0f0f0f;
     border-top: 1px solid rgba(255, 255, 255, 0.08);
     display: flex;
@@ -1800,15 +2189,419 @@
   .modalFooter .secondaryBtn,
   .modalFooter .primaryBtn {
     flex: 1;
-    padding: 0.875rem 1rem;
-    font-size: 0.875rem;
+    padding: 1rem 1rem;
+    font-size: 0.9375rem;
+    min-height: 48px;
+    border-radius: 12px;
   }
 
   /* Loading State */
   .loadingState {
     padding: 3rem 1.5rem;
+    min-height: 60vh;
   }
 
+  .spinner {
+    width: 40px;
+    height: 40px;
+  }
+
+  .loadingText {
+    font-size: 0.875rem;
+    margin-top: 1rem;
+  }
+}
+
+/* ============================================
+   iPhone 15 Pro Max / 14 Plus / Large Android (≤430px)
+   Slightly larger phones
+   ============================================ */
+@media (max-width: 430px) {
+  .calendarCard {
+    width: 100%;
+    padding: 1.125rem 0;
+  }
+
+  .calendarHeader {
+    padding: 0 0.875rem;
+  }
+
+  .calendarGrid {
+    gap: clamp(4px, 1.8vw, 8px);
+    padding: 0 0.625rem;
+  }
+
+  .dayDot {
+    width: 5px;
+    height: 5px;
+  }
+
+  .weekTimeHeader {
+    min-width: 115px;
+  }
+
+  .weekTimeCellMobile {
+    min-width: 115px;
+  }
+
+  .weekAppointmentMobile {
+    min-width: 105px;
+    padding: 0.625rem 0.75rem;
+  }
+}
+
+/* ============================================
+   iPhone 15 / 14 / 13 Pro (≤393px)
+   Standard iPhone size
+   ============================================ */
+@media (max-width: 393px) {
+  .viewTitle {
+    font-size: 1.3125rem;
+  }
+
+  .currentMonth {
+    font-size: 1rem;
+  }
+
+  .calendarCard {
+    width: 100%;
+    padding: 1rem 0;
+  }
+
+  .calendarHeader {
+    padding: 0 0.75rem;
+  }
+
+  .calendarGrid {
+    gap: clamp(3px, 1.5vw, 6px);
+    padding: 0 0.5rem;
+  }
+
+  .dayDot {
+    width: 5px;
+    height: 5px;
+  }
+
+  .dayDotIndicator {
+    bottom: 2px;
+  }
+
+  .weekTimeHeader {
+    min-width: 110px;
+    font-size: 0.6875rem;
+  }
+
+  .weekTimeCellMobile {
+    min-width: 110px;
+  }
+
+  .weekAppointmentMobile {
+    min-width: 100px;
+    padding: 0.5rem 0.625rem;
+  }
+
+  .weekAptNameMobile {
+    font-size: 0.75rem;
+  }
+
+  .weekAptServiceMobile {
+    font-size: 0.625rem;
+  }
+
+  .dayTimeRow {
+    grid-template-columns: 55px 1fr;
+  }
+
+  .fab {
+    width: 54px;
+    height: 54px;
+    min-width: 54px;
+    min-height: 54px;
+  }
+
+  .listFab {
+    width: 46px;
+    height: 46px;
+    min-width: 46px;
+    min-height: 46px;
+    bottom: calc(84px + env(safe-area-inset-bottom, 0px));
+    right: calc(20px + env(safe-area-inset-right, 0px));
+  }
+}
+
+/* ============================================
+   iPhone SE / 13 Mini / 12 Mini (≤375px)
+   Compact phones - extra optimization
+   ============================================ */
+@media (max-width: 375px) {
+  .viewTitle {
+    font-size: 1.25rem;
+  }
+
+  .viewHeader {
+    padding: 0 0.75rem;
+    margin-bottom: 1rem;
+  }
+
+  .liveIndicator {
+    font-size: 0.5rem;
+    padding: 0.125rem 0.375rem;
+  }
+
+  .calendarCard {
+    width: 100%;
+    padding: 0.875rem 0;
+    border-radius: 14px;
+  }
+
+  .calendarHeader {
+    padding: 0 0.625rem;
+    gap: 0.75rem;
+  }
+
+  .currentMonth {
+    font-size: 0.9375rem;
+  }
+
+  .navBtn {
+    width: 40px;
+    height: 40px;
+    min-width: 40px;
+    min-height: 40px;
+  }
+
+  .viewTab {
+    padding: 0.625rem 0.5rem;
+    font-size: 0.8125rem;
+    min-height: 40px;
+  }
+
+  /* Calendar grid - optimized for small screens */
+  .calendarGrid {
+    gap: clamp(3px, 1.2vw, 5px);
+    padding: 0 0.5rem;
+  }
+
+  .calendarDayHeader {
+    padding: 0.5rem 0;
+    font-size: 0.625rem;
+  }
+
+  .dayDot {
+    width: 4px;
+    height: 4px;
+  }
+
+  .dayDotIndicator {
+    bottom: 2px;
+    gap: 2px;
+  }
+
+  /* Week view compact */
+  .weekCornerCell {
+    min-width: 55px;
+  }
+
+  .weekDayCell {
+    min-width: 55px;
+    padding: 0.375rem;
+  }
+
+  .weekDayCellName {
+    font-size: 0.5625rem;
+  }
+
+  .weekDayCellDate {
+    font-size: 0.9375rem;
+  }
+
+  .weekDayCellToday {
+    width: 32px;
+    height: 32px;
+    font-size: 0.8125rem;
+  }
+
+  .weekTimeHeader {
+    min-width: 100px;
+    font-size: 0.625rem;
+    padding: 0.375rem 0.25rem;
+  }
+
+  .weekTimeCellMobile {
+    min-width: 100px;
+    min-height: 55px;
+    padding: 0.25rem;
+  }
+
+  .weekAppointmentMobile {
+    min-width: 92px;
+    padding: 0.5rem;
+    border-radius: 8px;
+  }
+
+  .weekAptNameMobile {
+    font-size: 0.6875rem;
+  }
+
+  .weekAptServiceMobile {
+    font-size: 0.5625rem;
+  }
+
+  /* Day view compact */
+  .dayViewHeader {
+    padding: 0.75rem;
+    margin: 0 0.5rem 0.75rem;
+  }
+
+  .dayViewDate {
+    font-size: 0.9375rem;
+  }
+
+  .todayBadge {
+    font-size: 0.625rem;
+    padding: 0.1875rem 0.5rem;
+  }
+
+  .dayViewBody {
+    padding: 0 0.5rem;
+    gap: 0.375rem;
+  }
+
+  .dayTimeRow {
+    grid-template-columns: 50px 1fr;
+    gap: 0.5rem;
+    min-height: 65px;
+  }
+
+  .dayTimeLabel {
+    font-size: 0.6875rem;
+  }
+
+  .dayTimeSlot {
+    min-height: 65px;
+    padding: 0.375rem;
+    border-radius: 8px;
+  }
+
+  .dayAppointmentCard {
+    padding: 0.625rem;
+    border-radius: 8px;
+  }
+
+  .dayAptTime {
+    font-size: 0.75rem;
+  }
+
+  .dayAptStatus {
+    font-size: 0.5625rem;
+    padding: 0.125rem 0.375rem;
+  }
+
+  .dayAptName {
+    font-size: 0.8125rem;
+  }
+
+  .dayAptDetails {
+    font-size: 0.75rem;
+    gap: 0.25rem;
+  }
+
+  /* FAB positioning for smaller screens */
+  .fab {
+    width: 52px;
+    height: 52px;
+    min-width: 52px;
+    min-height: 52px;
+    bottom: calc(20px + env(safe-area-inset-bottom, 0px));
+    right: calc(16px + env(safe-area-inset-right, 0px));
+  }
+
+  .fab svg {
+    width: 22px;
+    height: 22px;
+  }
+
+  .listFab {
+    width: 44px;
+    height: 44px;
+    min-width: 44px;
+    min-height: 44px;
+    bottom: calc(78px + env(safe-area-inset-bottom, 0px));
+    right: calc(16px + env(safe-area-inset-right, 0px));
+  }
+
+  /* Modal adjustments */
+  .modalHeader {
+    padding: 0.875rem 1rem;
+  }
+
+  .modalHeader::before {
+    width: 32px;
+    height: 3px;
+  }
+
+  .modalTitle {
+    font-size: 1rem;
+  }
+
+  .modalClose {
+    width: 40px;
+    height: 40px;
+    min-width: 40px;
+    min-height: 40px;
+  }
+
+  .modalBody {
+    padding: 1rem;
+    padding-bottom: calc(6rem + env(safe-area-inset-bottom, 0px));
+  }
+
+  .formGroup {
+    margin-bottom: 1rem;
+  }
+
+  .formLabel {
+    font-size: 0.75rem;
+  }
+
+  .formInput,
+  .formTextarea {
+    padding: 0.875rem 0.875rem;
+    border-radius: 10px;
+    min-height: 46px;
+  }
+
+  .modalFooter {
+    padding: 0.875rem 1rem;
+    padding-bottom: calc(0.875rem + env(safe-area-inset-bottom, 0px));
+  }
+
+  .modalFooter .secondaryBtn,
+  .modalFooter .primaryBtn {
+    padding: 0.875rem 0.75rem;
+    font-size: 0.875rem;
+    min-height: 46px;
+    border-radius: 10px;
+  }
+
+  /* Empty state compact */
+  .emptyState {
+    padding: 2rem 1rem;
+  }
+
+  .emptyIcon {
+    font-size: 2.5rem;
+  }
+
+  .emptyTitle {
+    font-size: 1rem;
+  }
+
+  .emptyText {
+    font-size: 0.8125rem;
+  }
+
+  /* Loading state */
   .spinner {
     width: 36px;
     height: 36px;
@@ -1820,48 +2613,112 @@
 }
 
 /* ============================================
-   Small Mobile Breakpoint (≤375px)
-   Extra compact for small phones
+   Very Small Screens (≤320px)
+   iPhone 5/5s/SE 1st gen and similar
    ============================================ */
-@media (max-width: 375px) {
+@media (max-width: 320px) {
   .viewTitle {
-    font-size: 1.25rem;
+    font-size: 1.125rem;
   }
 
-  .statCard {
-    min-width: 125px;
-    padding: 0.875rem;
+  .currentMonth {
+    font-size: 0.875rem;
   }
 
-  .calendarDay {
-    min-height: 48px;
+  .calendarCard {
+    width: 100%;
+    padding: 0.75rem 0;
+    border-radius: 12px;
   }
 
-  .dayNumber {
-    font-size: 0.625rem;
+  .calendarHeader {
+    padding: 0 0.5rem;
   }
 
-  .appointmentTime {
-    font-size: 0.4375rem;
+  .calendarGrid {
+    gap: 3px;
+    padding: 0 0.375rem;
+  }
+
+  .calendarDayHeader {
+    font-size: 0.5625rem;
+    padding: 0.375rem 0;
+  }
+
+  .dayDot {
+    width: 3px;
+    height: 3px;
+  }
+
+  .navBtn {
+    width: 36px;
+    height: 36px;
+    min-width: 36px;
+    min-height: 36px;
+  }
+
+  .viewTab {
+    padding: 0.5rem 0.375rem;
+    font-size: 0.75rem;
+    min-height: 36px;
   }
 
   .fab {
-    width: 52px;
-    height: 52px;
-    bottom: 20px;
-    right: 16px;
+    width: 48px;
+    height: 48px;
+    min-width: 48px;
+    min-height: 48px;
   }
 
   .fab svg {
-    width: 22px;
-    height: 22px;
+    width: 20px;
+    height: 20px;
+  }
+
+  .listFab {
+    width: 42px;
+    height: 42px;
+    min-width: 42px;
+    min-height: 42px;
+    bottom: calc(72px + env(safe-area-inset-bottom, 0px));
+    right: calc(16px + env(safe-area-inset-right, 0px));
   }
 }
 
-/* ============================================
-   Large Screen Breakpoint (≥1440px)
-   Centered content with max width
-   ============================================ */
+/* ════════ Laptop (1024px - 1279px) ════════ */
+@media (min-width: 1024px) and (max-width: 1279px) {
+  .calendarSection {
+    grid-template-columns: 1fr 300px;
+    gap: 1.25rem;
+  }
+
+  .appointmentsList {
+    min-width: 300px;
+  }
+
+  .calendarCard {
+    padding: 1.25rem;
+  }
+
+  .calendarDay {
+    min-height: 80px;
+  }
+
+  .statsRow {
+    grid-template-columns: repeat(4, 1fr);
+    gap: 0.875rem;
+  }
+
+  .statCard {
+    padding: 1rem;
+  }
+
+  .viewTitle {
+    font-size: 1.5rem;
+  }
+}
+
+/* ════════ Large Desktop (≥1440px) ════════ */
 @media (min-width: 1440px) {
   .appointmentsView {
     max-width: 1400px;
@@ -1878,5 +2735,502 @@
 
   .appointmentsList {
     min-width: 380px;
+  }
+}
+
+/* ============================================
+   Bottom Sheet Component (Mobile Only)
+   Premium slide-up modal for day appointments
+   ============================================ */
+.bottomSheetOverlay {
+  display: none;
+}
+
+@media (max-width: 767px) {
+  .bottomSheetOverlay {
+    display: block;
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.6);
+    backdrop-filter: blur(4px);
+    -webkit-backdrop-filter: blur(4px);
+    z-index: 200;
+    animation: fadeIn 0.2s ease;
+  }
+
+  .bottomSheet {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    background: #0f0f0f;
+    border-radius: 20px 20px 0 0;
+    max-height: calc(85vh - env(safe-area-inset-bottom, 0px));
+    z-index: 201;
+    animation: bottomSheetSlideUp 0.3s cubic-bezier(0.32, 0.72, 0, 1);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+
+  @keyframes bottomSheetSlideUp {
+    from {
+      transform: translateY(100%);
+    }
+    to {
+      transform: translateY(0);
+    }
+  }
+
+  .bottomSheetHandle {
+    width: 36px;
+    height: 4px;
+    background: rgba(255, 255, 255, 0.3);
+    border-radius: 2px;
+    margin: 12px auto 0;
+    flex-shrink: 0;
+  }
+
+  .bottomSheetHeader {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 1rem 1.25rem;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    flex-shrink: 0;
+  }
+
+  .bottomSheetDateInfo {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+  }
+
+  .bottomSheetDate {
+    font-size: 1.125rem;
+    font-weight: 700;
+    color: #fff;
+  }
+
+  .bottomSheetCount {
+    font-size: 0.8125rem;
+    color: #888;
+  }
+
+  /* Bottom Sheet Close - iOS touch target */
+  .bottomSheetClose {
+    width: 44px;
+    height: 44px;
+    min-width: 44px;
+    min-height: 44px;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.08);
+    border: none;
+    color: #888;
+    font-size: 1.125rem;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s ease;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .bottomSheetClose:active {
+    background: rgba(255, 255, 255, 0.15);
+    color: #fff;
+    transform: scale(0.95);
+  }
+
+  .bottomSheetBody {
+    padding: 1rem 1.25rem;
+    padding-bottom: calc(2rem + env(safe-area-inset-bottom, 0px));
+    overflow-y: auto;
+    flex: 1;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  /* Appointment Cards in Bottom Sheet */
+  .bottomSheetCard {
+    background: #1a1a1a;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 14px;
+    margin-bottom: 0.75rem;
+    overflow: hidden;
+    transition: all 0.2s ease;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .bottomSheetCard:active {
+    transform: scale(0.98);
+    background: #222;
+  }
+
+  .bottomSheetCardMain {
+    padding: 1rem 1.25rem;
+    display: flex;
+    flex-direction: row-reverse;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    min-height: 70px;
+  }
+
+  .bottomSheetCardTime {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    min-width: 55px;
+    flex-shrink: 0;
+  }
+
+  .bottomSheetTimeValue {
+    font-size: 1.125rem;
+    font-weight: 700;
+    color: #fff;
+  }
+
+  .bottomSheetTimePeriod {
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: #888;
+    text-transform: uppercase;
+  }
+
+  .bottomSheetCardContent {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .bottomSheetCardName {
+    font-size: 1.125rem;
+    font-weight: 600;
+    color: #fff;
+    margin-bottom: 0.5rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .bottomSheetCardService {
+    font-size: 0.9375rem;
+    color: #aaa;
+    margin-bottom: 0.5rem;
+  }
+
+  .bottomSheetCardMeta {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+  }
+
+  .bottomSheetCardStatus {
+    display: inline-flex;
+    padding: 0.3125rem 0.625rem;
+    border-radius: 6px;
+    font-size: 0.6875rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.02em;
+  }
+
+  .bottomSheetCardStatus.pending {
+    background: rgba(255, 170, 0, 0.15);
+    color: #ffaa00;
+  }
+
+  .bottomSheetCardStatus.confirmed {
+    background: rgba(34, 193, 90, 0.15);
+    color: #22c15a;
+  }
+
+  .bottomSheetCardStatus.cancelled {
+    background: rgba(255, 68, 68, 0.15);
+    color: #ff4444;
+  }
+
+  .bottomSheetCardStatus.completed {
+    background: rgba(0, 188, 212, 0.15);
+    color: #00bcd4;
+  }
+
+  .bottomSheetCardStatus.no_show {
+    background: rgba(128, 128, 128, 0.15);
+    color: #888;
+  }
+
+  /* Hide the AI Booked / Manual source label */
+  .bottomSheetCardSource {
+    display: none;
+  }
+
+  .bottomSheetCardSource.ai {
+    display: none;
+  }
+
+  /* Expanded Card Details */
+  .bottomSheetCardExpanded {
+    border-top: 1px solid rgba(255, 255, 255, 0.08);
+    padding: 1rem;
+    background: rgba(0, 0, 0, 0.2);
+    animation: expandIn 0.25s ease;
+  }
+
+  @keyframes expandIn {
+    from {
+      opacity: 0;
+      max-height: 0;
+    }
+    to {
+      opacity: 1;
+      max-height: 400px;
+    }
+  }
+
+  .bottomSheetDetailGroup {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 1rem;
+    flex-wrap: wrap;
+  }
+
+  .bottomSheetDetailRow {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 1rem;
+    color: #e0e0e0;
+    min-height: 28px;
+  }
+
+  .bottomSheetDetailIcon {
+    width: 18px;
+    height: 18px;
+    opacity: 0.7;
+    flex-shrink: 0;
+  }
+
+  .bottomSheetNotes {
+    font-size: 0.875rem;
+    color: #888;
+    background: rgba(255, 255, 255, 0.04);
+    padding: 0.875rem;
+    border-radius: 10px;
+    margin-top: 0.625rem;
+    font-style: italic;
+    line-height: 1.5;
+  }
+
+  /* Action Buttons - iOS touch targets */
+  .bottomSheetActions {
+    display: flex;
+    gap: 0.75rem;
+    margin-top: 1rem;
+    padding-top: 1rem;
+    border-top: 1px solid rgba(255, 255, 255, 0.08);
+  }
+
+  .bottomSheetActionBtn {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    padding: 0.875rem 1rem;
+    min-height: 48px;
+    border-radius: 12px;
+    font-size: 0.875rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    border: none;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .bottomSheetActionBtn.primary {
+    background: linear-gradient(135deg, #22c15a 0%, #1a9e4a 100%);
+    color: #fff;
+  }
+
+  .bottomSheetActionBtn.primary:active {
+    transform: scale(0.97);
+    box-shadow: 0 4px 15px rgba(34, 193, 90, 0.4);
+  }
+
+  .bottomSheetActionBtn.secondary {
+    background: rgba(255, 255, 255, 0.08);
+    color: #fff;
+  }
+
+  .bottomSheetActionBtn.secondary:active {
+    background: rgba(255, 255, 255, 0.15);
+    transform: scale(0.97);
+  }
+
+  .bottomSheetActionBtn.danger {
+    background: rgba(255, 255, 255, 0.08);
+    color: #ff6b6b;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+  }
+
+  .bottomSheetActionBtn.danger:active {
+    /* background: rgba(255, 68, 68, 0.25); */
+    transform: scale(0.97);
+  }
+
+  .bottomSheetActionIcon {
+    width: 18px;
+    height: 18px;
+  }
+
+  /* Empty State in Bottom Sheet */
+  .bottomSheetEmpty {
+    text-align: center;
+    padding: 2.5rem 1.25rem;
+  }
+
+  .bottomSheetEmptyIcon {
+    font-size: 3rem;
+    margin-bottom: 1rem;
+    opacity: 0.65;
+  }
+
+  .bottomSheetEmptyText {
+    font-size: 1rem;
+    color: #666;
+    line-height: 1.5;
+  }
+}
+
+/* Bottom Sheet - iPhone SE / Small Screens */
+@media (max-width: 375px) {
+  .bottomSheetHandle {
+    width: 32px;
+    height: 3px;
+    margin-top: 10px;
+  }
+
+  .bottomSheetHeader {
+    padding: 0.875rem 1rem;
+  }
+
+  .bottomSheetDate {
+    font-size: 1rem;
+  }
+
+  .bottomSheetCount {
+    font-size: 0.75rem;
+  }
+
+  .bottomSheetClose {
+    width: 40px;
+    height: 40px;
+    min-width: 40px;
+    min-height: 40px;
+    font-size: 1rem;
+  }
+
+  .bottomSheetBody {
+    padding: 0.875rem 1rem;
+    padding-bottom: calc(1.5rem + env(safe-area-inset-bottom, 0px));
+  }
+
+  .bottomSheetCard {
+    border-radius: 12px;
+    margin-bottom: 0.625rem;
+  }
+
+  .bottomSheetCardMain {
+    padding: 0.875rem;
+    gap: 0.75rem;
+  }
+
+  .bottomSheetCardTime {
+    min-width: 45px;
+  }
+
+  .bottomSheetTimeValue {
+    font-size: 1.5rem;
+  }
+
+  .bottomSheetTimePeriod {
+    font-size: 0.925rem;
+  }
+
+  .bottomSheetCardName {
+    font-size: 1.3rem;
+  }
+
+  .bottomSheetCardService {
+    font-size: 0.8125rem;
+  }
+
+  .bottomSheetCardStatus {
+    padding: 0.25rem 0.5rem;
+    font-size: 0.625rem;
+  }
+
+  .bottomSheetCardSource {
+    font-size: 0.625rem;
+  }
+
+  .bottomSheetCardExpanded {
+    padding: 0.875rem;
+  }
+
+  .bottomSheetDetailRow {
+    font-size: 0.875rem;
+    gap: 0.625rem;
+    margin-bottom: 0.625rem;
+    min-height: 24px;
+  }
+
+  .bottomSheetDetailIcon {
+    width: 16px;
+    height: 16px;
+  }
+
+  .bottomSheetNotes {
+    font-size: 0.8125rem;
+    padding: 0.75rem;
+    border-radius: 8px;
+  }
+
+  .bottomSheetActions {
+    gap: 0.625rem;
+    margin-top: 0.875rem;
+    padding-top: 0.875rem;
+  }
+
+  .bottomSheetActionBtn {
+    padding: 0.75rem 0.875rem;
+    min-height: 44px;
+    border-radius: 10px;
+    font-size: 0.8125rem;
+    gap: 0.375rem;
+  }
+
+  .bottomSheetActionIcon {
+    width: 16px;
+    height: 16px;
+  }
+
+  .bottomSheetEmpty {
+    padding: 2rem 1rem;
+  }
+
+  .bottomSheetEmptyIcon {
+    font-size: 2.5rem;
+    margin-bottom: 0.75rem;
+  }
+
+  .bottomSheetEmptyText {
+    font-size: 0.9375rem;
   }
 }
