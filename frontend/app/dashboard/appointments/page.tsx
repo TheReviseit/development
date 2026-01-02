@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
 import styles from "./appointments.module.css";
 import { useRealtimeAppointments } from "@/lib/hooks/useRealtimeAppointments";
@@ -67,6 +67,40 @@ export default function AppointmentsPage() {
     notes: "",
   });
   const [userId, setUserId] = useState<string | null>(null);
+
+  // Mobile detection for new calendar UX
+  const [isMobile, setIsMobile] = useState(false);
+  const [showBottomSheet, setShowBottomSheet] = useState(false);
+  const [bottomSheetAppointments, setBottomSheetAppointments] = useState<
+    Appointment[]
+  >([]);
+  const [bottomSheetDate, setBottomSheetDate] = useState<string>("");
+  const [expandedCardId, setExpandedCardId] = useState<string | null>(null);
+
+  // Refs for synchronized scrolling in week view
+  const weekHeaderRef = useRef<HTMLDivElement>(null);
+  const weekBodyRef = useRef<HTMLDivElement>(null);
+
+  // Detect mobile viewport - matches CSS breakpoint at 767px
+  useEffect(() => {
+    const checkMobile = () => setIsMobile(window.innerWidth <= 767);
+    checkMobile();
+    window.addEventListener("resize", checkMobile);
+    return () => window.removeEventListener("resize", checkMobile);
+  }, []);
+
+  // Sync scroll between header and body
+  const handleWeekScroll = (source: "header" | "body") => {
+    if (source === "body" && weekBodyRef.current && weekHeaderRef.current) {
+      weekHeaderRef.current.scrollLeft = weekBodyRef.current.scrollLeft;
+    } else if (
+      source === "header" &&
+      weekHeaderRef.current &&
+      weekBodyRef.current
+    ) {
+      weekBodyRef.current.scrollLeft = weekHeaderRef.current.scrollLeft;
+    }
+  };
 
   // Fetch user ID for realtime subscription
   useEffect(() => {
@@ -478,6 +512,46 @@ export default function AppointmentsPage() {
     return `${displayHour}:${minutes} ${ampm}`;
   };
 
+  // Split time for bottom sheet display
+  const formatTimeParts = (time: string) => {
+    const [hours, minutes] = time.split(":");
+    const hour = parseInt(hours);
+    const ampm = hour >= 12 ? "PM" : "AM";
+    const displayHour = hour % 12 || 12;
+    return { time: `${displayHour}:${minutes}`, period: ampm };
+  };
+
+  // Handle date tap on mobile - opens bottom sheet
+  const handleDateTap = (date: Date, dayAppointments: Appointment[]) => {
+    const dateStr = formatDateLocal(date);
+
+    if (isMobile && viewMode === "month") {
+      // On mobile, show bottom sheet for booked dates
+      if (dayAppointments.length > 0) {
+        setBottomSheetDate(dateStr);
+        setBottomSheetAppointments(dayAppointments);
+        setExpandedCardId(null);
+        setShowBottomSheet(true);
+      }
+      // Always update selected date
+      setSelectedDate(dateStr);
+    } else {
+      // Desktop behavior - toggle selection
+      setSelectedDate(selectedDate === dateStr ? null : dateStr);
+    }
+  };
+
+  // Close bottom sheet
+  const handleCloseBottomSheet = () => {
+    setShowBottomSheet(false);
+    setExpandedCardId(null);
+  };
+
+  // Toggle card expansion in bottom sheet
+  const handleToggleCard = (appointmentId: string) => {
+    setExpandedCardId(expandedCardId === appointmentId ? null : appointmentId);
+  };
+
   if (loading) {
     return (
       <div className={styles.appointmentsView}>
@@ -673,6 +747,7 @@ export default function AppointmentsPage() {
                   const dateStr = formatDateLocal(date);
                   const dayAppointments = getAppointmentsForDate(date);
                   const isSelected = selectedDate === dateStr;
+                  const hasBookings = dayAppointments.length > 0;
 
                   return (
                     <div
@@ -681,12 +756,14 @@ export default function AppointmentsPage() {
                         !isCurrentMonth ? styles.calendarDayOther : ""
                       } ${isToday(date) ? styles.calendarDayToday : ""} ${
                         isSelected ? styles.calendarDaySelected : ""
+                      } ${
+                        hasBookings && isMobile ? styles.calendarDayBooked : ""
                       }`}
-                      onClick={() =>
-                        setSelectedDate(isSelected ? null : dateStr)
-                      }
+                      onClick={() => handleDateTap(date, dayAppointments)}
                     >
                       <div className={styles.dayNumber}>{date.getDate()}</div>
+
+                      {/* Desktop: Show appointment bars */}
                       <div className={styles.dayAppointments}>
                         {dayAppointments.slice(0, 3).map((apt) => (
                           <div
@@ -713,6 +790,37 @@ export default function AppointmentsPage() {
                           </span>
                         )}
                       </div>
+
+                      {/* Mobile: Show dot indicator instead */}
+                      {isMobile && hasBookings && (
+                        <>
+                          <div className={styles.dayDotIndicator}>
+                            {/* Single dot only */}
+                            <span
+                              className={`${styles.dayDot} ${
+                                styles[dayAppointments[0].status]
+                              }`}
+                            />
+                            {/* Multiple dots - commented out
+                            {dayAppointments.slice(0, 3).map((apt, i) => (
+                              <span
+                                key={i}
+                                className={`${styles.dayDot} ${
+                                  styles[apt.status]
+                                }`}
+                              />
+                            ))}
+                            */}
+                          </div>
+                          {/* Booking count - commented out
+                          {dayAppointments.length > 1 && (
+                            <span className={styles.dayBookingCount}>
+                              {dayAppointments.length}
+                            </span>
+                          )}
+                          */}
+                        </>
+                      )}
                     </div>
                   );
                 }
@@ -723,79 +831,177 @@ export default function AppointmentsPage() {
           {/* Week View */}
           {viewMode === "week" && (
             <div className={styles.weekView}>
-              {/* Week header */}
-              <div className={styles.weekHeader}>
-                <div className={styles.timeColumn}></div>
-                {getWeekDays(currentDate).map((date, index) => (
+              {/* Mobile Week View - Days as rows, Times as columns */}
+              {isMobile ? (
+                <>
+                  {/* Time slots header row */}
                   <div
-                    key={index}
-                    className={`${styles.weekDayHeader} ${
-                      isToday(date) ? styles.weekDayToday : ""
-                    }`}
-                    onClick={() => {
-                      setCurrentDate(date);
-                      setViewMode("day");
-                    }}
+                    ref={weekHeaderRef}
+                    className={styles.weekHeaderMobile}
+                    onScroll={() => handleWeekScroll("header")}
                   >
-                    <div className={styles.weekDayName}>
-                      {DAYS[date.getDay()]}
-                    </div>
-                    <div className={styles.weekDayDate}>{date.getDate()}</div>
+                    <div className={styles.weekCornerCell}></div>
+                    {TIME_SLOTS.map((timeSlot) => (
+                      <div key={timeSlot} className={styles.weekTimeHeader}>
+                        {formatTime(timeSlot)}
+                      </div>
+                    ))}
                   </div>
-                ))}
-              </div>
 
-              {/* Time slots */}
-              <div className={styles.weekBody}>
-                {TIME_SLOTS.map((timeSlot) => (
-                  <div key={timeSlot} className={styles.weekRow}>
-                    <div className={styles.timeLabel}>
-                      {formatTime(timeSlot)}
-                    </div>
-                    {getWeekDays(currentDate).map((date, dayIndex) => {
-                      const slotAppointments = getAppointmentsForTimeSlot(
-                        date,
-                        timeSlot
-                      );
-                      return (
+                  {/* Days as rows */}
+                  <div
+                    ref={weekBodyRef}
+                    className={styles.weekBodyMobile}
+                    onScroll={() => handleWeekScroll("body")}
+                  >
+                    {getWeekDays(currentDate).map((date, dayIndex) => (
+                      <div
+                        key={dayIndex}
+                        className={`${styles.weekDayRow} ${
+                          isToday(date) ? styles.weekDayRowToday : ""
+                        }`}
+                      >
                         <div
-                          key={dayIndex}
-                          className={styles.weekCell}
+                          className={styles.weekDayCell}
                           onClick={() => {
-                            const dateStr = formatDateLocal(date);
-                            setFormData((prev) => ({
-                              ...prev,
-                              date: dateStr,
-                              time: timeSlot,
-                            }));
-                            setShowModal(true);
+                            setCurrentDate(date);
+                            setViewMode("day");
                           }}
                         >
-                          {slotAppointments.map((apt) => (
+                          <span className={styles.weekDayCellName}>
+                            {DAYS[date.getDay()]}
+                          </span>
+                          <span
+                            className={`${styles.weekDayCellDate} ${
+                              isToday(date) ? styles.weekDayCellToday : ""
+                            }`}
+                          >
+                            {date.getDate()}
+                          </span>
+                        </div>
+                        {TIME_SLOTS.map((timeSlot) => {
+                          const slotAppointments = getAppointmentsForTimeSlot(
+                            date,
+                            timeSlot
+                          );
+                          return (
                             <div
-                              key={apt.id}
-                              className={`${styles.weekAppointment} ${
-                                styles[`week_${apt.status}`]
-                              }`}
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleOpenModal(apt);
+                              key={timeSlot}
+                              className={styles.weekTimeCellMobile}
+                              onClick={() => {
+                                const dateStr = formatDateLocal(date);
+                                setFormData((prev) => ({
+                                  ...prev,
+                                  date: dateStr,
+                                  time: timeSlot,
+                                }));
+                                setShowModal(true);
                               }}
                             >
-                              <div className={styles.weekAptName}>
-                                {apt.customer_name}
-                              </div>
-                              <div className={styles.weekAptService}>
-                                {apt.service || "Appointment"}
-                              </div>
+                              {slotAppointments.length > 0 && (
+                                <div
+                                  className={`${styles.weekAppointmentMobile} ${
+                                    styles[`week_${slotAppointments[0].status}`]
+                                  }`}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleOpenModal(slotAppointments[0]);
+                                  }}
+                                >
+                                  <span className={styles.weekAptNameMobile}>
+                                    {slotAppointments[0].customer_name}
+                                  </span>
+                                  <span className={styles.weekAptServiceMobile}>
+                                    {slotAppointments[0].service ||
+                                      "Appointment"}
+                                  </span>
+                                </div>
+                              )}
                             </div>
-                          ))}
-                        </div>
-                      );
-                    })}
+                          );
+                        })}
+                      </div>
+                    ))}
                   </div>
-                ))}
-              </div>
+                </>
+              ) : (
+                /* Desktop Week View - Original layout */
+                <>
+                  <div className={styles.weekHeader}>
+                    <div className={styles.timeColumn}></div>
+                    {getWeekDays(currentDate).map((date, index) => (
+                      <div
+                        key={index}
+                        className={`${styles.weekDayHeader} ${
+                          isToday(date) ? styles.weekDayToday : ""
+                        }`}
+                        onClick={() => {
+                          setCurrentDate(date);
+                          setViewMode("day");
+                        }}
+                      >
+                        <div className={styles.weekDayName}>
+                          {DAYS[date.getDay()]}
+                        </div>
+                        <div className={styles.weekDayDate}>
+                          {date.getDate()}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+
+                  <div className={styles.weekBody}>
+                    {TIME_SLOTS.map((timeSlot) => (
+                      <div key={timeSlot} className={styles.weekRow}>
+                        <div className={styles.timeLabel}>
+                          {formatTime(timeSlot)}
+                        </div>
+                        {getWeekDays(currentDate).map((date, dayIndex) => {
+                          const slotAppointments = getAppointmentsForTimeSlot(
+                            date,
+                            timeSlot
+                          );
+                          return (
+                            <div
+                              key={dayIndex}
+                              className={styles.weekCell}
+                              onClick={() => {
+                                const dateStr = formatDateLocal(date);
+                                setFormData((prev) => ({
+                                  ...prev,
+                                  date: dateStr,
+                                  time: timeSlot,
+                                }));
+                                setShowModal(true);
+                              }}
+                            >
+                              {slotAppointments.map((apt) => (
+                                <div
+                                  key={apt.id}
+                                  className={`${styles.weekAppointment} ${
+                                    styles[`week_${apt.status}`]
+                                  }`}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleOpenModal(apt);
+                                  }}
+                                >
+                                  <div className={styles.weekAptName}>
+                                    {apt.customer_name}
+                                  </div>
+                                  <div className={styles.weekAptService}>
+                                    {apt.service || "Appointment"}
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    ))}
+                  </div>
+                </>
+              )}
             </div>
           )}
 
@@ -1313,6 +1519,191 @@ export default function AppointmentsPage() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Bottom Sheet - Mobile Day Appointments */}
+      {showBottomSheet && (
+        <>
+          <div
+            className={styles.bottomSheetOverlay}
+            onClick={handleCloseBottomSheet}
+          />
+          <div className={styles.bottomSheet}>
+            <div className={styles.bottomSheetHandle} />
+
+            <div className={styles.bottomSheetHeader}>
+              <div className={styles.bottomSheetDateInfo}>
+                <span className={styles.bottomSheetDate}>
+                  {bottomSheetDate &&
+                    new Date(bottomSheetDate + "T00:00:00").toLocaleDateString(
+                      "en-US",
+                      {
+                        weekday: "long",
+                        month: "short",
+                        day: "numeric",
+                      }
+                    )}
+                </span>
+                <span className={styles.bottomSheetCount}>
+                  {bottomSheetAppointments.length} appointment
+                  {bottomSheetAppointments.length !== 1 ? "s" : ""}
+                </span>
+              </div>
+              <button
+                className={styles.bottomSheetClose}
+                onClick={handleCloseBottomSheet}
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className={styles.bottomSheetBody}>
+              {bottomSheetAppointments.length === 0 ? (
+                <div className={styles.bottomSheetEmpty}>
+                  <div className={styles.bottomSheetEmptyIcon}>📅</div>
+                  <p className={styles.bottomSheetEmptyText}>
+                    No appointments for this day
+                  </p>
+                </div>
+              ) : (
+                bottomSheetAppointments.map((apt) => {
+                  const timeParts = formatTimeParts(apt.time);
+                  const isExpanded = expandedCardId === apt.id;
+
+                  return (
+                    <div key={apt.id} className={styles.bottomSheetCard}>
+                      <div
+                        className={styles.bottomSheetCardMain}
+                        onClick={() => handleToggleCard(apt.id)}
+                      >
+                        <div className={styles.bottomSheetCardTime}>
+                          <span className={styles.bottomSheetTimeValue}>
+                            {timeParts.time}
+                          </span>
+                          <span className={styles.bottomSheetTimePeriod}>
+                            {timeParts.period}
+                          </span>
+                        </div>
+                        <div className={styles.bottomSheetCardContent}>
+                          <div className={styles.bottomSheetCardName}>
+                            {apt.customer_name}
+                          </div>
+                          <div className={styles.bottomSheetCardService}>
+                            {apt.service || "General Appointment"}
+                          </div>
+                          <div className={styles.bottomSheetCardMeta}>
+                            {/* <span
+                              className={`${styles.bottomSheetCardStatus} ${
+                                styles[apt.status]
+                              }`}
+                            >
+                              {apt.status}
+                            </span> */}
+                            <span
+                              className={`${styles.bottomSheetCardSource} ${
+                                styles[apt.source]
+                              }`}
+                            >
+                              {apt.source === "ai"
+                                ? "🤖 AI Booked"
+                                : "✏️ Manual"}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Expanded Details */}
+                      {isExpanded && (
+                        <div className={styles.bottomSheetCardExpanded}>
+                          <div className={styles.bottomSheetDetailGroup}>
+                            <div className={styles.bottomSheetDetailRow}>
+                              <svg
+                                className={styles.bottomSheetDetailIcon}
+                                viewBox="0 0 24 24"
+                                fill="none"
+                                stroke="currentColor"
+                                strokeWidth="2.5"
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                              >
+                                <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72" />
+                              </svg>
+                              {apt.customer_phone}
+                            </div>
+                            <div className={styles.bottomSheetDetailRow}>
+                              <svg
+                                className={styles.bottomSheetDetailIcon}
+                                viewBox="0 0 24 24"
+                                fill="none"
+                                stroke="currentColor"
+                                strokeWidth="2.5"
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                              >
+                                <circle cx="12" cy="12" r="10" />
+                                <polyline points="12 6 12 12 16 14" />
+                              </svg>
+                              {apt.duration} min
+                            </div>
+                          </div>
+                          {apt.notes && (
+                            <div className={styles.bottomSheetNotes}>
+                              "{apt.notes}"
+                            </div>
+                          )}
+
+                          <div className={styles.bottomSheetActions}>
+                            {apt.status !== "cancelled" && (
+                              <button
+                                className={`${styles.bottomSheetActionBtn} ${styles.danger}`}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleCloseBottomSheet();
+                                  handleCancel(apt);
+                                }}
+                              >
+                                <svg
+                                  className={styles.bottomSheetActionIcon}
+                                  viewBox="0 0 24 24"
+                                  fill="none"
+                                  stroke="currentColor"
+                                  strokeWidth="2"
+                                >
+                                  <line x1="18" y1="6" x2="6" y2="18" />
+                                  <line x1="6" y1="6" x2="18" y2="18" />
+                                </svg>
+                                Cancel
+                              </button>
+                            )}
+                            <button
+                              className={`${styles.bottomSheetActionBtn} ${styles.secondary}`}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleCloseBottomSheet();
+                                handleOpenModal(apt);
+                              }}
+                            >
+                              <svg
+                                className={styles.bottomSheetActionIcon}
+                                viewBox="0 0 24 24"
+                                fill="none"
+                                stroke="currentColor"
+                                strokeWidth="2"
+                              >
+                                <path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z" />
+                              </svg>
+                              Edit
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })
+              )}
+            </div>
+          </div>
+        </>
       )}
     </div>
   );
