@@ -41,37 +41,10 @@ export default function sitemap(): MetadataRoute.Sitemap {
     },
 
     // ==========================================
-    // AUTH PAGES - Medium Priority
-    // Login pages typically shouldn't be indexed, but included with lower priority
+    // NOTE: Login, forgot-password, reset-password, verify-email
+    // are excluded from sitemap because they have noindex meta tags.
+    // Sitemap should only contain indexable pages.
     // ==========================================
-    {
-      url: `${baseUrl}/login`,
-      lastModified: lastModified,
-      changeFrequency: "yearly",
-      priority: 0.3, // Low priority, mainly for sitemap completeness
-    },
-
-    // ==========================================
-    // UTILITY PAGES - Medium Priority
-    // ==========================================
-    {
-      url: `${baseUrl}/forgot-password`,
-      lastModified: lastModified,
-      changeFrequency: "yearly",
-      priority: 0.3,
-    },
-    {
-      url: `${baseUrl}/reset-password`,
-      lastModified: lastModified,
-      changeFrequency: "yearly",
-      priority: 0.3,
-    },
-    {
-      url: `${baseUrl}/verify-email`,
-      lastModified: lastModified,
-      changeFrequency: "yearly",
-      priority: 0.3,
-    },
 
     // ==========================================
     // LEGAL & POLICY PAGES - Lower Priority
