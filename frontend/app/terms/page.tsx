@@ -70,7 +70,7 @@ export const metadata: Metadata = {
       "User agreement for ReviseIt: WhatsApp compliance requirements, data rights, service guarantees, and legal terms for businesses automating WhatsApp messaging.",
     images: [
       {
-        url: "/og-terms-of-service.png",
+        url: "/og-image.png",
         width: 1200,
         height: 630,
         alt: "ReviseIt Terms of Service - WhatsApp Automation Agreement",
@@ -88,7 +88,7 @@ export const metadata: Metadata = {
     title: "Terms of Service - ReviseIt",
     description:
       "Legal terms for using ReviseIt WhatsApp automation. Includes WhatsApp Business Policy compliance, data protection, and SLA guarantees.",
-    images: ["/twitter-terms.png"],
+    images: ["/twitter-image.png"],
     creator: "@reviseit",
     site: "@reviseit",
   },

@@ -70,7 +70,7 @@ export const metadata: Metadata = {
       "Transparent privacy practices for ReviseIt users. DPDP Act 2023 compliant. Learn about data collection, user rights, and WhatsApp Business API data handling.",
     images: [
       {
-        url: "/og-privacy-policy.png",
+        url: "/og-image.png",
         width: 1200,
         height: 630,
         alt: "ReviseIt Privacy Policy - DPDP Act 2023 Compliant",
@@ -88,7 +88,7 @@ export const metadata: Metadata = {
     title: "Privacy Policy - ReviseIt",
     description:
       "DPDP Act 2023 compliant privacy policy. Learn how ReviseIt protects your data when using our WhatsApp automation platform.",
-    images: ["/twitter-privacy.png"],
+    images: ["/twitter-image.png"],
     creator: "@reviseit",
     site: "@reviseit",
   },

@@ -330,7 +330,7 @@ const softwareAppSchema = {
     "@type": "Offer",
     price: "0",
     priceCurrency: "INR",
-    priceValidUntil: "2025-12-31",
+    priceValidUntil: "2026-12-31",
     availability: "https://schema.org/InStock",
     description: "14-day free trial available",
   },
