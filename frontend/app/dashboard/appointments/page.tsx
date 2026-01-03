@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
 import styles from "./appointments.module.css";
 import { useRealtimeAppointments } from "@/lib/hooks/useRealtimeAppointments";
+import Dropdown from "@/app/utils/ui/Dropdown";
 
 interface Appointment {
   id: string;
@@ -31,18 +32,18 @@ interface AppointmentFormData {
 
 const DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 const MONTHS = [
-  "January",
-  "February",
-  "March",
-  "April",
+  "Jan",
+  "Feb",
+  "Mar",
+  "Apr",
   "May",
-  "June",
-  "July",
-  "August",
-  "September",
-  "October",
-  "November",
-  "December",
+  "Jun",
+  "Jul",
+  "Aug",
+  "Sep",
+  "Oct",
+  "Nov",
+  "Dec",
 ];
 
 export default function AppointmentsPage() {
@@ -53,6 +54,7 @@ export default function AppointmentsPage() {
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<"month" | "week" | "day">("month");
   const [showModal, setShowModal] = useState(false);
+  const [showSidePanel, setShowSidePanel] = useState(false);
   const [showListModal, setShowListModal] = useState(false);
   const [editingAppointment, setEditingAppointment] =
     useState<Appointment | null>(null);
@@ -567,23 +569,6 @@ export default function AppointmentsPage() {
     <div className={styles.appointmentsView}>
       {/* Header */}
       <div className={styles.viewHeader}>
-        <div className={styles.headerInfo}>
-          <h1 className={styles.viewTitle}>
-            📅 Appointments
-            {realtimeActive && (
-              <span
-                className={styles.liveIndicator}
-                title="Real-time updates active"
-              >
-                <span className={styles.liveDot}></span>
-                LIVE
-              </span>
-            )}
-          </h1>
-          <p className={styles.viewSubtitle}>
-            Manage bookings from AI and manual entries
-          </p>
-        </div>
         <div className={styles.headerActions}>
           <button
             className={styles.secondaryBtn}
@@ -634,28 +619,62 @@ export default function AppointmentsPage() {
       {/* Stats Row */}
       <div className={styles.statsRow}>
         <div className={styles.statCard}>
-          <div className={`${styles.statIcon} ${styles.pending}`}>⏳</div>
+          <div className={`${styles.statIcon} ${styles.pending}`}>
+            <img
+              src="/icons/appointment/pending.svg"
+              alt="Pending"
+              width="24"
+              height="24"
+            />
+          </div>
           <div className={styles.statContent}>
             <div className={styles.statValue}>{stats.pending}</div>
-            <div className={styles.statLabel}>Pending</div>
+            <div className={`${styles.statLabel} ${styles.pendingLabel}`}>
+              Pending
+            </div>
           </div>
         </div>
         <div className={styles.statCard}>
-          <div className={`${styles.statIcon} ${styles.confirmed}`}>✓</div>
+          <div className={`${styles.statIcon} ${styles.confirmed}`}>
+            <img
+              src="/icons/appointment/Confirmed.svg"
+              alt="Confirmed"
+              width="24"
+              height="24"
+            />
+          </div>
           <div className={styles.statContent}>
             <div className={styles.statValue}>{stats.confirmed}</div>
-            <div className={styles.statLabel}>Confirmed</div>
+            <div className={`${styles.statLabel} ${styles.confirmedLabel}`}>
+              Confirmed
+            </div>
           </div>
         </div>
         <div className={styles.statCard}>
-          <div className={`${styles.statIcon} ${styles.cancelled}`}>✕</div>
+          <div className={`${styles.statIcon} ${styles.cancelled}`}>
+            <img
+              src="/icons/appointment/canclled.svg"
+              alt="Cancelled"
+              width="24"
+              height="24"
+            />
+          </div>
           <div className={styles.statContent}>
             <div className={styles.statValue}>{stats.cancelled}</div>
-            <div className={styles.statLabel}>Cancelled</div>
+            <div className={`${styles.statLabel} ${styles.cancelledLabel}`}>
+              Cancelled
+            </div>
           </div>
         </div>
         <div className={styles.statCard}>
-          <div className={`${styles.statIcon} ${styles.total}`}>📊</div>
+          <div className={`${styles.statIcon} ${styles.total}`}>
+            <img
+              src="/icons/appointment/this month .svg"
+              alt="This Month"
+              width="24"
+              height="24"
+            />
+          </div>
           <div className={styles.statContent}>
             <div className={styles.statValue}>{stats.total}</div>
             <div className={styles.statLabel}>This Month</div>
@@ -729,6 +748,25 @@ export default function AppointmentsPage() {
                 Day
               </button>
             </div>
+            <button
+              className={styles.allAppointmentsBtn}
+              onClick={() => setShowSidePanel(true)}
+            >
+              <svg
+                width="16"
+                height="16"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+              >
+                <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
+                <line x1="16" y1="2" x2="16" y2="6" />
+                <line x1="8" y1="2" x2="8" y2="6" />
+                <line x1="3" y1="10" x2="21" y2="10" />
+              </svg>
+              All Appointments
+            </button>
           </div>
 
           {/* Month View */}
@@ -762,10 +800,15 @@ export default function AppointmentsPage() {
                       onClick={() => handleDateTap(date, dayAppointments)}
                     >
                       <div className={styles.dayNumber}>{date.getDate()}</div>
+                      {!isMobile && dayAppointments.length > 2 && (
+                        <div className={styles.overflowCount}>
+                          +{dayAppointments.length - 2}
+                        </div>
+                      )}
 
                       {/* Desktop: Show appointment bars */}
                       <div className={styles.dayAppointments}>
-                        {dayAppointments.slice(0, 3).map((apt) => (
+                        {dayAppointments.map((apt) => (
                           <div
                             key={apt.id}
                             className={`${styles.appointmentBar} ${
@@ -784,11 +827,6 @@ export default function AppointmentsPage() {
                             </span>
                           </div>
                         ))}
-                        {dayAppointments.length > 3 && (
-                          <span className={styles.moreAppointments}>
-                            +{dayAppointments.length - 3} more
-                          </span>
-                        )}
                       </div>
 
                       {/* Mobile: Show dot indicator instead */}
@@ -1091,133 +1129,161 @@ export default function AppointmentsPage() {
           )}
         </div>
 
-        {/* Appointments List */}
-        <div className={styles.appointmentsList}>
-          <div className={styles.listHeader}>
-            <h3 className={styles.listTitle}>
-              {selectedDate
-                ? new Date(selectedDate).toLocaleDateString("en-US", {
-                    weekday: "short",
-                    month: "short",
-                    day: "numeric",
-                  })
-                : "All Appointments"}
-            </h3>
-            <select
-              className={styles.filterSelect}
-              value={filter}
-              onChange={(e) => setFilter(e.target.value)}
+        {/* Appointments List - Slide-in Panel */}
+        {showSidePanel && (
+          <div
+            className={styles.sidePanelOverlay}
+            onClick={() => setShowSidePanel(false)}
+          >
+            <div
+              className={styles.sidePanel}
+              onClick={(e) => e.stopPropagation()}
             >
-              <option value="all">All Status</option>
-              <option value="pending">Pending</option>
-              <option value="confirmed">Confirmed</option>
-              <option value="cancelled">Cancelled</option>
-              <option value="completed">Completed</option>
-            </select>
-          </div>
-
-          {filteredAppointments.length === 0 ? (
-            <div className={styles.emptyState}>
-              <div className={styles.emptyIcon}>📅</div>
-              <h4 className={styles.emptyTitle}>No appointments</h4>
-              <p className={styles.emptyText}>
-                {selectedDate
-                  ? "No appointments on this date"
-                  : "No appointments found for this month"}
-              </p>
-              <button
-                className={styles.primaryBtn}
-                onClick={() => handleOpenModal()}
-              >
-                Add Appointment
-              </button>
-              {process.env.NODE_ENV === "development" && (
-                <p
-                  className={styles.emptyText}
-                  style={{
-                    marginTop: "1rem",
-                    fontSize: "0.75rem",
-                    opacity: 0.6,
-                  }}
-                >
-                  Debug: Check /api/appointments/debug for diagnosis
-                </p>
-              )}
-            </div>
-          ) : (
-            filteredAppointments.map((appointment) => (
-              <div
-                key={appointment.id}
-                className={styles.appointmentCard}
-                onClick={() => handleOpenModal(appointment)}
-              >
-                <div className={styles.appointmentCardHeader}>
-                  <span className={styles.customerName}>
-                    {appointment.customer_name}
-                  </span>
-                  <span
-                    className={`${styles.statusBadge} ${
-                      styles[appointment.status]
-                    }`}
+              <div className={styles.sidePanelHeader}>
+                <h3 className={styles.listTitle}>
+                  {selectedDate
+                    ? new Date(selectedDate).toLocaleDateString("en-US", {
+                        weekday: "short",
+                        month: "short",
+                        day: "numeric",
+                      })
+                    : "All Appointments"}
+                </h3>
+                <div className={styles.sidePanelActions}>
+                  <button
+                    className={styles.sidePanelClose}
+                    onClick={() => setShowSidePanel(false)}
                   >
-                    {appointment.status}
-                  </span>
-                </div>
-                <div className={styles.appointmentDetails}>
-                  <div className={styles.detailRow}>
                     <svg
-                      className={styles.detailIcon}
+                      width="20"
+                      height="20"
                       viewBox="0 0 24 24"
                       fill="none"
                       stroke="currentColor"
                       strokeWidth="2"
                     >
-                      <circle cx="12" cy="12" r="10" />
-                      <polyline points="12 6 12 12 16 14" />
+                      <line
+                        x1="18"
+                        y1="6"
+                        x2="6"
+                        y2="18"
+                        strokeLinecap="round"
+                      />
+                      <line
+                        x1="6"
+                        y1="6"
+                        x2="18"
+                        y2="18"
+                        strokeLinecap="round"
+                      />
                     </svg>
-                    {formatTime(appointment.time)} ({appointment.duration} min)
-                  </div>
-                  <div className={styles.detailRow}>
-                    <svg
-                      className={styles.detailIcon}
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="2"
-                    >
-                      <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72" />
-                    </svg>
-                    {appointment.customer_phone}
-                  </div>
-                  {appointment.service && (
-                    <div className={styles.detailRow}>
-                      <svg
-                        className={styles.detailIcon}
-                        viewBox="0 0 24 24"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth="2"
-                      >
-                        <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
-                        <circle cx="12" cy="7" r="4" />
-                      </svg>
-                      {appointment.service}
-                    </div>
-                  )}
-                  <div className={styles.detailRow}>
-                    <span
-                      className={`${styles.sourceBadge} ${
-                        styles[appointment.source]
-                      }`}
-                    >
-                      {appointment.source === "ai" ? "🤖 AI" : "✏️ Manual"}
-                    </span>
-                  </div>
+                  </button>
                 </div>
               </div>
-            ))
-          )}
-        </div>
+
+              <div className={styles.filterSection}>
+                <Dropdown
+                  options={[
+                    { value: "all", label: "All Status" },
+                    { value: "pending", label: "Pending" },
+                    { value: "confirmed", label: "Confirmed" },
+                    { value: "cancelled", label: "Cancelled" },
+                    { value: "completed", label: "Completed" },
+                  ]}
+                  value={filter}
+                  onChange={setFilter}
+                  className={styles.statusFilterDropdown}
+                />
+              </div>
+
+              <div className={styles.sidePanelContent}>
+                {filteredAppointments.length === 0 ? (
+                  <div className={styles.emptyState}>
+                    <div className={styles.emptyIcon}>📅</div>
+                    <h4 className={styles.emptyTitle}>No appointments</h4>
+                    <p className={styles.emptyText}>
+                      {selectedDate
+                        ? "No appointments on this date"
+                        : "No appointments found for this month"}
+                    </p>
+                    <button
+                      className={styles.primaryBtn}
+                      onClick={() => {
+                        setShowSidePanel(false);
+                        handleOpenModal();
+                      }}
+                    >
+                      Add Appointment
+                    </button>
+                  </div>
+                ) : (
+                  filteredAppointments.map((appointment) => (
+                    <div
+                      key={appointment.id}
+                      className={styles.appointmentCard}
+                      onClick={() => {
+                        setShowSidePanel(false);
+                        handleOpenModal(appointment);
+                      }}
+                    >
+                      <div
+                        className={`${styles.statusDot} ${
+                          styles[`dot_${appointment.status}`]
+                        }`}
+                      />
+                      <div className={styles.appointmentCardLayout}>
+                        <div className={styles.appointmentInfo}>
+                          <span className={styles.customerName}>
+                            {appointment.customer_name}
+                          </span>
+                          <div className={styles.appointmentMeta}>
+                            <span>{appointment.customer_phone}</span>
+                            {appointment.service && (
+                              <span>• {appointment.service}</span>
+                            )}
+                          </div>
+                          <div className={styles.appointmentFooter}>
+                            <span className={styles.duration}>
+                              {appointment.duration} min
+                            </span>
+                            <span
+                              className={`${styles.sourceBadge} ${
+                                styles[appointment.source]
+                              }`}
+                            >
+                              {appointment.source === "ai" ? (
+                                <>
+                                  <img
+                                    src="/icons/bot.svg"
+                                    alt="AI"
+                                    width="14"
+                                    height="14"
+                                    className={styles.aiIcon}
+                                  />
+                                  AI
+                                </>
+                              ) : (
+                                "✏️ Manual"
+                              )}
+                            </span>
+                          </div>
+                        </div>
+                        <div className={styles.appointmentTimeBlock}>
+                          <span className={styles.timeValue}>
+                            {formatTimeParts(appointment.time).time}
+                          </span>
+                          <span className={styles.timePeriod}>
+                            {formatTimeParts(appointment.time).period}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Modal */}
@@ -1359,13 +1425,7 @@ export default function AppointmentsPage() {
                       Cancel Appointment
                     </button>
                   )}
-                <button
-                  type="button"
-                  className={styles.secondaryBtn}
-                  onClick={handleCloseModal}
-                >
-                  Close
-                </button>
+
                 <button type="submit" className={styles.primaryBtn}>
                   {editingAppointment ? "Save Changes" : "Create Appointment"}
                 </button>
@@ -1397,7 +1457,7 @@ export default function AppointmentsPage() {
       {/* List Button - Mobile Only (Calendar Icon) */}
       <button
         className={styles.listFab}
-        onClick={() => setShowListModal(true)}
+        onClick={() => setShowSidePanel(true)}
         aria-label="View all appointments"
       >
         <svg
