@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect } from "react";
 import FeatureCarousel from "./FeatureCarousel";
 import "./HeroSection.css";
 
@@ -14,104 +14,14 @@ const dynamicTexts = [
 
 export default function HeroSection() {
   const [currentTextIndex, setCurrentTextIndex] = useState(0);
-  const heroLeftRef = useRef<HTMLDivElement>(null);
-  const heroRightRef = useRef<HTMLDivElement>(null);
-  const ctaRef = useRef<HTMLDivElement>(null);
-  const dynamicTextRef = useRef<HTMLSpanElement>(null);
-  const gsapRef = useRef<typeof import("gsap").gsap | null>(null);
 
-  // Initial entrance animations with dynamic GSAP import - deferred until idle
-  useEffect(() => {
-    let ctx: ReturnType<typeof import("gsap").gsap.context> | null = null;
+  // CSS @keyframes in HeroSection.css handle initial load animations
+  // This eliminates the flash/double-load issue and reduces TBT
 
-    const loadGsap = () => {
-      import("gsap").then(({ gsap }) => {
-        gsapRef.current = gsap;
-        ctx = gsap.context(() => {
-          // Animate text from left
-          gsap.fromTo(
-            heroLeftRef.current?.querySelectorAll(
-              ".hero-title > span, .hero-description"
-            ) || [],
-            { opacity: 0, x: -60 },
-            {
-              opacity: 1,
-              x: 0,
-              duration: 0.8,
-              stagger: 0.15,
-              ease: "power3.out",
-            }
-          );
-
-          // Animate buttons from bottom
-          gsap.fromTo(
-            ctaRef.current?.querySelectorAll(".hero-cta-button") || [],
-            { opacity: 0, y: 40 },
-            {
-              opacity: 1,
-              y: 0,
-              duration: 0.8,
-              delay: 0.6,
-              stagger: 0.15,
-              ease: "power3.out",
-            }
-          );
-
-          // Animate carousel from right
-          gsap.fromTo(
-            heroRightRef.current,
-            { opacity: 0, x: 60 },
-            {
-              opacity: 1,
-              x: 0,
-              duration: 0.8,
-              delay: 0.3,
-              ease: "power3.out",
-            }
-          );
-        });
-      });
-    };
-
-    // Defer GSAP loading until browser is idle to reduce TBT
-    if ("requestIdleCallback" in window) {
-      (window as Window).requestIdleCallback(loadGsap, { timeout: 1000 });
-    } else {
-      setTimeout(loadGsap, 200);
-    }
-
-    return () => ctx?.revert();
-  }, []);
-
-  // Smooth dynamic text rotation with GSAP
+  // Smooth dynamic text rotation with CSS - no GSAP needed
   useEffect(() => {
     const interval = setInterval(() => {
-      if (dynamicTextRef.current && gsapRef.current) {
-        const gsap = gsapRef.current;
-        // Fade out
-        gsap.to(dynamicTextRef.current, {
-          opacity: 0,
-          y: -10,
-          duration: 0.3,
-          ease: "power2.in",
-          onComplete: () => {
-            // Change text
-            setCurrentTextIndex((prev) => (prev + 1) % dynamicTexts.length);
-
-            // Fade in
-            gsap.fromTo(
-              dynamicTextRef.current,
-              { opacity: 0, y: 10 },
-              {
-                opacity: 1,
-                y: 0,
-                duration: 0.3,
-                ease: "power2.out",
-              }
-            );
-          },
-        });
-      }
+      setCurrentTextIndex((prev) => (prev + 1) % dynamicTexts.length);
     }, 3000);
 
     return () => clearInterval(interval);
@@ -125,7 +35,7 @@ export default function HeroSection() {
       <div className="hero-container">
         <div className="hero-content-wrapper">
           {/* Left Content */}
-          <div className="hero-left-content" ref={heroLeftRef}>
+          <div className="hero-left-content">
             <h1 className="hero-title">
               <span className="hero-title-regular">Let's</span>
               <span className="hero-title-bold hero-title-mobile">
@@ -135,7 +45,7 @@ export default function HeroSection() {
                 Automate WhatsApp
               </span>
               <span
-                ref={dynamicTextRef}
+                key={currentTextIndex}
                 className="hero-title-dynamic dynamic-text"
               >
                 &#10075;{dynamicTexts[currentTextIndex]}&#10076;
@@ -147,7 +57,7 @@ export default function HeroSection() {
               scale your customer conversations.
             </p>
 
-            <div className="hero-cta-container" ref={ctaRef}>
+            <div className="hero-cta-container">
               <a href="/signup" className="btn-header-primary hero-cta-button">
                 Start Free Trial
                 <svg
@@ -190,7 +100,7 @@ export default function HeroSection() {
           </div>
 
           {/* Right Content - Feature Carousel */}
-          <div className="hero-right-content" ref={heroRightRef}>
+          <div className="hero-right-content">
             <FeatureCarousel />
           </div>
         </div>

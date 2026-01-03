@@ -1,5 +1,6 @@
 "use client";
 
+import { useState, useEffect, useRef } from "react";
 import dynamic from "next/dynamic";
 import Header from "./Header/Header";
 import HeroSection from "./HeroSection";
@@ -23,6 +24,34 @@ const ContactSection = dynamic(
 const Footer = dynamic(() => import("./Footer/Footer"), { ssr: false });
 
 export default function HomePageContent() {
+  const [showBelowFold, setShowBelowFold] = useState(false);
+  const triggerRef = useRef<HTMLDivElement>(null);
+
+  // Use Intersection Observer to load below-fold content when user scrolls near
+  useEffect(() => {
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting) {
+          setShowBelowFold(true);
+          observer.disconnect(); // Only need to trigger once
+        }
+      },
+      { rootMargin: "200px" } // Start loading 200px before visible
+    );
+
+    if (triggerRef.current) {
+      observer.observe(triggerRef.current);
+    }
+
+    // Also trigger after 3 seconds as fallback for slow scrollers
+    const timeout = setTimeout(() => setShowBelowFold(true), 3000);
+
+    return () => {
+      observer.disconnect();
+      clearTimeout(timeout);
+    };
+  }, []);
+
   return (
     <div className="min-h-screen">
       {/* Header / Navigation */}
@@ -39,11 +68,18 @@ export default function HomePageContent() {
       {/* WhatsApp Features Section */}
       <WhatsAppFeatures />
 
-      {/* Lazy-loaded below-fold sections */}
-      <PricingCards />
-      <Testimonials />
-      <ContactSection />
-      <Footer />
+      {/* Trigger point for below-fold content */}
+      <div ref={triggerRef} />
+
+      {/* Lazy-loaded below-fold sections - only render when needed */}
+      {showBelowFold && (
+        <>
+          <PricingCards />
+          <Testimonials />
+          <ContactSection />
+          <Footer />
+        </>
+      )}
     </div>
   );
 }
