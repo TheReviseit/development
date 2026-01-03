@@ -266,6 +266,14 @@ self.addEventListener("fetch", (event) => {
   // Skip chrome-extension and other non-http(s) requests
   if (!url.startsWith("http")) return;
 
+  // Skip Vercel scripts and third-party resources - let browser handle them
+  if (
+    url.includes("_vercel/") ||
+    url.includes("vercel.live") ||
+    url.includes("vercel-scripts.com")
+  )
+    return;
+
   // Handle navigation requests (HTML pages)
   if (request.mode === "navigate") {
     event.respondWith(
