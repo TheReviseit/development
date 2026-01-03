@@ -20,6 +20,7 @@ export async function proxy(request: NextRequest) {
     "/api/auth/logout",
     "/api/auth/create-user",
     "/api/auth/check-user-exists",
+    "/api/auth/send-verification",
     "/privacy",
     "/terms",
     "/data-deletion",
@@ -33,6 +34,12 @@ export async function proxy(request: NextRequest) {
     "/sw.js",
     "/offline",
     "/_vercel",
+    // SEO files - MUST be public for search engines
+    "/sitemap.xml",
+    "/robots.txt",
+    "/forgot-password",
+    "/reset-password",
+    "/verify-email",
   ];
 
   const isPublicPath =
