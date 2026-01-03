@@ -7,6 +7,12 @@ import {
   CreateTemplateData,
   Template,
 } from "@/lib/api/whatsapp";
+import {
+  RECOMMENDED_TEMPLATES,
+  RecommendedTemplate,
+  searchTemplates,
+  getTemplatesByCategory,
+} from "./data/recommended-templates";
 
 interface CreateTemplateModalProps {
   isOpen: boolean;
@@ -64,9 +70,18 @@ export default function CreateTemplateModal({
   userId,
   editTemplate,
 }: CreateTemplateModalProps) {
-  const [step, setStep] = useState(1);
+  const [step, setStep] = useState(0); // Start at 0 for template selection
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Template selection state
+  const [useTemplate, setUseTemplate] = useState(true);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [categoryFilter, setCategoryFilter] = useState<
+    "ALL" | "MARKETING" | "UTILITY" | "AUTHENTICATION"
+  >("ALL");
+  const [selectedTemplate, setSelectedTemplate] =
+    useState<RecommendedTemplate | null>(null);
 
   // Form state
   const [name, setName] = useState("");
@@ -157,9 +172,50 @@ export default function CreateTemplateModal({
 
   const variables = extractVariables(body);
 
+  // Filter templates based on search and category
+  const getFilteredTemplates = () => {
+    let templates = RECOMMENDED_TEMPLATES;
+
+    // Filter by category
+    if (categoryFilter !== "ALL") {
+      templates = getTemplatesByCategory(categoryFilter);
+    }
+
+    // Filter by search query
+    if (searchQuery.trim()) {
+      templates = searchTemplates(searchQuery).filter((t) =>
+        categoryFilter === "ALL" ? true : t.category === categoryFilter
+      );
+    }
+
+    return templates;
+  };
+
+  // Handle template selection and pre-fill form
+  const handleTemplateSelect = (template: RecommendedTemplate) => {
+    setSelectedTemplate(template);
+    setName(template.name);
+    setCategory(template.category);
+    setLanguage(template.language);
+    setHasHeader(template.hasHeader);
+    if (template.headerType) setHeaderType(template.headerType);
+    if (template.headerText) setHeaderText(template.headerText);
+    setBody(template.body);
+    if (template.bodyExamples) setBodyExamples(template.bodyExamples);
+    setHasFooter(template.hasFooter);
+    if (template.footer) setFooter(template.footer);
+    setHasButtons(template.hasButtons);
+    if (template.buttons) setButtons(template.buttons);
+    setStep(1); // Move to basic info step
+  };
+
   // Reset form
   const resetForm = () => {
-    setStep(1);
+    setStep(0);
+    setUseTemplate(true);
+    setSearchQuery("");
+    setCategoryFilter("ALL");
+    setSelectedTemplate(null);
     setName("");
     setCategory("UTILITY");
     setLanguage("en");
@@ -303,7 +359,9 @@ export default function CreateTemplateModal({
             <div>
               <h2 className={styles.modalTitle}>Create Message Template</h2>
               <p className={styles.modalSubtitle}>
-                Step {step} of 3 - Templates require Meta approval before use
+                {step === 0
+                  ? "Choose a starting point"
+                  : `Step ${step} of 3 - Templates require Meta approval before use`}
               </p>
             </div>
             <button className={styles.closeBtn} onClick={handleClose}>
@@ -331,6 +389,125 @@ export default function CreateTemplateModal({
               >
                 ✕
               </button>
+            </div>
+          )}
+
+          {/* Step 0: Template Selection */}
+          {step === 0 && (
+            <div className={styles.modalBody}>
+              {/* Toggle between template and custom */}
+              <div className={styles.templateToggle}>
+                <button
+                  className={`${styles.toggleOption} ${
+                    useTemplate ? styles.toggleActive : ""
+                  }`}
+                  onClick={() => setUseTemplate(true)}
+                >
+                  📚 Start from Template
+                </button>
+                <button
+                  className={`${styles.toggleOption} ${
+                    !useTemplate ? styles.toggleActive : ""
+                  }`}
+                  onClick={() => {
+                    setUseTemplate(false);
+                    setStep(1);
+                  }}
+                >
+                  ✏️ Create Custom
+                </button>
+              </div>
+
+              {useTemplate && (
+                <>
+                  {/* Search and Filter */}
+                  <div className={styles.templateControls}>
+                    <input
+                      type="text"
+                      className={styles.templateSearch}
+                      placeholder="🔍 Search templates..."
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                    />
+                    <div className={styles.templateFilters}>
+                      {["ALL", "AUTHENTICATION", "UTILITY", "MARKETING"].map(
+                        (cat) => (
+                          <button
+                            key={cat}
+                            className={`${styles.filterBtn} ${
+                              categoryFilter === cat ? styles.filterActive : ""
+                            }`}
+                            onClick={() =>
+                              setCategoryFilter(
+                                cat as
+                                  | "ALL"
+                                  | "MARKETING"
+                                  | "UTILITY"
+                                  | "AUTHENTICATION"
+                              )
+                            }
+                          >
+                            {cat === "ALL"
+                              ? "All"
+                              : cat.charAt(0) + cat.slice(1).toLowerCase()}
+                          </button>
+                        )
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Template Gallery */}
+                  <div className={styles.templateGallery}>
+                    {getFilteredTemplates().length === 0 ? (
+                      <div className={styles.emptyState}>
+                        <p>No templates found matching your criteria.</p>
+                        <p className={styles.hint}>
+                          Try adjusting your search or filters.
+                        </p>
+                      </div>
+                    ) : (
+                      getFilteredTemplates().map((template) => (
+                        <div
+                          key={template.id}
+                          className={styles.templateCard}
+                          onClick={() => handleTemplateSelect(template)}
+                        >
+                          <div className={styles.templateCardHeader}>
+                            <span className={styles.templateCategory}>
+                              {template.category === "AUTHENTICATION"
+                                ? "🔐"
+                                : template.category === "UTILITY"
+                                ? "🔧"
+                                : "📢"}{" "}
+                              {template.category}
+                            </span>
+                          </div>
+                          <h4 className={styles.templateCardTitle}>
+                            {template.displayName}
+                          </h4>
+                          <p className={styles.templateCardDesc}>
+                            {template.description}
+                          </p>
+                          <div className={styles.templateCardPreview}>
+                            {template.headerText && (
+                              <div className={styles.previewHeader}>
+                                {template.headerText}
+                              </div>
+                            )}
+                            <div className={styles.previewBody}>
+                              {template.body.substring(0, 100)}
+                              {template.body.length > 100 ? "..." : ""}
+                            </div>
+                          </div>
+                          <button className={styles.useTemplateBtn}>
+                            Use Template →
+                          </button>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </>
+              )}
             </div>
           )}
 
@@ -641,7 +818,7 @@ export default function CreateTemplateModal({
 
           {/* Footer */}
           <div className={styles.modalFooter}>
-            {step > 1 && (
+            {step > 0 && step !== 1 && (
               <button
                 className={styles.secondaryBtn}
                 onClick={() => setStep(step - 1)}
@@ -649,11 +826,22 @@ export default function CreateTemplateModal({
                 Back
               </button>
             )}
+            {step === 1 && (
+              <button
+                className={styles.secondaryBtn}
+                onClick={() => {
+                  setStep(0);
+                  setUseTemplate(true);
+                }}
+              >
+                ← Templates
+              </button>
+            )}
             <div className={styles.footerRight}>
               <button className={styles.cancelBtn} onClick={handleClose}>
                 Cancel
               </button>
-              {step < 3 ? (
+              {step === 0 && useTemplate ? null : step < 3 ? (
                 <button
                   className={styles.primaryBtn}
                   onClick={() => setStep(step + 1)}

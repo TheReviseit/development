@@ -10,7 +10,7 @@
 /* Header */
 .viewHeader {
   display: flex;
-  justify-content: space-between;
+  justify-content: flex-end;
   align-items: flex-start;
   margin-bottom: 2rem;
   flex-wrap: wrap;
@@ -46,8 +46,8 @@
   align-items: center;
   gap: 0.5rem;
   padding: 0.75rem 1.25rem;
-  background: linear-gradient(135deg, #22c15a 0%, #1a9e4a 100%);
-  color: #fff;
+  background: #ffffff;
+  color: #000000;
   border: none;
   border-radius: 10px;
   font-size: 0.875rem;
@@ -57,8 +57,9 @@
 }
 
 .primaryBtn:hover {
+  background: #e5e5e5;
   transform: translateY(-2px);
-  box-shadow: 0 8px 25px rgba(34, 193, 90, 0.3);
+  box-shadow: 0 8px 25px rgba(255, 255, 255, 0.2);
 }
 
 .secondaryBtn {
@@ -102,31 +103,32 @@
 .statIcon {
   width: 44px;
   height: 44px;
-  border-radius: 10px;
+  border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
   font-size: 1.25rem;
+  background: #ffffff;
+}
+
+.statIcon img {
+  filter: brightness(0);
 }
 
 .statIcon.pending {
-  background: rgba(255, 170, 0, 0.15);
-  color: #ffaa00;
+  background: #ffffff;
 }
 
 .statIcon.confirmed {
-  background: rgba(34, 193, 90, 0.15);
-  color: #22c15a;
+  background: #ffffff;
 }
 
 .statIcon.cancelled {
-  background: rgba(255, 68, 68, 0.15);
-  color: #ff4444;
+  background: #ffffff;
 }
 
 .statIcon.total {
-  background: rgba(0, 188, 212, 0.15);
-  color: #00bcd4;
+  background: #ffffff;
 }
 
 .statContent {
@@ -146,11 +148,22 @@
   color: #808080;
 }
 
+.statLabel.pendingLabel {
+  color: #ffaa00;
+}
+
+.statLabel.confirmedLabel {
+  color: #22c15a;
+}
+
+.statLabel.cancelledLabel {
+  color: #ff4444;
+}
+
 /* Calendar Section */
 .calendarSection {
-  display: grid;
-  grid-template-columns: 1fr 340px;
-  gap: 1.5rem;
+  display: block;
+  width: 100%;
 }
 
 .calendarCard {
@@ -165,6 +178,117 @@
   justify-content: space-between;
   align-items: center;
   margin-bottom: 1.5rem;
+  flex-wrap: wrap;
+  gap: 1rem;
+}
+
+/* All Appointments Button */
+.allAppointmentsBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 1rem;
+  background: #1a1a1a;
+  color: #ffffff;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 8px;
+  font-size: 0.875rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.allAppointmentsBtn:hover {
+  background: #252525;
+  border-color: #ffffff;
+}
+
+/* Slide-in Panel */
+.sidePanelOverlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.6);
+  z-index: 1000;
+  animation: fadeIn 0.2s ease;
+}
+
+.sidePanel {
+  position: fixed;
+  top: 0;
+  right: 0;
+  width: 380px;
+  max-width: 100%;
+  height: 100vh;
+  background: #0f0f0f;
+  border-left: 1px solid rgba(255, 255, 255, 0.12);
+  display: flex;
+  flex-direction: column;
+  animation: slideInRight 0.3s ease;
+  z-index: 1001;
+}
+
+@keyframes slideInRight {
+  from {
+    transform: translateX(100%);
+  }
+  to {
+    transform: translateX(0);
+  }
+}
+
+.sidePanelHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 1.25rem 1.5rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+  gap: 1rem;
+}
+
+.filterSection {
+  padding: 0.75rem 1.5rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+  display: flex;
+  justify-content: center;
+}
+
+.statusFilterDropdown {
+  width: 100%;
+}
+
+.sidePanelActions {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.sidePanelClose {
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: #808080;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+}
+
+.sidePanelClose:hover {
+  background: #1a1a1a;
+  color: #ffffff;
+  border-color: #ffffff;
+}
+
+.sidePanelContent {
+  flex: 1;
+  overflow-y: auto;
+  padding: 1rem 1.5rem;
 }
 
 .calendarNav {
@@ -274,6 +398,19 @@
   flex-direction: column;
 }
 
+.overflowCount {
+  position: absolute;
+  top: 0.5rem;
+  right: 0.5rem;
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: #22c55e;
+  background: rgba(34, 197, 94, 0.1);
+  padding: 2px 6px;
+  border-radius: 4px;
+  line-height: 1;
+}
+
 .calendarDay:hover {
   background: #252525;
 }
@@ -315,36 +452,55 @@
 .dayAppointments {
   display: flex;
   flex-direction: column;
-  gap: 3px;
+  gap: 4px;
   flex: 1;
   margin-top: 4px;
-  overflow: hidden;
+  overflow-y: auto;
+  overflow-x: hidden;
+  max-height: calc(100% - 32px);
+}
+
+.dayAppointments::-webkit-scrollbar {
+  width: 4px;
 }
 
 /* Appointment Bar - White bar with time */
 .appointmentBar {
   background: #ffffff;
   border-radius: 4px;
-  padding: 2px 6px;
+  padding: 4px 8px;
+  min-height: 24px;
   cursor: pointer;
   transition: all 0.2s ease;
   overflow: hidden;
   white-space: nowrap;
   border-left: 3px solid #22c15a;
+  display: flex;
+  align-items: center;
 }
 
 .appointmentBar:hover {
   transform: scale(1.02);
   box-shadow: 0 2px 8px rgba(255, 255, 255, 0.2);
+  /* background: #000000; */
 }
 
+/* .appointmentBar:hover .appointmentTime {
+  color: #ffffff;
+} */
+
 .appointmentTime {
-  font-size: 0.625rem;
-  font-weight: 600;
-  color: #0a0a0a;
+  font-size: 0.95rem;
+  font-weight: 700;
+  letter-spacing: 0.2px;
+  color: #0f172a;
+  font-family: "Inter", "Segoe UI", system-ui, -apple-system, BlinkMacSystemFont,
+    "Helvetica Neue", Arial, sans-serif;
   display: block;
-  text-overflow: ellipsis;
+  line-height: 1.4;
+  white-space: nowrap;
   overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 /* Status-based left border colors */
@@ -412,16 +568,134 @@
 .appointmentCard {
   background: #1a1a1a;
   border: 1px solid rgba(255, 255, 255, 0.08);
+  /* border-left: 4px solid rgba(255, 255, 255, 0.2); */
   border-radius: 10px;
   padding: 1rem;
   margin-bottom: 0.75rem;
   cursor: pointer;
   transition: all 0.2s ease;
+  position: relative;
 }
 
 .appointmentCard:hover {
   background: #252525;
-  border-color: rgba(255, 255, 255, 0.2);
+}
+
+/* Status dot indicator */
+.statusDot {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #808080;
+}
+
+.statusDot.dot_confirmed {
+  background: #22c15a;
+}
+
+.statusDot.dot_pending {
+  background: #ffaa00;
+}
+
+.statusDot.dot_cancelled {
+  background: #ff4444;
+}
+
+.statusDot.dot_completed {
+  background: #00bcd4;
+}
+
+.statusDot.dot_no_show {
+  background: #808080;
+}
+
+/* Status-based left border colors - COMMENTED OUT */
+/*
+.card_confirmed {
+  border-left-color: #22c15a;
+}
+
+.card_pending {
+  border-left-color: #ffaa00;
+}
+
+.card_cancelled {
+  border-left-color: #ff4444;
+}
+
+.card_completed {
+  border-left-color: #00bcd4;
+}
+
+.card_no_show {
+  border-left-color: #808080;
+}
+*/
+
+/* New card layout */
+.appointmentCardLayout {
+  display: flex;
+  gap: 1rem;
+  align-items: center;
+  padding-left: 1.25rem;
+}
+
+.appointmentTimeBlock {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-width: 70px;
+}
+
+.timeValue {
+  font-size: 2rem;
+  font-weight: 700;
+  color: #ffffff;
+  line-height: 1.2;
+}
+
+.timePeriod {
+  font-size: 1.2rem;
+  font-weight: 500;
+  color: #808080;
+}
+
+.appointmentInfo {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+}
+
+.appointmentMeta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  font-size: 0.8125rem;
+  color: #b0b0b0;
+}
+
+.appointmentFooter {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-top: 0.25rem;
+}
+
+.duration {
+  font-size: 0.75rem;
+  color: #808080;
+}
+
+.aiIcon {
+  display: inline-block;
+  vertical-align: middle;
+  margin-right: 4px;
+  font: 2px solid black;
 }
 
 .appointmentCardHeader {
@@ -495,15 +769,15 @@
   align-items: center;
   gap: 0.25rem;
   padding: 0.125rem 0.375rem;
-  border-radius: 4px;
+  border-radius: 7px;
   font-size: 0.625rem;
   font-weight: 600;
   text-transform: uppercase;
 }
 
 .sourceBadge.ai {
-  background: rgba(156, 39, 176, 0.15);
-  color: #ce93d8;
+  background: rgba(255, 255, 255, 0.936);
+  color: #000000;
 }
 
 .sourceBadge.manual {
@@ -1182,6 +1456,39 @@
    
    ════════════════════════════════════════════════════════════════════════════════ */
 
+/* ════════ Desktop (≥1024px) - Desktop-specific overrides ════════ */
+@media (min-width: 1024px) {
+  /* Fixed height calendar cells for desktop */
+  .calendarDay {
+    height: 120px;
+  }
+
+  /* Increased gap between calendar cells */
+  .calendarGrid {
+    gap: 8px;
+  }
+
+  /* Hidden scrollbar for day appointments */
+  .dayAppointments {
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+
+  .dayAppointments::-webkit-scrollbar {
+    display: none;
+  }
+
+  /* Larger appointment bars for desktop */
+  .appointmentBar {
+    padding: 6px 10px;
+    min-height: 32px;
+  }
+
+  .appointmentTime {
+    font-size: 0.95rem;
+  }
+}
+
 /* ════════ Tablet (768px - 1023px) ════════ */
 @media (min-width: 768px) and (max-width: 1023px) {
   .calendarSection {
@@ -1247,6 +1554,28 @@
 
 /* ════════ Mobile (≤767px) ════════ */
 @media (max-width: 767px) {
+  /* Hide All Appointments button in header (moved to FAB) */
+  .allAppointmentsBtn {
+    display: none;
+  }
+
+  /* Transform Side Panel to Bottom Sheet on Mobile */
+  .sidePanel {
+    width: 100%;
+    height: 85vh;
+    top: auto;
+    bottom: 0;
+    right: 0;
+    left: 0;
+    border-left: none;
+    border-top: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 20px 20px 0 0;
+    animation: slideUp 0.3s ease; /* Using existing slideUp animation */
+  }
+
+  .sidePanelOverlay {
+    align-items: flex-end; /* Align to bottom */
+  }
   /* Page Container - Full width with minimal padding */
   .appointmentsView {
     padding: 0;
@@ -2177,7 +2506,7 @@
     bottom: 0;
     left: 0;
     right: 0;
-    padding: 1rem 1.25rem;
+    padding: 1rem 0.75rem;
     padding-bottom: calc(1rem + env(safe-area-inset-bottom, 0px));
     background: #0f0f0f;
     border-top: 1px solid rgba(255, 255, 255, 0.08);
