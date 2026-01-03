@@ -4,10 +4,12 @@ import { Resend } from "resend";
 const resendApiKey = process.env.RESEND_API_KEY;
 
 if (!resendApiKey) {
-  console.warn("RESEND_API_KEY is not set in environment variables");
+  console.error(
+    "❌ CRITICAL: RESEND_API_KEY is not set in environment variables. Emails will NOT be sent!"
+  );
 }
 
-export const resend = new Resend(resendApiKey);
+export const resend = resendApiKey ? new Resend(resendApiKey) : null;
 
 // Helper function to send email with error handling
 export async function sendEmail({
@@ -21,7 +23,20 @@ export async function sendEmail({
   html: string;
   from?: string;
 }) {
+  // Check if Resend is configured
+  if (!resend) {
+    console.error("❌ Cannot send email: RESEND_API_KEY is not configured");
+    return {
+      success: false,
+      error: "Email service not configured. Please contact support.",
+    };
+  }
+
   try {
+    console.log(
+      `📧 Attempting to send email to ${to} with subject: "${subject}"`
+    );
+
     const response = await resend.emails.send({
       from,
       to,
@@ -29,12 +44,22 @@ export async function sendEmail({
       html,
     });
 
+    if (response.error) {
+      console.error("❌ Resend API error:", response.error);
+      return {
+        success: false,
+        error: response.error.message || "Email service error",
+      };
+    }
+
+    console.log(`✅ Email sent successfully! Message ID: ${response.data?.id}`);
     return {
       success: true,
       messageId: response.data?.id,
     };
   } catch (error: any) {
-    console.error("Error sending email:", error);
+    console.error("❌ Error sending email:", error);
+    console.error("  Error details:", JSON.stringify(error, null, 2));
     return {
       success: false,
       error: error.message || "Failed to send email",
