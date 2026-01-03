@@ -42,6 +42,20 @@
 .hero-left-content {
   flex: 1;
   text-align: center;
+  /* CSS animation as primary - GSAP will enhance if loaded */
+  animation: slideInFromLeft 0.8s ease-out 0.1s forwards;
+  opacity: 0;
+}
+
+@keyframes slideInFromLeft {
+  from {
+    opacity: 0;
+    transform: translateX(-60px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
 }
 
 @media (min-width: 1024px) {
@@ -180,6 +194,20 @@
 .hero-right-content {
   flex: 1;
   width: 100%;
+  /* CSS animation as primary - GSAP will enhance if loaded */
+  animation: slideInFromRight 0.8s ease-out 0.3s forwards;
+  opacity: 0;
+}
+
+@keyframes slideInFromRight {
+  from {
+    opacity: 0;
+    transform: translateX(60px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
 }
 
 @media (min-width: 1024px) {
@@ -188,7 +216,26 @@
   }
 }
 
-/* Dynamic Text Animation */
+/* Dynamic Text Animation - Pure CSS for better performance */
 .dynamic-text {
   display: inline-block;
+  animation: textFadeIn 0.4s ease-out;
+}
+
+@keyframes textFadeIn {
+  0% {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Reduce motion for accessibility */
+@media (prefers-reduced-motion: reduce) {
+  .dynamic-text {
+    animation: none;
+  }
 }
