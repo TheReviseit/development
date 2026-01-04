@@ -42,7 +42,7 @@ export default async function AdminPage() {
               Welcome, {user.full_name || user.email}
             </h2>
             <p className="text-gray-600">
-              You have admin access to this application.
+              You have Admin access to this application.
             </p>
           </div>
 
