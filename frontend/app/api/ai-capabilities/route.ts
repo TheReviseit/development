@@ -22,6 +22,17 @@ interface AppointmentField {
   placeholder?: string;
 }
 
+// Order field configuration type (same structure as AppointmentField)
+interface OrderField {
+  id: string;
+  label: string;
+  type: "text" | "phone" | "email" | "date" | "time" | "textarea" | "select";
+  required: boolean;
+  order: number;
+  options?: string[];
+  placeholder?: string;
+}
+
 // Business hours configuration type
 interface BusinessHours {
   start: string;
@@ -42,7 +53,7 @@ interface ServiceConfig {
 
 // Default services
 const DEFAULT_SERVICES: ServiceConfig[] = [
-  { id: "default", name: "General Appointment", duration: 60, capacity: 1 }
+  { id: "default", name: "General Appointment", duration: 60, capacity: 1 },
 ];
 
 // Default appointment fields
@@ -78,6 +89,14 @@ const DEFAULT_BUSINESS_HOURS: BusinessHours = {
   duration: 60,
   buffer: 0,
 };
+
+// Default order fields
+const DEFAULT_ORDER_FIELDS: OrderField[] = [
+  { id: "name", label: "Full Name", type: "text", required: true, order: 1 },
+  { id: "phone", label: "Phone Number", type: "phone", required: true, order: 2 },
+  { id: "address", label: "Delivery Address", type: "textarea", required: true, order: 3 },
+  { id: "notes", label: "Order Notes", type: "textarea", required: false, order: 4 },
+];
 
 // Helper to get user ID from Firebase token
 async function getUserId(request: NextRequest): Promise<string | null> {
@@ -134,6 +153,11 @@ export async function GET(request: NextRequest) {
       appointment_business_hours: DEFAULT_BUSINESS_HOURS,
       appointment_minimal_mode: false,
       appointment_services: DEFAULT_SERVICES,
+      order_booking_enabled: false,
+      order_fields: DEFAULT_ORDER_FIELDS,
+      order_minimal_mode: false,
+      order_sheet_url: null,
+      order_sheet_sync_enabled: false,
     };
 
     // Ensure defaults are set for any missing fields
@@ -146,8 +170,21 @@ export async function GET(request: NextRequest) {
     if (capabilities.appointment_minimal_mode === undefined) {
       capabilities.appointment_minimal_mode = false;
     }
-    if (!capabilities.appointment_services || capabilities.appointment_services.length === 0) {
+    if (
+      !capabilities.appointment_services ||
+      capabilities.appointment_services.length === 0
+    ) {
       capabilities.appointment_services = DEFAULT_SERVICES;
+    }
+    // Ensure order defaults
+    if (capabilities.order_booking_enabled === undefined) {
+      capabilities.order_booking_enabled = false;
+    }
+    if (!capabilities.order_fields) {
+      capabilities.order_fields = DEFAULT_ORDER_FIELDS;
+    }
+    if (capabilities.order_minimal_mode === undefined) {
+      capabilities.order_minimal_mode = false;
     }
 
     return NextResponse.json({
@@ -179,6 +216,11 @@ export async function POST(request: NextRequest) {
       appointment_business_hours,
       appointment_minimal_mode,
       appointment_services,
+      order_booking_enabled,
+      order_fields,
+      order_minimal_mode,
+      order_sheet_url,
+      order_sheet_sync_enabled,
     } = body;
 
     // Build update object with only provided fields
@@ -238,6 +280,42 @@ export async function POST(request: NextRequest) {
       if (isValid) {
         updateData.appointment_services = appointment_services;
       }
+    }
+
+    // Validate and add order_booking_enabled
+    if (typeof order_booking_enabled === "boolean") {
+      updateData.order_booking_enabled = order_booking_enabled;
+    }
+
+    // Validate and add order_fields
+    if (Array.isArray(order_fields)) {
+      // Validate each field has required properties
+      const isValid = order_fields.every(
+        (field: OrderField) =>
+          field.id &&
+          field.label &&
+          field.type &&
+          typeof field.required === "boolean" &&
+          typeof field.order === "number"
+      );
+      if (isValid) {
+        updateData.order_fields = order_fields;
+      }
+    }
+
+    // Validate and add order_minimal_mode
+    if (typeof order_minimal_mode === "boolean") {
+      updateData.order_minimal_mode = order_minimal_mode;
+    }
+
+    // Validate and add order_sheet_url
+    if (order_sheet_url !== undefined) {
+      updateData.order_sheet_url = order_sheet_url;
+    }
+
+    // Validate and add order_sheet_sync_enabled
+    if (typeof order_sheet_sync_enabled === "boolean") {
+      updateData.order_sheet_sync_enabled = order_sheet_sync_enabled;
     }
 
     // Check if we have at least one valid field to update

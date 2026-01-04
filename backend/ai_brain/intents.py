@@ -14,7 +14,8 @@ class IntentType(str, Enum):
     CASUAL_CONVERSATION = "casual_conversation"  # "how are you", "what's up"
     GENERAL_ENQUIRY = "general_enquiry"
     PRICING = "pricing"
-    BOOKING = "booking"
+    BOOKING = "booking"  # Time/date-based appointments
+    ORDER_BOOKING = "order_booking"  # Item/quantity-based orders (buy, order, purchase)
     HOURS = "hours"
     LOCATION = "location"
     ORDER_STATUS = "order_status"
@@ -51,8 +52,18 @@ INTENT_KEYWORDS: Dict[IntentType, List[str]] = {
         r"\b(how much|total cost|charges|rate batao|batao)\b",
     ],
     IntentType.BOOKING: [
-        r"\b(book|appointment|schedule|reserve|slot|booking|appoint)\b",
+        r"\b(appointment|schedule|slot|appoint)\b",
         r"\b(available|availability|free slot|next available)\b",
+        r"\b(today|tomorrow|monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b",
+        r"\b\d{1,2}[:/]\d{2}\b",  # Time patterns like 10:30, 2:00
+        r"\b\d{1,2}\s*(am|pm)\b",  # Time patterns like 10am, 2 pm
+    ],
+    IntentType.ORDER_BOOKING: [
+        r"\b(order|buy|purchase|want to order|want to buy|get me)\b",
+        r"\b(i want|i need|can i get)\s+(a|an|the|\d+)\b",
+        r"\b\d+\s*(x|nos?|pieces?|items?|qty)\b",  # Quantity patterns: "2 pieces", "3x"
+        r"\b(quantity|qty)\s*:?\s*\d+\b",
+        r"\b(add to cart|checkout|place order)\b",
     ],
     IntentType.HOURS: [
         r"\b(timing|timings|time|hours|open|close|kab|kitne baje|working hours)\b",
@@ -101,7 +112,8 @@ INTENT_DESCRIPTIONS = {
     IntentType.CASUAL_CONVERSATION: "Customer is making casual conversation like 'how are you', 'what's up'",
     IntentType.GENERAL_ENQUIRY: "Customer wants general information about the business or services",
     IntentType.PRICING: "Customer is asking about prices, costs, or rates",
-    IntentType.BOOKING: "Customer wants to book an appointment or make a reservation",
+    IntentType.BOOKING: "Customer wants to book a time-based appointment or schedule a service",
+    IntentType.ORDER_BOOKING: "Customer wants to order/buy a product or item (not a time-based appointment)",
     IntentType.HOURS: "Customer is asking about operating hours or timings",
     IntentType.LOCATION: "Customer is asking about address, location, or directions",
     IntentType.ORDER_STATUS: "Customer is asking about an order status or delivery tracking",

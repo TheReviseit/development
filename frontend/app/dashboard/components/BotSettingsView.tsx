@@ -23,6 +23,10 @@ interface ProductService {
   stockStatus: string;
   imageUrl: string;
   variants: string[];
+  sizes: string[];
+  colors: string[];
+  brand: string;
+  materials: string[];
 }
 
 interface DayTiming {
@@ -39,6 +43,17 @@ interface FAQ {
 
 // Appointment configuration types
 interface AppointmentField {
+  id: string;
+  label: string;
+  type: "text" | "phone" | "email" | "date" | "time" | "textarea" | "select";
+  required: boolean;
+  order: number;
+  options?: string[];
+  placeholder?: string;
+}
+
+// Order field configuration type (same structure as AppointmentField)
+interface OrderField {
   id: string;
   label: string;
   type: "text" | "phone" | "email" | "date" | "time" | "textarea" | "select";
@@ -126,6 +141,7 @@ interface BusinessData {
     sunday: DayTiming;
   };
   products: ProductService[];
+  productCategories: string[];
   policies: {
     refund: string;
     cancellation: string;
@@ -257,6 +273,7 @@ const INITIAL_DATA: BusinessData = {
     sunday: { open: "10:00", close: "16:00", isClosed: false },
   },
   products: [],
+  productCategories: [],
   policies: { refund: "", cancellation: "", delivery: "", paymentMethods: [] },
   ecommercePolicies: {
     shippingPolicy: "",
@@ -285,12 +302,101 @@ type TabType =
   | "profile"
   | "brand"
   | "services"
+  | "categories"
   | "timings"
   | "policies"
   | "ecommerce"
   | "faqs"
-  | "capabilities"
-  | "preview";
+  | "capabilities";
+
+// Predefined size options
+const SIZE_OPTIONS = ["XS", "S", "M", "L", "XL", "XXL", "XXXL", "Free Size"];
+
+// Multi-select component for sizes
+function SizeMultiSelect({
+  selectedSizes,
+  onChange,
+}: {
+  selectedSizes: string[];
+  onChange: (sizes: string[]) => void;
+}) {
+  const [isOpen, setIsOpen] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (
+        containerRef.current &&
+        !containerRef.current.contains(event.target as Node)
+      ) {
+        setIsOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  const toggleSize = (size: string) => {
+    if (selectedSizes.includes(size)) {
+      onChange(selectedSizes.filter((s) => s !== size));
+    } else {
+      onChange([...selectedSizes, size]);
+    }
+  };
+
+  const removeSize = (size: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    onChange(selectedSizes.filter((s) => s !== size));
+  };
+
+  return (
+    <div className={styles.multiSelectContainer} ref={containerRef}>
+      <div
+        className={`${styles.multiSelectTrigger} ${isOpen ? styles.open : ""}`}
+        onClick={() => setIsOpen(!isOpen)}
+      >
+        {selectedSizes.length === 0 ? (
+          <span className={styles.multiSelectPlaceholder}>Select sizes...</span>
+        ) : (
+          selectedSizes.map((size) => (
+            <span key={size} className={styles.selectedTag}>
+              {size}
+              <button onClick={(e) => removeSize(size, e)}>×</button>
+            </span>
+          ))
+        )}
+      </div>
+      {isOpen && (
+        <div className={styles.multiSelectDropdown}>
+          {SIZE_OPTIONS.map((size) => (
+            <div
+              key={size}
+              className={`${styles.multiSelectOption} ${
+                selectedSizes.includes(size) ? styles.selected : ""
+              }`}
+              onClick={() => toggleSize(size)}
+            >
+              <div className={styles.multiSelectCheckbox}>
+                {selectedSizes.includes(size) && (
+                  <svg
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="3"
+                  >
+                    <polyline points="20 6 9 17 4 12" />
+                  </svg>
+                )}
+              </div>
+              {size}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
 
 export default function BotSettingsView() {
   const [activeTab, setActiveTab] = useState<TabType>("profile");
@@ -300,17 +406,11 @@ export default function BotSettingsView() {
     type: "success" | "error";
     text: string;
   } | null>(null);
-  const [previewQuery, setPreviewQuery] = useState("");
-  const [previewResponse, setPreviewResponse] = useState<any>(null);
-  const [previewLoading, setPreviewLoading] = useState(false);
-  const [chatMessages, setChatMessages] = useState<
-    { role: "user" | "bot"; content: string; time: string; intent?: string }[]
-  >([]);
-  const chatEndRef = useRef<HTMLDivElement>(null);
 
   // AI Capabilities state
   const [appointmentBookingEnabled, setAppointmentBookingEnabled] =
     useState(false);
+  const [orderBookingEnabled, setOrderBookingEnabled] = useState(false);
   const [capabilitiesLoading, setCapabilitiesLoading] = useState(false);
   const [capabilityExpanded, setCapabilityExpanded] = useState(false);
   const [alertToast, setAlertToast] = useState<{
@@ -354,37 +454,41 @@ export default function BotSettingsView() {
     buffer: 0,
   });
   const [minimalMode, setMinimalMode] = useState(false);
-  
+
   // Services configuration state
   const [services, setServices] = useState<ServiceConfig[]>([
-    { id: "default", name: "General Appointment", duration: 60, capacity: 1 }
+    { id: "default", name: "General Appointment", duration: 60, capacity: 1 },
   ]);
   const [configExpanded, setConfigExpanded] = useState(false);
+  const [newCategoryName, setNewCategoryName] = useState("");
 
-  // Initialize chat with welcome message if empty
-  useEffect(() => {
-    if (activeTab === "preview" && chatMessages.length === 0) {
-      setChatMessages([
-        {
-          role: "bot",
-          content: `Hi! I'm your AI Business Assistant. I've learned all about ${
-            data.businessName || "your business"
-          }. Ask me anything to see how I'll respond to your customers!`,
-          time: new Date().toLocaleTimeString([], {
-            hour: "2-digit",
-            minute: "2-digit",
-          }),
-        },
-      ]);
-    }
-  }, [activeTab, data.businessName, chatMessages.length]);
-
-  // Scroll to bottom whenever messages change
-  useEffect(() => {
-    if (chatEndRef.current) {
-      chatEndRef.current.scrollIntoView({ behavior: "smooth" });
-    }
-  }, [chatMessages, previewLoading]);
+  // Order fields configuration state
+  const [orderFields, setOrderFields] = useState<OrderField[]>([
+    { id: "name", label: "Full Name", type: "text", required: true, order: 1 },
+    {
+      id: "phone",
+      label: "Phone Number",
+      type: "phone",
+      required: true,
+      order: 2,
+    },
+    {
+      id: "address",
+      label: "Delivery Address",
+      type: "textarea",
+      required: true,
+      order: 3,
+    },
+    {
+      id: "notes",
+      label: "Order Notes",
+      type: "textarea",
+      required: false,
+      order: 4,
+    },
+  ]);
+  const [orderMinimalMode, setOrderMinimalMode] = useState(false);
+  const [orderConfigExpanded, setOrderConfigExpanded] = useState(false);
 
   // Load saved data on mount
   useEffect(() => {
@@ -425,8 +529,22 @@ export default function BotSettingsView() {
             if (result.data.appointment_minimal_mode !== undefined) {
               setMinimalMode(result.data.appointment_minimal_mode);
             }
-            if (result.data.appointment_services && result.data.appointment_services.length > 0) {
+            if (
+              result.data.appointment_services &&
+              result.data.appointment_services.length > 0
+            ) {
               setServices(result.data.appointment_services);
+            }
+            // Load order booking state
+            if (result.data.order_booking_enabled !== undefined) {
+              setOrderBookingEnabled(result.data.order_booking_enabled);
+            }
+            // Load order fields configuration
+            if (result.data.order_fields) {
+              setOrderFields(result.data.order_fields);
+            }
+            if (result.data.order_minimal_mode !== undefined) {
+              setOrderMinimalMode(result.data.order_minimal_mode);
             }
           }
         }
@@ -464,6 +582,60 @@ export default function BotSettingsView() {
           show: true,
           variant: "success",
           title: newValue ? "Booking Enabled!" : "Booking Disabled!",
+          description: "",
+        });
+      } else {
+        setAlertToast({
+          show: true,
+          variant: "warning",
+          title: newValue ? "Enabled Locally" : "Disabled Locally",
+          description: "",
+        });
+      }
+    } catch (error) {
+      setAlertToast({
+        show: true,
+        variant: "warning",
+        title: newValue ? "Enabled Locally" : "Disabled Locally",
+        description: "",
+      });
+    } finally {
+      setCapabilitiesLoading(false);
+    }
+  };
+
+  // Handle order booking toggle
+  const handleOrderToggle = async () => {
+    const newValue = !orderBookingEnabled;
+    setCapabilitiesLoading(true);
+
+    // Immediately update local state for instant UI feedback
+    setOrderBookingEnabled(newValue);
+
+    // Immediately dispatch event to update sidebar (don't wait for API)
+    window.dispatchEvent(
+      new CustomEvent("ai-capabilities-updated", {
+        detail: {
+          appointment_booking_enabled: appointmentBookingEnabled,
+          order_booking_enabled: newValue,
+        },
+      })
+    );
+
+    try {
+      const response = await fetch("/api/ai-capabilities", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ order_booking_enabled: newValue }),
+      });
+
+      if (response.ok) {
+        setAlertToast({
+          show: true,
+          variant: "success",
+          title: newValue
+            ? "Order Booking Enabled!"
+            : "Order Booking Disabled!",
           description: "",
         });
       } else {
@@ -557,7 +729,7 @@ export default function BotSettingsView() {
       id: `service_${Date.now()}`,
       name: "",
       duration: 60,
-      capacity: 1
+      capacity: 1,
     };
     setServices([...services, newService]);
   };
@@ -581,6 +753,108 @@ export default function BotSettingsView() {
       return;
     }
     setServices(services.filter((service) => service.id !== id));
+  };
+
+  // Order field management functions
+  const addOrderField = () => {
+    const newField: OrderField = {
+      id: `custom_${Date.now()}`,
+      label: "",
+      type: "text",
+      required: false,
+      order: orderFields.length + 1,
+      placeholder: "",
+    };
+    setOrderFields([...orderFields, newField]);
+  };
+
+  const updateOrderField = (id: string, updates: Partial<OrderField>) => {
+    setOrderFields(
+      orderFields.map((field) =>
+        field.id === id ? { ...field, ...updates } : field
+      )
+    );
+  };
+
+  const removeOrderField = (id: string) => {
+    // Don't allow removing core fields
+    const coreFields = ["name", "phone"];
+    if (coreFields.includes(id)) {
+      setAlertToast({
+        show: true,
+        variant: "warning",
+        title: "Cannot Remove",
+        description: "Name and Phone are required fields",
+      });
+      return;
+    }
+    setOrderFields(
+      orderFields
+        .filter((field) => field.id !== id)
+        .map((field, index) => ({ ...field, order: index + 1 }))
+    );
+  };
+
+  const moveOrderFieldUp = (id: string) => {
+    const index = orderFields.findIndex((f) => f.id === id);
+    if (index <= 0) return;
+    const newFields = [...orderFields];
+    [newFields[index - 1], newFields[index]] = [
+      newFields[index],
+      newFields[index - 1],
+    ];
+    setOrderFields(newFields.map((f, i) => ({ ...f, order: i + 1 })));
+  };
+
+  const moveOrderFieldDown = (id: string) => {
+    const index = orderFields.findIndex((f) => f.id === id);
+    if (index >= orderFields.length - 1) return;
+    const newFields = [...orderFields];
+    [newFields[index], newFields[index + 1]] = [
+      newFields[index + 1],
+      newFields[index],
+    ];
+    setOrderFields(newFields.map((f, i) => ({ ...f, order: i + 1 })));
+  };
+
+  // Save order configuration
+  const saveOrderConfig = async () => {
+    setCapabilitiesLoading(true);
+    try {
+      const response = await fetch("/api/ai-capabilities", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          order_fields: orderFields,
+          order_minimal_mode: orderMinimalMode,
+        }),
+      });
+
+      if (response.ok) {
+        setAlertToast({
+          show: true,
+          variant: "success",
+          title: "Order Configuration Saved!",
+          description: "",
+        });
+      } else {
+        setAlertToast({
+          show: true,
+          variant: "error",
+          title: "Save Failed",
+          description: "",
+        });
+      }
+    } catch (error) {
+      setAlertToast({
+        show: true,
+        variant: "error",
+        title: "Save Failed",
+        description: "",
+      });
+    } finally {
+      setCapabilitiesLoading(false);
+    }
   };
 
   // Save appointment configuration
@@ -648,26 +922,42 @@ export default function BotSettingsView() {
   const handleSave = async () => {
     setSaving(true);
     setMessage(null);
+
     try {
-      // Save to Firestore
-      const response = await fetch("/api/business/save", {
+      // Prepare both requests
+      const firestoreSave = fetch("/api/business/save", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(data),
       });
 
-      // Also sync to Flask backend for WhatsApp webhook
-      try {
-        const backendUrl =
-          process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
-        await fetch(`${backendUrl}/api/whatsapp/set-business-data`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(convertToApiFormat(data)),
+      // Flask backend sync with 5-second timeout (fire-and-forget, don't block)
+      const backendUrl =
+        process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 5000); // 5s timeout
+
+      const flaskSync = fetch(`${backendUrl}/api/whatsapp/set-business-data`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(convertToApiFormat(data)),
+        signal: controller.signal,
+      })
+        .catch(() => {
+          // Silently ignore Flask errors - it's optional
+          console.log(
+            "Backend sync skipped (backend may not be running or timed out)"
+          );
+        })
+        .finally(() => {
+          clearTimeout(timeoutId);
         });
-      } catch (syncError) {
-        console.log("Backend sync skipped (backend may not be running)");
-      }
+
+      // Run Firestore save first (primary), Flask sync is fire-and-forget
+      const response = await firestoreSave;
+
+      // Don't wait for Flask - just start it
+      flaskSync; // Fire and forget
 
       if (response.ok) {
         setMessage({
@@ -681,78 +971,6 @@ export default function BotSettingsView() {
       setMessage({ type: "error", text: "Failed to save. Please try again." });
     } finally {
       setSaving(false);
-    }
-  };
-
-  const handlePreview = async (customQuery?: string) => {
-    const query = customQuery || previewQuery;
-    if (!query.trim()) return;
-
-    const userTime = new Date().toLocaleTimeString([], {
-      hour: "2-digit",
-      minute: "2-digit",
-    });
-
-    // Add user message to chat
-    setChatMessages((prev) => [
-      ...prev,
-      { role: "user", content: query, time: userTime },
-    ]);
-
-    setPreviewQuery("");
-    setPreviewLoading(true);
-    setPreviewResponse(null);
-
-    try {
-      const response = await fetch("/api/ai/preview", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          business_data: convertToApiFormat(data),
-          user_message: query,
-          history: chatMessages.map((m) => ({
-            role: m.role === "bot" ? "assistant" : "user",
-            content: m.content,
-          })),
-        }),
-      });
-
-      const result = await response.json();
-      setPreviewResponse(result);
-
-      // Add bot response to chat
-      setChatMessages((prev) => [
-        ...prev,
-        {
-          role: "bot",
-          content:
-            result.reply ||
-            result.error ||
-            "I'm sorry, I couldn't generate a response.",
-          time: new Date().toLocaleTimeString([], {
-            hour: "2-digit",
-            minute: "2-digit",
-          }),
-          intent: result.intent,
-        },
-      ]);
-    } catch (error) {
-      const errorMsg =
-        "Could not connect to AI Brain. Make sure backend is running.";
-      setPreviewResponse({ error: errorMsg });
-      setChatMessages((prev) => [
-        ...prev,
-        {
-          role: "bot",
-          content: errorMsg,
-          time: new Date().toLocaleTimeString([], {
-            hour: "2-digit",
-            minute: "2-digit",
-          }),
-        },
-      ]);
-    } finally {
-      setPreviewLoading(false);
     }
   };
 
@@ -834,6 +1052,10 @@ export default function BotSettingsView() {
           stockStatus: "in_stock",
           imageUrl: "",
           variants: [],
+          sizes: [],
+          colors: [],
+          brand: "",
+          materials: [],
         },
       ],
     });
@@ -882,47 +1104,215 @@ export default function BotSettingsView() {
     setData({ ...data, faqs: data.faqs.filter((f) => f.id !== id) });
   };
 
-  // Tab configuration with SVG icons
+  // =============================================================================
+  // BUSINESS-TYPE-AWARE TAB CONFIGURATION
+  // Tabs adapt based on industry type for optimal UX
+  // =============================================================================
+
+  // Industry categorization for smart tab display
+  const industryConfig: Record<
+    string,
+    {
+      servicesLabel: string; // What to call "Services" tab
+      hasProducts: boolean; // Shows products/items
+      hasTimings: boolean; // Needs store hours
+      hasPolicies: boolean; // Needs general policies tab
+      hasEcommerce: boolean; // Needs e-commerce settings
+    }
+  > = {
+    // SERVICE-BASED BUSINESSES
+    salon: {
+      servicesLabel: "Services",
+      hasProducts: false,
+      hasTimings: true,
+      hasPolicies: true,
+      hasEcommerce: false,
+    },
+    clinic: {
+      servicesLabel: "Treatments",
+      hasProducts: false,
+      hasTimings: true,
+      hasPolicies: true,
+      hasEcommerce: false,
+    },
+    fitness: {
+      servicesLabel: "Classes & Memberships",
+      hasProducts: false,
+      hasTimings: true,
+      hasPolicies: true,
+      hasEcommerce: false,
+    },
+    coaching: {
+      servicesLabel: "Courses",
+      hasProducts: false,
+      hasTimings: true,
+      hasPolicies: true,
+      hasEcommerce: false,
+    },
+    education: {
+      servicesLabel: "Courses & Programs",
+      hasProducts: false,
+      hasTimings: true,
+      hasPolicies: true,
+      hasEcommerce: false,
+    },
+    events: {
+      servicesLabel: "Event Packages",
+      hasProducts: false,
+      hasTimings: false, // Events don't have fixed timings
+      hasPolicies: true,
+      hasEcommerce: false,
+    },
+
+    // PRODUCT-BASED BUSINESSES
+    ecommerce: {
+      servicesLabel: "Products",
+      hasProducts: true,
+      hasTimings: false, // Online 24/7
+      hasPolicies: false, // Has own e-commerce policies
+      hasEcommerce: true,
+    },
+    retail: {
+      servicesLabel: "Products",
+      hasProducts: true,
+      hasTimings: true,
+      hasPolicies: true,
+      hasEcommerce: false,
+    },
+    restaurant: {
+      servicesLabel: "Menu",
+      hasProducts: true,
+      hasTimings: true,
+      hasPolicies: true,
+      hasEcommerce: false,
+    },
+    automobile: {
+      servicesLabel: "Vehicles & Services",
+      hasProducts: true,
+      hasTimings: true,
+      hasPolicies: true,
+      hasEcommerce: false,
+    },
+
+    // LISTING-BASED BUSINESSES
+    real_estate: {
+      servicesLabel: "Properties",
+      hasProducts: true,
+      hasTimings: true,
+      hasPolicies: true,
+      hasEcommerce: false,
+    },
+    travel: {
+      servicesLabel: "Packages & Tours",
+      hasProducts: true,
+      hasTimings: false,
+      hasPolicies: true,
+      hasEcommerce: false,
+    },
+
+    // B2B / SERVICE BUSINESSES
+    logistics: {
+      servicesLabel: "Services & Rates",
+      hasProducts: false,
+      hasTimings: true,
+      hasPolicies: true,
+      hasEcommerce: false,
+    },
+    finance: {
+      servicesLabel: "Financial Products",
+      hasProducts: true,
+      hasTimings: true,
+      hasPolicies: true,
+      hasEcommerce: false,
+    },
+
+    // DEFAULT
+    other: {
+      servicesLabel: "Products & Services",
+      hasProducts: true,
+      hasTimings: true,
+      hasPolicies: true,
+      hasEcommerce: false,
+    },
+  };
+
+  // Get config for current industry (fallback to "other")
+  const currentConfig = industryConfig[data.industry] || industryConfig.other;
+
+  // Build tabs dynamically based on business type
   const tabs: { id: TabType; label: string; iconPath: string }[] = [
+    // Always show Profile
     {
       id: "profile",
       label: "Profile",
       iconPath: "/icons/ai_settings/profile.svg",
     },
+    // Always show Brand Voice
     {
       id: "brand",
       label: "Brand Voice",
       iconPath: "/icons/ai_settings/brand_voice.svg",
     },
+    // Services/Products tab - label adapts to business type
     {
       id: "services",
-      label: "Services",
+      label: currentConfig.servicesLabel,
       iconPath: "/icons/ai_settings/services.svg",
     },
-    {
-      id: "timings",
-      label: "Timings",
-      iconPath: "/icons/ai_settings/store_timings.svg",
-    },
-    {
-      id: "policies",
-      label: "Policies",
-      iconPath: "/icons/ai_settings/policies.svg",
-    },
-    {
-      id: "ecommerce",
-      label: "E-commerce",
-      iconPath: "/icons/ai_settings/ecommerce.svg",
-    },
-    { id: "faqs", label: "FAQs", iconPath: "/icons/ai_settings/faqs.svg" },
+    // Categories tab - only for e-commerce businesses
+    ...(currentConfig.hasEcommerce
+      ? [
+          {
+            id: "categories" as TabType,
+            label: "Categories",
+            iconPath: "/icons/ai_settings/services.svg",
+          },
+        ]
+      : []),
+    // Timings - only for businesses with physical presence or appointments
+    ...(currentConfig.hasTimings
+      ? [
+          {
+            id: "timings" as TabType,
+            label: "Timings",
+            iconPath: "/icons/ai_settings/store_timings.svg",
+          },
+        ]
+      : []),
+    // General Policies - hide for e-commerce (has own section)
+    ...(currentConfig.hasPolicies
+      ? [
+          {
+            id: "policies" as TabType,
+            label: "Policies",
+            iconPath: "/icons/ai_settings/policies.svg",
+          },
+        ]
+      : []),
+    // E-commerce Settings - only for e-commerce businesses
+    ...(currentConfig.hasEcommerce
+      ? [
+          {
+            id: "ecommerce" as TabType,
+            label: "E-commerce",
+            iconPath: "/icons/ai_settings/ecommerce.svg",
+          },
+        ]
+      : []),
+    // FAQ tab - hide for e-commerce (moved inside E-commerce tab)
+    ...(!currentConfig.hasEcommerce
+      ? [
+          {
+            id: "faqs" as TabType,
+            label: "FAQs",
+            iconPath: "/icons/ai_settings/faqs.svg",
+          },
+        ]
+      : []),
+    // Always show Capabilities
     {
       id: "capabilities",
       label: "Capabilities",
-      iconPath: "/icons/ai_settings/preview.svg",
-    },
-    {
-      id: "preview",
-      label: "Preview",
       iconPath: "/icons/ai_settings/preview.svg",
     },
   ];
@@ -951,6 +1341,8 @@ export default function BotSettingsView() {
         return !!(
           data.policies.refund.trim() || data.policies.cancellation.trim()
         );
+      case "categories":
+        return data.productCategories.length > 0;
       case "ecommerce":
         return !!(
           data.ecommercePolicies.shippingPolicy.trim() ||
@@ -963,17 +1355,71 @@ export default function BotSettingsView() {
         );
       case "capabilities":
         return true; // Capabilities is always "complete"
-      case "preview":
-        return true; // Preview is always "complete"
       default:
         return false;
     }
   };
 
   const getTabStatus = (tabId: TabType) => {
-    if (tabId === "preview") return null;
     return checkTabCompletion(tabId);
   };
+
+  // Render FAQ Content (used in standalone tab OR inside E-commerce tab)
+  const renderFAQContent = () => (
+    <>
+      <div className={styles.sectionHeader}>
+        <h2 className={styles.sectionTitle}>Frequently Asked Questions</h2>
+        <button className={styles.addButton} onClick={addFaq}>
+          + Add FAQ
+        </button>
+      </div>
+
+      {data.faqs.length === 0 ? (
+        <div className={styles.emptyState}>
+          <p>
+            No FAQs added yet. Add common questions to help the AI answer
+            better!
+          </p>
+        </div>
+      ) : (
+        <div className={styles.faqList}>
+          {data.faqs.map((faq, index) => (
+            <div key={faq.id} className={styles.faqCard}>
+              <div className={styles.faqHeader}>
+                <span>FAQ #{index + 1}</span>
+                <button
+                  className={styles.removeButton}
+                  onClick={() => removeFaq(faq.id)}
+                >
+                  ✕
+                </button>
+              </div>
+              <div className={styles.formGroup}>
+                <label>Question</label>
+                <input
+                  type="text"
+                  value={faq.question}
+                  onChange={(e) =>
+                    updateFaq(faq.id, "question", e.target.value)
+                  }
+                  placeholder="e.g., Do you accept walk-ins?"
+                />
+              </div>
+              <div className={styles.formGroup}>
+                <label>Answer</label>
+                <textarea
+                  value={faq.answer}
+                  onChange={(e) => updateFaq(faq.id, "answer", e.target.value)}
+                  placeholder="e.g., Yes, walk-ins are welcome but appointments are preferred."
+                  rows={2}
+                />
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </>
+  );
 
   return (
     <div className={styles.container}>
@@ -1103,9 +1549,7 @@ export default function BotSettingsView() {
                   className={`${styles.tabStatus} ${
                     status ? styles.tabComplete : styles.tabIncomplete
                   }`}
-                >
-                  {status ? "✓" : "!"}
-                </span>
+                />
               )}
             </button>
           );
@@ -1480,17 +1924,22 @@ export default function BotSettingsView() {
         {activeTab === "services" && (
           <div className={styles.section}>
             <div className={styles.sectionHeader}>
-              <h2 className={styles.sectionTitle}>Products & Services</h2>
+              <h2 className={styles.sectionTitle}>
+                {currentConfig.hasEcommerce
+                  ? "Products"
+                  : currentConfig.servicesLabel}
+              </h2>
               <button className={styles.addButton} onClick={addProduct}>
-                + Add Service
+                {currentConfig.hasEcommerce ? "+ Add Product" : "+ Add Service"}
               </button>
             </div>
 
             {data.products.length === 0 ? (
               <div className={styles.emptyState}>
                 <p>
-                  No services added yet. Add your first service to help the AI
-                  answer pricing questions!
+                  {currentConfig.hasEcommerce
+                    ? "No products added yet. Add your first product to help the AI answer questions!"
+                    : "No services added yet. Add your first service to help the AI answer pricing questions!"}
                 </p>
               </div>
             ) : (
@@ -1508,30 +1957,63 @@ export default function BotSettingsView() {
                     </div>
                     <div className={styles.formGrid}>
                       <div className={styles.formGroup}>
-                        <label>Service Name *</label>
+                        <label>
+                          {currentConfig.hasEcommerce
+                            ? "Product Name *"
+                            : "Service Name *"}
+                        </label>
                         <input
                           type="text"
                           value={product.name}
                           onChange={(e) =>
                             updateProduct(product.id, "name", e.target.value)
                           }
-                          placeholder="e.g., Haircut - Men"
+                          placeholder={
+                            currentConfig.hasEcommerce
+                              ? "e.g., Wireless Headphones"
+                              : "e.g., Haircut - Men"
+                          }
                         />
                       </div>
                       <div className={styles.formGroup}>
                         <label>Category</label>
-                        <input
-                          type="text"
-                          value={product.category}
-                          onChange={(e) =>
-                            updateProduct(
-                              product.id,
-                              "category",
-                              e.target.value
-                            )
-                          }
-                          placeholder="e.g., Hair"
-                        />
+                        {currentConfig.hasEcommerce &&
+                        data.productCategories.length > 0 ? (
+                          <select
+                            value={product.category}
+                            onChange={(e) =>
+                              updateProduct(
+                                product.id,
+                                "category",
+                                e.target.value
+                              )
+                            }
+                          >
+                            <option value="">Select a category</option>
+                            {data.productCategories.map((cat, i) => (
+                              <option key={i} value={cat}>
+                                {cat}
+                              </option>
+                            ))}
+                          </select>
+                        ) : (
+                          <input
+                            type="text"
+                            value={product.category}
+                            onChange={(e) =>
+                              updateProduct(
+                                product.id,
+                                "category",
+                                e.target.value
+                              )
+                            }
+                            placeholder={
+                              currentConfig.hasEcommerce
+                                ? "e.g., Electronics"
+                                : "e.g., Hair"
+                            }
+                          />
+                        )}
                       </div>
                       <div className={styles.formGroup}>
                         <label>Price (₹)</label>
@@ -1545,27 +2027,210 @@ export default function BotSettingsView() {
                               parseFloat(e.target.value) || 0
                             )
                           }
-                          placeholder="e.g., 300"
+                          placeholder={
+                            currentConfig.hasEcommerce
+                              ? "e.g., 1999"
+                              : "e.g., 300"
+                          }
                         />
                       </div>
                       <div className={styles.formGroup}>
-                        <label>Duration</label>
+                        <label>
+                          {currentConfig.hasEcommerce
+                            ? "Product Link"
+                            : "Duration"}
+                        </label>
                         <input
-                          type="text"
-                          value={product.duration}
+                          type={currentConfig.hasEcommerce ? "url" : "text"}
+                          value={
+                            currentConfig.hasEcommerce
+                              ? product.imageUrl
+                              : product.duration
+                          }
                           onChange={(e) =>
                             updateProduct(
                               product.id,
-                              "duration",
+                              currentConfig.hasEcommerce
+                                ? "imageUrl"
+                                : "duration",
                               e.target.value
                             )
                           }
-                          placeholder="e.g., 30 min"
+                          placeholder={
+                            currentConfig.hasEcommerce
+                              ? "e.g., https://yourstore.com/product"
+                              : "e.g., 30 min"
+                          }
                         />
                       </div>
+                      {currentConfig.hasEcommerce && (
+                        <>
+                          <div className={styles.formGroup}>
+                            <label>Brand</label>
+                            <input
+                              type="text"
+                              value={product.brand || ""}
+                              onChange={(e) =>
+                                updateProduct(
+                                  product.id,
+                                  "brand",
+                                  e.target.value
+                                )
+                              }
+                              placeholder="e.g., Nike, Apple, Samsung"
+                            />
+                          </div>
+                          <div className={styles.formGroup}>
+                            <label>Sizes</label>
+                            <SizeMultiSelect
+                              selectedSizes={product.sizes || []}
+                              onChange={(sizes: string[]) =>
+                                updateProduct(product.id, "sizes", sizes)
+                              }
+                            />
+                          </div>
+                          <div className={styles.formGroup}>
+                            <label>Colors (comma separated)</label>
+                            <input
+                              type="text"
+                              value={(product.colors || []).join(", ")}
+                              onChange={(e) => {
+                                // Keep raw input while typing - don't filter until blur
+                                const rawValue = e.target.value;
+                                // Split but keep trailing comma to allow typing more
+                                const colors = rawValue
+                                  .split(",")
+                                  .map((s) => s.trim());
+                                updateProduct(product.id, "colors", colors);
+                              }}
+                              onBlur={(e) => {
+                                // Clean up empty values on blur
+                                const cleaned = (product.colors || []).filter(
+                                  Boolean
+                                );
+                                updateProduct(product.id, "colors", cleaned);
+                              }}
+                              placeholder="e.g., Red, Blue, Black, White"
+                            />
+                          </div>
+                          <div className={styles.formGroup}>
+                            <label>Materials (comma separated)</label>
+                            <input
+                              type="text"
+                              value={(product.materials || []).join(", ")}
+                              onChange={(e) => {
+                                // Keep raw input while typing - don't filter until blur
+                                const rawValue = e.target.value;
+                                // Split but keep trailing comma to allow typing more
+                                const materials = rawValue
+                                  .split(",")
+                                  .map((s) => s.trim());
+                                updateProduct(
+                                  product.id,
+                                  "materials",
+                                  materials
+                                );
+                              }}
+                              onBlur={(e) => {
+                                // Clean up empty values on blur
+                                const cleaned = (
+                                  product.materials || []
+                                ).filter(Boolean);
+                                updateProduct(product.id, "materials", cleaned);
+                              }}
+                              placeholder="e.g., Cotton, Polyester, Silk"
+                            />
+                          </div>
+                        </>
+                      )}
                     </div>
                   </div>
                 ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Categories Tab - Only for E-commerce */}
+        {activeTab === "categories" && (
+          <div className={styles.section}>
+            <div className={styles.sectionHeader}>
+              <h2 className={styles.sectionTitle}>Product Categories</h2>
+            </div>
+
+            <p className={styles.categoryDescription}>
+              Define categories to organize your products. These categories will
+              appear as options when adding products.
+            </p>
+
+            {/* Add Category Input */}
+            <div className={styles.addCategoryForm}>
+              <input
+                type="text"
+                value={newCategoryName}
+                onChange={(e) => setNewCategoryName(e.target.value)}
+                placeholder="Enter category name (e.g., Electronics, Clothing)"
+                className={styles.categoryInput}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && newCategoryName.trim()) {
+                    setData({
+                      ...data,
+                      productCategories: [
+                        ...data.productCategories,
+                        newCategoryName.trim(),
+                      ],
+                    });
+                    setNewCategoryName("");
+                  }
+                }}
+              />
+              <button
+                className={styles.addButton}
+                onClick={() => {
+                  if (newCategoryName.trim()) {
+                    setData({
+                      ...data,
+                      productCategories: [
+                        ...data.productCategories,
+                        newCategoryName.trim(),
+                      ],
+                    });
+                    setNewCategoryName("");
+                  }
+                }}
+              >
+                + Add Category
+              </button>
+            </div>
+
+            {/* Categories List */}
+            {data.productCategories.length > 0 ? (
+              <div className={styles.categoriesList}>
+                {data.productCategories.map((category, index) => (
+                  <div key={index} className={styles.categoryItem}>
+                    <span className={styles.categoryName}>{category}</span>
+                    <button
+                      className={styles.removeButton}
+                      onClick={() => {
+                        setData({
+                          ...data,
+                          productCategories: data.productCategories.filter(
+                            (_, i) => i !== index
+                          ),
+                        });
+                      }}
+                    >
+                      ✕
+                    </button>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className={styles.emptyState}>
+                <p>
+                  No categories added yet. Add your first category above to
+                  organize your products!
+                </p>
               </div>
             )}
           </div>
@@ -1878,67 +2543,21 @@ export default function BotSettingsView() {
                 rows={2}
               />
             </div>
+
+            <div
+              style={{
+                marginTop: "48px",
+                paddingTop: "32px",
+                borderTop: "1px solid rgba(255, 255, 255, 0.1)",
+              }}
+            >
+              {renderFAQContent()}
+            </div>
           </div>
         )}
 
         {activeTab === "faqs" && (
-          <div className={styles.section}>
-            <div className={styles.sectionHeader}>
-              <h2 className={styles.sectionTitle}>
-                Frequently Asked Questions
-              </h2>
-              <button className={styles.addButton} onClick={addFaq}>
-                + Add FAQ
-              </button>
-            </div>
-
-            {data.faqs.length === 0 ? (
-              <div className={styles.emptyState}>
-                <p>
-                  No FAQs added yet. Add common questions to help the AI answer
-                  better!
-                </p>
-              </div>
-            ) : (
-              <div className={styles.faqList}>
-                {data.faqs.map((faq, index) => (
-                  <div key={faq.id} className={styles.faqCard}>
-                    <div className={styles.faqHeader}>
-                      <span>FAQ #{index + 1}</span>
-                      <button
-                        className={styles.removeButton}
-                        onClick={() => removeFaq(faq.id)}
-                      >
-                        ✕
-                      </button>
-                    </div>
-                    <div className={styles.formGroup}>
-                      <label>Question</label>
-                      <input
-                        type="text"
-                        value={faq.question}
-                        onChange={(e) =>
-                          updateFaq(faq.id, "question", e.target.value)
-                        }
-                        placeholder="e.g., Do you accept walk-ins?"
-                      />
-                    </div>
-                    <div className={styles.formGroup}>
-                      <label>Answer</label>
-                      <textarea
-                        value={faq.answer}
-                        onChange={(e) =>
-                          updateFaq(faq.id, "answer", e.target.value)
-                        }
-                        placeholder="e.g., Yes, walk-ins are welcome but appointments are preferred."
-                        rows={2}
-                      />
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
+          <div className={styles.section}>{renderFAQContent()}</div>
         )}
 
         {activeTab === "capabilities" && (
@@ -1953,62 +2572,64 @@ export default function BotSettingsView() {
               Enable or disable AI-powered features for your business.
             </p>
 
-            {/* Appointment Booking Toggle */}
-            <div
-              className={`${styles.capabilitiesSection} ${
-                capabilityExpanded ? styles.capabilitiesExpanded : ""
-              }`}
-              onClick={() => setCapabilityExpanded(!capabilityExpanded)}
-            >
-              <div className={styles.capabilityRow}>
-                <div className={styles.capabilityInfo}>
-                  <div className={styles.capabilityTitle}>
-                    <img
-                      src="/icons/ai_settings/bussiness_type/calender.svg"
-                      alt="Calendar"
-                      width={20}
-                      height={20}
-                      style={{ filter: "invert(1)" }}
-                    />
-                    Appointment Booking
-                    <span className={styles.newBadge}>NEW</span>
-                    <span
-                      className={`${styles.chevron} ${
-                        capabilityExpanded ? styles.chevronUp : ""
-                      }`}
+            {/* Appointment Booking Toggle - Hidden for ecommerce businesses */}
+            {!currentConfig.hasEcommerce && (
+              <>
+                <div
+                  className={`${styles.capabilitiesSection} ${
+                    capabilityExpanded ? styles.capabilitiesExpanded : ""
+                  }`}
+                  onClick={() => setCapabilityExpanded(!capabilityExpanded)}
+                >
+                  <div className={styles.capabilityRow}>
+                    <div className={styles.capabilityInfo}>
+                      <div className={styles.capabilityTitle}>
+                        <img
+                          src="/icons/ai_settings/bussiness_type/calender.svg"
+                          alt="Calendar"
+                          width={20}
+                          height={20}
+                          style={{ filter: "invert(1)" }}
+                        />
+                        Appointment Booking
+                        <span className={styles.newBadge}>NEW</span>
+                        <span
+                          className={`${styles.chevron} ${
+                            capabilityExpanded ? styles.chevronUp : ""
+                          }`}
+                        >
+                          ▼
+                        </span>
+                      </div>
+                    </div>
+                    <label
+                      className={styles.toggleSwitch}
+                      onClick={(e) => e.stopPropagation()}
                     >
-                      ▼
-                    </span>
+                      <input
+                        type="checkbox"
+                        checked={appointmentBookingEnabled}
+                        onChange={handleAppointmentToggle}
+                        disabled={capabilitiesLoading}
+                      />
+                      <span className={styles.toggleSlider}></span>
+                    </label>
+                  </div>
+                  <div
+                    className={`${styles.capabilityDropdown} ${
+                      capabilityExpanded ? styles.capabilityDropdownOpen : ""
+                    }`}
+                  >
+                    <p className={styles.capabilityDropdownText}>
+                      Enable AI-powered appointment scheduling. When enabled, your
+                      AI assistant can book appointments through WhatsApp and a new
+                      Appointments menu appears in the sidebar.
+                    </p>
                   </div>
                 </div>
-                <label
-                  className={styles.toggleSwitch}
-                  onClick={(e) => e.stopPropagation()}
-                >
-                  <input
-                    type="checkbox"
-                    checked={appointmentBookingEnabled}
-                    onChange={handleAppointmentToggle}
-                    disabled={capabilitiesLoading}
-                  />
-                  <span className={styles.toggleSlider}></span>
-                </label>
-              </div>
-              <div
-                className={`${styles.capabilityDropdown} ${
-                  capabilityExpanded ? styles.capabilityDropdownOpen : ""
-                }`}
-              >
-                <p className={styles.capabilityDropdownText}>
-                  Enable AI-powered appointment scheduling. When enabled, your
-                  AI assistant can book appointments through WhatsApp and a new
-                  Appointments menu appears in the sidebar.
-                </p>
-              </div>
-            </div>
 
-            {/* Appointment Configuration - Only show when enabled */}
-            {appointmentBookingEnabled && (
+                {/* Appointment Configuration - Only show when enabled and expanded */}
+                {appointmentBookingEnabled && capabilityExpanded && (
               <div className={styles.appointmentConfig}>
                 {/* Business Hours Configuration */}
                 <div
@@ -2075,28 +2696,24 @@ export default function BotSettingsView() {
                 >
                   <div className={styles.configCardHeader}>
                     <div>
-                      <h3 className={styles.configCardTitle}>
-                        Services
-                      </h3>
+                      <h3 className={styles.configCardTitle}>Services</h3>
                       <p className={styles.configCardDescription}>
-                        Configure your services with duration and capacity per slot
+                        Configure your services with duration and capacity per
+                        slot
                       </p>
                     </div>
-                    <button
-                      className={styles.addButton}
-                      onClick={addService}
-                    >
+                    <button className={styles.addButton} onClick={addService}>
                       + Add Service
                     </button>
                   </div>
 
                   <div className={styles.fieldBuilderList}>
                     {services.map((service, index) => (
-                      <div
-                        key={service.id}
-                        className={styles.fieldBuilderItem}
-                      >
-                        <div className={styles.fieldBuilderContent} style={{ flex: 1 }}>
+                      <div key={service.id} className={styles.fieldBuilderItem}>
+                        <div
+                          className={styles.fieldBuilderContent}
+                          style={{ flex: 1 }}
+                        >
                           <div className={styles.fieldBuilderRow}>
                             <input
                               type="text"
@@ -2110,8 +2727,18 @@ export default function BotSettingsView() {
                               className={styles.fieldLabelInput}
                               style={{ flex: 2 }}
                             />
-                            <div className={styles.formGroup} style={{ flex: 1, minWidth: '120px' }}>
-                              <label style={{ fontSize: '12px', marginBottom: '4px' }}>Duration</label>
+                            <div
+                              className={styles.formGroup}
+                              style={{ flex: 1, minWidth: "120px" }}
+                            >
+                              <label
+                                style={{
+                                  fontSize: "12px",
+                                  marginBottom: "4px",
+                                }}
+                              >
+                                Duration
+                              </label>
                               <select
                                 value={service.duration}
                                 onChange={(e) =>
@@ -2129,8 +2756,18 @@ export default function BotSettingsView() {
                                 <option value={120}>2 hours</option>
                               </select>
                             </div>
-                            <div className={styles.formGroup} style={{ flex: 1, minWidth: '120px' }}>
-                              <label style={{ fontSize: '12px', marginBottom: '4px' }}>Capacity/Slot</label>
+                            <div
+                              className={styles.formGroup}
+                              style={{ flex: 1, minWidth: "120px" }}
+                            >
+                              <label
+                                style={{
+                                  fontSize: "12px",
+                                  marginBottom: "4px",
+                                }}
+                              >
+                                Capacity/Slot
+                              </label>
                               <input
                                 type="number"
                                 min={1}
@@ -2138,11 +2775,14 @@ export default function BotSettingsView() {
                                 value={service.capacity}
                                 onChange={(e) =>
                                   updateService(service.id, {
-                                    capacity: Math.max(1, parseInt(e.target.value) || 1),
+                                    capacity: Math.max(
+                                      1,
+                                      parseInt(e.target.value) || 1
+                                    ),
                                   })
                                 }
                                 className={styles.fieldTypeSelect}
-                                style={{ width: '100%' }}
+                                style={{ width: "100%" }}
                               />
                             </div>
                             <button
@@ -2157,7 +2797,13 @@ export default function BotSettingsView() {
                       </div>
                     ))}
                     {services.length === 0 && (
-                      <p style={{ color: '#888', textAlign: 'center', padding: '1rem' }}>
+                      <p
+                        style={{
+                          color: "#888",
+                          textAlign: "center",
+                          padding: "1rem",
+                        }}
+                      >
                         No services configured. Add at least one service.
                       </p>
                     )}
@@ -2291,95 +2937,347 @@ export default function BotSettingsView() {
                 </div>
               </div>
             )}
+              </>
+            )}
           </div>
         )}
 
-        {activeTab === "preview" && (
-          <div className={styles.section}>
-            <div className={styles.sectionHeader}>
-              <h2 className={styles.sectionTitle}>AI Brain Preview</h2>
-              <div className={styles.intentBadge}>
-                Tone: {data.brandVoice.tone}
-              </div>
-            </div>
-
-            <div className={styles.chatContainer}>
-              <div className={styles.messageList}>
-                {chatMessages.map((msg, idx) => (
-                  <div
-                    key={idx}
-                    className={`${styles.message} ${
-                      msg.role === "user"
-                        ? styles.userMessage
-                        : styles.botMessage
-                    }`}
-                  >
-                    <div className={styles.bubble}>{msg.content}</div>
-                    <div className={styles.messageTime}>
-                      {msg.time}
-                      {msg.intent && ` • Intent: ${msg.intent}`}
-                    </div>
+        {activeTab === "capabilities" && (
+          <div style={{ marginTop: "2rem" }}>
+            {/* Order Booking Toggle */}
+            <div
+              className={`${styles.capabilitiesSection} ${
+                orderConfigExpanded ? styles.capabilitiesExpanded : ""
+              }`}
+              onClick={() => setOrderConfigExpanded(!orderConfigExpanded)}
+              style={{ cursor: "pointer" }}
+            >
+              <div className={styles.capabilityRow}>
+                <div className={styles.capabilityInfo}>
+                  <div className={styles.capabilityTitle}>
+                    <svg
+                      width="20"
+                      height="20"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      style={{ marginRight: "8px" }}
+                    >
+                      <path
+                        d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      />
+                      <path
+                        d="M3.27 6.96L12 12.01l8.73-5.05"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      />
+                      <path
+                        d="M12 22.08V12"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      />
+                    </svg>
+                    Order Booking
+                    <span className={styles.newBadge}>NEW</span>
+                    <span
+                      className={`${styles.chevron} ${
+                        orderConfigExpanded ? styles.chevronUp : ""
+                      }`}
+                    >
+                      ▼
+                    </span>
                   </div>
-                ))}
-
-                {previewLoading && (
-                  <div className={`${styles.message} ${styles.botMessage}`}>
-                    <div className={styles.typingBubble}>
-                      <div className={styles.dot}></div>
-                      <div className={styles.dot}></div>
-                      <div className={styles.dot}></div>
-                    </div>
-                  </div>
-                )}
-                <div ref={chatEndRef} />
-              </div>
-
-              <div className={styles.suggestions}>
-                {[
-                  "What is the price?",
-                  "What are your timings?",
-                  "Where are you located?",
-                  "How to book an appointment?",
-                ].map((s, i) => (
-                  <button
-                    key={i}
-                    className={styles.suggestionChip}
-                    onClick={() => handlePreview(s)}
-                    disabled={previewLoading}
-                  >
-                    {s}
-                  </button>
-                ))}
-              </div>
-
-              <div className={styles.chatFooter}>
-                <input
-                  type="text"
-                  value={previewQuery}
-                  onChange={(e) => setPreviewQuery(e.target.value)}
-                  placeholder="Type a customer question..."
-                  onKeyDown={(e) => e.key === "Enter" && handlePreview()}
-                  disabled={previewLoading}
-                />
-                <button
-                  className={styles.sendButton}
-                  onClick={() => handlePreview()}
-                  disabled={previewLoading || !previewQuery.trim()}
+                </div>
+                <label
+                  className={styles.toggleSwitch}
+                  onClick={(e) => e.stopPropagation()}
                 >
-                  {previewLoading ? "..." : "Send"}
-                </button>
+                  <input
+                    type="checkbox"
+                    checked={orderBookingEnabled}
+                    onChange={handleOrderToggle}
+                    disabled={capabilitiesLoading}
+                  />
+                  <span className={styles.toggleSlider}></span>
+                </label>
+              </div>
+
+              {/* Dropdown description - shown when expanded */}
+              <div
+                className={`${styles.capabilityDropdown} ${
+                  orderConfigExpanded ? styles.capabilityDropdownOpen : ""
+                }`}
+              >
+                <p className={styles.capabilityDropdownText}>
+                  Enable AI-powered order taking. Your AI assistant can take
+                  orders through WhatsApp and a new Orders menu appears in the
+                  sidebar.
+                </p>
               </div>
             </div>
 
-            <p className={styles.previewHint} style={{ marginTop: "20px" }}>
-              💡 This preview uses the business data you've entered above. Save
-              your changes to sync them with the live WhatsApp automation.
-            </p>
+              {/* Order Configuration - shown when expanded and order booking is enabled */}
+              {orderConfigExpanded && orderBookingEnabled && (
+                <div
+                  style={{
+                    marginTop: "1.5rem",
+                    padding: "1.5rem",
+                    background: "#1a1a1a",
+                    borderRadius: "12px",
+                    border: "1px solid #333",
+                  }}
+                >
+                  {/* Field Builder - Order Questions */}
+                  <div>
+                    <div
+                      style={{
+                        display: "flex",
+                        justifyContent: "space-between",
+                        alignItems: "flex-start",
+                        marginBottom: "1.5rem",
+                      }}
+                    >
+                      <div>
+                        <h3
+                          style={{
+                            fontSize: "16px",
+                            fontWeight: 600,
+                            color: "#fff",
+                            margin: 0,
+                          }}
+                        >
+                          Order Questions
+                        </h3>
+                        <p
+                          style={{
+                            fontSize: "13px",
+                            color: "#888",
+                            margin: "0.5rem 0 0 0",
+                          }}
+                        >
+                          Configure what information the AI will collect from
+                          customers when placing an order
+                        </p>
+                      </div>
+                      <button
+                        className={styles.addButton}
+                        onClick={addOrderField}
+                      >
+                        + Add Question
+                      </button>
+                    </div>
+
+                    <div
+                      style={{
+                        display: "flex",
+                        flexDirection: "column",
+                        gap: "12px",
+                      }}
+                    >
+                      {orderFields
+                        .sort((a, b) => a.order - b.order)
+                        .map((field, index) => {
+                          return (
+                            <div
+                              key={field.id}
+                              style={{
+                                display: "flex",
+                                alignItems: "center",
+                                gap: "12px",
+                                padding: "16px",
+                                background: "#252525",
+                                borderRadius: "8px",
+                                border: "1px solid #333",
+                              }}
+                            >
+                              {/* Order Controls */}
+                              <div
+                                style={{
+                                  display: "flex",
+                                  flexDirection: "column",
+                                  alignItems: "center",
+                                  gap: "4px",
+                                }}
+                              >
+                                <button
+                                  onClick={() => moveOrderFieldUp(field.id)}
+                                  disabled={index === 0}
+                                  style={{
+                                    width: "28px",
+                                    height: "28px",
+                                    background: "#333",
+                                    border: "1px solid #444",
+                                    borderRadius: "4px",
+                                    color: index === 0 ? "#555" : "#aaa",
+                                    cursor:
+                                      index === 0 ? "not-allowed" : "pointer",
+                                    fontSize: "12px",
+                                  }}
+                                  title="Move up"
+                                >
+                                  ↑
+                                </button>
+                                <span
+                                  style={{
+                                    fontSize: "12px",
+                                    fontWeight: 600,
+                                    color: "#888",
+                                  }}
+                                >
+                                  {field.order}
+                                </span>
+                                <button
+                                  onClick={() => moveOrderFieldDown(field.id)}
+                                  disabled={index === orderFields.length - 1}
+                                  style={{
+                                    width: "28px",
+                                    height: "28px",
+                                    background: "#333",
+                                    border: "1px solid #444",
+                                    borderRadius: "4px",
+                                    color:
+                                      index === orderFields.length - 1
+                                        ? "#555"
+                                        : "#aaa",
+                                    cursor:
+                                      index === orderFields.length - 1
+                                        ? "not-allowed"
+                                        : "pointer",
+                                    fontSize: "12px",
+                                  }}
+                                  title="Move down"
+                                >
+                                  ↓
+                                </button>
+                              </div>
+
+                              {/* Field Inputs */}
+                              <div
+                                style={{
+                                  flex: 1,
+                                  display: "flex",
+                                  alignItems: "center",
+                                  gap: "12px",
+                                  flexWrap: "wrap",
+                                }}
+                              >
+                                <input
+                                  type="text"
+                                  placeholder="Question/Field Label"
+                                  value={field.label}
+                                  onChange={(e) =>
+                                    updateOrderField(field.id, {
+                                      label: e.target.value,
+                                    })
+                                  }
+                                  style={{
+                                    flex: "1 1 200px",
+                                    padding: "10px 12px",
+                                    background: "#1a1a1a",
+                                    border: "1px solid #444",
+                                    borderRadius: "6px",
+                                    color: "#fff",
+                                    fontSize: "14px",
+                                  }}
+                                />
+                                <select
+                                  value={field.type}
+                                  onChange={(e) =>
+                                    updateOrderField(field.id, {
+                                      type: e.target
+                                        .value as OrderField["type"],
+                                    })
+                                  }
+                                  style={{
+                                    padding: "10px 12px",
+                                    background: "#1a1a1a",
+                                    border: "1px solid #444",
+                                    borderRadius: "6px",
+                                    color: "#fff",
+                                    fontSize: "14px",
+                                    minWidth: "120px",
+                                  }}
+                                >
+                                  <option value="text">Text</option>
+                                  <option value="phone">Phone</option>
+                                  <option value="email">Email</option>
+                                  <option value="textarea">Long Text</option>
+                                  <option value="select">Dropdown</option>
+                                </select>
+                                <label
+                                  style={{
+                                    display: "flex",
+                                    alignItems: "center",
+                                    gap: "6px",
+                                    color: "#aaa",
+                                    fontSize: "14px",
+                                    cursor: "pointer",
+                                  }}
+                                >
+                                  <input
+                                    type="checkbox"
+                                    checked={field.required}
+                                    onChange={(e) =>
+                                      updateOrderField(field.id, {
+                                        required: e.target.checked,
+                                      })
+                                    }
+                                    style={{
+                                      width: "18px",
+                                      height: "18px",
+                                      accentColor: "#22c55e",
+                                    }}
+                                  />
+                                  <span>Required</span>
+                                </label>
+                              </div>
+
+                              {/* Remove Button */}
+                              <button
+                                onClick={() => removeOrderField(field.id)}
+                                title="Remove field"
+                                style={{
+                                  width: "36px",
+                                  height: "36px",
+                                  background: "#3a2020",
+                                  border: "1px solid #5a3030",
+                                  borderRadius: "6px",
+                                  color: "#ff6b6b",
+                                  cursor: "pointer",
+                                  fontSize: "16px",
+                                  display: "flex",
+                                  alignItems: "center",
+                                  justifyContent: "center",
+                                }}
+                              >
+                                ✕
+                              </button>
+                            </div>
+                          );
+                        })}
+                    </div>
+                  </div>
+
+                  {/* Save Order Configuration Button */}
+                  <div style={{ marginTop: "1.5rem", textAlign: "right" }}>
+                    <button
+                      className={styles.primaryButton}
+                      onClick={saveOrderConfig}
+                      disabled={capabilitiesLoading}
+                    >
+                      {capabilitiesLoading ? "Saving..." : "Save Configuration"}
+                    </button>
+                  </div>
+                </div>
+              )}
           </div>
         )}
       </div>
 
-      {activeTab !== "preview" && activeTab !== "capabilities" && (
+      {activeTab !== "capabilities" && (
         <div className={styles.footer}>
           <button
             className={styles.saveButton}

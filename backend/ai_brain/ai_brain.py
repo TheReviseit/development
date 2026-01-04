@@ -233,47 +233,58 @@ class AIBrain:
                 return response
 
         # =====================================================
-        # STATE-DRIVEN FLOW CHECK - Deterministic Appointment Booking
+        # STATE-DRIVEN FLOW CHECK - Handle active booking flows
         # =====================================================
-        # If user is in an active appointment flow, let the handler process it
+        # If user is in an active flow (appointment or order), let the handler process it
         is_flow_active = user_id and self.conversation_manager.is_flow_active(user_id)
         logger.info(f"📋 Flow check - user_id: {user_id}, is_flow_active: {is_flow_active}")
         
         if is_flow_active:
+            # Get the current flow type
+            state = self.conversation_manager.get_state(user_id)
+            flow_name = state.active_flow if state else None
+            logger.info(f"📋 Active flow: {flow_name}")
+            
             # Check if this is a question/interruption (optional heuristic)
             is_question = "?" in user_message or any(w in user_message.lower() for w in ["what", "how", "where", "price", "cost"])
             
-            # Use LLM to check if it's an answer or a question if ambiguous
-            if is_question:
-                # Let LLM decide - handled in _handle_appointment_flow
-                pass
-                
-            flow_response = self._handle_appointment_flow(user_id, user_message, business)
-            logger.info(f"📋 Flow response: {flow_response is not None}")
-            if flow_response:
-                return flow_response
+            if flow_name == "order_booking":
+                # Handle order flow
+                flow_response = self._handle_order_flow(user_id, user_message, business)
+                if flow_response:
+                    return flow_response
+            elif flow_name == "appointment_booking":
+                # Handle appointment flow
+                flow_response = self._handle_appointment_flow(user_id, user_message, business)
+                logger.info(f"📋 Flow response: {flow_response is not None}")
+                if flow_response:
+                    return flow_response
         
         # =====================================================
-        # BOOKING INTENT DETECTION - Start flow if booking requested
+        # BOOKING INTENT DETECTION - Route to correct flow based on type
         # =====================================================
-        booking_keywords = [
-            "book", "appointment", "schedule", "reserve", "booking", 
-            "slot", "time slot", "appoint", "book a", "want to book",
-            "i want to book", "can i book", "need appointment"
-        ]
+        # Classify whether this is an order request or appointment request
+        booking_type = self._classify_booking_type(user_message, business)
+        logger.info(f"📦 Booking type classification: {booking_type} for message: '{user_message[:50]}...'")
         
-        is_booking_request = any(kw in user_message.lower() for kw in booking_keywords)
-        
-        if is_booking_request and user_id and not self.conversation_manager.is_flow_active(user_id):
-            # Check if appointment booking is enabled for this business
-            if self.appointment_handler:
-                config = self.appointment_handler.get_config(biz_id)
-                if config.get("enabled", False):
-                    # Start the structured appointment booking flow
-                    # Pass the initial message to extract any pre-provided data
-                    flow_response = self._start_appointment_flow(user_id, biz_id, config, user_message)
+        if booking_type and user_id and not self.conversation_manager.is_flow_active(user_id):
+            if booking_type == "order":
+                # Check if order booking is enabled and start order flow
+                if self._is_order_booking_enabled(biz_id):
+                    flow_response = self._start_order_flow(user_id, biz_id, user_message, business)
                     if flow_response:
                         return flow_response
+                else:
+                    logger.info(f"📦 Order booking not enabled for business: {biz_id}")
+            elif booking_type == "appointment":
+                # Check if appointment booking is enabled for this business
+                if self.appointment_handler:
+                    config = self.appointment_handler.get_config(biz_id)
+                    if config.get("enabled", False):
+                        # Start the structured appointment booking flow
+                        flow_response = self._start_appointment_flow(user_id, biz_id, config, user_message)
+                        if flow_response:
+                            return flow_response
         
         
         # Get conversation history
@@ -479,6 +490,617 @@ class AIBrain:
             "entities": intent_result.entities,
             "needs_clarification": intent_result.needs_clarification,
             "clarification_question": intent_result.clarification_question
+        }
+    
+    def _classify_booking_type(self, message: str, business_data: Dict[str, Any]) -> Optional[str]:
+        """
+        Classify whether a booking request is for an order or an appointment.
+        
+        Returns:
+            "order" - Item/quantity based (t-shirt, pizza, etc.)
+            "appointment" - Time/date based (haircut tomorrow, slot at 3pm)
+            None - Not a booking request
+        """
+        msg_lower = message.lower()
+        
+        # Order indicators (item-based)
+        order_keywords = ["order", "buy", "purchase", "want to order", "want to buy", "get me"]
+        order_patterns = [
+            r"\b\d+\s*(x|nos?|pieces?|items?|qty)\b",  # "2 pieces", "3x"
+            r"\b(quantity|qty)\s*:?\s*\d+",
+        ]
+        
+        # Check for product mentions from business catalog
+        products = business_data.get("products_services", [])
+        product_names = [p.get("name", "").lower() for p in products if isinstance(p, dict) and p.get("name")]
+        has_product_mention = any(name in msg_lower for name in product_names if name and len(name) > 2)
+        
+        # Appointment indicators (time-based)
+        appointment_keywords = ["appointment", "schedule", "slot", "time slot", "appoint"]
+        time_patterns = [
+            r"\b(today|tomorrow|monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b",
+            r"\b\d{1,2}[:/]\d{2}\b",  # Time patterns like 10:30
+            r"\b\d{1,2}\s*(am|pm)\b",  # Time patterns like 10am
+            r"\b\d{1,2}[-/]\d{1,2}[-/]\d{2,4}\b",  # Date patterns
+        ]
+        
+        has_order_keyword = any(kw in msg_lower for kw in order_keywords)
+        has_appointment_keyword = any(kw in msg_lower for kw in appointment_keywords)
+        has_time_indicator = any(re.search(p, msg_lower) for p in time_patterns)
+        has_order_quantity = any(re.search(p, msg_lower) for p in order_patterns)
+        
+        # Log classification factors
+        logger.info(f"📦 Classification factors: order_kw={has_order_keyword}, appt_kw={has_appointment_keyword}, "
+                   f"time={has_time_indicator}, qty={has_order_quantity}, product={has_product_mention}")
+        
+        # Decision logic (order takes precedence when clear signals)
+        if has_order_keyword or has_order_quantity:
+            return "order"
+        if has_appointment_keyword:
+            return "appointment"
+        if has_time_indicator:
+            return "appointment"
+        if has_product_mention and not has_time_indicator:
+            # Product mentioned without time = likely order
+            return "order"
+        if "book" in msg_lower:
+            # Generic "book" - check context
+            if has_product_mention:
+                return "order"
+            # Default "book" to appointment (traditional semantics)
+            return "appointment"
+        
+        return None
+    
+    def _is_order_booking_enabled(self, user_id: str) -> bool:
+        """Check if order booking is enabled for this business."""
+        if not self.supabase_client:
+            return False
+        try:
+            result = self.supabase_client.table("ai_capabilities").select(
+                "order_booking_enabled"
+            ).eq("user_id", user_id).single().execute()
+            enabled = result.data.get("order_booking_enabled", False) if result.data else False
+            logger.info(f"📦 Order booking enabled for {user_id}: {enabled}")
+            return enabled
+        except Exception as e:
+            logger.warning(f"📦 Failed to check order_booking_enabled: {e}")
+            return False
+    
+    def _get_order_config(self, user_id: str) -> Dict:
+        """
+        Get order field configuration for a business.
+        
+        Returns:
+            Dict with order fields configuration or defaults
+        """
+        # Default fields
+        default_fields = [
+            {"id": "name", "label": "Full Name", "type": "text", "required": True, "order": 1},
+            {"id": "phone", "label": "Phone Number", "type": "phone", "required": True, "order": 2},
+            {"id": "address", "label": "Delivery Address", "type": "textarea", "required": True, "order": 3},
+            {"id": "notes", "label": "Order Notes", "type": "textarea", "required": False, "order": 4},
+        ]
+        
+        if not self.supabase_client:
+            return {"fields": default_fields, "minimal_mode": False}
+        
+        try:
+            result = self.supabase_client.table("ai_capabilities").select(
+                "order_fields, order_minimal_mode"
+            ).eq("user_id", user_id).single().execute()
+            
+            if result.data:
+                fields = result.data.get("order_fields", default_fields)
+                minimal_mode = result.data.get("order_minimal_mode", False)
+                
+                # If minimal mode, only use name and phone
+                if minimal_mode:
+                    fields = [f for f in fields if f.get("id") in ["name", "phone"]]
+                
+                return {
+                    "fields": sorted(fields, key=lambda x: x.get("order", 0)),
+                    "minimal_mode": minimal_mode
+                }
+            
+            return {"fields": default_fields, "minimal_mode": False}
+            
+        except Exception as e:
+            logger.warning(f"📦 Failed to get order config: {e}")
+            return {"fields": default_fields, "minimal_mode": False}
+    
+    def _start_order_flow(
+        self,
+        user_id: str,
+        business_owner_id: str,
+        initial_message: str,
+        business_data: Dict[str, Any]
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Start AI-driven order booking flow.
+        
+        This initializes order collection and asks what the customer wants to order.
+        """
+        logger.info(f"📦 Starting order flow for user: {user_id}, business: {business_owner_id}")
+        
+        # Get order field configuration
+        order_config = self._get_order_config(business_owner_id)
+        order_fields = order_config.get("fields", [])
+        
+        # Build required fields list from config
+        required_field_ids = ["items"] + [f["id"] for f in order_fields if f.get("required", False)]
+        
+        # Start the order flow in conversation manager
+        state = self.conversation_manager.start_flow(
+            user_id=user_id,
+            flow_name="order_booking",
+            required_fields=required_field_ids,
+            config={
+                "business_owner_id": business_owner_id,
+                "order_fields": order_fields,
+            }
+        )
+        
+        # Try to extract product mention from initial message
+        products = business_data.get("products_services", [])
+        mentioned_product = None
+        msg_lower = initial_message.lower()
+        
+        for product in products:
+            if isinstance(product, dict):
+                name = product.get("name", "").lower()
+                if name and name in msg_lower:
+                    mentioned_product = product
+                    break
+        
+        # Generate appropriate response
+        if mentioned_product:
+            product_name = mentioned_product.get("name", "item")
+            product_price = mentioned_product.get("price", "")
+            price_str = f" (₹{product_price})" if product_price else ""
+            
+            # Pre-collect the item
+            state.collect_field("pending_item", product_name)
+            
+            response_text = (
+                f"Great choice! 🎉 You want to order the *{product_name}*{price_str}.\n\n"
+                f"How many would you like to order?"
+            )
+            suggested_actions = ["1", "2", "3", "Cancel"]
+        else:
+            # List available products
+            if products:
+                product_list = "\n".join([f"{i+1}. {p.get('name', 'Item')} - ₹{p.get('price', 'N/A')}" 
+                                         for i, p in enumerate(products[:5]) if isinstance(p, dict)])
+                response_text = (
+                    f"📦 I'd be happy to help you place an order!\n\n"
+                    f"Here's what we have:\n{product_list}\n\n"
+                    f"Which item would you like? (Reply with the number or name)"
+                )
+                # Set flag to indicate we're awaiting product selection
+                state.collect_field("awaiting_selection", True)
+                state.collect_field("_available_products", [p.get('name') for p in products[:5] if isinstance(p, dict)])
+            else:
+                response_text = (
+                    f"📦 I'd be happy to help you place an order!\n\n"
+                    f"What would you like to order today?"
+                )
+            suggested_actions = ["1", "2", "Cancel order"]
+        
+        # Add to conversation history
+        self.conversation_manager.add_message(user_id, "user", initial_message)
+        self.conversation_manager.add_message(user_id, "assistant", response_text)
+        
+        return {
+            "reply": response_text,
+            "intent": "order_started",
+            "confidence": 1.0,
+            "needs_human": False,
+            "suggested_actions": suggested_actions,
+            "metadata": {
+                "generation_method": "order_flow_started",
+                "flow": "order_booking",
+                "mentioned_product": mentioned_product.get("name") if mentioned_product else None
+            }
+        }
+    
+    def _handle_order_flow(
+        self,
+        user_id: str,
+        message: str,
+        business_data: Dict[str, Any]
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Handle an active order booking flow.
+        
+        Processes user responses for quantity, name, and confirmation.
+        """
+        logger.info(f"📦 _handle_order_flow called for user: {user_id}, message: '{message}'")
+        
+        state = self.conversation_manager.get_state(user_id)
+        if not state:
+            logger.warning(f"📦 No state found for user: {user_id}")
+            return None
+        
+        msg_lower = message.lower().strip()
+        
+        # Check for confirmation response
+        if state.flow_status == FlowStatus.AWAITING_CONFIRMATION:
+            if msg_lower in ["yes", "confirm", "ok", "okay", "sure", "y", "haan", "ha", "ji"]:
+                # User confirmed - complete the order
+                return self._complete_order(user_id, state, business_data)
+            elif msg_lower in ["no", "cancel", "nahi", "nako", "na", "n"]:
+                # User cancelled
+                self.conversation_manager.cancel_flow(user_id)
+                self.conversation_manager.add_message(user_id, "user", message)
+                cancel_msg = "No problem! I've cancelled the order. Is there anything else I can help you with? 😊"
+                self.conversation_manager.add_message(user_id, "assistant", cancel_msg)
+                return {
+                    "reply": cancel_msg,
+                    "intent": "order_cancelled",
+                    "confidence": 1.0,
+                    "needs_human": False,
+                    "suggested_actions": ["Browse products", "Place order", "Contact"],
+                    "metadata": {"generation_method": "order_flow_cancelled"}
+                }
+        
+        # =====================================================
+        # STEP 1: Handle product selection (when list was shown)
+        # =====================================================
+        if state.collected_fields.get("awaiting_selection") and not state.collected_fields.get("pending_item"):
+            products = business_data.get("products_services", [])
+            available_products = state.collected_fields.get("_available_products", [])
+            matched_product = None
+            
+            # Check for number selection (e.g., "1", "2")
+            number_match = re.search(r'^\s*(\d+)\s*$', message)
+            if number_match:
+                idx = int(number_match.group(1)) - 1
+                if 0 <= idx < len(available_products):
+                    matched_product = available_products[idx]
+            
+            # Check for direct product name match
+            if not matched_product:
+                for product in products:
+                    if isinstance(product, dict):
+                        name = product.get("name", "").lower()
+                        if name and name in msg_lower:
+                            matched_product = product.get("name")
+                            break
+            
+            # Check for "yes", "first", "first one" - default to first product
+            if not matched_product and msg_lower in ["yes", "ok", "okay", "first", "first one", "1st", "the first", "haan", "ha"]:
+                if available_products:
+                    matched_product = available_products[0]
+            
+            if matched_product:
+                # Clear awaiting_selection and set pending_item
+                if "awaiting_selection" in state.collected_fields:
+                    del state.collected_fields["awaiting_selection"]
+                if "_available_products" in state.collected_fields:
+                    del state.collected_fields["_available_products"]
+                
+                state.collect_field("pending_item", matched_product)
+                
+                # Ask for quantity
+                self.conversation_manager.add_message(user_id, "user", message)
+                response_text = f"Great choice! 🎉 You want to order *{matched_product}*.\n\nHow many would you like?"
+                self.conversation_manager.add_message(user_id, "assistant", response_text)
+                
+                return {
+                    "reply": response_text,
+                    "intent": "order_product_selected",
+                    "confidence": 1.0,
+                    "needs_human": False,
+                    "suggested_actions": ["1", "2", "3", "Cancel"],
+                    "metadata": {"generation_method": "order_flow", "product": matched_product}
+                }
+            else:
+                # Ask user to specify which product
+                self.conversation_manager.add_message(user_id, "user", message)
+                response_text = "Please tell me which item you'd like by replying with the number (1, 2, 3...) or the product name."
+                self.conversation_manager.add_message(user_id, "assistant", response_text)
+                
+                return {
+                    "reply": response_text,
+                    "intent": "order_clarification",
+                    "confidence": 0.8,
+                    "needs_human": False,
+                    "suggested_actions": ["1", "2", "Cancel"],
+                    "metadata": {"generation_method": "order_flow_clarification"}
+                }
+        
+        # =====================================================
+        # STEP 2: Handle quantity response
+        # =====================================================
+        pending_item = state.collected_fields.get("pending_item")
+        if pending_item and not state.collected_fields.get("quantity"):
+            # Try to extract quantity
+            qty_match = re.search(r'\b(\d+)\b', message)
+            if qty_match:
+                quantity = int(qty_match.group(1))
+                if quantity > 0 and quantity <= 100:
+                    state.collect_field("quantity", quantity)
+                    state.collect_field("items", [{"name": pending_item, "quantity": quantity}])
+                    
+                    # Get configured order fields
+                    order_fields = state.flow_config.get("order_fields", [])
+                    if order_fields:
+                        # Mark that we need to collect fields, start with first one
+                        state.collect_field("_order_fields", order_fields)
+                        state.collect_field("_current_field_index", 0)
+                        
+                        first_field = order_fields[0]
+                        question = self._generate_order_field_question(first_field)
+                        
+                        self.conversation_manager.add_message(user_id, "user", message)
+                        response_text = f"Great! {quantity}x {pending_item} added. ✓\n\n{question}"
+                        self.conversation_manager.add_message(user_id, "assistant", response_text)
+                        
+                        return {
+                            "reply": response_text,
+                            "intent": "order_quantity_collected",
+                            "confidence": 1.0,
+                            "needs_human": False,
+                            "suggested_actions": [],
+                            "metadata": {"generation_method": "order_flow", "quantity": quantity}
+                        }
+                    else:
+                        # No fields configured, go straight to confirmation
+                        state.collect_field("customer_name", "Customer")
+                        return self._show_order_confirmation(user_id, state, message)
+        
+        # =====================================================
+        # STEP 3: Handle dynamic field collection
+        # =====================================================
+        order_fields = state.collected_fields.get("_order_fields", [])
+        current_index = state.collected_fields.get("_current_field_index")
+        
+        if order_fields and current_index is not None and state.collected_fields.get("items"):
+            current_field = order_fields[current_index] if current_index < len(order_fields) else None
+            
+            if current_field:
+                field_id = current_field.get("id")
+                field_value = message.strip()
+                
+                # Validate the response based on field type
+                validation = self._validate_order_field(current_field, field_value)
+                
+                if validation.get("valid"):
+                    # Store the field value
+                    state.collect_field(field_id, validation.get("value", field_value))
+                    
+                    # Map common field names
+                    if field_id == "name":
+                        state.collect_field("customer_name", field_value)
+                    elif field_id == "phone":
+                        state.collect_field("customer_phone", field_value)
+                    elif field_id == "address":
+                        state.collect_field("customer_address", field_value)
+                    
+                    # Move to next field
+                    next_index = current_index + 1
+                    state.collect_field("_current_field_index", next_index)
+                    
+                    if next_index < len(order_fields):
+                        # Ask next question
+                        next_field = order_fields[next_index]
+                        question = self._generate_order_field_question(next_field)
+                        
+                        self.conversation_manager.add_message(user_id, "user", message)
+                        self.conversation_manager.add_message(user_id, "assistant", question)
+                        
+                        return {
+                            "reply": question,
+                            "intent": "order_field_collected",
+                            "confidence": 1.0,
+                            "needs_human": False,
+                            "suggested_actions": [],
+                            "metadata": {"generation_method": "order_flow", "field": field_id}
+                        }
+                    else:
+                        # All fields collected, show confirmation
+                        return self._show_order_confirmation(user_id, state, message)
+                else:
+                    # Invalid response, ask again
+                    error_msg = validation.get("error", "That doesn't look right. Please try again.")
+                    question = self._generate_order_field_question(current_field)
+                    
+                    self.conversation_manager.add_message(user_id, "user", message)
+                    response_text = f"{error_msg}\n\n{question}"
+                    self.conversation_manager.add_message(user_id, "assistant", response_text)
+                    
+                    return {
+                        "reply": response_text,
+                        "intent": "order_field_invalid",
+                        "confidence": 0.8,
+                        "needs_human": False,
+                        "suggested_actions": [],
+                        "metadata": {"generation_method": "order_flow_validation"}
+                    }
+        
+        # If we get here, something unexpected - let the user know
+        self.conversation_manager.add_message(user_id, "user", message)
+        response_text = "I didn't quite understand that. Could you please try again?"
+        self.conversation_manager.add_message(user_id, "assistant", response_text)
+        
+        return {
+            "reply": response_text,
+            "intent": "order_flow_error",
+            "confidence": 0.5,
+            "needs_human": False,
+            "suggested_actions": ["Cancel order"],
+            "metadata": {"generation_method": "order_flow_error"}
+        }
+    
+    def _complete_order(
+        self,
+        user_id: str,
+        state: ConversationState,
+        business_data: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """Complete the order after user confirmation."""
+        logger.info(f"📦 Completing order for user: {user_id}")
+        
+        items = state.collected_fields.get("items", [])
+        customer_name = state.collected_fields.get("customer_name", "Customer")
+        customer_phone = state.collected_fields.get("customer_phone", "")
+        customer_address = state.collected_fields.get("customer_address", "")
+        business_owner_id = state.flow_config.get("business_owner_id", "")
+        
+        # Collect all custom fields
+        order_fields = state.flow_config.get("order_fields", [])
+        custom_fields = {}
+        for field in order_fields:
+            field_id = field.get("id")
+            if field_id and field_id not in ["name", "phone", "address"]:
+                value = state.collected_fields.get(field_id)
+                if value:
+                    custom_fields[field_id] = value
+        
+        # Format items for display
+        items_text = ", ".join([f"{item['quantity']}x {item['name']}" for item in items])
+        
+        # Clean up flow
+        self.conversation_manager.cancel_flow(user_id)
+        
+        self.conversation_manager.add_message(user_id, "user", "yes")
+        response_text = (
+            f"✅ *Order Confirmed!*\n\n"
+            f"Thank you, {customer_name}! Your order for {items_text} has been received.\n\n"
+            f"We'll process it shortly and keep you updated. 🎉"
+        )
+        self.conversation_manager.add_message(user_id, "assistant", response_text)
+        
+        # Log the order with all collected data
+        logger.info(f"📦 ORDER CREATED: customer={customer_name}, phone={customer_phone}, address={customer_address}, items={items}, custom_fields={custom_fields}, business={business_owner_id}")
+        
+        return {
+            "reply": response_text,
+            "intent": "order_completed",
+            "confidence": 1.0,
+            "needs_human": False,
+            "suggested_actions": ["Browse more", "Track order"],
+            "metadata": {
+                "generation_method": "order_completed",
+                "order_items": items,
+                "customer_name": customer_name,
+                "customer_phone": customer_phone,
+                "customer_address": customer_address,
+                "custom_fields": custom_fields
+            }
+        }
+    
+    def _generate_order_field_question(self, field: Dict) -> str:
+        """Generate a conversational question for an order field."""
+        field_id = field.get("id", "")
+        label = field.get("label", "information")
+        field_type = field.get("type", "text")
+        required = field.get("required", False)
+        
+        # Custom questions for common fields
+        questions = {
+            "name": "May I have your name for this order?",
+            "phone": "What's your phone number?",
+            "address": "Where should we deliver this order? (Please provide your full address)",
+            "email": "What's your email address?",
+            "notes": "Any special instructions or notes for your order? (Type 'skip' if none)",
+        }
+        
+        if field_id in questions:
+            return questions[field_id]
+        
+        # Generate question based on type
+        optional_text = " (optional)" if not required else ""
+        if field_type == "phone":
+            return f"What's your {label.lower()}?{optional_text}"
+        elif field_type == "email":
+            return f"What's your {label.lower()}?{optional_text}"
+        elif field_type == "textarea":
+            return f"Please provide your {label.lower()}{optional_text}:"
+        else:
+            return f"What is your {label.lower()}?{optional_text}"
+    
+    def _validate_order_field(self, field: Dict, value: str) -> Dict:
+        """Validate an order field response."""
+        field_id = field.get("id", "")
+        field_type = field.get("type", "text")
+        required = field.get("required", False)
+        
+        # Handle skip for optional fields
+        if value.lower() in ["skip", "none", "na", "n/a", "-"]:
+            if not required:
+                return {"valid": True, "value": ""}
+            else:
+                return {"valid": False, "error": "This field is required. Please provide the information."}
+        
+        # Basic validation by type
+        if field_type == "phone":
+            # Accept various phone formats
+            cleaned = re.sub(r'[^\d+]', '', value)
+            if len(cleaned) >= 10:
+                return {"valid": True, "value": value}
+            return {"valid": False, "error": "Please provide a valid phone number (at least 10 digits)."}
+        
+        elif field_type == "email":
+            if "@" in value and "." in value.split("@")[-1]:
+                return {"valid": True, "value": value}
+            return {"valid": False, "error": "Please provide a valid email address."}
+        
+        # Text and textarea - just check minimum length for required fields
+        if required and len(value.strip()) < 2:
+            return {"valid": False, "error": "Please provide a valid response."}
+        
+        return {"valid": True, "value": value}
+    
+    def _show_order_confirmation(
+        self,
+        user_id: str,
+        state: ConversationState,
+        last_message: str
+    ) -> Dict[str, Any]:
+        """Show order summary and ask for confirmation."""
+        items = state.collected_fields.get("items", [])
+        items_text = "\n".join([f"• {item['quantity']}x {item['name']}" for item in items])
+        
+        # Build details from collected fields
+        order_fields = state.collected_fields.get("_order_fields", [])
+        details_lines = []
+        
+        for field in order_fields:
+            field_id = field.get("id")
+            label = field.get("label", field_id.title())
+            value = state.collected_fields.get(field_id, "")
+            if value:
+                details_lines.append(f"*{label}:* {value}")
+        
+        details_text = "\n".join(details_lines)
+        
+        state.flow_status = FlowStatus.AWAITING_CONFIRMATION
+        self.conversation_manager.add_message(user_id, "user", last_message)
+        
+        response_text = (
+            f"📋 *Order Summary*\n\n"
+            f"{items_text}\n\n"
+            f"{details_text}\n\n"
+            f"Would you like to confirm this order?"
+        )
+        self.conversation_manager.add_message(user_id, "assistant", response_text)
+        
+        return {
+            "reply": response_text,
+            "intent": "order_confirmation",
+            "confidence": 1.0,
+            "needs_human": False,
+            "suggested_actions": ["Yes, confirm", "No, cancel"],
+            "metadata": {
+                "generation_method": "order_flow",
+                "use_buttons": True,
+                "buttons": [
+                    {"id": "confirm_yes", "title": "✅ Yes, Confirm"},
+                    {"id": "confirm_no", "title": "❌ No, Cancel"}
+                ]
+            }
         }
     
     def _start_appointment_flow(

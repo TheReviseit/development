@@ -139,9 +139,9 @@ export default function CustomDropdown({
     status: "complete" | "incomplete" | null | undefined
   ) => {
     if (status === "complete")
-      return <span className={styles.statusComplete}>✓</span>;
+      return <span className={styles.statusComplete} />;
     if (status === "incomplete")
-      return <span className={styles.statusIncomplete}>!</span>;
+      return <span className={styles.statusIncomplete} />;
     return null;
   };
 

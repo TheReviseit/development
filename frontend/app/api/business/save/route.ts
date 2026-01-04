@@ -25,33 +25,17 @@ export async function POST(request: NextRequest) {
     // Get the business data from request body
     const businessData = await request.json();
 
-    // Save to Firestore - create collection if doesn't exist
-    try {
-      const docRef = adminDb.collection("businesses").doc(userId);
-      await docRef.set(
-        {
-          ...businessData,
-          userId,
-          updatedAt: new Date().toISOString(),
-        },
-        { merge: true }
-      );
-    } catch (dbError: any) {
-      console.error("Firestore save error:", dbError);
-      // If Firestore fails, try to create the document
-      if (dbError.code === 5) {
-        // NOT_FOUND - collection may not exist, try creating it
-        const docRef = adminDb.collection("businesses").doc(userId);
-        await docRef.create({
-          ...businessData,
-          userId,
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-        });
-      } else {
-        throw dbError;
-      }
-    }
+    // Save to Firestore using set with merge (creates if not exists, updates if exists)
+    // This is the fastest approach - single write operation
+    const docRef = adminDb.collection("businesses").doc(userId);
+    await docRef.set(
+      {
+        ...businessData,
+        userId,
+        updatedAt: new Date().toISOString(),
+      },
+      { merge: true }
+    );
 
     return NextResponse.json({ success: true });
   } catch (error: any) {

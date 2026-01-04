@@ -86,6 +86,10 @@ class ProductService(BaseModel):
     variants: List[str] = Field(default_factory=list)  # e.g., ["Small", "Medium", "Large"]
     min_order_qty: Optional[int] = None
     max_order_qty: Optional[int] = None
+    sizes: List[str] = Field(default_factory=list)  # e.g., ["S", "M", "L", "XL"]
+    colors: List[str] = Field(default_factory=list)  # e.g., ["Red", "Blue", "Black"]
+    brand: Optional[str] = None  # e.g., "Nike", "Apple"
+    materials: List[str] = Field(default_factory=list)  # e.g., ["Cotton", "Polyester"]
 
 
 class BusinessPolicies(BaseModel):

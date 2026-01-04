@@ -15,6 +15,7 @@ interface NavItem {
 
 interface AICapabilities {
   appointment_booking_enabled: boolean;
+  order_booking_enabled: boolean;
 }
 
 interface DashboardSidebarProps {
@@ -193,6 +194,34 @@ const BotIcon = () => (
   </svg>
 );
 
+// Preview Bot icon - robot face matching the AI Settings preview icon
+const PreviewBotIcon = () => (
+  <svg
+    width="20"
+    height="20"
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2"
+  >
+    <rect
+      x="3"
+      y="3"
+      width="18"
+      height="18"
+      rx="3"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+    <circle cx="9" cy="10" r="2" />
+    <circle cx="15" cy="10" r="2" />
+    <path
+      d="M8 16C8 16 9.5 18 12 18C14.5 18 16 16 16 16"
+      strokeLinecap="round"
+    />
+  </svg>
+);
+
 // Calendar icon for Appointments - matches existing icon style
 const AppointmentsIcon = () => (
   <svg
@@ -221,6 +250,30 @@ const AppointmentsIcon = () => (
     <path d="M16 14h.01" strokeLinecap="round" />
     <path d="M8 18h.01" strokeLinecap="round" />
     <path d="M12 18h.01" strokeLinecap="round" />
+  </svg>
+);
+
+// Package icon for Orders
+const OrdersIcon = () => (
+  <svg
+    width="20"
+    height="20"
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2"
+  >
+    <path
+      d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+    <path
+      d="M3.27 6.96L12 12.01l8.73-5.05"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+    <path d="M12 22.08V12" strokeLinecap="round" strokeLinejoin="round" />
   </svg>
 );
 
@@ -260,7 +313,9 @@ export default function DashboardSidebar({
   const [userCount, setUserCount] = useState<number>(0);
   const [aiCapabilities, setAiCapabilities] = useState<AICapabilities>({
     appointment_booking_enabled: false,
+    order_booking_enabled: false,
   });
+  const [showProfileMenu, setShowProfileMenu] = useState(false);
 
   // Fetch AI capabilities to determine which features to show
   useEffect(() => {
@@ -283,6 +338,7 @@ export default function DashboardSidebar({
     const handleCapabilitiesUpdate = (event: Event) => {
       const customEvent = event as CustomEvent<{
         appointment_booking_enabled: boolean;
+        order_booking_enabled: boolean;
       }>;
       if (customEvent.detail) {
         console.log("Sidebar: Received capability update:", customEvent.detail);
@@ -370,11 +426,28 @@ export default function DashboardSidebar({
           },
         ]
       : []),
+    // Orders - only show when toggle is enabled
+    ...(aiCapabilities.order_booking_enabled
+      ? [
+          {
+            id: "orders",
+            label: "Orders",
+            icon: <OrdersIcon />,
+            href: "/dashboard/orders",
+          },
+        ]
+      : []),
     {
       id: "bot-settings",
       label: "AI Settings",
       icon: <BotIcon />,
       href: "/dashboard/bot-settings",
+    },
+    {
+      id: "preview-bot",
+      label: "Preview Bot",
+      icon: <PreviewBotIcon />,
+      href: "/dashboard/preview-bot",
     },
   ];
 
@@ -437,26 +510,146 @@ export default function DashboardSidebar({
 
       {/* Bottom Section */}
       <div className={styles.sidebarFooter}>
-        <Link
-          href="/dashboard/settings"
-          className={`${styles.navItem} ${
-            activeSection === "settings" ? styles.navItemActive : ""
-          }`}
-          title={isCollapsed ? "Settings" : undefined}
-        >
-          <span className={styles.navIcon}>
-            <SettingsIcon />
-          </span>
-          {!isCollapsed && <span className={styles.navLabel}>Settings</span>}
-        </Link>
+        {/* User Profile with Settings Menu */}
+        <div className={styles.userProfileRow}>
+          <div className={styles.userProfile}>
+            <div className={styles.userAvatar}>{initials}</div>
+            {!isCollapsed && (
+              <div className={styles.userInfo}>
+                <span className={styles.userName}>{displayName}</span>
+                <span className={styles.userEmail}>{userEmail}</span>
+              </div>
+            )}
+          </div>
 
-        {/* User Profile */}
-        <div className={styles.userProfile}>
-          <div className={styles.userAvatar}>{initials}</div>
+          {/* Settings Button (3-dots) with Dropdown */}
           {!isCollapsed && (
-            <div className={styles.userInfo}>
-              <span className={styles.userName}>{displayName}</span>
-              <span className={styles.userEmail}>{userEmail}</span>
+            <div className={styles.profileMenuContainer}>
+              <button
+                className={styles.settingsDotsBtn}
+                onClick={() => setShowProfileMenu(!showProfileMenu)}
+                title="Menu"
+              >
+                <svg
+                  width="18"
+                  height="18"
+                  viewBox="0 0 24 24"
+                  fill="currentColor"
+                >
+                  <circle cx="12" cy="5" r="2" />
+                  <circle cx="12" cy="12" r="2" />
+                  <circle cx="12" cy="19" r="2" />
+                </svg>
+              </button>
+
+              {showProfileMenu && (
+                <>
+                  <div
+                    className={styles.profileMenuOverlay}
+                    onClick={() => setShowProfileMenu(false)}
+                  />
+                  <div className={styles.profileMenu}>
+                    <Link
+                      href="/dashboard/profile"
+                      className={styles.profileMenuItem}
+                      onClick={() => setShowProfileMenu(false)}
+                    >
+                      <svg
+                        width="16"
+                        height="16"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                      >
+                        <path
+                          d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                        />
+                        <circle
+                          cx="12"
+                          cy="7"
+                          r="4"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                        />
+                      </svg>
+                      <span>Profile</span>
+                    </Link>
+                    <Link
+                      href="/dashboard/settings"
+                      className={styles.profileMenuItem}
+                      onClick={() => setShowProfileMenu(false)}
+                    >
+                      <svg
+                        width="16"
+                        height="16"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                      >
+                        <circle
+                          cx="12"
+                          cy="12"
+                          r="3"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                        />
+                        <path
+                          d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                        />
+                      </svg>
+                      <span>Settings</span>
+                    </Link>
+                    <div className={styles.profileMenuDivider} />
+                    <button
+                      className={`${styles.profileMenuItem} ${styles.profileMenuItemDanger}`}
+                      onClick={async () => {
+                        setShowProfileMenu(false);
+                        try {
+                          await fetch("/api/auth/logout", { method: "POST" });
+                          window.location.href = "/login";
+                        } catch (error) {
+                          console.error("Logout error:", error);
+                        }
+                      }}
+                    >
+                      <svg
+                        width="16"
+                        height="16"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                      >
+                        <path
+                          d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                        />
+                        <polyline
+                          points="16 17 21 12 16 7"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                        />
+                        <line
+                          x1="21"
+                          y1="12"
+                          x2="9"
+                          y2="12"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                        />
+                      </svg>
+                      <span>Logout</span>
+                    </button>
+                  </div>
+                </>
+              )}
             </div>
           )}
         </div>
