@@ -77,7 +77,7 @@ importScripts(
 // ============================================
 const FIREBASE_CONFIG = {
   apiKey: "AIzaSyAll4KrhbRPu5W7MR3TVj3-X60Hexapk8k",
-  authDomain: "www.reviseit.in",
+  authDomain: "reviseit-def4c.firebaseapp.com",
   projectId: "reviseit-def4c",
   storageBucket: "reviseit-def4c.firebasestorage.app",
   messagingSenderId: "636743724509",
