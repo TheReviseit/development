@@ -180,6 +180,7 @@ def convert_firestore_to_ai_format(data: Dict[str, Any], firebase_uid: str = Non
             'twitter': social_media_data.get('twitter', ''),
             'youtube': social_media_data.get('youtube', ''),
         },
+        'categories': data.get('productCategories', data.get('categories', [])),
     }
 
 
@@ -196,15 +197,22 @@ def convert_timings(timings: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def convert_products(products: list) -> list:
-    """Convert products list from camelCase to snake_case."""
+    """Convert products list from camelCase to snake_case, preserving all fields."""
     return [
         {
+            'id': p.get('id', ''),
+            'sku': p.get('sku', ''),
             'name': p.get('name', ''),
             'category': p.get('category', ''),
             'price': p.get('price', 0),
             'price_unit': p.get('priceUnit', 'INR'),
             'duration': p.get('duration', ''),
             'available': p.get('available', True),
+            'sizes': p.get('sizes', []),
+            'colors': p.get('colors', []),
+            'variants': p.get('variants', []),
+            'imageUrl': p.get('imageUrl', p.get('image', '')),
+            'description': p.get('description', ''),
         }
         for p in products
     ]

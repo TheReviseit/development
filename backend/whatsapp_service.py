@@ -561,3 +561,155 @@ class WhatsAppService:
                 'success': False,
                 'error': f'Unexpected error: {str(e)}'
             }
+
+    def send_interactive_list(
+        self,
+        phone_number_id: str,
+        access_token: str,
+        to: str,
+        body_text: str,
+        button_text: str,
+        sections: list,
+        header_text: str = None,
+        footer_text: str = None
+    ) -> Dict[str, Any]:
+        """
+        Send an interactive list message (menu with up to 10 items).
+        
+        WhatsApp List Messages show a single button that opens a list picker.
+        Great for menus with more than 3 options.
+        
+        Args:
+            phone_number_id: The sender's WhatsApp phone number ID
+            access_token: The Facebook/WhatsApp access token
+            to: Recipient phone number (with country code, no + sign)
+            body_text: Main message body text
+            button_text: Text shown on the button (max 20 chars), e.g., "View Menu"
+            sections: List of section dicts with title and rows:
+                [
+                    {
+                        "title": "Section Title",
+                        "rows": [
+                            {"id": "row_1", "title": "Item 1", "description": "Optional desc"},
+                            {"id": "row_2", "title": "Item 2"}
+                        ]
+                    }
+                ]
+                Max 10 rows total, title max 24 chars, description max 72 chars
+            header_text: Optional header text (max 60 chars)
+            footer_text: Optional footer text (max 60 chars)
+            
+        Returns:
+            Dict containing success status and response data
+        """
+        if not phone_number_id or not access_token:
+            return {
+                'success': False,
+                'error': 'Missing phone_number_id or access_token'
+            }
+        
+        if not sections:
+            return {
+                'success': False,
+                'error': 'Sections required for list message'
+            }
+        
+        url = f'{self.base_url}/{phone_number_id}/messages'
+        
+        print(f"   📋 Sending interactive list to {to}")
+        print(f"   🔧 Using Phone Number ID: {phone_number_id}")
+        
+        headers = {
+            'Authorization': f'Bearer {access_token}',
+            'Content-Type': 'application/json'
+        }
+        
+        # Build sections with proper row format
+        formatted_sections = []
+        for section in sections:
+            formatted_rows = []
+            for row in section.get("rows", []):
+                row_obj = {
+                    "id": row.get("id", row.get("title", "item"))[:200],
+                    "title": row.get("title", "Item")[:24]
+                }
+                if row.get("description"):
+                    row_obj["description"] = row["description"][:72]
+                formatted_rows.append(row_obj)
+            
+            formatted_section = {"rows": formatted_rows}
+            if section.get("title"):
+                formatted_section["title"] = section["title"][:24]
+            formatted_sections.append(formatted_section)
+        
+        # Build interactive list message payload
+        interactive_payload = {
+            "type": "list",
+            "body": {
+                "text": body_text
+            },
+            "action": {
+                "button": button_text[:20],  # WhatsApp limit: 20 chars
+                "sections": formatted_sections
+            }
+        }
+        
+        # Add optional header
+        if header_text:
+            interactive_payload["header"] = {
+                "type": "text",
+                "text": header_text[:60]
+            }
+        
+        # Add optional footer
+        if footer_text:
+            interactive_payload["footer"] = {
+                "text": footer_text[:60]
+            }
+        
+        payload = {
+            'messaging_product': 'whatsapp',
+            'recipient_type': 'individual',
+            'to': to,
+            'type': 'interactive',
+            'interactive': interactive_payload
+        }
+        
+        try:
+            response = requests.post(url, json=payload, headers=headers, timeout=10)
+            response_data = response.json()
+            
+            if response.status_code == 200:
+                print(f"   ✅ Interactive list sent successfully!")
+                return {
+                    'success': True,
+                    'message_id': response_data.get('messages', [{}])[0].get('id'),
+                    'data': response_data
+                }
+            else:
+                error_message = response_data.get('error', {}).get('message', 'Unknown error')
+                error_code = response_data.get('error', {}).get('code', 'N/A')
+                print(f"   ❌ Error: {error_message} (Code: {error_code})")
+                return {
+                    'success': False,
+                    'error': error_message,
+                    'error_code': error_code,
+                    'status_code': response.status_code,
+                    'data': response_data
+                }
+                
+        except requests.exceptions.Timeout:
+            return {
+                'success': False,
+                'error': 'Request timed out. Please try again.'
+            }
+        except requests.exceptions.RequestException as e:
+            return {
+                'success': False,
+                'error': f'Network error: {str(e)}'
+            }
+        except Exception as e:
+            return {
+                'success': False,
+                'error': f'Unexpected error: {str(e)}'
+            }

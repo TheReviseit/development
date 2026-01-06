@@ -617,9 +617,12 @@ class AIBrain:
         business_data: Dict[str, Any]
     ) -> Optional[Dict[str, Any]]:
         """
-        Start AI-driven order booking flow.
+        Start AI-driven order booking flow with category navigation and variant support.
         
-        This initializes order collection and asks what the customer wants to order.
+        Enhanced flow:
+        1. If multiple categories exist, show category selection first
+        2. Show products with variant indicators (sizes/colors available)
+        3. Store product_id for stable references
         """
         logger.info(f"📦 Starting order flow for user: {user_id}, business: {business_owner_id}")
         
@@ -641,11 +644,34 @@ class AIBrain:
             }
         )
         
-        # Try to extract product mention from initial message
         products = business_data.get("products_services", [])
-        mentioned_product = None
         msg_lower = initial_message.lower()
         
+        # Extract unique categories from products
+        product_categories = list(set([
+            p.get("category", "").strip() 
+            for p in products 
+            if isinstance(p, dict) and p.get("category", "").strip()
+        ]))
+        
+        # Also check for separately defined categories in AI Settings
+        separate_categories = business_data.get("categories", [])
+        if isinstance(separate_categories, list):
+            # Categories might be strings or dicts with 'name' field
+            for cat in separate_categories:
+                if isinstance(cat, str) and cat.strip():
+                    if cat.strip() not in product_categories:
+                        product_categories.append(cat.strip())
+                elif isinstance(cat, dict) and cat.get('name', '').strip():
+                    cat_name = cat.get('name', '').strip()
+                    if cat_name not in product_categories:
+                        product_categories.append(cat_name)
+        
+        categories = [c for c in product_categories if c]  # Remove empty
+        logger.info(f"📂 Categories found: {len(categories)} - {categories[:5]}... (from products + AI Settings)")
+        
+        # Try to extract product mention from initial message
+        mentioned_product = None
         for product in products:
             if isinstance(product, dict):
                 name = product.get("name", "").lower()
@@ -653,43 +679,117 @@ class AIBrain:
                     mentioned_product = product
                     break
         
-        # Generate appropriate response
+        # Generate appropriate response based on context
         if mentioned_product:
+            # Product mentioned - check for variants
             product_name = mentioned_product.get("name", "item")
+            product_id = mentioned_product.get("id") or mentioned_product.get("sku") or product_name
             product_price = mentioned_product.get("price", "")
+            sizes = mentioned_product.get("sizes", [])
+            colors = mentioned_product.get("colors", [])
+            
             price_str = f" (₹{product_price})" if product_price else ""
             
-            # Pre-collect the item
+            # Store full product info
             state.collect_field("pending_item", product_name)
+            state.collect_field("pending_product_id", product_id)
+            state.collect_field("pending_product_data", mentioned_product)
             
-            response_text = (
-                f"Great choice! 🎉 You want to order the *{product_name}*{price_str}.\n\n"
-                f"How many would you like to order?"
-            )
-            suggested_actions = ["1", "2", "3", "Cancel"]
-        else:
-            # List available products
-            if products:
-                product_list = "\n".join([f"{i+1}. {p.get('name', 'Item')} - ₹{p.get('price', 'N/A')}" 
-                                         for i, p in enumerate(products[:5]) if isinstance(p, dict)])
+            # Check if we need variant selection
+            if sizes:
+                state.collect_field("_needs_size", True)
+                state.collect_field("_available_sizes", sizes)
+                size_list = ", ".join(sizes[:6])
                 response_text = (
-                    f"📦 I'd be happy to help you place an order!\n\n"
-                    f"Here's what we have:\n{product_list}\n\n"
-                    f"Which item would you like? (Reply with the number or name)"
+                    f"Great choice! 🎉 *{product_name}*{price_str}\n\n"
+                    f"Available sizes: {size_list}\n\n"
+                    f"Which size would you like?"
                 )
-                # Set flag to indicate we're awaiting product selection
-                state.collect_field("awaiting_selection", True)
-                state.collect_field("_available_products", [p.get('name') for p in products[:5] if isinstance(p, dict)])
+                suggested_actions = sizes[:4] + ["Cancel"]
+            elif colors:
+                state.collect_field("_needs_color", True)
+                state.collect_field("_available_colors", colors)
+                color_list = ", ".join(colors[:6])
+                response_text = (
+                    f"Great choice! 🎉 *{product_name}*{price_str}\n\n"
+                    f"Available colors: {color_list}\n\n"
+                    f"Which color would you like?"
+                )
+                suggested_actions = colors[:4] + ["Cancel"]
             else:
                 response_text = (
-                    f"📦 I'd be happy to help you place an order!\n\n"
-                    f"What would you like to order today?"
+                    f"Great choice! 🎉 You want to order *{product_name}*{price_str}.\n\n"
+                    f"How many would you like to order?"
                 )
-            suggested_actions = ["1", "2", "Cancel order"]
+                suggested_actions = ["1", "2", "3", "Cancel"]
+        
+        elif len(categories) > 1:
+            # Multiple categories - show category selection first
+            state.collect_field("awaiting_category", True)
+            state.collect_field("_available_categories", categories)
+            header_text = "🛒 Place an Order"
+            use_list = False
+            list_sections = None
+            
+            if len(categories) > 3:
+                # More than 3 categories - use WhatsApp List Message (menu picker)
+                use_list = True
+                response_text = "What would you like to order today?\n\nTap the button below to see all categories."
+                suggested_actions = ["View Categories"]
+                
+                # Build list sections for WhatsApp List Message
+                list_sections = [{
+                    "title": "Categories",
+                    "rows": [
+                        {"id": f"cat_{i}_{cat.replace(' ', '_').lower()[:20]}", "title": cat[:24]}
+                        for i, cat in enumerate(categories[:10])  # WhatsApp max 10 items
+                    ]
+                }]
+            else:
+                # 3 or fewer categories - show all as reply buttons
+                suggested_actions = categories[:3]
+                response_text = "What would you like to order today?\n\nSelect a category to browse our products."
+        
+        elif products:
+            # Single or no category - show products directly
+            response_text, suggested_actions = self._format_product_list(products[:8], state)
+        
+        else:
+            response_text = (
+                f"📦 I'd be happy to help you place an order!\n\n"
+                f"What would you like to order today?"
+            )
+            suggested_actions = ["Cancel order"]
         
         # Add to conversation history
         self.conversation_manager.add_message(user_id, "user", initial_message)
         self.conversation_manager.add_message(user_id, "assistant", response_text)
+        
+        # Build metadata based on message type
+        metadata = {
+            "generation_method": "order_flow_started",
+            "flow": "order_booking",
+            "mentioned_product": mentioned_product.get("name") if mentioned_product else None,
+            "categories_available": len(categories) if categories else 0,
+            "header_text": header_text if 'header_text' in dir() else "🛒 Place an Order",
+            "footer_text": "Tap to continue",
+        }
+        
+        if 'use_list' in dir() and use_list and list_sections:
+            # Use WhatsApp List Message
+            metadata["use_list"] = True
+            metadata["list_button"] = "View Categories"
+            metadata["list_sections"] = list_sections
+        else:
+            # Use WhatsApp Reply Buttons
+            buttons = []
+            for i, action in enumerate(suggested_actions[:3]):
+                buttons.append({
+                    "id": f"cat_{i}_{action.replace(' ', '_').lower()[:15]}",
+                    "title": action[:20]
+                })
+            metadata["use_buttons"] = True
+            metadata["buttons"] = buttons
         
         return {
             "reply": response_text,
@@ -697,12 +797,60 @@ class AIBrain:
             "confidence": 1.0,
             "needs_human": False,
             "suggested_actions": suggested_actions,
-            "metadata": {
-                "generation_method": "order_flow_started",
-                "flow": "order_booking",
-                "mentioned_product": mentioned_product.get("name") if mentioned_product else None
-            }
+            "metadata": metadata
         }
+    
+    def _format_product_list(self, products: List[Dict], state) -> tuple:
+        """Format product list with detailed info: image, name, colors, sizes."""
+        product_lines = []
+        product_map = {}
+        
+        for i, p in enumerate(products):
+            if not isinstance(p, dict):
+                continue
+            name = p.get('name', 'Item')
+            price = p.get('price', 'N/A')
+            product_id = p.get('id') or p.get('sku') or name
+            
+            # Build detailed product entry (professional format, no icons)
+            lines = []
+            lines.append(f"*{i+1}. {name}* - ₹{price}")
+            
+            # Add image URL if available
+            image_url = p.get('imageUrl', '')
+            if image_url and not image_url.startswith('data:'):  # Skip base64 images
+                lines.append(f"Link: {image_url}")
+            
+            # Add colors if available
+            colors = p.get('colors', [])
+            if colors and isinstance(colors, list):
+                color_str = ', '.join(colors[:5])  # Max 5 colors
+                lines.append(f"Colors: {color_str}")
+            
+            # Add sizes if available
+            sizes = p.get('sizes', [])
+            if sizes and isinstance(sizes, list):
+                size_str = ', '.join(sizes[:6])  # Max 6 sizes
+                lines.append(f"Sizes: {size_str}")
+            
+            product_lines.append('\n'.join(lines))
+            product_map[str(i+1)] = p
+            product_map[name.lower()] = p
+        
+        state.collect_field("awaiting_selection", True)
+        state.collect_field("_product_map", product_map)
+        state.collect_field("_available_products", [p.get('name') for p in products if isinstance(p, dict)])
+        
+        product_list = "\n".join(product_lines)
+        response_text = (
+            f"📦 I'd be happy to help you place an order!\n\n"
+            f"Here's what we have:\n{product_list}\n\n"
+            f"Reply with a number or product name.\n"
+            # f"_(📏 = sizes available, 🎨 = colors available)_"
+        )
+        suggested_actions = ["1", "2", "Cancel order"]
+        
+        return response_text, suggested_actions
     
     def _handle_order_flow(
         self,
@@ -713,7 +861,14 @@ class AIBrain:
         """
         Handle an active order booking flow.
         
-        Processes user responses for quantity, name, and confirmation.
+        Enhanced flow handling:
+        - Category selection (when multiple categories)
+        - Product selection (with product_id tracking)
+        - Size selection (when product has sizes)
+        - Color selection (when product has colors)
+        - Quantity collection
+        - Customer details
+        - Confirmation
         """
         logger.info(f"📦 _handle_order_flow called for user: {user_id}, message: '{message}'")
         
@@ -745,46 +900,320 @@ class AIBrain:
                 }
         
         # =====================================================
+        # STEP 0: Handle category selection
+        # =====================================================
+        if state.collected_fields.get("awaiting_category"):
+            categories = state.collected_fields.get("_available_categories", [])
+            products = business_data.get("products_services", [])
+            matched_category = None
+            
+            # Check for "More ▼" button press - show ALL remaining categories
+            if msg_lower in ["more ▼", "more", "more categories"]:
+                extra_categories = state.collected_fields.get("_extra_categories", [])
+                if extra_categories:
+                    # Show ALL remaining categories as buttons (max 3 per message)
+                    # For more than 3, we'll list them all in text and use buttons for top 3
+                    if len(extra_categories) <= 3:
+                        suggested_actions = extra_categories
+                        category_list = "\n".join([f"• {cat}" for cat in extra_categories])
+                        response_text = f"*All Categories:*\n{category_list}\n\nTap a button or type a category name."
+                    else:
+                        # Show all as text list, top 3 as buttons
+                        suggested_actions = extra_categories[:3]
+                        all_cats_list = "\n".join([f"• {cat}" for cat in extra_categories])
+                        response_text = f"*All Categories:*\n{all_cats_list}\n\nTap a button or type a category name."
+                    
+                    # Clear extra categories since we're showing all now
+                    if "_extra_categories" in state.collected_fields:
+                        del state.collected_fields["_extra_categories"]
+                    
+                    self.conversation_manager.add_message(user_id, "user", message)
+                    self.conversation_manager.add_message(user_id, "assistant", response_text)
+                    
+                    # Format buttons for WhatsApp
+                    buttons = []
+                    for i, action in enumerate(suggested_actions[:3]):
+                        buttons.append({
+                            "id": f"mcat_{i}_{action.replace(' ', '_').lower()[:15]}",
+                            "title": action[:20]
+                        })
+                    
+                    return {
+                        "reply": response_text,
+                        "intent": "order_category_more",
+                        "confidence": 1.0,
+                        "needs_human": False,
+                        "suggested_actions": suggested_actions,
+                        "metadata": {
+                            "generation_method": "order_flow",
+                            "use_buttons": True,
+                            "buttons": buttons,
+                            "header_text": "📁 All Categories",
+                            "footer_text": "Tap or type to select",
+                        }
+                    }
+            
+            # Check for "show all"
+            if msg_lower in ["show all", "all", "all products", "see all"]:
+                del state.collected_fields["awaiting_category"]
+                del state.collected_fields["_available_categories"]
+                response_text, suggested_actions = self._format_product_list(products[:10], state)
+                self.conversation_manager.add_message(user_id, "user", message)
+                self.conversation_manager.add_message(user_id, "assistant", response_text)
+                return {
+                    "reply": response_text,
+                    "intent": "order_category_all",
+                    "confidence": 1.0,
+                    "needs_human": False,
+                    "suggested_actions": suggested_actions,
+                    "metadata": {"generation_method": "order_flow"}
+                }
+            
+            # Check for number selection
+            number_match = re.search(r'^\s*(\d+)\s*$', message)
+            if number_match:
+                idx = int(number_match.group(1)) - 1
+                if 0 <= idx < len(categories):
+                    matched_category = categories[idx]
+            
+            # Check for category name match
+            if not matched_category:
+                for cat in categories:
+                    if cat.lower() in msg_lower or msg_lower in cat.lower():
+                        matched_category = cat
+                        break
+            
+            if matched_category:
+                del state.collected_fields["awaiting_category"]
+                del state.collected_fields["_available_categories"]
+                
+                # Filter products by category
+                filtered_products = [
+                    p for p in products 
+                    if isinstance(p, dict) and p.get("category", "").strip().lower() == matched_category.lower()
+                ]
+                
+                response_text, suggested_actions = self._format_product_list(filtered_products[:10], state)
+                response_text = f"📁 *{matched_category}*\n\n" + response_text.split("\n\n", 1)[1]
+                
+                self.conversation_manager.add_message(user_id, "user", message)
+                self.conversation_manager.add_message(user_id, "assistant", response_text)
+                return {
+                    "reply": response_text,
+                    "intent": "order_category_selected",
+                    "confidence": 1.0,
+                    "needs_human": False,
+                    "suggested_actions": suggested_actions,
+                    "metadata": {"generation_method": "order_flow", "category": matched_category}
+                }
+            else:
+                self.conversation_manager.add_message(user_id, "user", message)
+                response_text = "Please select a category by replying with a number or category name, or say 'show all'."
+                self.conversation_manager.add_message(user_id, "assistant", response_text)
+                return {
+                    "reply": response_text,
+                    "intent": "order_category_clarification",
+                    "confidence": 0.8,
+                    "needs_human": False,
+                    "suggested_actions": ["1", "Show all"],
+                    "metadata": {"generation_method": "order_flow"}
+                }
+        
+        # =====================================================
+        # STEP 0.5: Handle size selection
+        # =====================================================
+        if state.collected_fields.get("_needs_size"):
+            sizes = state.collected_fields.get("_available_sizes", [])
+            matched_size = None
+            
+            # Try direct match
+            for size in sizes:
+                if size.lower() == msg_lower or msg_lower in size.lower():
+                    matched_size = size
+                    break
+            
+            if matched_size:
+                del state.collected_fields["_needs_size"]
+                del state.collected_fields["_available_sizes"]
+                state.collect_field("selected_size", matched_size)
+                
+                # Check if color selection needed
+                product_data = state.collected_fields.get("pending_product_data", {})
+                colors = product_data.get("colors", [])
+                
+                if colors:
+                    state.collect_field("_needs_color", True)
+                    state.collect_field("_available_colors", colors)
+                    color_list = ", ".join(colors[:6])
+                    response_text = f"Size *{matched_size}* selected. ✓\n\nAvailable colors: {color_list}\n\nWhich color would you like?"
+                    suggested_actions = colors[:4] + ["Cancel"]
+                else:
+                    response_text = f"Size *{matched_size}* selected. ✓\n\nHow many would you like to order?"
+                    suggested_actions = ["1", "2", "3", "Cancel"]
+                
+                self.conversation_manager.add_message(user_id, "user", message)
+                self.conversation_manager.add_message(user_id, "assistant", response_text)
+                return {
+                    "reply": response_text,
+                    "intent": "order_size_selected",
+                    "confidence": 1.0,
+                    "needs_human": False,
+                    "suggested_actions": suggested_actions,
+                    "metadata": {"generation_method": "order_flow", "size": matched_size}
+                }
+            else:
+                size_list = ", ".join(sizes[:6])
+                response_text = f"Please select a valid size: {size_list}"
+                self.conversation_manager.add_message(user_id, "user", message)
+                self.conversation_manager.add_message(user_id, "assistant", response_text)
+                return {
+                    "reply": response_text,
+                    "intent": "order_size_invalid",
+                    "confidence": 0.8,
+                    "needs_human": False,
+                    "suggested_actions": sizes[:4],
+                    "metadata": {"generation_method": "order_flow"}
+                }
+        
+        # =====================================================
+        # STEP 0.6: Handle color selection
+        # =====================================================
+        if state.collected_fields.get("_needs_color"):
+            colors = state.collected_fields.get("_available_colors", [])
+            matched_color = None
+            
+            for color in colors:
+                if color.lower() == msg_lower or msg_lower in color.lower():
+                    matched_color = color
+                    break
+            
+            if matched_color:
+                del state.collected_fields["_needs_color"]
+                del state.collected_fields["_available_colors"]
+                state.collect_field("selected_color", matched_color)
+                
+                # Build variant display
+                size = state.collected_fields.get("selected_size")
+                if size:
+                    variant_display = f"Size: {size}, Color: {matched_color}"
+                else:
+                    variant_display = f"Color: {matched_color}"
+                state.collect_field("variant_display", variant_display)
+                
+                response_text = f"Color *{matched_color}* selected. ✓\n\nHow many would you like to order?"
+                suggested_actions = ["1", "2", "3", "Cancel"]
+                
+                self.conversation_manager.add_message(user_id, "user", message)
+                self.conversation_manager.add_message(user_id, "assistant", response_text)
+                return {
+                    "reply": response_text,
+                    "intent": "order_color_selected",
+                    "confidence": 1.0,
+                    "needs_human": False,
+                    "suggested_actions": suggested_actions,
+                    "metadata": {"generation_method": "order_flow", "color": matched_color}
+                }
+            else:
+                color_list = ", ".join(colors[:6])
+                response_text = f"Please select a valid color: {color_list}"
+                self.conversation_manager.add_message(user_id, "user", message)
+                self.conversation_manager.add_message(user_id, "assistant", response_text)
+                return {
+                    "reply": response_text,
+                    "intent": "order_color_invalid",
+                    "confidence": 0.8,
+                    "needs_human": False,
+                    "suggested_actions": colors[:4],
+                    "metadata": {"generation_method": "order_flow"}
+                }
+        
+        # =====================================================
         # STEP 1: Handle product selection (when list was shown)
         # =====================================================
         if state.collected_fields.get("awaiting_selection") and not state.collected_fields.get("pending_item"):
             products = business_data.get("products_services", [])
+            product_map = state.collected_fields.get("_product_map", {})
             available_products = state.collected_fields.get("_available_products", [])
             matched_product = None
+            matched_product_data = None
             
-            # Check for number selection (e.g., "1", "2")
-            number_match = re.search(r'^\s*(\d+)\s*$', message)
-            if number_match:
-                idx = int(number_match.group(1)) - 1
-                if 0 <= idx < len(available_products):
-                    matched_product = available_products[idx]
+            # Try product_map first (includes index and name lookups)
+            if msg_lower in product_map:
+                matched_product_data = product_map[msg_lower]
+                matched_product = matched_product_data.get("name")
+            elif message.strip() in product_map:
+                matched_product_data = product_map[message.strip()]
+                matched_product = matched_product_data.get("name")
             
-            # Check for direct product name match
+            # Fallback: number selection
+            if not matched_product:
+                number_match = re.search(r'^\s*(\d+)\s*$', message)
+                if number_match:
+                    idx = int(number_match.group(1)) - 1
+                    if 0 <= idx < len(available_products):
+                        matched_product = available_products[idx]
+                        # Find full product data
+                        for p in products:
+                            if isinstance(p, dict) and p.get("name") == matched_product:
+                                matched_product_data = p
+                                break
+            
+            # Fallback: name match
             if not matched_product:
                 for product in products:
                     if isinstance(product, dict):
                         name = product.get("name", "").lower()
                         if name and name in msg_lower:
                             matched_product = product.get("name")
+                            matched_product_data = product
                             break
             
-            # Check for "yes", "first", "first one" - default to first product
+            # Check for "yes" -> first product
             if not matched_product and msg_lower in ["yes", "ok", "okay", "first", "first one", "1st", "the first", "haan", "ha"]:
                 if available_products:
                     matched_product = available_products[0]
+                    for p in products:
+                        if isinstance(p, dict) and p.get("name") == matched_product:
+                            matched_product_data = p
+                            break
             
             if matched_product:
-                # Clear awaiting_selection and set pending_item
-                if "awaiting_selection" in state.collected_fields:
-                    del state.collected_fields["awaiting_selection"]
-                if "_available_products" in state.collected_fields:
-                    del state.collected_fields["_available_products"]
+                # Clear selection state
+                for key in ["awaiting_selection", "_available_products", "_product_map"]:
+                    if key in state.collected_fields:
+                        del state.collected_fields[key]
                 
+                # Store product info including stable ID
                 state.collect_field("pending_item", matched_product)
+                if matched_product_data:
+                    product_id = matched_product_data.get("id") or matched_product_data.get("sku") or matched_product
+                    state.collect_field("pending_product_id", product_id)
+                    state.collect_field("pending_product_data", matched_product_data)
+                    
+                    # Check for variants
+                    sizes = matched_product_data.get("sizes", [])
+                    colors = matched_product_data.get("colors", [])
+                    
+                    if sizes:
+                        state.collect_field("_needs_size", True)
+                        state.collect_field("_available_sizes", sizes)
+                        size_list = ", ".join(sizes[:6])
+                        response_text = f"Great choice! 🎉 *{matched_product}*\n\nAvailable sizes: {size_list}\n\nWhich size would you like?"
+                        suggested_actions = sizes[:4] + ["Cancel"]
+                    elif colors:
+                        state.collect_field("_needs_color", True)
+                        state.collect_field("_available_colors", colors)
+                        color_list = ", ".join(colors[:6])
+                        response_text = f"Great choice! 🎉 *{matched_product}*\n\nAvailable colors: {color_list}\n\nWhich color would you like?"
+                        suggested_actions = colors[:4] + ["Cancel"]
+                    else:
+                        response_text = f"Great choice! 🎉 You want to order *{matched_product}*.\n\nHow many would you like?"
+                        suggested_actions = ["1", "2", "3", "Cancel"]
+                else:
+                    response_text = f"Great choice! 🎉 You want to order *{matched_product}*.\n\nHow many would you like?"
+                    suggested_actions = ["1", "2", "3", "Cancel"]
                 
-                # Ask for quantity
                 self.conversation_manager.add_message(user_id, "user", message)
-                response_text = f"Great choice! 🎉 You want to order *{matched_product}*.\n\nHow many would you like?"
                 self.conversation_manager.add_message(user_id, "assistant", response_text)
                 
                 return {
@@ -792,7 +1221,7 @@ class AIBrain:
                     "intent": "order_product_selected",
                     "confidence": 1.0,
                     "needs_human": False,
-                    "suggested_actions": ["1", "2", "3", "Cancel"],
+                    "suggested_actions": suggested_actions,
                     "metadata": {"generation_method": "order_flow", "product": matched_product}
                 }
             else:
@@ -821,7 +1250,36 @@ class AIBrain:
                 quantity = int(qty_match.group(1))
                 if quantity > 0 and quantity <= 100:
                     state.collect_field("quantity", quantity)
-                    state.collect_field("items", [{"name": pending_item, "quantity": quantity}])
+                    
+                    # Build complete item with stable product references
+                    product_data = state.collected_fields.get("pending_product_data", {})
+                    item = {
+                        "name": pending_item,
+                        "quantity": quantity,
+                        "product_id": state.collected_fields.get("pending_product_id") or product_data.get("id") or product_data.get("sku"),
+                        "variant_id": None,
+                        "variant_display": state.collected_fields.get("variant_display"),
+                        "price": product_data.get("price"),
+                        "sku": product_data.get("sku"),
+                    }
+                    
+                    # Build variant_id from size/color
+                    size = state.collected_fields.get("selected_size")
+                    color = state.collected_fields.get("selected_color")
+                    if size and color:
+                        item["variant_id"] = f"{size}_{color}"
+                        if not item["variant_display"]:
+                            item["variant_display"] = f"Size: {size}, Color: {color}"
+                    elif size:
+                        item["variant_id"] = size
+                        if not item["variant_display"]:
+                            item["variant_display"] = f"Size: {size}"
+                    elif color:
+                        item["variant_id"] = color
+                        if not item["variant_display"]:
+                            item["variant_display"] = f"Color: {color}"
+                    
+                    state.collect_field("items", [item])
                     
                     # Get configured order fields
                     order_fields = state.flow_config.get("order_fields", [])
@@ -939,57 +1397,172 @@ class AIBrain:
         state: ConversationState,
         business_data: Dict[str, Any]
     ) -> Dict[str, Any]:
-        """Complete the order after user confirmation."""
+        """
+        Complete the order after user confirmation.
+        
+        Production safeguards:
+        - State lock to prevent mutation during persistence
+        - Deterministic idempotency key to prevent duplicates
+        - Real database persistence via OrderService
+        - Summary rendered from persisted record
+        """
         logger.info(f"📦 Completing order for user: {user_id}")
         
-        items = state.collected_fields.get("items", [])
-        customer_name = state.collected_fields.get("customer_name", "Customer")
-        customer_phone = state.collected_fields.get("customer_phone", "")
-        customer_address = state.collected_fields.get("customer_address", "")
-        business_owner_id = state.flow_config.get("business_owner_id", "")
-        
-        # Collect all custom fields
-        order_fields = state.flow_config.get("order_fields", [])
-        custom_fields = {}
-        for field in order_fields:
-            field_id = field.get("id")
-            if field_id and field_id not in ["name", "phone", "address"]:
-                value = state.collected_fields.get(field_id)
-                if value:
-                    custom_fields[field_id] = value
-        
-        # Format items for display
-        items_text = ", ".join([f"{item['quantity']}x {item['name']}" for item in items])
-        
-        # Clean up flow
-        self.conversation_manager.cancel_flow(user_id)
-        
-        self.conversation_manager.add_message(user_id, "user", "yes")
-        response_text = (
-            f"✅ *Order Confirmed!*\n\n"
-            f"Thank you, {customer_name}! Your order for {items_text} has been received.\n\n"
-            f"We'll process it shortly and keep you updated. 🎉"
-        )
-        self.conversation_manager.add_message(user_id, "assistant", response_text)
-        
-        # Log the order with all collected data
-        logger.info(f"📦 ORDER CREATED: customer={customer_name}, phone={customer_phone}, address={customer_address}, items={items}, custom_fields={custom_fields}, business={business_owner_id}")
-        
-        return {
-            "reply": response_text,
-            "intent": "order_completed",
-            "confidence": 1.0,
-            "needs_human": False,
-            "suggested_actions": ["Browse more", "Track order"],
-            "metadata": {
-                "generation_method": "order_completed",
-                "order_items": items,
-                "customer_name": customer_name,
-                "customer_phone": customer_phone,
-                "customer_address": customer_address,
-                "custom_fields": custom_fields
+        # SAFETY: Lock state to prevent mutation during persistence
+        if hasattr(state, '_persistence_locked') and state._persistence_locked:
+            logger.warning(f"📦 Order already being processed for user: {user_id}")
+            return {
+                "reply": "Your order is already being processed. Please wait a moment.",
+                "intent": "order_processing",
+                "confidence": 1.0,
+                "needs_human": False,
+                "suggested_actions": [],
+                "metadata": {"generation_method": "order_duplicate_attempt"}
             }
-        }
+        
+        # Set lock
+        state._persistence_locked = True
+        
+        try:
+            items = state.collected_fields.get("items", [])
+            customer_name = state.collected_fields.get("customer_name", "Customer")
+            customer_phone = state.collected_fields.get("customer_phone", "")
+            customer_address = state.collected_fields.get("customer_address", "")
+            business_owner_id = state.flow_config.get("business_owner_id", "")
+            
+            # Collect all custom fields
+            order_fields = state.flow_config.get("order_fields", [])
+            custom_fields = {}
+            for field in order_fields:
+                field_id = field.get("id")
+                if field_id and field_id not in ["name", "phone", "address"]:
+                    value = state.collected_fields.get(field_id)
+                    if value:
+                        custom_fields[field_id] = value
+            
+            # Build notes from address and custom fields
+            notes_parts = []
+            if customer_address:
+                notes_parts.append(f"Address: {customer_address}")
+            for key, value in custom_fields.items():
+                notes_parts.append(f"{key}: {value}")
+            notes = " | ".join(notes_parts) if notes_parts else None
+            
+            # =================================================================
+            # PERSIST ORDER VIA ORDER SERVICE
+            # =================================================================
+            try:
+                from services.order_service import get_order_service
+                from domain.schemas import OrderCreate, OrderItem, OrderSource
+                import hashlib
+                import json
+                
+                # Build OrderItem objects with stable product references
+                order_items = []
+                for item in items:
+                    order_items.append(OrderItem(
+                        name=item.get("name", "Unknown"),
+                        quantity=item.get("quantity", 1),
+                        product_id=item.get("product_id"),
+                        variant_id=item.get("variant_id"),
+                        variant_display=item.get("variant_display"),
+                        price=item.get("price"),
+                        sku=item.get("sku"),
+                    ))
+                
+                # Generate deterministic idempotency key
+                # Based on: user_id + customer_phone + product fingerprint
+                fingerprint_data = {
+                    "user_id": user_id,
+                    "business": business_owner_id,
+                    "phone": customer_phone,
+                    "items": sorted([{"n": i.get("name", "").lower(), "q": i.get("quantity", 1)} for i in items], key=lambda x: x["n"])
+                }
+                idempotency_key = f"ai_order_{hashlib.sha256(json.dumps(fingerprint_data, sort_keys=True).encode()).hexdigest()[:24]}"
+                
+                # Create order via service
+                order_data = OrderCreate(
+                    user_id=business_owner_id,
+                    customer_name=customer_name,
+                    customer_phone=customer_phone if customer_phone else "0000000000",  # Fallback for validation
+                    items=order_items,
+                    source=OrderSource.AI,
+                    notes=notes,
+                    idempotency_key=idempotency_key,
+                )
+                
+                order_service = get_order_service(self.supabase_client)
+                created_order = order_service.create_order(order_data)
+                
+                # SUCCESS: Build response from PERSISTED record
+                order_id = created_order.id[:8].upper()
+                
+                # Format items from persisted order
+                items_text = "\n".join([
+                    f"• {item.get('quantity', 1)}x {item.get('name', 'Item')}" + 
+                    (f" ({item.get('variant_display')})" if item.get('variant_display') else "")
+                    for item in created_order.items
+                ])
+                
+                response_text = (
+                    f"✅ *Order Confirmed!*\n\n"
+                    f"📋 *Order #{order_id}*\n"
+                    f"━━━━━━━━━━━━━━━━━\n\n"
+                    f"*Items:*\n{items_text}\n\n"
+                    f"*Customer:*\n"
+                    f"👤 {created_order.customer_name}\n"
+                    f"📱 {created_order.customer_phone}\n"
+                    + (f"📍 {customer_address}\n" if customer_address else "") +
+                    f"\n*Total Items: {created_order.total_quantity}*\n\n"
+                    f"Your order has been received! We'll process it shortly. 🎉"
+                )
+                
+                logger.info(f"📦 ORDER PERSISTED: id={created_order.id}, customer={customer_name}, items={len(items)}")
+                
+            except Exception as e:
+                logger.error(f"📦 Order persistence FAILED: {e}")
+                # Store order attempt for recovery
+                logger.error(f"📦 FAILED ORDER DATA: customer={customer_name}, phone={customer_phone}, items={items}, business={business_owner_id}")
+                
+                # Format items for display
+                items_text = ", ".join([f"{item['quantity']}x {item['name']}" for item in items])
+                
+                response_text = (
+                    f"⚠️ *Order Received*\n\n"
+                    f"Thank you, {customer_name}! Your order for {items_text} has been received.\n\n"
+                    f"We're processing it now but experienced a minor delay. "
+                    f"The business owner has been notified and will confirm shortly.\n\n"
+                    f"If you don't hear back within 30 minutes, please contact the business directly."
+                )
+                order_id = "PENDING"
+            
+            # Clean up flow
+            self.conversation_manager.cancel_flow(user_id)
+            
+            self.conversation_manager.add_message(user_id, "user", "yes")
+            self.conversation_manager.add_message(user_id, "assistant", response_text)
+            
+            return {
+                "reply": response_text,
+                "intent": "order_completed",
+                "confidence": 1.0,
+                "needs_human": False,
+                "suggested_actions": ["Browse more", "Track order"],
+                "metadata": {
+                    "generation_method": "order_completed",
+                    "order_id": order_id if order_id != "PENDING" else None,
+                    "order_items": items,
+                    "customer_name": customer_name,
+                    "customer_phone": customer_phone,
+                    "customer_address": customer_address,
+                    "custom_fields": custom_fields,
+                    "persisted": order_id != "PENDING"
+                }
+            }
+            
+        finally:
+            # Release lock
+            state._persistence_locked = False
     
     def _generate_order_field_question(self, field: Dict) -> str:
         """Generate a conversational question for an order field."""

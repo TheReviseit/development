@@ -685,14 +685,34 @@ def webhook():
             if use_buttons and buttons:
                 # Send interactive message with buttons
                 logger.info(f"🔘 Sending interactive buttons: {[b.get('title') for b in buttons]}")
+                # Use dynamic header/footer from AI metadata, fallback to defaults
+                header = ai_metadata.get('header_text', 'Quick Reply')
+                footer = ai_metadata.get('footer_text', 'Tap a button to respond')
                 send_result = whatsapp_service.send_interactive_buttons(
                     phone_number_id=credentials['phone_number_id'],
                     access_token=credentials['access_token'],
                     to=from_number,
                     body_text=reply_text,
                     buttons=buttons,
-                    header_text="Confirm Booking",
-                    footer_text="Tap a button to respond"
+                    header_text=header,
+                    footer_text=footer
+                )
+            elif ai_metadata.get('use_list') and ai_metadata.get('list_sections'):
+                # Send interactive list message (menu with up to 10 items)
+                list_sections = ai_metadata.get('list_sections', [])
+                list_button = ai_metadata.get('list_button', 'View Options')
+                header = ai_metadata.get('header_text', 'Select an Option')
+                footer = ai_metadata.get('footer_text', 'Tap to continue')
+                logger.info(f"📋 Sending interactive list: {list_button}")
+                send_result = whatsapp_service.send_interactive_list(
+                    phone_number_id=credentials['phone_number_id'],
+                    access_token=credentials['access_token'],
+                    to=from_number,
+                    body_text=reply_text,
+                    button_text=list_button,
+                    sections=list_sections,
+                    header_text=header,
+                    footer_text=footer
                 )
             else:
                 # Send regular text message

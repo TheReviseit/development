@@ -56,6 +56,10 @@ class OrderItem(BaseModel):
     unit: Optional[str] = Field(None, max_length=50)
     notes: Optional[str] = Field(None, max_length=500)
     sku: Optional[str] = Field(None, max_length=100)
+    # Stable product references for inventory/reporting
+    product_id: Optional[str] = Field(None, max_length=255, description="Stable product identifier")
+    variant_id: Optional[str] = Field(None, max_length=255, description="Variant identifier (size/color combo)")
+    variant_display: Optional[str] = Field(None, max_length=255, description="Human-readable variant (e.g., 'Size: L, Color: Blue')")
     
     @field_validator("name")
     @classmethod
@@ -82,6 +86,9 @@ class OrderItem(BaseModel):
             "unit": self.unit,
             "notes": self.notes,
             "sku": self.sku,
+            "product_id": self.product_id,
+            "variant_id": self.variant_id,
+            "variant_display": self.variant_display,
         }
 
 
