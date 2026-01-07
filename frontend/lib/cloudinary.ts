@@ -41,3 +41,55 @@ export async function getSignature() {
 
   return { timestamp, signature };
 }
+
+/**
+ * Generate a secure signature for product image uploads.
+ * Uses multi-tenant folder structure for proper isolation:
+ * reviseit/users/{userId}/products/{productId}/
+ */
+export async function getProductImageSignature(
+  userId: string,
+  productId: string
+) {
+  const timestamp = Math.round(new Date().getTime() / 1000);
+
+  // Multi-tenant folder structure: reviseit/users/{userId}/products/
+  const folder = `reviseit/users/${userId}/products`;
+
+  // Only sign the essential parameters
+  const params = {
+    timestamp,
+    folder,
+  };
+
+  const signature = cloudinary.utils.api_sign_request(
+    params,
+    process.env.CLOUDINARY_API_SECRET!
+  );
+
+  return {
+    timestamp,
+    signature,
+    folder,
+    cloudName: process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME,
+    apiKey: process.env.NEXT_PUBLIC_CLOUDINARY_API_KEY,
+  };
+}
+
+/**
+ * Delete a product image from Cloudinary.
+ * @param publicId The public_id of the image to delete
+ */
+export async function deleteProductImage(publicId: string) {
+  if (!publicId) {
+    return { success: false, error: "No public ID provided" };
+  }
+
+  try {
+    const result = await cloudinary.uploader.destroy(publicId);
+    return { success: result.result === "ok", result };
+  } catch (error) {
+    console.error("Failed to delete product image:", error);
+    return { success: false, error: String(error) };
+  }
+}

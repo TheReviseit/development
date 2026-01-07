@@ -505,7 +505,7 @@
   justify-content: center;
   gap: var(--space-sm);
   padding: var(--space-md) var(--space-xl);
-  background: white ;
+  background: white;
   color: black;
   border: 1px solid rgba(34, 193, 90, 0.3);
   border-radius: var(--radius-md);
@@ -572,39 +572,12 @@
 }
 
 /* ============================================
-   Product/Service Cards
+   Product/Service List
    ============================================ */
 .productList {
   display: flex;
   flex-direction: column;
-  gap: var(--space-lg);
-}
-
-.productCard {
-  background: var(--bg-secondary);
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-xl);
-  padding: var(--space-xl);
-  transition: all var(--transition-fast);
-}
-
-.productCard:hover {
-  border-color: var(--border-default);
-  background: var(--bg-tertiary);
-}
-
-.productHeader {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: var(--space-lg);
-  gap: var(--space-md);
-}
-
-.productNumber {
-  font-size: 14px;
-  font-weight: 700;
-  color: var(--text-secondary);
+  gap: var(--space-2xl);
 }
 
 /* ============================================
@@ -2066,8 +2039,7 @@
     font-size: 16px;
   }
 
-  /* Product/FAQ Cards */
-  .productCard,
+  /* FAQ Cards */
   .faqCard {
     padding: var(--space-lg);
   }

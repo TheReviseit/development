@@ -2,14 +2,32 @@
 Conversation Manager for AI Brain.
 Handles session state, message history, and context management.
 Now includes structured conversation state for deterministic flow handling.
+
+IMPORTANT: Conversation state is now persisted to Redis to survive server restarts.
+This is critical for order/appointment booking flows that span multiple messages.
 """
 
 import time
+import os
+import json
+import logging
 from typing import Dict, List, Any, Optional
 from dataclasses import dataclass, field, asdict
 from collections import defaultdict
 from threading import Lock
 from enum import Enum
+
+logger = logging.getLogger('reviseit.conversation')
+
+# Try to import Redis
+try:
+    import redis
+    from redis.exceptions import RedisError
+    REDIS_AVAILABLE = True
+except ImportError:
+    REDIS_AVAILABLE = False
+    redis = None
+    RedisError = Exception
 
 
 class FlowStatus(str, Enum):
@@ -174,13 +192,22 @@ class ConversationManager:
     - Context persistence across messages
     - Session expiration and cleanup
     - Thread-safe operations
+    - Redis persistence for flow state survival across restarts
+    
+    CRITICAL: Flow states (order_booking, appointment_booking) are now
+    persisted to Redis to prevent loss during server restarts.
     """
+    
+    # Redis key prefix for conversation states
+    REDIS_KEY_PREFIX = "conversation_state"
+    REDIS_STATE_TTL = 7200  # 2 hours - longer than session TTL for safety
     
     def __init__(
         self,
         max_history: int = 10,
         session_ttl: int = 3600,  # 1 hour
-        cleanup_interval: int = 300  # 5 minutes
+        cleanup_interval: int = 300,  # 5 minutes
+        redis_url: str = None
     ):
         self.max_history = max_history
         self.session_ttl = session_ttl
@@ -189,24 +216,172 @@ class ConversationManager:
         self._sessions: Dict[str, ConversationSession] = {}
         self._lock = Lock()
         self._last_cleanup = time.time()
+        
+        # Redis connection for persistent state storage
+        self._redis: Optional[redis.Redis] = None
+        self._redis_available = False
+        self._redis_url = redis_url or os.getenv("REDIS_URL")
+        self._connect_redis()
+    
+    def _connect_redis(self):
+        """Connect to Redis for persistent state storage."""
+        if not REDIS_AVAILABLE or not self._redis_url:
+            logger.warning("Redis not available for conversation state - using memory only (state will be lost on restart)")
+            return
+        
+        try:
+            self._redis = redis.from_url(
+                self._redis_url,
+                decode_responses=True,
+                socket_timeout=5.0,
+                socket_connect_timeout=5.0,
+                retry_on_timeout=True,
+            )
+            self._redis.ping()
+            self._redis_available = True
+            logger.info(f"✅ Conversation state persistence enabled (Redis)")
+        except Exception as e:
+            logger.error(f"❌ Redis connection failed for conversation state: {e}")
+            self._redis_available = False
+    
+    def _get_redis_key(self, user_id: str) -> str:
+        """Generate Redis key for user's conversation state."""
+        return f"{self.REDIS_KEY_PREFIX}:{user_id}"
+    
+    def _persist_state_to_redis(self, user_id: str, session: ConversationSession) -> bool:
+        """
+        Persist conversation state to Redis.
+        
+        CRITICAL: Called after every state change during active flows
+        to ensure state survives server restarts.
+        """
+        if not self._redis_available:
+            return False
+        
+        try:
+            state = session.conversation_state
+            
+            # Only persist if there's an active flow worth saving
+            if not state.active_flow and not state.collected_fields:
+                return True  # Nothing to persist
+            
+            state_data = {
+                "user_id": user_id,
+                "active_flow": state.active_flow,
+                "flow_status": state.flow_status.value if state.flow_status else "idle",
+                "collected_fields": state.collected_fields,
+                "missing_fields": state.missing_fields,
+                "current_field": state.current_field,
+                "last_question": state.last_question,
+                "flow_config": state.flow_config,
+                "flow_started_at": state.flow_started_at,
+                "last_activity": session.last_activity,
+                "last_intent": session.last_intent,
+                "context": session.context,
+                # Store recent messages for context recovery
+                "recent_messages": session.messages[-10:] if session.messages else [],
+            }
+            
+            key = self._get_redis_key(user_id)
+            self._redis.setex(key, self.REDIS_STATE_TTL, json.dumps(state_data))
+            logger.debug(f"💾 Persisted conversation state for {user_id[:12]}... (flow: {state.active_flow})")
+            return True
+            
+        except Exception as e:
+            logger.error(f"Failed to persist conversation state: {e}")
+            return False
+    
+    def _load_state_from_redis(self, user_id: str) -> Optional[ConversationSession]:
+        """
+        Load conversation state from Redis.
+        
+        Called when getting a session that doesn't exist in memory,
+        allowing recovery after server restart.
+        """
+        if not self._redis_available:
+            return None
+        
+        try:
+            key = self._get_redis_key(user_id)
+            data = self._redis.get(key)
+            
+            if not data:
+                return None
+            
+            state_data = json.loads(data)
+            
+            # Reconstruct session
+            session = ConversationSession(user_id=user_id)
+            session.last_activity = state_data.get("last_activity", time.time())
+            session.last_intent = state_data.get("last_intent")
+            session.context = state_data.get("context", {})
+            
+            # Restore messages
+            for msg in state_data.get("recent_messages", []):
+                session.messages.append(msg)
+            
+            # Reconstruct conversation state
+            state = session.conversation_state
+            state.active_flow = state_data.get("active_flow")
+            state.flow_status = FlowStatus(state_data.get("flow_status", "idle"))
+            state.collected_fields = state_data.get("collected_fields", {})
+            state.missing_fields = state_data.get("missing_fields", [])
+            state.current_field = state_data.get("current_field")
+            state.last_question = state_data.get("last_question")
+            state.flow_config = state_data.get("flow_config", {})
+            state.flow_started_at = state_data.get("flow_started_at")
+            
+            logger.info(f"🔄 Recovered conversation state for {user_id[:12]}... (flow: {state.active_flow}, collected: {list(state.collected_fields.keys())})")
+            return session
+            
+        except Exception as e:
+            logger.error(f"Failed to load conversation state from Redis: {e}")
+            return None
+    
+    def _delete_state_from_redis(self, user_id: str):
+        """Delete conversation state from Redis when flow completes."""
+        if not self._redis_available:
+            return
+        
+        try:
+            key = self._get_redis_key(user_id)
+            self._redis.delete(key)
+            logger.debug(f"🗑️ Deleted conversation state for {user_id[:12]}...")
+        except Exception as e:
+            logger.error(f"Failed to delete conversation state from Redis: {e}")
     
     def get_or_create_session(self, user_id: str) -> ConversationSession:
-        """Get existing session or create new one."""
+        """Get existing session or create new one. Recovers from Redis if needed."""
         with self._lock:
             # Periodic cleanup
             self._maybe_cleanup()
             
             if user_id not in self._sessions:
+                # Try to recover from Redis first (critical for flow recovery after restart)
+                recovered_session = self._load_state_from_redis(user_id)
+                if recovered_session:
+                    self._sessions[user_id] = recovered_session
+                    return recovered_session
+                
+                # Create new session
                 self._sessions[user_id] = ConversationSession(user_id=user_id)
             
             return self._sessions[user_id]
     
     def get_session(self, user_id: str) -> Optional[ConversationSession]:
-        """Get session if exists, otherwise None."""
+        """Get session if exists, otherwise None. Recovers from Redis if needed."""
         with self._lock:
             session = self._sessions.get(user_id)
             if session and not session.is_expired(self.session_ttl):
                 return session
+            
+            # Session not in memory or expired - try Redis recovery
+            if not session:
+                recovered_session = self._load_state_from_redis(user_id)
+                if recovered_session and not recovered_session.is_expired(self.session_ttl):
+                    self._sessions[user_id] = recovered_session
+                    return recovered_session
+            
             return None
     
     def add_message(
@@ -230,6 +405,10 @@ class ConversationManager:
         
         if entities:
             session.update_context(entities)
+        
+        # If there's an active flow, persist state (captures message history)
+        if session.conversation_state.is_active():
+            self._persist_state_to_redis(user_id, session)
     
     def get_history(
         self,
@@ -385,6 +564,11 @@ class ConversationManager:
         """
         session = self.get_or_create_session(user_id)
         session.conversation_state.start_flow(flow_name, required_fields, config)
+        
+        # CRITICAL: Persist to Redis immediately after starting flow
+        self._persist_state_to_redis(user_id, session)
+        logger.info(f"📋 Started flow '{flow_name}' for user {user_id[:12]}... (persisted to Redis)")
+        
         return session.conversation_state
     
     def update_flow_field(
@@ -406,7 +590,12 @@ class ConversationManager:
         """
         session = self.get_session(user_id)
         if session and session.conversation_state.is_active():
-            return session.conversation_state.collect_field(field_name, value)
+            result = session.conversation_state.collect_field(field_name, value)
+            
+            # CRITICAL: Persist after each field collection to survive restarts
+            self._persist_state_to_redis(user_id, session)
+            
+            return result
         return None
     
     def cancel_flow(self, user_id: str) -> bool:
@@ -419,6 +608,11 @@ class ConversationManager:
         session = self.get_session(user_id)
         if session and session.conversation_state.is_active():
             session.conversation_state.cancel_flow()
+            
+            # Delete from Redis since flow is cancelled
+            self._delete_state_from_redis(user_id)
+            logger.info(f"📋 Cancelled flow for user {user_id[:12]}... (removed from Redis)")
+            
             return True
         return False
     
@@ -433,6 +627,11 @@ class ConversationManager:
         if session:
             collected = session.conversation_state.collected_fields.copy()
             session.conversation_state.complete_flow()
+            
+            # Delete from Redis since flow is complete
+            self._delete_state_from_redis(user_id)
+            logger.info(f"📋 Completed flow for user {user_id[:12]}... (removed from Redis)")
+            
             return collected
         return {}
     
@@ -440,6 +639,18 @@ class ConversationManager:
         """Check if user has an active conversation flow."""
         session = self.get_session(user_id)
         return session is not None and session.conversation_state.is_active()
+    
+    def persist_state(self, user_id: str) -> bool:
+        """
+        Force persist current state to Redis.
+        
+        Call this after modifying collected_fields directly in order flow.
+        This ensures state changes are saved immediately.
+        """
+        session = self.get_session(user_id)
+        if session:
+            return self._persist_state_to_redis(user_id, session)
+        return False
     
     def get_active_flow(self, user_id: str) -> Optional[str]:
         """Get the name of the currently active flow, if any."""
@@ -595,13 +806,21 @@ _conversation_manager: Optional[ConversationManager] = None
 
 def get_conversation_manager(
     max_history: int = 10,
-    session_ttl: int = 3600
+    session_ttl: int = 3600,
+    redis_url: str = None
 ) -> ConversationManager:
-    """Get or create the global conversation manager."""
+    """Get or create the global conversation manager with Redis persistence."""
     global _conversation_manager
     if _conversation_manager is None:
         _conversation_manager = ConversationManager(
             max_history=max_history,
-            session_ttl=session_ttl
+            session_ttl=session_ttl,
+            redis_url=redis_url
         )
     return _conversation_manager
+
+
+def reset_conversation_manager():
+    """Reset the global conversation manager (for testing)."""
+    global _conversation_manager
+    _conversation_manager = None

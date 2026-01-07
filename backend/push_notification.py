@@ -35,6 +35,36 @@ def send_push_to_user(user_id, title, body, data=None):
         if fcm_data.get('conversationId'):
             notification_url = f'{frontend_url}/dashboard?conversation={fcm_data["conversationId"]}'
         
+        # IMPORTANT: WebpushFCMOptions.link MUST be HTTPS
+        # In development with http://localhost, we skip webpush fcm_options
+        is_https_url = notification_url.startswith('https://')
+        
+        # Build webpush config - only include fcm_options if HTTPS
+        webpush_config = messaging.WebpushConfig(
+            notification=messaging.WebpushNotification(
+                title=title,
+                body=body,
+                icon='/icon-192.png',
+                badge='/icon-192.png',
+                tag=fcm_data.get('conversationId', 'message'),
+            ),
+        )
+        
+        # Only add fcm_options with link if URL is HTTPS (required by FCM)
+        if is_https_url:
+            webpush_config = messaging.WebpushConfig(
+                notification=messaging.WebpushNotification(
+                    title=title,
+                    body=body,
+                    icon='/icon-192.png',
+                    badge='/icon-192.png',
+                    tag=fcm_data.get('conversationId', 'message'),
+                ),
+                fcm_options=messaging.WebpushFCMOptions(
+                    link=notification_url  # Where to navigate on click
+                ),
+            )
+        
         message = messaging.Message(
             notification=messaging.Notification(
                 title=title,
@@ -43,19 +73,7 @@ def send_push_to_user(user_id, title, body, data=None):
             data=fcm_data,
             token=token,
             # Web-specific settings (CRITICAL for browser notifications)
-            webpush=messaging.WebpushConfig(
-                notification=messaging.WebpushNotification(
-                    title=title,
-                    body=body,
-                    icon='/icon-192.png',
-                    badge='/icon-192.png',
-                    tag=fcm_data.get('conversationId', 'message'),
-                    # requireInteraction=False,  # Auto-dismiss after a few seconds
-                ),
-                fcm_options=messaging.WebpushFCMOptions(
-                    link=notification_url  # Where to navigate on click
-                ),
-            ),
+            webpush=webpush_config,
             # Android-specific settings
             android=messaging.AndroidConfig(
                 priority='high',

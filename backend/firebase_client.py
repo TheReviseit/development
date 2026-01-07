@@ -112,9 +112,18 @@ def get_business_data_from_firestore(user_id: str) -> Optional[Dict[str, Any]]:
         
         if doc.exists:
             data = doc.to_dict()
+            products = data.get('products', [])
             print(f"📊 Loaded business data from Firestore for user: {user_id}")
             print(f"   Business: {data.get('businessName', 'Unknown')}")
-            print(f"   Products: {len(data.get('products', []))} items")
+            print(f"   Products: {len(products)} items")
+            
+            # Debug: Log image URLs from raw Firestore data
+            for i, p in enumerate(products):
+                if isinstance(p, dict):
+                    raw_img = p.get('imageUrl') or p.get('image_url') or p.get('image', '')
+                    img_preview = raw_img[:60] + '...' if raw_img and len(raw_img) > 60 else raw_img or 'NONE'
+                    print(f"   📷 Product {i+1} ({p.get('name', 'Unknown')}): imageUrl = {img_preview}")
+            
             # Pass the Firebase UID explicitly to ensure correct business_id
             return convert_firestore_to_ai_format(data, firebase_uid=user_id)
         else:
@@ -197,22 +206,48 @@ def convert_timings(timings: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def convert_products(products: list) -> list:
-    """Convert products list from camelCase to snake_case, preserving all fields."""
-    return [
-        {
+    """
+    Convert products list to a consistent format for AI Brain.
+    
+    Handles multiple input formats:
+    - camelCase (from Firestore): imageUrl, priceUnit, stockStatus
+    - snake_case (from API): image_url, price_unit, stock_status
+    
+    Output uses camelCase for imageUrl (AI Brain expectation) and snake_case for others.
+    """
+    converted = []
+    for p in products:
+        if not isinstance(p, dict):
+            continue
+        
+        # Handle image URL with multiple fallbacks for maximum compatibility
+        image_url = (
+            p.get('imageUrl') or 
+            p.get('image_url') or 
+            p.get('image') or 
+            ''
+        )
+        
+        converted.append({
             'id': p.get('id', ''),
             'sku': p.get('sku', ''),
             'name': p.get('name', ''),
             'category': p.get('category', ''),
+            'description': p.get('description', ''),
             'price': p.get('price', 0),
-            'price_unit': p.get('priceUnit', 'INR'),
+            'price_unit': p.get('priceUnit') or p.get('price_unit', 'INR'),
             'duration': p.get('duration', ''),
             'available': p.get('available', True),
             'sizes': p.get('sizes', []),
             'colors': p.get('colors', []),
             'variants': p.get('variants', []),
-            'imageUrl': p.get('imageUrl', p.get('image', '')),
-            'description': p.get('description', ''),
-        }
-        for p in products
-    ]
+            'brand': p.get('brand', ''),
+            'materials': p.get('materials', []),
+            # Image fields - use camelCase as expected by AI Brain
+            'imageUrl': image_url,
+            'imagePublicId': p.get('imagePublicId') or p.get('image_public_id', ''),
+            'originalSize': p.get('originalSize') or p.get('original_size', 0),
+            'optimizedSize': p.get('optimizedSize') or p.get('optimized_size', 0),
+        })
+    
+    return converted

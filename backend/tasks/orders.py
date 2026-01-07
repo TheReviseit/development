@@ -11,7 +11,7 @@ These tasks are for secondary operations that should NOT block order creation.
 """
 
 import logging
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, List
 from datetime import datetime
 
 # Try to import Celery, fallback to synchronous execution
@@ -184,12 +184,16 @@ def sync_order_to_sheets(
     
     try:
         # Get sheets configuration for this business
+        logger.info(f"📊 Getting sheets config for user {user_id}")
         sheets_config = _get_sheets_config(user_id)
         
         if not sheets_config or not sheets_config.get("enabled"):
-            logger.debug(f"Sheets sync not enabled for user {user_id}")
-            result["reason"] = "not_enabled"
+            reason = sheets_config.get("reason", "not_enabled") if sheets_config else "no_config"
+            logger.info(f"📊 Sheets sync skipped for user {user_id}: {reason}")
+            result["reason"] = reason
             return result
+        
+        logger.info(f"📊 Sheets config found: spreadsheet_id={sheets_config.get('spreadsheet_id', '')[:20]}...")
         
         # Format data for sheets
         row_data = _format_order_for_sheets(data)
@@ -198,6 +202,7 @@ def sync_order_to_sheets(
         sheets_client = _get_sheets_client(sheets_config)
         
         if not sheets_client:
+            logger.warning(f"📊 Could not create sheets client for user {user_id}")
             result["reason"] = "client_unavailable"
             return result
         
@@ -206,6 +211,7 @@ def sync_order_to_sheets(
         sheet_name = sheets_config.get("sheet_name", "Orders")
         
         # Append or update row
+        logger.info(f"📊 Upserting order {order_id} to sheet {sheet_name}")
         synced = _upsert_sheet_row(
             client=sheets_client,
             spreadsheet_id=spreadsheet_id,
@@ -217,16 +223,13 @@ def sync_order_to_sheets(
         result["synced"] = synced
         result["spreadsheet_id"] = spreadsheet_id
         
-        logger.info(
-            f"Order synced to sheets: {order_id}",
-            extra={"correlation_id": correlation_id}
-        )
+        if synced:
+            logger.info(f"✅ Order {order_id} synced to Google Sheets successfully")
+        else:
+            logger.warning(f"⚠️ Order {order_id} sync returned False")
         
     except Exception as e:
-        logger.error(
-            f"Sheets sync failed: {e}",
-            extra={"order_id": order_id, "correlation_id": correlation_id}
-        )
+        logger.error(f"❌ Sheets sync failed for order {order_id}: {e}")
         result["error"] = str(e)
         
         # Let retry mechanism handle it
@@ -238,6 +241,9 @@ def sync_order_to_sheets(
 
 def _get_sheets_config(user_id: str) -> Optional[Dict[str, Any]]:
     """Get Google Sheets configuration for a business."""
+    import os
+    import re
+    
     try:
         from supabase_client import get_supabase_client
         client = get_supabase_client()
@@ -245,19 +251,67 @@ def _get_sheets_config(user_id: str) -> Optional[Dict[str, Any]]:
         if not client:
             return None
         
+        # Query using the correct field names (order_sheet_url, order_sheet_sync_enabled)
         result = client.table("ai_capabilities").select(
-            "sheets_sync_enabled, sheets_spreadsheet_id, sheets_sheet_name, sheets_credentials"
+            "order_sheet_url, order_sheet_sync_enabled"
         ).eq("user_id", user_id).single().execute()
         
-        if result.data and result.data.get("sheets_sync_enabled"):
-            return {
-                "enabled": True,
-                "spreadsheet_id": result.data.get("sheets_spreadsheet_id"),
-                "sheet_name": result.data.get("sheets_sheet_name", "Orders"),
-                "credentials": result.data.get("sheets_credentials"),
-            }
+        if not result.data:
+            return {"enabled": False}
         
-        return {"enabled": False}
+        sheet_url = result.data.get("order_sheet_url")
+        sync_enabled = result.data.get("order_sheet_sync_enabled", False)
+        
+        if not sync_enabled or not sheet_url:
+            logger.debug(f"Sheets sync not enabled for user {user_id}: sync_enabled={sync_enabled}, has_url={bool(sheet_url)}")
+            return {"enabled": False}
+        
+        # Extract spreadsheet ID from URL
+        # URL format: https://docs.google.com/spreadsheets/d/{SPREADSHEET_ID}/edit...
+        spreadsheet_id = None
+        match = re.search(r'/spreadsheets/d/([a-zA-Z0-9-_]+)', sheet_url)
+        if match:
+            spreadsheet_id = match.group(1)
+        else:
+            logger.warning(f"Could not extract spreadsheet ID from URL: {sheet_url[:50]}...")
+            return {"enabled": False}
+        
+        # Get credentials - try shared service account from env first
+        credentials = None
+        
+        # Option 1: Shared service account from environment variable
+        credentials_json = os.getenv("GOOGLE_SHEETS_CREDENTIALS")
+        if credentials_json:
+            try:
+                import json
+                credentials = json.loads(credentials_json)
+                logger.debug("Using shared Google Sheets credentials from env")
+            except Exception as e:
+                logger.warning(f"Failed to parse GOOGLE_SHEETS_CREDENTIALS: {e}")
+        
+        # Option 2: Try using Firebase service account (if it has Sheets API access)
+        if not credentials:
+            firebase_creds = os.getenv("FIREBASE_SERVICE_ACCOUNT_KEY")
+            if firebase_creds:
+                try:
+                    import json
+                    import base64
+                    creds_json = base64.b64decode(firebase_creds).decode('utf-8')
+                    credentials = json.loads(creds_json)
+                    logger.debug("Using Firebase service account for Google Sheets")
+                except Exception as e:
+                    logger.warning(f"Failed to parse Firebase credentials for Sheets: {e}")
+        
+        if not credentials:
+            logger.warning("No Google Sheets credentials available. Set GOOGLE_SHEETS_CREDENTIALS env var.")
+            return {"enabled": False, "reason": "no_credentials"}
+        
+        return {
+            "enabled": True,
+            "spreadsheet_id": spreadsheet_id,
+            "sheet_name": "Orders",  # Default sheet name
+            "credentials": credentials,
+        }
         
     except Exception as e:
         logger.warning(f"Could not get sheets config: {e}")

@@ -95,10 +95,13 @@ class AIBrain:
         # Core engine
         self.engine = ChatGPTEngine(self.config)
         
-        # Context management
+        # Context management with Redis persistence for flow state
+        import os
+        redis_url = os.getenv("REDIS_URL")
         self.conversation_manager = get_conversation_manager(
             max_history=self.config.conversation_history_limit,
-            session_ttl=3600  # 1 hour session TTL
+            session_ttl=3600,  # 1 hour session TTL
+            redis_url=redis_url
         )
         
         # Response caching
@@ -626,6 +629,19 @@ class AIBrain:
         """
         logger.info(f"📦 Starting order flow for user: {user_id}, business: {business_owner_id}")
         
+        # Validate business_owner_id before starting flow
+        # Must be a valid ID (not empty, not "default", not too short)
+        if not business_owner_id or business_owner_id == "default" or len(business_owner_id) < 10:
+            logger.error(f"📦 Invalid business_owner_id: '{business_owner_id}' - cannot start order flow without valid business ID")
+            return {
+                "reply": "I'm sorry, but I cannot process orders at the moment. Please contact the business directly.",
+                "intent": "order_error",
+                "confidence": 1.0,
+                "needs_human": True,
+                "suggested_actions": ["Contact us"],
+                "metadata": {"generation_method": "order_flow_invalid_business", "error": "invalid_business_id"}
+            }
+        
         # Get order field configuration
         order_config = self._get_order_config(business_owner_id)
         order_fields = order_config.get("fields", [])
@@ -671,15 +687,36 @@ class AIBrain:
         logger.info(f"📂 Categories found: {len(categories)} - {categories[:5]}... (from products + AI Settings)")
         
         # Try to extract product mention from initial message
+        # Handles: "order bubble tshirt", "order_bubble_tshirt", direct product names
         mentioned_product = None
+        
+        # Check if this is from "Order This" button click (format: "order {product_id}")
+        order_prefix_match = msg_lower.startswith("order ")
+        search_term = msg_lower.replace("order ", "").replace("_", " ").strip() if order_prefix_match else msg_lower
+        
         for product in products:
             if isinstance(product, dict):
                 name = product.get("name", "").lower()
-                if name and name in msg_lower:
+                product_id = str(product.get("id", "")).lower()
+                sku = str(product.get("sku", "")).lower()
+                
+                # Match by name, id, or sku
+                if name and (name in search_term or search_term in name):
+                    mentioned_product = product
+                    break
+                if product_id and (product_id in search_term or search_term in product_id):
+                    mentioned_product = product
+                    break
+                if sku and (sku in search_term or search_term in sku):
                     mentioned_product = product
                     break
         
+        logger.info(f"📦 Product match search: '{search_term}' → {mentioned_product.get('name') if mentioned_product else 'No match'}")
+        
         # Generate appropriate response based on context
+        # Initialize product metadata (may be filled by _format_product_list)
+        product_meta = {}
+        
         if mentioned_product:
             # Product mentioned - check for variants
             product_name = mentioned_product.get("name", "item")
@@ -752,7 +789,7 @@ class AIBrain:
         
         elif products:
             # Single or no category - show products directly
-            response_text, suggested_actions = self._format_product_list(products[:8], state)
+            response_text, suggested_actions, product_meta = self._format_product_list(products[:8], state)
         
         else:
             response_text = (
@@ -773,6 +810,7 @@ class AIBrain:
             "categories_available": len(categories) if categories else 0,
             "header_text": header_text if 'header_text' in dir() else "🛒 Place an Order",
             "footer_text": "Tap to continue",
+            **product_meta,  # Include product_cards if present
         }
         
         if 'use_list' in dir() and use_list and list_sections:
@@ -801,9 +839,14 @@ class AIBrain:
         }
     
     def _format_product_list(self, products: List[Dict], state) -> tuple:
-        """Format product list with detailed info: image, name, colors, sizes."""
+        """Format product list with detailed info and image metadata for WhatsApp rendering.
+        
+        Returns:
+            tuple: (response_text, suggested_actions, metadata_with_product_cards)
+        """
         product_lines = []
         product_map = {}
+        product_cards = []  # For WhatsApp image rendering
         
         for i, p in enumerate(products):
             if not isinstance(p, dict):
@@ -811,26 +854,35 @@ class AIBrain:
             name = p.get('name', 'Item')
             price = p.get('price', 'N/A')
             product_id = p.get('id') or p.get('sku') or name
+            # Handle both camelCase (imageUrl) and snake_case (image_url) for compatibility
+            # with different data sources (Firestore uses camelCase, some API calls use snake_case)
+            image_url = p.get('imageUrl') or p.get('image_url') or p.get('image', '')
             
-            # Build detailed product entry (professional format, no icons)
+            # Build product card for WhatsApp image messages
+            product_cards.append({
+                'index': i + 1,
+                'name': name,
+                'price': price,
+                'product_id': product_id,
+                'image_url': image_url if image_url and not image_url.startswith('data:') else '',
+                'colors': p.get('colors', [])[:5],
+                'sizes': p.get('sizes', [])[:6],
+            })
+            
+            # Build text entry (WITHOUT raw URL - images sent separately)
             lines = []
             lines.append(f"*{i+1}. {name}* - ₹{price}")
-            
-            # Add image URL if available
-            image_url = p.get('imageUrl', '')
-            if image_url and not image_url.startswith('data:'):  # Skip base64 images
-                lines.append(f"Link: {image_url}")
             
             # Add colors if available
             colors = p.get('colors', [])
             if colors and isinstance(colors, list):
-                color_str = ', '.join(colors[:5])  # Max 5 colors
+                color_str = ', '.join(colors[:5])
                 lines.append(f"Colors: {color_str}")
             
             # Add sizes if available
             sizes = p.get('sizes', [])
             if sizes and isinstance(sizes, list):
-                size_str = ', '.join(sizes[:6])  # Max 6 sizes
+                size_str = ', '.join(sizes[:6])
                 lines.append(f"Sizes: {size_str}")
             
             product_lines.append('\n'.join(lines))
@@ -846,11 +898,16 @@ class AIBrain:
             f"📦 I'd be happy to help you place an order!\n\n"
             f"Here's what we have:\n{product_list}\n\n"
             f"Reply with a number or product name.\n"
-            # f"_(📏 = sizes available, 🎨 = colors available)_"
         )
         suggested_actions = ["1", "2", "Cancel order"]
         
-        return response_text, suggested_actions
+        # Log product cards with image info for debugging
+        for card in product_cards:
+            img_status = "✅ HAS IMAGE" if card.get('image_url') else "❌ NO IMAGE"
+            logger.info(f"🖼️ Product card: {card.get('name')} - {img_status} - URL: {card.get('image_url', 'None')[:50] if card.get('image_url') else 'None'}...")
+        
+        # Return with product_cards for image rendering
+        return response_text, suggested_actions, {'product_cards': product_cards}
     
     def _handle_order_flow(
         self,
@@ -927,6 +984,9 @@ class AIBrain:
                     if "_extra_categories" in state.collected_fields:
                         del state.collected_fields["_extra_categories"]
                     
+                    # Persist state after modification
+                    self.conversation_manager.persist_state(user_id)
+                    
                     self.conversation_manager.add_message(user_id, "user", message)
                     self.conversation_manager.add_message(user_id, "assistant", response_text)
                     
@@ -957,7 +1017,9 @@ class AIBrain:
             if msg_lower in ["show all", "all", "all products", "see all"]:
                 del state.collected_fields["awaiting_category"]
                 del state.collected_fields["_available_categories"]
-                response_text, suggested_actions = self._format_product_list(products[:10], state)
+                self.conversation_manager.persist_state(user_id)  # Persist after state change
+                
+                response_text, suggested_actions, product_meta = self._format_product_list(products[:10], state)
                 self.conversation_manager.add_message(user_id, "user", message)
                 self.conversation_manager.add_message(user_id, "assistant", response_text)
                 return {
@@ -966,7 +1028,7 @@ class AIBrain:
                     "confidence": 1.0,
                     "needs_human": False,
                     "suggested_actions": suggested_actions,
-                    "metadata": {"generation_method": "order_flow"}
+                    "metadata": {"generation_method": "order_flow", **product_meta}
                 }
             
             # Check for number selection
@@ -986,6 +1048,7 @@ class AIBrain:
             if matched_category:
                 del state.collected_fields["awaiting_category"]
                 del state.collected_fields["_available_categories"]
+                self.conversation_manager.persist_state(user_id)  # Persist after state change
                 
                 # Filter products by category
                 filtered_products = [
@@ -993,7 +1056,7 @@ class AIBrain:
                     if isinstance(p, dict) and p.get("category", "").strip().lower() == matched_category.lower()
                 ]
                 
-                response_text, suggested_actions = self._format_product_list(filtered_products[:10], state)
+                response_text, suggested_actions, product_meta = self._format_product_list(filtered_products[:10], state)
                 response_text = f"📁 *{matched_category}*\n\n" + response_text.split("\n\n", 1)[1]
                 
                 self.conversation_manager.add_message(user_id, "user", message)
@@ -1004,7 +1067,7 @@ class AIBrain:
                     "confidence": 1.0,
                     "needs_human": False,
                     "suggested_actions": suggested_actions,
-                    "metadata": {"generation_method": "order_flow", "category": matched_category}
+                    "metadata": {"generation_method": "order_flow", "category": matched_category, **product_meta}
                 }
             else:
                 self.conversation_manager.add_message(user_id, "user", message)
@@ -1050,6 +1113,9 @@ class AIBrain:
                 else:
                     response_text = f"Size *{matched_size}* selected. ✓\n\nHow many would you like to order?"
                     suggested_actions = ["1", "2", "3", "Cancel"]
+                
+                # Persist state after size selection
+                self.conversation_manager.persist_state(user_id)
                 
                 self.conversation_manager.add_message(user_id, "user", message)
                 self.conversation_manager.add_message(user_id, "assistant", response_text)
@@ -1103,6 +1169,9 @@ class AIBrain:
                 response_text = f"Color *{matched_color}* selected. ✓\n\nHow many would you like to order?"
                 suggested_actions = ["1", "2", "3", "Cancel"]
                 
+                # Persist state after color selection
+                self.conversation_manager.persist_state(user_id)
+                
                 self.conversation_manager.add_message(user_id, "user", message)
                 self.conversation_manager.add_message(user_id, "assistant", response_text)
                 return {
@@ -1137,12 +1206,22 @@ class AIBrain:
             matched_product = None
             matched_product_data = None
             
+            # Handle "Order This" button click pattern: "order {product_id}"
+            # Button IDs use underscores, product names may use spaces
+            # Normalize search term for proper matching
+            is_order_button = msg_lower.startswith("order ")
+            search_term = msg_lower.replace("order ", "").replace("_", " ").strip() if is_order_button else msg_lower
+            
             # Try product_map first (includes index and name lookups)
             if msg_lower in product_map:
                 matched_product_data = product_map[msg_lower]
                 matched_product = matched_product_data.get("name")
             elif message.strip() in product_map:
                 matched_product_data = product_map[message.strip()]
+                matched_product = matched_product_data.get("name")
+            elif search_term in product_map:
+                # Try normalized search term (for button clicks)
+                matched_product_data = product_map[search_term]
                 matched_product = matched_product_data.get("name")
             
             # Fallback: number selection
@@ -1158,12 +1237,24 @@ class AIBrain:
                                 matched_product_data = p
                                 break
             
-            # Fallback: name match
+            # Fallback: name match (use normalized search_term for button clicks)
             if not matched_product:
                 for product in products:
                     if isinstance(product, dict):
                         name = product.get("name", "").lower()
-                        if name and name in msg_lower:
+                        product_id = str(product.get("id", "")).lower()
+                        sku = str(product.get("sku", "")).lower()
+                        
+                        # Match by name, id, or sku against normalized search term
+                        if name and (name in search_term or search_term in name):
+                            matched_product = product.get("name")
+                            matched_product_data = product
+                            break
+                        if product_id and (product_id in search_term or search_term in product_id):
+                            matched_product = product.get("name")
+                            matched_product_data = product
+                            break
+                        if sku and (sku in search_term or search_term in sku):
                             matched_product = product.get("name")
                             matched_product_data = product
                             break
@@ -1212,6 +1303,9 @@ class AIBrain:
                 else:
                     response_text = f"Great choice! 🎉 You want to order *{matched_product}*.\n\nHow many would you like?"
                     suggested_actions = ["1", "2", "3", "Cancel"]
+                
+                # Persist state after product selection
+                self.conversation_manager.persist_state(user_id)
                 
                 self.conversation_manager.add_message(user_id, "user", message)
                 self.conversation_manager.add_message(user_id, "assistant", response_text)
@@ -1288,6 +1382,9 @@ class AIBrain:
                         state.collect_field("_order_fields", order_fields)
                         state.collect_field("_current_field_index", 0)
                         
+                        # Persist state after quantity collection (critical for recovery)
+                        self.conversation_manager.persist_state(user_id)
+                        
                         first_field = order_fields[0]
                         question = self._generate_order_field_question(first_field)
                         
@@ -1306,6 +1403,7 @@ class AIBrain:
                     else:
                         # No fields configured, go straight to confirmation
                         state.collect_field("customer_name", "Customer")
+                        self.conversation_manager.persist_state(user_id)
                         return self._show_order_confirmation(user_id, state, message)
         
         # =====================================================
@@ -1339,6 +1437,9 @@ class AIBrain:
                     # Move to next field
                     next_index = current_index + 1
                     state.collect_field("_current_field_index", next_index)
+                    
+                    # CRITICAL: Persist after each field collection for recovery
+                    self.conversation_manager.persist_state(user_id)
                     
                     if next_index < len(order_fields):
                         # Ask next question
@@ -1429,6 +1530,14 @@ class AIBrain:
             customer_phone = state.collected_fields.get("customer_phone", "")
             customer_address = state.collected_fields.get("customer_address", "")
             business_owner_id = state.flow_config.get("business_owner_id", "")
+            
+            # Log order details for debugging
+            logger.info(f"📦 Order details - business_owner_id: {business_owner_id}, customer: {customer_name}, phone: {customer_phone}, items: {len(items)}")
+            
+            # Validate business_owner_id - must be a valid UUID, not empty or "default"
+            if not business_owner_id or business_owner_id == "default" or len(business_owner_id) < 10:
+                logger.error(f"📦 Invalid business_owner_id: '{business_owner_id}' - cannot persist order to database")
+                raise ValueError(f"Invalid business_owner_id: {business_owner_id}")
             
             # Collect all custom fields
             order_fields = state.flow_config.get("order_fields", [])
@@ -1650,6 +1759,11 @@ class AIBrain:
         details_text = "\n".join(details_lines)
         
         state.flow_status = FlowStatus.AWAITING_CONFIRMATION
+        
+        # CRITICAL: Persist state before showing confirmation (prevents loss during button send)
+        self.conversation_manager.persist_state(user_id)
+        logger.info(f"📋 Order confirmation state persisted for {user_id[:12]}... (awaiting confirmation)")
+        
         self.conversation_manager.add_message(user_id, "user", last_message)
         
         response_text = (

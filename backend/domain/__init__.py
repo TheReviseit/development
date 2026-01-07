@@ -4,6 +4,7 @@ Contains: Entities, Value Objects, Exceptions, Validation Schemas
 """
 
 from .exceptions import (
+    ErrorCode,
     OrderError,
     ValidationError,
     BusinessRuleError,
@@ -28,6 +29,8 @@ from .schemas import (
 from .entities import Order, OrderFingerprint
 
 __all__ = [
+    # Error Codes
+    "ErrorCode",
     # Exceptions
     "OrderError",
     "ValidationError", 

@@ -8,6 +8,10 @@ import { AlertToast } from "@/components/ui/alert-toast";
 import alertStyles from "@/components/ui/alert.module.css";
 import { AnimatePresence, motion } from "framer-motion";
 import { CircleCheck, CircleX, AlertTriangle } from "lucide-react";
+import ProductImageUpload from "./ProductImageUpload";
+import { ProductCard } from "./ProductCard";
+import ProductForm from "./ProductCard/ProductForm";
+import SlidePanel from "@/app/utils/ui/SlidePanel";
 
 // Types for business data
 interface ProductService {
@@ -22,6 +26,9 @@ interface ProductService {
   sku: string;
   stockStatus: string;
   imageUrl: string;
+  imagePublicId: string; // Cloudinary public ID for deletions
+  originalSize: number; // Original file size in bytes
+  optimizedSize: number; // Optimized file size in bytes
   variants: string[];
   sizes: string[];
   colors: string[];
@@ -419,6 +426,12 @@ export default function BotSettingsView() {
     title: string;
     description: string;
   } | null>(null);
+
+  // Product panel state
+  const [isProductPanelOpen, setIsProductPanelOpen] = useState(false);
+  const [editingProduct, setEditingProduct] = useState<ProductService | null>(
+    null
+  );
 
   // Appointment configuration state
   const [appointmentFields, setAppointmentFields] = useState<
@@ -992,6 +1005,7 @@ export default function BotSettingsView() {
       ])
     ),
     products_services: d.products.map((p) => ({
+      id: p.id,
       name: p.name,
       category: p.category,
       description: p.description,
@@ -1001,8 +1015,16 @@ export default function BotSettingsView() {
       available: p.available,
       sku: p.sku,
       stock_status: p.stockStatus,
-      image_url: p.imageUrl,
+      // IMPORTANT: Use imageUrl (camelCase) to match backend AI Brain expectations
+      imageUrl: p.imageUrl,
+      imagePublicId: p.imagePublicId,
+      originalSize: p.originalSize,
+      optimizedSize: p.optimizedSize,
       variants: p.variants,
+      sizes: p.sizes,
+      colors: p.colors,
+      brand: p.brand,
+      materials: p.materials,
     })),
     policies: {
       refund: d.policies.refund,
@@ -1035,30 +1057,36 @@ export default function BotSettingsView() {
 
   // Product management
   const addProduct = () => {
-    setData({
-      ...data,
-      products: [
-        ...data.products,
-        {
-          id: Date.now().toString(),
-          name: "",
-          category: "",
-          description: "",
-          price: 0,
-          priceUnit: "",
-          duration: "",
-          available: true,
-          sku: "",
-          stockStatus: "in_stock",
-          imageUrl: "",
-          variants: [],
-          sizes: [],
-          colors: [],
-          brand: "",
-          materials: [],
-        },
-      ],
-    });
+    setEditingProduct(null); // null means new product
+    setIsProductPanelOpen(true);
+  };
+
+  const openEditProduct = (product: ProductService) => {
+    setEditingProduct(product);
+    setIsProductPanelOpen(true);
+  };
+
+  const handleProductSave = (product: ProductService) => {
+    if (editingProduct) {
+      // Update existing product
+      setData({
+        ...data,
+        products: data.products.map((p) => (p.id === product.id ? product : p)),
+      });
+    } else {
+      // Add new product
+      setData({
+        ...data,
+        products: [...data.products, product],
+      });
+    }
+    setIsProductPanelOpen(false);
+    setEditingProduct(null);
+  };
+
+  const handleProductCancel = () => {
+    setIsProductPanelOpen(false);
+    setEditingProduct(null);
   };
 
   const updateProduct = (
@@ -1945,206 +1973,20 @@ export default function BotSettingsView() {
             ) : (
               <div className={styles.productList}>
                 {data.products.map((product, index) => (
-                  <div key={product.id} className={styles.productCard}>
-                    <div className={styles.productHeader}>
-                      <span className={styles.productNumber}>#{index + 1}</span>
-                      <button
-                        className={styles.removeButton}
-                        onClick={() => removeProduct(product.id)}
-                      >
-                        ✕
-                      </button>
-                    </div>
-                    <div className={styles.formGrid}>
-                      <div className={styles.formGroup}>
-                        <label>
-                          {currentConfig.hasEcommerce
-                            ? "Product Name *"
-                            : "Service Name *"}
-                        </label>
-                        <input
-                          type="text"
-                          value={product.name}
-                          onChange={(e) =>
-                            updateProduct(product.id, "name", e.target.value)
-                          }
-                          placeholder={
-                            currentConfig.hasEcommerce
-                              ? "e.g., Wireless Headphones"
-                              : "e.g., Haircut - Men"
-                          }
-                        />
-                      </div>
-                      <div className={styles.formGroup}>
-                        <label>Category</label>
-                        {currentConfig.hasEcommerce &&
-                        data.productCategories.length > 0 ? (
-                          <select
-                            value={product.category}
-                            onChange={(e) =>
-                              updateProduct(
-                                product.id,
-                                "category",
-                                e.target.value
-                              )
-                            }
-                          >
-                            <option value="">Select a category</option>
-                            {data.productCategories.map((cat, i) => (
-                              <option key={i} value={cat}>
-                                {cat}
-                              </option>
-                            ))}
-                          </select>
-                        ) : (
-                          <input
-                            type="text"
-                            value={product.category}
-                            onChange={(e) =>
-                              updateProduct(
-                                product.id,
-                                "category",
-                                e.target.value
-                              )
-                            }
-                            placeholder={
-                              currentConfig.hasEcommerce
-                                ? "e.g., Electronics"
-                                : "e.g., Hair"
-                            }
-                          />
-                        )}
-                      </div>
-                      <div className={styles.formGroup}>
-                        <label>Price (₹)</label>
-                        <input
-                          type="number"
-                          value={product.price || ""}
-                          onChange={(e) =>
-                            updateProduct(
-                              product.id,
-                              "price",
-                              parseFloat(e.target.value) || 0
-                            )
-                          }
-                          placeholder={
-                            currentConfig.hasEcommerce
-                              ? "e.g., 1999"
-                              : "e.g., 300"
-                          }
-                        />
-                      </div>
-                      <div className={styles.formGroup}>
-                        <label>
-                          {currentConfig.hasEcommerce
-                            ? "Product Link"
-                            : "Duration"}
-                        </label>
-                        <input
-                          type={currentConfig.hasEcommerce ? "url" : "text"}
-                          value={
-                            currentConfig.hasEcommerce
-                              ? product.imageUrl
-                              : product.duration
-                          }
-                          onChange={(e) =>
-                            updateProduct(
-                              product.id,
-                              currentConfig.hasEcommerce
-                                ? "imageUrl"
-                                : "duration",
-                              e.target.value
-                            )
-                          }
-                          placeholder={
-                            currentConfig.hasEcommerce
-                              ? "e.g., https://yourstore.com/product"
-                              : "e.g., 30 min"
-                          }
-                        />
-                      </div>
-                      {currentConfig.hasEcommerce && (
-                        <>
-                          <div className={styles.formGroup}>
-                            <label>Brand</label>
-                            <input
-                              type="text"
-                              value={product.brand || ""}
-                              onChange={(e) =>
-                                updateProduct(
-                                  product.id,
-                                  "brand",
-                                  e.target.value
-                                )
-                              }
-                              placeholder="e.g., Nike, Apple, Samsung"
-                            />
-                          </div>
-                          <div className={styles.formGroup}>
-                            <label>Sizes</label>
-                            <SizeMultiSelect
-                              selectedSizes={product.sizes || []}
-                              onChange={(sizes: string[]) =>
-                                updateProduct(product.id, "sizes", sizes)
-                              }
-                            />
-                          </div>
-                          <div className={styles.formGroup}>
-                            <label>Colors (comma separated)</label>
-                            <input
-                              type="text"
-                              value={(product.colors || []).join(", ")}
-                              onChange={(e) => {
-                                // Keep raw input while typing - don't filter until blur
-                                const rawValue = e.target.value;
-                                // Split but keep trailing comma to allow typing more
-                                const colors = rawValue
-                                  .split(",")
-                                  .map((s) => s.trim());
-                                updateProduct(product.id, "colors", colors);
-                              }}
-                              onBlur={(e) => {
-                                // Clean up empty values on blur
-                                const cleaned = (product.colors || []).filter(
-                                  Boolean
-                                );
-                                updateProduct(product.id, "colors", cleaned);
-                              }}
-                              placeholder="e.g., Red, Blue, Black, White"
-                            />
-                          </div>
-                          <div className={styles.formGroup}>
-                            <label>Materials (comma separated)</label>
-                            <input
-                              type="text"
-                              value={(product.materials || []).join(", ")}
-                              onChange={(e) => {
-                                // Keep raw input while typing - don't filter until blur
-                                const rawValue = e.target.value;
-                                // Split but keep trailing comma to allow typing more
-                                const materials = rawValue
-                                  .split(",")
-                                  .map((s) => s.trim());
-                                updateProduct(
-                                  product.id,
-                                  "materials",
-                                  materials
-                                );
-                              }}
-                              onBlur={(e) => {
-                                // Clean up empty values on blur
-                                const cleaned = (
-                                  product.materials || []
-                                ).filter(Boolean);
-                                updateProduct(product.id, "materials", cleaned);
-                              }}
-                              placeholder="e.g., Cotton, Polyester, Silk"
-                            />
-                          </div>
-                        </>
-                      )}
-                    </div>
-                  </div>
+                  <ProductCard
+                    key={product.id}
+                    product={product}
+                    index={index}
+                    isEcommerce={currentConfig.hasEcommerce}
+                    productCategories={data.productCategories}
+                    onUpdate={updateProduct}
+                    onRemove={removeProduct}
+                    onImageDeleted={() => {
+                      // Auto-save after image deletion to sync Firestore with Cloudinary
+                      // Use setTimeout to ensure React state update has processed
+                      setTimeout(() => handleSave(), 200);
+                    }}
+                  />
                 ))}
               </div>
             )}
@@ -2621,322 +2463,334 @@ export default function BotSettingsView() {
                     }`}
                   >
                     <p className={styles.capabilityDropdownText}>
-                      Enable AI-powered appointment scheduling. When enabled, your
-                      AI assistant can book appointments through WhatsApp and a new
-                      Appointments menu appears in the sidebar.
+                      Enable AI-powered appointment scheduling. When enabled,
+                      your AI assistant can book appointments through WhatsApp
+                      and a new Appointments menu appears in the sidebar.
                     </p>
                   </div>
                 </div>
 
                 {/* Appointment Configuration - Only show when enabled and expanded */}
                 {appointmentBookingEnabled && capabilityExpanded && (
-              <div className={styles.appointmentConfig}>
-                {/* Business Hours Configuration */}
-                <div
-                  className={styles.configCard}
-                  style={{ marginTop: "1.5rem" }}
-                >
-                  <h3 className={styles.configCardTitle}>Business Hours</h3>
-                  <p className={styles.configCardDescription}>
-                    Set your available hours for appointments
-                  </p>
-                  <div className={styles.businessHoursGrid}>
-                    <div className={styles.formGroup}>
-                      <label>Opens At</label>
-                      <input
-                        type="time"
-                        value={businessHours.start}
-                        onChange={(e) =>
-                          setBusinessHours({
-                            ...businessHours,
-                            start: e.target.value,
-                          })
-                        }
-                      />
-                    </div>
-                    <div className={styles.formGroup}>
-                      <label>Closes At</label>
-                      <input
-                        type="time"
-                        value={businessHours.end}
-                        onChange={(e) =>
-                          setBusinessHours({
-                            ...businessHours,
-                            end: e.target.value,
-                          })
-                        }
-                      />
-                    </div>
-                    <div className={styles.formGroup}>
-                      <label>Slot Duration</label>
-                      <select
-                        value={businessHours.duration}
-                        onChange={(e) =>
-                          setBusinessHours({
-                            ...businessHours,
-                            duration: parseInt(e.target.value),
-                          })
-                        }
-                      >
-                        <option value={15}>15 minutes</option>
-                        <option value={30}>30 minutes</option>
-                        <option value={45}>45 minutes</option>
-                        <option value={60}>1 hour</option>
-                        <option value={90}>1.5 hours</option>
-                        <option value={120}>2 hours</option>
-                      </select>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Services Configuration */}
-                <div
-                  className={styles.configCard}
-                  style={{ marginTop: "1rem" }}
-                >
-                  <div className={styles.configCardHeader}>
-                    <div>
-                      <h3 className={styles.configCardTitle}>Services</h3>
+                  <div className={styles.appointmentConfig}>
+                    {/* Business Hours Configuration */}
+                    <div
+                      className={styles.configCard}
+                      style={{ marginTop: "1.5rem" }}
+                    >
+                      <h3 className={styles.configCardTitle}>Business Hours</h3>
                       <p className={styles.configCardDescription}>
-                        Configure your services with duration and capacity per
-                        slot
+                        Set your available hours for appointments
                       </p>
-                    </div>
-                    <button className={styles.addButton} onClick={addService}>
-                      + Add Service
-                    </button>
-                  </div>
-
-                  <div className={styles.fieldBuilderList}>
-                    {services.map((service, index) => (
-                      <div key={service.id} className={styles.fieldBuilderItem}>
-                        <div
-                          className={styles.fieldBuilderContent}
-                          style={{ flex: 1 }}
-                        >
-                          <div className={styles.fieldBuilderRow}>
-                            <input
-                              type="text"
-                              placeholder="Service Name (e.g., Haircut, Consultation)"
-                              value={service.name}
-                              onChange={(e) =>
-                                updateService(service.id, {
-                                  name: e.target.value,
-                                })
-                              }
-                              className={styles.fieldLabelInput}
-                              style={{ flex: 2 }}
-                            />
-                            <div
-                              className={styles.formGroup}
-                              style={{ flex: 1, minWidth: "120px" }}
-                            >
-                              <label
-                                style={{
-                                  fontSize: "12px",
-                                  marginBottom: "4px",
-                                }}
-                              >
-                                Duration
-                              </label>
-                              <select
-                                value={service.duration}
-                                onChange={(e) =>
-                                  updateService(service.id, {
-                                    duration: parseInt(e.target.value),
-                                  })
-                                }
-                                className={styles.fieldTypeSelect}
-                              >
-                                <option value={15}>15 min</option>
-                                <option value={30}>30 min</option>
-                                <option value={45}>45 min</option>
-                                <option value={60}>1 hour</option>
-                                <option value={90}>1.5 hours</option>
-                                <option value={120}>2 hours</option>
-                              </select>
-                            </div>
-                            <div
-                              className={styles.formGroup}
-                              style={{ flex: 1, minWidth: "120px" }}
-                            >
-                              <label
-                                style={{
-                                  fontSize: "12px",
-                                  marginBottom: "4px",
-                                }}
-                              >
-                                Capacity/Slot
-                              </label>
-                              <input
-                                type="number"
-                                min={1}
-                                max={100}
-                                value={service.capacity}
-                                onChange={(e) =>
-                                  updateService(service.id, {
-                                    capacity: Math.max(
-                                      1,
-                                      parseInt(e.target.value) || 1
-                                    ),
-                                  })
-                                }
-                                className={styles.fieldTypeSelect}
-                                style={{ width: "100%" }}
-                              />
-                            </div>
-                            <button
-                              className={styles.removeFieldBtn}
-                              onClick={() => removeService(service.id)}
-                              title="Remove service"
-                            >
-                              ×
-                            </button>
-                          </div>
+                      <div className={styles.businessHoursGrid}>
+                        <div className={styles.formGroup}>
+                          <label>Opens At</label>
+                          <input
+                            type="time"
+                            value={businessHours.start}
+                            onChange={(e) =>
+                              setBusinessHours({
+                                ...businessHours,
+                                start: e.target.value,
+                              })
+                            }
+                          />
+                        </div>
+                        <div className={styles.formGroup}>
+                          <label>Closes At</label>
+                          <input
+                            type="time"
+                            value={businessHours.end}
+                            onChange={(e) =>
+                              setBusinessHours({
+                                ...businessHours,
+                                end: e.target.value,
+                              })
+                            }
+                          />
+                        </div>
+                        <div className={styles.formGroup}>
+                          <label>Slot Duration</label>
+                          <select
+                            value={businessHours.duration}
+                            onChange={(e) =>
+                              setBusinessHours({
+                                ...businessHours,
+                                duration: parseInt(e.target.value),
+                              })
+                            }
+                          >
+                            <option value={15}>15 minutes</option>
+                            <option value={30}>30 minutes</option>
+                            <option value={45}>45 minutes</option>
+                            <option value={60}>1 hour</option>
+                            <option value={90}>1.5 hours</option>
+                            <option value={120}>2 hours</option>
+                          </select>
                         </div>
                       </div>
-                    ))}
-                    {services.length === 0 && (
-                      <p
-                        style={{
-                          color: "#888",
-                          textAlign: "center",
-                          padding: "1rem",
-                        }}
-                      >
-                        No services configured. Add at least one service.
-                      </p>
-                    )}
-                  </div>
-                </div>
-
-                {/* Field Builder - Appointment Questions */}
-                <div
-                  className={styles.configCard}
-                  style={{ marginTop: "1rem" }}
-                >
-                  <div className={styles.configCardHeader}>
-                    <div>
-                      <h3 className={styles.configCardTitle}>
-                        Appointment Questions
-                      </h3>
-                      <p className={styles.configCardDescription}>
-                        Configure what information the AI will collect from
-                        customers
-                      </p>
                     </div>
-                    <button
-                      className={styles.addButton}
-                      onClick={addAppointmentField}
-                    >
-                      + Add Question
-                    </button>
-                  </div>
 
-                  <div className={styles.fieldBuilderList}>
-                    {appointmentFields
-                      .sort((a, b) => a.order - b.order)
-                      .map((field, index) => {
-                        return (
+                    {/* Services Configuration */}
+                    <div
+                      className={styles.configCard}
+                      style={{ marginTop: "1rem" }}
+                    >
+                      <div className={styles.configCardHeader}>
+                        <div>
+                          <h3 className={styles.configCardTitle}>Services</h3>
+                          <p className={styles.configCardDescription}>
+                            Configure your services with duration and capacity
+                            per slot
+                          </p>
+                        </div>
+                        <button
+                          className={styles.addButton}
+                          onClick={addService}
+                        >
+                          + Add Service
+                        </button>
+                      </div>
+
+                      <div className={styles.fieldBuilderList}>
+                        {services.map((service, index) => (
                           <div
-                            key={field.id}
+                            key={service.id}
                             className={styles.fieldBuilderItem}
                           >
-                            <div className={styles.fieldBuilderOrder}>
-                              <button
-                                className={styles.orderBtn}
-                                onClick={() => moveFieldUp(field.id)}
-                                disabled={index === 0}
-                                title="Move up"
-                              >
-                                ↑
-                              </button>
-                              <span className={styles.orderNumber}>
-                                {field.order}
-                              </span>
-                              <button
-                                className={styles.orderBtn}
-                                onClick={() => moveFieldDown(field.id)}
-                                disabled={
-                                  index === appointmentFields.length - 1
-                                }
-                                title="Move down"
-                              >
-                                ↓
-                              </button>
-                            </div>
-
-                            <div className={styles.fieldBuilderContent}>
+                            <div
+                              className={styles.fieldBuilderContent}
+                              style={{ flex: 1 }}
+                            >
                               <div className={styles.fieldBuilderRow}>
                                 <input
                                   type="text"
-                                  placeholder="Question/Field Label"
-                                  value={field.label}
+                                  placeholder="Service Name (e.g., Haircut, Consultation)"
+                                  value={service.name}
                                   onChange={(e) =>
-                                    updateAppointmentField(field.id, {
-                                      label: e.target.value,
+                                    updateService(service.id, {
+                                      name: e.target.value,
                                     })
                                   }
                                   className={styles.fieldLabelInput}
+                                  style={{ flex: 2 }}
                                 />
-                                <select
-                                  value={field.type}
-                                  onChange={(e) =>
-                                    updateAppointmentField(field.id, {
-                                      type: e.target
-                                        .value as AppointmentField["type"],
-                                    })
-                                  }
-                                  className={styles.fieldTypeSelect}
+                                <div
+                                  className={styles.formGroup}
+                                  style={{ flex: 1, minWidth: "120px" }}
                                 >
-                                  <option value="text">Text</option>
-                                  <option value="phone">Phone</option>
-                                  <option value="email">Email</option>
-                                  <option value="date">Date</option>
-                                  <option value="time">Time</option>
-                                  <option value="textarea">Long Text</option>
-                                  <option value="select">Dropdown</option>
-                                </select>
-                                <label className={styles.requiredToggle}>
-                                  <input
-                                    type="checkbox"
-                                    checked={field.required}
+                                  <label
+                                    style={{
+                                      fontSize: "12px",
+                                      marginBottom: "4px",
+                                    }}
+                                  >
+                                    Duration
+                                  </label>
+                                  <select
+                                    value={service.duration}
                                     onChange={(e) =>
-                                      updateAppointmentField(field.id, {
-                                        required: e.target.checked,
+                                      updateService(service.id, {
+                                        duration: parseInt(e.target.value),
                                       })
                                     }
+                                    className={styles.fieldTypeSelect}
+                                  >
+                                    <option value={15}>15 min</option>
+                                    <option value={30}>30 min</option>
+                                    <option value={45}>45 min</option>
+                                    <option value={60}>1 hour</option>
+                                    <option value={90}>1.5 hours</option>
+                                    <option value={120}>2 hours</option>
+                                  </select>
+                                </div>
+                                <div
+                                  className={styles.formGroup}
+                                  style={{ flex: 1, minWidth: "120px" }}
+                                >
+                                  <label
+                                    style={{
+                                      fontSize: "12px",
+                                      marginBottom: "4px",
+                                    }}
+                                  >
+                                    Capacity/Slot
+                                  </label>
+                                  <input
+                                    type="number"
+                                    min={1}
+                                    max={100}
+                                    value={service.capacity}
+                                    onChange={(e) =>
+                                      updateService(service.id, {
+                                        capacity: Math.max(
+                                          1,
+                                          parseInt(e.target.value) || 1
+                                        ),
+                                      })
+                                    }
+                                    className={styles.fieldTypeSelect}
+                                    style={{ width: "100%" }}
                                   />
-                                  <span>Required</span>
-                                </label>
+                                </div>
+                                <button
+                                  className={styles.removeFieldBtn}
+                                  onClick={() => removeService(service.id)}
+                                  title="Remove service"
+                                >
+                                  ×
+                                </button>
                               </div>
                             </div>
-
-                            <button
-                              className={styles.removeFieldBtn}
-                              onClick={() => removeAppointmentField(field.id)}
-                              title="Remove field"
-                            >
-                              ✕
-                            </button>
                           </div>
-                        );
-                      })}
-                  </div>
-                </div>
+                        ))}
+                        {services.length === 0 && (
+                          <p
+                            style={{
+                              color: "#888",
+                              textAlign: "center",
+                              padding: "1rem",
+                            }}
+                          >
+                            No services configured. Add at least one service.
+                          </p>
+                        )}
+                      </div>
+                    </div>
 
-                {/* Save Configuration Button */}
-                <div style={{ marginTop: "1.5rem", textAlign: "right" }}>
-                  <button
-                    className={styles.primaryButton}
-                    onClick={saveAppointmentConfig}
-                    disabled={capabilitiesLoading}
-                  >
-                    {capabilitiesLoading ? "Saving..." : "Save Configuration"}
-                  </button>
-                </div>
-              </div>
-            )}
+                    {/* Field Builder - Appointment Questions */}
+                    <div
+                      className={styles.configCard}
+                      style={{ marginTop: "1rem" }}
+                    >
+                      <div className={styles.configCardHeader}>
+                        <div>
+                          <h3 className={styles.configCardTitle}>
+                            Appointment Questions
+                          </h3>
+                          <p className={styles.configCardDescription}>
+                            Configure what information the AI will collect from
+                            customers
+                          </p>
+                        </div>
+                        <button
+                          className={styles.addButton}
+                          onClick={addAppointmentField}
+                        >
+                          + Add Question
+                        </button>
+                      </div>
+
+                      <div className={styles.fieldBuilderList}>
+                        {appointmentFields
+                          .sort((a, b) => a.order - b.order)
+                          .map((field, index) => {
+                            return (
+                              <div
+                                key={field.id}
+                                className={styles.fieldBuilderItem}
+                              >
+                                <div className={styles.fieldBuilderOrder}>
+                                  <button
+                                    className={styles.orderBtn}
+                                    onClick={() => moveFieldUp(field.id)}
+                                    disabled={index === 0}
+                                    title="Move up"
+                                  >
+                                    ↑
+                                  </button>
+                                  <span className={styles.orderNumber}>
+                                    {field.order}
+                                  </span>
+                                  <button
+                                    className={styles.orderBtn}
+                                    onClick={() => moveFieldDown(field.id)}
+                                    disabled={
+                                      index === appointmentFields.length - 1
+                                    }
+                                    title="Move down"
+                                  >
+                                    ↓
+                                  </button>
+                                </div>
+
+                                <div className={styles.fieldBuilderContent}>
+                                  <div className={styles.fieldBuilderRow}>
+                                    <input
+                                      type="text"
+                                      placeholder="Question/Field Label"
+                                      value={field.label}
+                                      onChange={(e) =>
+                                        updateAppointmentField(field.id, {
+                                          label: e.target.value,
+                                        })
+                                      }
+                                      className={styles.fieldLabelInput}
+                                    />
+                                    <select
+                                      value={field.type}
+                                      onChange={(e) =>
+                                        updateAppointmentField(field.id, {
+                                          type: e.target
+                                            .value as AppointmentField["type"],
+                                        })
+                                      }
+                                      className={styles.fieldTypeSelect}
+                                    >
+                                      <option value="text">Text</option>
+                                      <option value="phone">Phone</option>
+                                      <option value="email">Email</option>
+                                      <option value="date">Date</option>
+                                      <option value="time">Time</option>
+                                      <option value="textarea">
+                                        Long Text
+                                      </option>
+                                      <option value="select">Dropdown</option>
+                                    </select>
+                                    <label className={styles.requiredToggle}>
+                                      <input
+                                        type="checkbox"
+                                        checked={field.required}
+                                        onChange={(e) =>
+                                          updateAppointmentField(field.id, {
+                                            required: e.target.checked,
+                                          })
+                                        }
+                                      />
+                                      <span>Required</span>
+                                    </label>
+                                  </div>
+                                </div>
+
+                                <button
+                                  className={styles.removeFieldBtn}
+                                  onClick={() =>
+                                    removeAppointmentField(field.id)
+                                  }
+                                  title="Remove field"
+                                >
+                                  ✕
+                                </button>
+                              </div>
+                            );
+                          })}
+                      </div>
+                    </div>
+
+                    {/* Save Configuration Button */}
+                    <div style={{ marginTop: "1.5rem", textAlign: "right" }}>
+                      <button
+                        className={styles.primaryButton}
+                        onClick={saveAppointmentConfig}
+                        disabled={capabilitiesLoading}
+                      >
+                        {capabilitiesLoading
+                          ? "Saving..."
+                          : "Save Configuration"}
+                      </button>
+                    </div>
+                  </div>
+                )}
               </>
             )}
           </div>
@@ -3019,260 +2873,259 @@ export default function BotSettingsView() {
               </div>
             </div>
 
-              {/* Order Configuration - shown when expanded and order booking is enabled */}
-              {orderConfigExpanded && orderBookingEnabled && (
-                <div
-                  style={{
-                    marginTop: "1.5rem",
-                    padding: "1.5rem",
-                    background: "#1a1a1a",
-                    borderRadius: "12px",
-                    border: "1px solid #333",
-                  }}
-                >
-                  {/* Field Builder - Order Questions */}
-                  <div>
-                    <div
-                      style={{
-                        display: "flex",
-                        justifyContent: "space-between",
-                        alignItems: "flex-start",
-                        marginBottom: "1.5rem",
-                      }}
-                    >
-                      <div>
-                        <h3
-                          style={{
-                            fontSize: "16px",
-                            fontWeight: 600,
-                            color: "#fff",
-                            margin: 0,
-                          }}
-                        >
-                          Order Questions
-                        </h3>
-                        <p
-                          style={{
-                            fontSize: "13px",
-                            color: "#888",
-                            margin: "0.5rem 0 0 0",
-                          }}
-                        >
-                          Configure what information the AI will collect from
-                          customers when placing an order
-                        </p>
-                      </div>
-                      <button
-                        className={styles.addButton}
-                        onClick={addOrderField}
+            {/* Order Configuration - shown when expanded and order booking is enabled */}
+            {orderConfigExpanded && orderBookingEnabled && (
+              <div
+                style={{
+                  marginTop: "1.5rem",
+                  padding: "1.5rem",
+                  background: "#1a1a1a",
+                  borderRadius: "12px",
+                  border: "1px solid #333",
+                }}
+              >
+                {/* Field Builder - Order Questions */}
+                <div>
+                  <div
+                    style={{
+                      display: "flex",
+                      justifyContent: "space-between",
+                      alignItems: "flex-start",
+                      marginBottom: "1.5rem",
+                    }}
+                  >
+                    <div>
+                      <h3
+                        style={{
+                          fontSize: "16px",
+                          fontWeight: 600,
+                          color: "#fff",
+                          margin: 0,
+                        }}
                       >
-                        + Add Question
-                      </button>
+                        Order Questions
+                      </h3>
+                      <p
+                        style={{
+                          fontSize: "13px",
+                          color: "#888",
+                          margin: "0.5rem 0 0 0",
+                        }}
+                      >
+                        Configure what information the AI will collect from
+                        customers when placing an order
+                      </p>
                     </div>
-
-                    <div
-                      style={{
-                        display: "flex",
-                        flexDirection: "column",
-                        gap: "12px",
-                      }}
+                    <button
+                      className={styles.addButton}
+                      onClick={addOrderField}
                     >
-                      {orderFields
-                        .sort((a, b) => a.order - b.order)
-                        .map((field, index) => {
-                          return (
+                      + Add Question
+                    </button>
+                  </div>
+
+                  <div
+                    style={{
+                      display: "flex",
+                      flexDirection: "column",
+                      gap: "12px",
+                    }}
+                  >
+                    {orderFields
+                      .sort((a, b) => a.order - b.order)
+                      .map((field, index) => {
+                        return (
+                          <div
+                            key={field.id}
+                            style={{
+                              display: "flex",
+                              alignItems: "center",
+                              gap: "12px",
+                              padding: "16px",
+                              background: "#252525",
+                              borderRadius: "8px",
+                              border: "1px solid #333",
+                            }}
+                          >
+                            {/* Order Controls */}
                             <div
-                              key={field.id}
                               style={{
+                                display: "flex",
+                                flexDirection: "column",
+                                alignItems: "center",
+                                gap: "4px",
+                              }}
+                            >
+                              <button
+                                onClick={() => moveOrderFieldUp(field.id)}
+                                disabled={index === 0}
+                                style={{
+                                  width: "28px",
+                                  height: "28px",
+                                  background: "#333",
+                                  border: "1px solid #444",
+                                  borderRadius: "4px",
+                                  color: index === 0 ? "#555" : "#aaa",
+                                  cursor:
+                                    index === 0 ? "not-allowed" : "pointer",
+                                  fontSize: "12px",
+                                }}
+                                title="Move up"
+                              >
+                                ↑
+                              </button>
+                              <span
+                                style={{
+                                  fontSize: "12px",
+                                  fontWeight: 600,
+                                  color: "#888",
+                                }}
+                              >
+                                {field.order}
+                              </span>
+                              <button
+                                onClick={() => moveOrderFieldDown(field.id)}
+                                disabled={index === orderFields.length - 1}
+                                style={{
+                                  width: "28px",
+                                  height: "28px",
+                                  background: "#333",
+                                  border: "1px solid #444",
+                                  borderRadius: "4px",
+                                  color:
+                                    index === orderFields.length - 1
+                                      ? "#555"
+                                      : "#aaa",
+                                  cursor:
+                                    index === orderFields.length - 1
+                                      ? "not-allowed"
+                                      : "pointer",
+                                  fontSize: "12px",
+                                }}
+                                title="Move down"
+                              >
+                                ↓
+                              </button>
+                            </div>
+
+                            {/* Field Inputs */}
+                            <div
+                              style={{
+                                flex: 1,
                                 display: "flex",
                                 alignItems: "center",
                                 gap: "12px",
-                                padding: "16px",
-                                background: "#252525",
-                                borderRadius: "8px",
-                                border: "1px solid #333",
+                                flexWrap: "wrap",
                               }}
                             >
-                              {/* Order Controls */}
-                              <div
+                              <input
+                                type="text"
+                                placeholder="Question/Field Label"
+                                value={field.label}
+                                onChange={(e) =>
+                                  updateOrderField(field.id, {
+                                    label: e.target.value,
+                                  })
+                                }
                                 style={{
-                                  display: "flex",
-                                  flexDirection: "column",
-                                  alignItems: "center",
-                                  gap: "4px",
+                                  flex: "1 1 200px",
+                                  padding: "10px 12px",
+                                  background: "#1a1a1a",
+                                  border: "1px solid #444",
+                                  borderRadius: "6px",
+                                  color: "#fff",
+                                  fontSize: "14px",
+                                }}
+                              />
+                              <select
+                                value={field.type}
+                                onChange={(e) =>
+                                  updateOrderField(field.id, {
+                                    type: e.target.value as OrderField["type"],
+                                  })
+                                }
+                                style={{
+                                  padding: "10px 12px",
+                                  background: "#1a1a1a",
+                                  border: "1px solid #444",
+                                  borderRadius: "6px",
+                                  color: "#fff",
+                                  fontSize: "14px",
+                                  minWidth: "120px",
                                 }}
                               >
-                                <button
-                                  onClick={() => moveOrderFieldUp(field.id)}
-                                  disabled={index === 0}
-                                  style={{
-                                    width: "28px",
-                                    height: "28px",
-                                    background: "#333",
-                                    border: "1px solid #444",
-                                    borderRadius: "4px",
-                                    color: index === 0 ? "#555" : "#aaa",
-                                    cursor:
-                                      index === 0 ? "not-allowed" : "pointer",
-                                    fontSize: "12px",
-                                  }}
-                                  title="Move up"
-                                >
-                                  ↑
-                                </button>
-                                <span
-                                  style={{
-                                    fontSize: "12px",
-                                    fontWeight: 600,
-                                    color: "#888",
-                                  }}
-                                >
-                                  {field.order}
-                                </span>
-                                <button
-                                  onClick={() => moveOrderFieldDown(field.id)}
-                                  disabled={index === orderFields.length - 1}
-                                  style={{
-                                    width: "28px",
-                                    height: "28px",
-                                    background: "#333",
-                                    border: "1px solid #444",
-                                    borderRadius: "4px",
-                                    color:
-                                      index === orderFields.length - 1
-                                        ? "#555"
-                                        : "#aaa",
-                                    cursor:
-                                      index === orderFields.length - 1
-                                        ? "not-allowed"
-                                        : "pointer",
-                                    fontSize: "12px",
-                                  }}
-                                  title="Move down"
-                                >
-                                  ↓
-                                </button>
-                              </div>
-
-                              {/* Field Inputs */}
-                              <div
+                                <option value="text">Text</option>
+                                <option value="phone">Phone</option>
+                                <option value="email">Email</option>
+                                <option value="textarea">Long Text</option>
+                                <option value="select">Dropdown</option>
+                              </select>
+                              <label
                                 style={{
-                                  flex: 1,
                                   display: "flex",
                                   alignItems: "center",
-                                  gap: "12px",
-                                  flexWrap: "wrap",
+                                  gap: "6px",
+                                  color: "#aaa",
+                                  fontSize: "14px",
+                                  cursor: "pointer",
                                 }}
                               >
                                 <input
-                                  type="text"
-                                  placeholder="Question/Field Label"
-                                  value={field.label}
+                                  type="checkbox"
+                                  checked={field.required}
                                   onChange={(e) =>
                                     updateOrderField(field.id, {
-                                      label: e.target.value,
+                                      required: e.target.checked,
                                     })
                                   }
                                   style={{
-                                    flex: "1 1 200px",
-                                    padding: "10px 12px",
-                                    background: "#1a1a1a",
-                                    border: "1px solid #444",
-                                    borderRadius: "6px",
-                                    color: "#fff",
-                                    fontSize: "14px",
+                                    width: "18px",
+                                    height: "18px",
+                                    accentColor: "#22c55e",
                                   }}
                                 />
-                                <select
-                                  value={field.type}
-                                  onChange={(e) =>
-                                    updateOrderField(field.id, {
-                                      type: e.target
-                                        .value as OrderField["type"],
-                                    })
-                                  }
-                                  style={{
-                                    padding: "10px 12px",
-                                    background: "#1a1a1a",
-                                    border: "1px solid #444",
-                                    borderRadius: "6px",
-                                    color: "#fff",
-                                    fontSize: "14px",
-                                    minWidth: "120px",
-                                  }}
-                                >
-                                  <option value="text">Text</option>
-                                  <option value="phone">Phone</option>
-                                  <option value="email">Email</option>
-                                  <option value="textarea">Long Text</option>
-                                  <option value="select">Dropdown</option>
-                                </select>
-                                <label
-                                  style={{
-                                    display: "flex",
-                                    alignItems: "center",
-                                    gap: "6px",
-                                    color: "#aaa",
-                                    fontSize: "14px",
-                                    cursor: "pointer",
-                                  }}
-                                >
-                                  <input
-                                    type="checkbox"
-                                    checked={field.required}
-                                    onChange={(e) =>
-                                      updateOrderField(field.id, {
-                                        required: e.target.checked,
-                                      })
-                                    }
-                                    style={{
-                                      width: "18px",
-                                      height: "18px",
-                                      accentColor: "#22c55e",
-                                    }}
-                                  />
-                                  <span>Required</span>
-                                </label>
-                              </div>
-
-                              {/* Remove Button */}
-                              <button
-                                onClick={() => removeOrderField(field.id)}
-                                title="Remove field"
-                                style={{
-                                  width: "36px",
-                                  height: "36px",
-                                  background: "#3a2020",
-                                  border: "1px solid #5a3030",
-                                  borderRadius: "6px",
-                                  color: "#ff6b6b",
-                                  cursor: "pointer",
-                                  fontSize: "16px",
-                                  display: "flex",
-                                  alignItems: "center",
-                                  justifyContent: "center",
-                                }}
-                              >
-                                ✕
-                              </button>
+                                <span>Required</span>
+                              </label>
                             </div>
-                          );
-                        })}
-                    </div>
-                  </div>
 
-                  {/* Save Order Configuration Button */}
-                  <div style={{ marginTop: "1.5rem", textAlign: "right" }}>
-                    <button
-                      className={styles.primaryButton}
-                      onClick={saveOrderConfig}
-                      disabled={capabilitiesLoading}
-                    >
-                      {capabilitiesLoading ? "Saving..." : "Save Configuration"}
-                    </button>
+                            {/* Remove Button */}
+                            <button
+                              onClick={() => removeOrderField(field.id)}
+                              title="Remove field"
+                              style={{
+                                width: "36px",
+                                height: "36px",
+                                background: "#3a2020",
+                                border: "1px solid #5a3030",
+                                borderRadius: "6px",
+                                color: "#ff6b6b",
+                                cursor: "pointer",
+                                fontSize: "16px",
+                                display: "flex",
+                                alignItems: "center",
+                                justifyContent: "center",
+                              }}
+                            >
+                              ✕
+                            </button>
+                          </div>
+                        );
+                      })}
                   </div>
                 </div>
-              )}
+
+                {/* Save Order Configuration Button */}
+                <div style={{ marginTop: "1.5rem", textAlign: "right" }}>
+                  <button
+                    className={styles.primaryButton}
+                    onClick={saveOrderConfig}
+                    disabled={capabilitiesLoading}
+                  >
+                    {capabilitiesLoading ? "Saving..." : "Save Configuration"}
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -3288,6 +3141,24 @@ export default function BotSettingsView() {
           </button>
         </div>
       )}
+
+      {/* Product Add/Edit SlidePanel */}
+      <SlidePanel
+        isOpen={isProductPanelOpen}
+        onClose={handleProductCancel}
+        title={editingProduct ? "Edit Product" : "Add Product"}
+      >
+        <ProductForm
+          product={editingProduct || undefined}
+          isEcommerce={currentConfig.hasEcommerce}
+          productCategories={data.productCategories}
+          onSave={handleProductSave}
+          onCancel={handleProductCancel}
+          onImageDeleted={(updatedProduct) => {
+            handleProductSave(updatedProduct);
+          }}
+        />
+      </SlidePanel>
     </div>
   );
 }

@@ -470,10 +470,16 @@ def webhook():
                 button_id = button_reply.get('id', '')
                 button_title = button_reply.get('title', '')
                 
+                # Handle "Order This" button - triggers order flow with product
+                if button_id.startswith('order_'):
+                    # Extract product identifier from button id
+                    product_identifier = button_id.replace('order_', '')
+                    message_text = f"order {product_identifier}"
+                    logger.info(f"🛒 Order button clicked for product: {product_identifier}")
                 # Map button clicks to text responses for the AI
-                if button_id in ['confirm_yes', 'yes'] or 'yes' in button_title.lower():
+                elif button_id in ['confirm_yes', 'yes'] or 'yes' in button_title.lower():
                     message_text = 'yes'
-                elif button_id in ['confirm_no', 'no'] or 'no' in button_title.lower() or 'cancel' in button_title.lower():
+                elif button_id in ['confirm_no', 'no', 'cancel_order'] or 'no' in button_title.lower() or 'cancel' in button_title.lower():
                     message_text = 'no'
                 else:
                     message_text = button_title  # Use button title as the response
@@ -529,12 +535,17 @@ def webhook():
         # The business_data['business_id'] is set to Firebase UID in firebase_client.py
         # This ensures AI-booked appointments appear in the dashboard correctly
         # For Supabase operations that need business manager ID, use user_id or fetch separately
-        if SUPABASE_AVAILABLE and user_id and not business_data.get('business_id'):
-            # Only set if not already set by firebase_client
+        current_business_id = business_data.get('business_id')
+        needs_business_id = not current_business_id or current_business_id == "default" or len(current_business_id) < 10
+        
+        if SUPABASE_AVAILABLE and user_id and needs_business_id:
+            # Set from Firebase UID if not already set with a valid ID
             firebase_uid = get_firebase_uid_from_user_id(user_id) if get_firebase_uid_from_user_id else None
             if firebase_uid:
                 business_data['business_id'] = firebase_uid
                 logger.info(f"📝 Set business_id from Firebase UID: {firebase_uid[:10]}...")
+            else:
+                logger.warning(f"⚠️ Could not get Firebase UID for user_id: {user_id} - order persistence may fail")
         
         # Store Supabase business manager ID separately for analytics/message tracking
         if SUPABASE_AVAILABLE and user_id:
@@ -678,9 +689,73 @@ def webhook():
         # Send reply - check if we should use interactive buttons
         use_buttons = ai_metadata.get('use_buttons', False)
         buttons = ai_metadata.get('buttons', [])
+        product_cards = ai_metadata.get('product_cards', [])
         
         if credentials and credentials.get('access_token'):
             logger.info(f"🏢 Using credentials for: {credentials.get('business_name')}")
+            
+            # Send product images with "Order This" button in a SINGLE unified message
+            # Uses WhatsApp interactive message with image header (per Meta documentation)
+            # This provides a professional, cohesive user experience for conversational commerce
+            if product_cards:
+                cards_with_images = [c for c in product_cards if c.get('image_url')]
+                if cards_with_images:
+                    logger.info(f"🖼️🔘 Sending {len(cards_with_images)} unified product card(s) (image + button)...")
+                    
+                    for card in cards_with_images[:5]:  # Limit to 5 products
+                        image_url = card.get('image_url')
+                        name = card.get('name', 'Product')
+                        price = card.get('price', '')
+                        product_id = card.get('product_id', name)
+                        
+                        # Sanitize product_id for button ID: replace spaces with underscores
+                        # This ensures valid button IDs and proper matching in ai_brain
+                        safe_product_id = str(product_id).replace(' ', '_').replace('-', '_')
+                        
+                        # Build rich product details for body text
+                        body_parts = [f"*{name}*"]
+                        if price:
+                            body_parts.append(f"💰 ₹{price}")
+                        
+                        # Add sizes/colors if available for complete product info
+                        if card.get('sizes'):
+                            body_parts.append(f"📏 Sizes: {', '.join(card['sizes'][:4])}")
+                        if card.get('colors'):
+                            body_parts.append(f"🎨 Colors: {', '.join(card['colors'][:4])}")
+                        
+                        body_text = "\n".join(body_parts)
+                        
+                        # Single "Order This" button (no Cancel - user can simply ignore)
+                        # Use sanitized product_id (underscores instead of spaces)
+                        order_buttons = [
+                            {"id": f"order_{safe_product_id[:20]}", "title": "🛒 Order This"}
+                        ]
+                        
+                        # Send UNIFIED message: image header + product details + order button
+                        # This is the production-ready approach per WhatsApp Cloud API docs
+                        result = whatsapp_service.send_interactive_image_buttons(
+                            phone_number_id=credentials['phone_number_id'],
+                            access_token=credentials['access_token'],
+                            to=from_number,
+                            image_url=image_url,
+                            body_text=body_text,
+                            buttons=order_buttons,
+                            footer_text="Tap to place your order"
+                        )
+                        
+                        if result.get('success'):
+                            logger.info(f"✅ Sent unified product card for: {name}")
+                        else:
+                            logger.warning(f"⚠️ Failed to send product card: {result.get('error')}")
+                        
+                        time.sleep(0.3)  # Rate limit between messages
+                    
+                    # All product cards sent successfully
+                    send_result = {'success': True, 'message_id': 'product_cards_sent'}
+                    
+                    if send_result['success']:
+                        logger.info(f"✅ Product catalog sent to {from_number}")
+                        return jsonify({'status': 'ok'}), 200
             
             if use_buttons and buttons:
                 # Send interactive message with buttons
@@ -760,6 +835,38 @@ def set_business_data():
     """Set business data for AI responses."""
     try:
         data = request.get_json()
+        
+        # Normalize product data to ensure consistent field naming
+        # This handles both snake_case (from API) and camelCase (from Firestore)
+        products = data.get('products_services', [])
+        if products:
+            normalized_products = []
+            for p in products:
+                if isinstance(p, dict):
+                    normalized = {
+                        'id': p.get('id', ''),
+                        'sku': p.get('sku', ''),
+                        'name': p.get('name', ''),
+                        'category': p.get('category', ''),
+                        'description': p.get('description', ''),
+                        'price': p.get('price', 0),
+                        'price_unit': p.get('price_unit', p.get('priceUnit', 'INR')),
+                        'duration': p.get('duration', ''),
+                        'available': p.get('available', True),
+                        # Normalize image URL field: accept both snake_case and camelCase
+                        'imageUrl': p.get('imageUrl') or p.get('image_url') or p.get('image', ''),
+                        'imagePublicId': p.get('imagePublicId') or p.get('image_public_id', ''),
+                        'originalSize': p.get('originalSize') or p.get('original_size', 0),
+                        'optimizedSize': p.get('optimizedSize') or p.get('optimized_size', 0),
+                        'sizes': p.get('sizes', []),
+                        'colors': p.get('colors', []),
+                        'variants': p.get('variants', []),
+                        'brand': p.get('brand', ''),
+                        'materials': p.get('materials', []),
+                    }
+                    normalized_products.append(normalized)
+            data['products_services'] = normalized_products
+        
         BUSINESS_DATA_CACHE['current'] = data
         
         # Invalidate cache for this business
@@ -767,6 +874,7 @@ def set_business_data():
             cache_manager.invalidate_business(data['business_id'])
         
         logger.info(f"📊 Business data updated: {data.get('business_name', 'Unknown')}")
+        logger.info(f"   Products: {len(products)} items (normalized)")
         return jsonify({'success': True}), 200
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500

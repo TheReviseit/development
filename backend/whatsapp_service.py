@@ -205,6 +205,108 @@ class WhatsAppService:
                 'error': f'Unexpected error: {str(e)}'
             }
 
+    def send_image_message(
+        self,
+        phone_number_id: str,
+        access_token: str,
+        to: str,
+        image_url: str,
+        caption: str = None
+    ) -> Dict[str, Any]:
+        """
+        Send an image message via WhatsApp using a public URL.
+        
+        For customer-initiated conversations (within 24-hour window),
+        media messages can be sent without approved templates.
+        
+        Args:
+            phone_number_id: The sender's WhatsApp phone number ID
+            access_token: The Facebook/WhatsApp access token
+            to: Recipient phone number (with country code, no + sign)
+            image_url: Public URL of the image (Cloudinary optimized URL works best)
+            caption: Optional caption text (max 1024 chars)
+            
+        Returns:
+            Dict containing success status and response data
+        """
+        if not phone_number_id or not access_token:
+            return {
+                'success': False,
+                'error': 'Missing phone_number_id or access_token'
+            }
+        
+        if not image_url:
+            return {
+                'success': False,
+                'error': 'image_url is required'
+            }
+        
+        url = f'{self.base_url}/{phone_number_id}/messages'
+        
+        print(f"   🖼️ Sending image to {to}")
+        print(f"   📷 Image URL: {image_url[:60]}...")
+        
+        headers = {
+            'Authorization': f'Bearer {access_token}',
+            'Content-Type': 'application/json'
+        }
+        
+        # Build image payload
+        image_payload = {
+            'link': image_url
+        }
+        
+        # Add caption if provided (max 1024 chars per WhatsApp API)
+        if caption:
+            image_payload['caption'] = caption[:1024]
+        
+        payload = {
+            'messaging_product': 'whatsapp',
+            'recipient_type': 'individual',
+            'to': to,
+            'type': 'image',
+            'image': image_payload
+        }
+        
+        try:
+            response = requests.post(url, json=payload, headers=headers, timeout=15)
+            response_data = response.json()
+            
+            if response.status_code == 200:
+                print(f"   ✅ Image message sent successfully!")
+                return {
+                    'success': True,
+                    'message_id': response_data.get('messages', [{}])[0].get('id'),
+                    'data': response_data
+                }
+            else:
+                error_message = response_data.get('error', {}).get('message', 'Unknown error')
+                error_code = response_data.get('error', {}).get('code', 'N/A')
+                print(f"   ❌ Error: {error_message} (Code: {error_code})")
+                return {
+                    'success': False,
+                    'error': error_message,
+                    'error_code': error_code,
+                    'status_code': response.status_code,
+                    'data': response_data
+                }
+                
+        except requests.exceptions.Timeout:
+            return {
+                'success': False,
+                'error': 'Request timed out. Please try again.'
+            }
+        except requests.exceptions.RequestException as e:
+            return {
+                'success': False,
+                'error': f'Network error: {str(e)}'
+            }
+        except Exception as e:
+            return {
+                'success': False,
+                'error': f'Unexpected error: {str(e)}'
+            }
+
     def send_template_message(
         self,
         phone_number_id: str,
@@ -529,6 +631,165 @@ class WhatsAppService:
             
             if response.status_code == 200:
                 print(f"   ✅ Interactive buttons sent successfully!")
+                return {
+                    'success': True,
+                    'message_id': response_data.get('messages', [{}])[0].get('id'),
+                    'data': response_data
+                }
+            else:
+                error_message = response_data.get('error', {}).get('message', 'Unknown error')
+                error_code = response_data.get('error', {}).get('code', 'N/A')
+                print(f"   ❌ Error: {error_message} (Code: {error_code})")
+                return {
+                    'success': False,
+                    'error': error_message,
+                    'error_code': error_code,
+                    'status_code': response.status_code,
+                    'data': response_data
+                }
+                
+        except requests.exceptions.Timeout:
+            return {
+                'success': False,
+                'error': 'Request timed out. Please try again.'
+            }
+        except requests.exceptions.RequestException as e:
+            return {
+                'success': False,
+                'error': f'Network error: {str(e)}'
+            }
+        except Exception as e:
+            return {
+                'success': False,
+                'error': f'Unexpected error: {str(e)}'
+            }
+
+    def send_interactive_image_buttons(
+        self,
+        phone_number_id: str,
+        access_token: str,
+        to: str,
+        image_url: str,
+        body_text: str,
+        buttons: list,
+        footer_text: str = None
+    ) -> Dict[str, Any]:
+        """
+        Send an interactive message with an image header and reply buttons.
+        
+        This combines product image + details + action buttons in a SINGLE message,
+        providing a professional, unified user experience for conversational commerce.
+        
+        Per official WhatsApp Business Platform documentation:
+        - Interactive button messages support media headers (image, video, document)
+        - Maximum 3 reply buttons allowed
+        - Button title max 20 characters, button ID max 256 characters
+        - Body text max 1024 characters
+        - Footer text max 60 characters (optional)
+        - Can only be sent within 24-hour customer service window
+        
+        Args:
+            phone_number_id: The sender's WhatsApp phone number ID
+            access_token: The Facebook/WhatsApp access token
+            to: Recipient phone number (with country code, no + sign)
+            image_url: Public URL of the product image (must be HTTPS, accessible)
+            body_text: Product details text (name, price, attributes - max 1024 chars)
+            buttons: List of button dicts, e.g., [{"id": "order_123", "title": "Order This"}]
+                     Max 3 buttons, title max 20 chars, id max 256 chars
+            footer_text: Optional footer text (max 60 chars)
+            
+        Returns:
+            Dict containing success status and response data
+            
+        Example:
+            result = send_interactive_image_buttons(
+                phone_number_id="123456",
+                access_token="EAAx...",
+                to="919876543210",
+                image_url="https://cdn.example.com/product.jpg",
+                body_text="*Premium T-Shirt*\n💰 ₹599\n📏 Sizes: S, M, L, XL\n🎨 Colors: Red, Blue",
+                buttons=[{"id": "order_tshirt_001", "title": "🛒 Order This"}],
+                footer_text="Tap to place your order"
+            )
+        """
+        if not phone_number_id or not access_token:
+            return {
+                'success': False,
+                'error': 'Missing phone_number_id or access_token'
+            }
+        
+        if not image_url:
+            return {
+                'success': False,
+                'error': 'image_url is required for interactive image message'
+            }
+        
+        if not buttons or len(buttons) > 3:
+            return {
+                'success': False,
+                'error': 'Buttons required (1-3 buttons allowed)'
+            }
+        
+        url = f'{self.base_url}/{phone_number_id}/messages'
+        
+        print(f"   🖼️🔘 Sending interactive image+buttons to {to}")
+        print(f"   📷 Image: {image_url[:60]}...")
+        print(f"   🔧 Using Phone Number ID: {phone_number_id}")
+        
+        headers = {
+            'Authorization': f'Bearer {access_token}',
+            'Content-Type': 'application/json'
+        }
+        
+        # Build button objects for WhatsApp API
+        button_objects = []
+        for btn in buttons:
+            button_objects.append({
+                "type": "reply",
+                "reply": {
+                    "id": btn.get("id", btn.get("title", "button"))[:256],
+                    "title": btn.get("title", "Button")[:20]  # WhatsApp limit: 20 chars
+                }
+            })
+        
+        # Build interactive message payload with IMAGE HEADER
+        # This is the key difference - using "image" type header instead of "text"
+        interactive_payload = {
+            "type": "button",
+            "header": {
+                "type": "image",
+                "image": {
+                    "link": image_url
+                }
+            },
+            "body": {
+                "text": body_text[:1024]  # WhatsApp limit: 1024 chars for body
+            },
+            "action": {
+                "buttons": button_objects
+            }
+        }
+        
+        # Add optional footer
+        if footer_text:
+            interactive_payload["footer"] = {
+                "text": footer_text[:60]  # WhatsApp limit: 60 chars
+            }
+        
+        payload = {
+            'messaging_product': 'whatsapp',
+            'recipient_type': 'individual',
+            'to': to,
+            'type': 'interactive',
+            'interactive': interactive_payload
+        }
+        
+        try:
+            response = requests.post(url, json=payload, headers=headers, timeout=15)
+            response_data = response.json()
+            
+            if response.status_code == 200:
+                print(f"   ✅ Interactive image+buttons sent successfully!")
                 return {
                     'success': True,
                     'message_id': response_data.get('messages', [{}])[0].get('id'),
