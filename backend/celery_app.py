@@ -4,29 +4,50 @@ Handles async tasks like bulk messaging, analytics, image processing, etc.
 """
 
 import os
+import logging
 from celery import Celery
 from kombu import Queue, Exchange
+from dotenv import load_dotenv
+
+# Load environment variables from .env file
+load_dotenv()
+
+logger = logging.getLogger('reviseit.celery')
 
 # =============================================================================
 # Celery Configuration
 # =============================================================================
 
-# Redis URL from environment
+# Redis URL from environment (optional for development)
 REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379/1")
 
-# Create Celery app
-celery_app = Celery(
-    "whatsapp_chatbot",
-    broker=REDIS_URL,
-    backend=REDIS_URL,
-    include=[
-        "tasks.messaging",
-        "tasks.analytics",
-        "tasks.media",
-        "tasks.notifications",
-        "tasks.maintenance",
-    ]
-)
+# Create Celery app with graceful failure handling
+try:
+    celery_app = Celery(
+        "whatsapp_chatbot",
+        broker=REDIS_URL,
+        backend=REDIS_URL,
+        include=[
+            "tasks.messaging",
+            "tasks.analytics",
+            "tasks.media",
+            "tasks.notifications",
+            "tasks.maintenance",
+            "tasks.orders",  # Order processing tasks
+        ]
+    )
+    
+    # Test connection to verify Redis is available (don't wait long)
+    try:
+        # Try to ping Redis with short timeout
+        celery_app.broker_connection().ensure_connection(max_retries=1, timeout=2)
+        logger.info("✅ Celery initialized successfully with Redis")
+    except Exception as conn_error:
+        logger.warning(f"⚠️ Redis connection test failed: {conn_error}. Background tasks will run synchronously.")
+        
+except Exception as e:
+    celery_app = None
+    logger.warning(f"⚠️ Failed to initialize Celery: {e}. Background tasks will run synchronously.")
 
 # =============================================================================
 # Task Queues with Priorities
@@ -125,10 +146,24 @@ celery_app.conf.result_expires = 86400  # 24 hours
 celery_app.conf.task_default_retry_delay = 60  # 1 minute
 celery_app.conf.task_max_retries = 3
 
-# Exponential backoff
+# Broker connection: Fail fast if Redis unavailable (prevents retry storm)
+celery_app.conf.broker_connection_retry = False  # Don't retry broker connection
+celery_app.conf.broker_connection_retry_on_startup = False  # Don't retry on startup
+celery_app.conf.broker_connection_max_retries = 1  # Single attempt only
+
+# Exponential backoff for task retries (not broker connection)
 celery_app.conf.broker_transport_options = {
     "visibility_timeout": 3600,  # 1 hour
     "max_retries": 3,
+    "socket_timeout": 2,  # 2 second socket timeout
+    "socket_connect_timeout": 2,  # 2 second connection timeout
+}
+
+# Result backend: Fail fast if Redis unavailable
+celery_app.conf.result_backend_transport_options = {
+    "socket_timeout": 2,
+    "socket_connect_timeout": 2,
+    "max_connections": 10,
 }
 
 # =============================================================================

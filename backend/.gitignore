@@ -42,3 +42,8 @@ credentials/
 serviceAccountKey.json
 *-firebase-adminsdk-*.json
 
+# Google Cloud Service Account - NEVER COMMIT!
+*.json
+!package.json
+!package-lock.json
+!tsconfig.json

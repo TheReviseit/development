@@ -1,0 +1,10 @@
+# =============================================================================
+# Google Sheets Integration Dependencies
+# =============================================================================
+# Optional: Only needed if using Google Sheets sync for orders
+# Install with: pip install -r requirements_sheets.txt
+
+gspread>=6.0.0
+google-auth>=2.25.0
+google-auth-oauthlib>=1.2.0
+google-auth-httplib2>=0.2.0

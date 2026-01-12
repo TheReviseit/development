@@ -1502,7 +1502,7 @@ class AIBrain:
         Complete the order after user confirmation.
         
         Production safeguards:
-        - State lock to prevent mutation during persistence
+        - Database-backed idempotency to prevent duplicate webhooks
         - Deterministic idempotency key to prevent duplicates
         - Real database persistence via OrderService
         - Summary rendered from persisted record
@@ -1530,14 +1530,6 @@ class AIBrain:
             customer_phone = state.collected_fields.get("customer_phone", "")
             customer_address = state.collected_fields.get("customer_address", "")
             business_owner_id = state.flow_config.get("business_owner_id", "")
-            
-            # Log order details for debugging
-            logger.info(f"📦 Order details - business_owner_id: {business_owner_id}, customer: {customer_name}, phone: {customer_phone}, items: {len(items)}")
-            
-            # Validate business_owner_id - must be a valid UUID, not empty or "default"
-            if not business_owner_id or business_owner_id == "default" or len(business_owner_id) < 10:
-                logger.error(f"📦 Invalid business_owner_id: '{business_owner_id}' - cannot persist order to database")
-                raise ValueError(f"Invalid business_owner_id: {business_owner_id}")
             
             # Collect all custom fields
             order_fields = state.flow_config.get("order_fields", [])

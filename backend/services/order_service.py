@@ -349,7 +349,7 @@ class OrderService:
             )
     
     def _default_event_handler(self, event: OrderEvent) -> None:
-        """Default event handler - logs and queues for background processing."""
+        """Default event handler - queues for background processing OR executes synchronously."""
         logger.info(
             f"Order event: {event.event_type}",
             extra={
@@ -360,19 +360,73 @@ class OrderService:
             }
         )
         
-        # Queue for background processing (sheets sync, notifications)
+        # Try async processing (Celery), fallback to sync if unavailable
         try:
             from tasks.orders import process_order_event
-            process_order_event.delay(
+            
+            # Check if Celery is available and try to queue the task
+            if hasattr(process_order_event, 'delay'):
+                try:
+                    # Attempt to queue for async processing with timeout
+                    # Use apply_async with countdown=0 to fail fast if broker unavailable
+                    from kombu.exceptions import OperationalError
+                    
+                    result = process_order_event.apply_async(
+                        kwargs={
+                            'event_type': event.event_type,
+                            'order_id': event.order_id,
+                            'user_id': event.user_id,
+                            'data': event.data,
+                            'correlation_id': event.correlation_id,
+                        },
+                        countdown=0,
+                        expires=300,  # Expire after 5 minutes
+                    )
+                    logger.info(f"✅ Background task queued for order {event.order_id} (task_id: {result.id})")
+                    return  # Success - task queued
+                    
+                except (OperationalError, Exception) as queue_error:
+                    # Redis connection failed or other Celery error - fail fast, no retries
+                    error_type = type(queue_error).__name__
+                    logger.warning(
+                        f"⚠️ Failed to queue background task ({error_type}): {queue_error}. "
+                        f"Falling back to synchronous execution..."
+                    )
+            
+            # Fallback: Execute synchronously (no Redis/Celery or queueing failed)
+            logger.info(f"🔄 Executing order event synchronously for order {event.order_id}")
+            process_order_event(
                 event_type=event.event_type,
                 order_id=event.order_id,
                 user_id=event.user_id,
                 data=event.data,
                 correlation_id=event.correlation_id,
             )
-        except ImportError:
-            # Celery not available, log warning
-            logger.debug("Background task processing not available")
+            logger.info(f"✅ Order {event.order_id} processed synchronously")
+            
+        except ImportError as e:
+            # tasks.orders module not available
+            logger.error(
+                f"❌ Order processing unavailable (tasks.orders not found): {e}. "
+                f"Order {event.order_id} saved but will NOT sync to Google Sheets.",
+                extra={
+                    "order_id": event.order_id,
+                    "user_id": event.user_id,
+                    "correlation_id": event.correlation_id,
+                }
+            )
+        except Exception as e:
+            # Unexpected error during sync execution
+            logger.error(
+                f"❌ Failed to process order event for {event.order_id}: {e}",
+                extra={
+                    "order_id": event.order_id,
+                    "user_id": event.user_id,
+                    "correlation_id": event.correlation_id,
+                },
+                exc_info=True
+            )
+
 
 
 # =============================================================================

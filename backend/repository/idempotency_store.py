@@ -11,7 +11,7 @@ Features:
 
 import logging
 from typing import Optional, Dict, Any, Tuple
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from dataclasses import dataclass
 import json
 
@@ -33,7 +33,7 @@ class IdempotencyRecord:
         """Check if record has expired."""
         if not self.expires_at:
             return False
-        return datetime.utcnow() > self.expires_at
+        return datetime.now(timezone.utc) > self.expires_at
     
     def is_completed(self) -> bool:
         """Check if operation completed successfully."""
@@ -139,7 +139,7 @@ class IdempotencyStore:
         Uses upsert with conflict handling for atomicity.
         """
         ttl = ttl_hours or self.DEFAULT_TTL_HOURS
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         expires_at = now + timedelta(hours=ttl)
         
         try:
@@ -220,7 +220,7 @@ class IdempotencyStore:
     def cleanup_expired(self) -> int:
         """Clean up expired records. Returns count deleted."""
         try:
-            now = datetime.utcnow().isoformat()
+            now = datetime.now(timezone.utc).isoformat()
             result = self.db.table(self.TABLE_NAME).delete().lt(
                 "expires_at", now
             ).execute()
@@ -281,7 +281,7 @@ class InMemoryIdempotencyStore(IdempotencyStore):
             return False
         
         ttl = ttl_hours or self.DEFAULT_TTL_HOURS
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         
         self._store[composite_key] = IdempotencyRecord(
             key=key,

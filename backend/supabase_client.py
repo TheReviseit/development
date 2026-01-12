@@ -695,7 +695,7 @@ def get_user_push_tokens(user_id: str) -> list[str]:
     Fetch all active FCM push tokens for a user.
     
     Args:
-        user_id: The Supabase user UUID
+        user_id: The Supabase user UUID (NOT Firebase UID)
         
     Returns:
         List of FCM token strings
@@ -706,6 +706,7 @@ def get_user_push_tokens(user_id: str) -> list[str]:
     
     try:
         # Fetch tokens from push_subscriptions table
+        # NOTE: user_id MUST be a Supabase UUID, not Firebase UID
         result = client.table('push_subscriptions').select('fcm_token').eq(
             'user_id', user_id
         ).execute()
@@ -715,7 +716,12 @@ def get_user_push_tokens(user_id: str) -> list[str]:
             print(f"🔑 Found {len(tokens)} push tokens for user {user_id[:8]}...")
             return tokens
     except Exception as e:
-        print(f"⚠️ Error fetching push tokens for user {user_id}: {e}")
+        error_str = str(e)
+        if 'invalid input syntax for type uuid' in error_str:
+            print(f"⚠️ Error fetching push tokens for user {user_id}: {e}")
+            print(f"   Hint: user_id appears to be Firebase UID, not Supabase UUID. Notifications skipped.")
+        else:
+            print(f"⚠️ Error fetching push tokens for user {user_id}: {e}")
         
     return []
 

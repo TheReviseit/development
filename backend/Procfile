@@ -28,7 +28,7 @@ web: gunicorn app:app --bind 0.0.0.0:$PORT --workers 4 --threads 4 --worker-clas
 
 # Uncomment when using Celery for background processing
 
-# worker: celery -A celery_app worker --loglevel=info --concurrency=4 -Q high,default,low
+worker: celery -A celery_app worker --loglevel=info --concurrency=2 --pool=solo -Q high,default,low
 
 # Beat scheduler for periodic tasks (optional)
 

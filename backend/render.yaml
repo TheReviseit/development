@@ -39,3 +39,30 @@ services:
         sync: false
       - key: FIREBASE_PROJECT_ID
         sync: false
+      - key: REDIS_URL
+        sync: false # Set in dashboard (Redis Cloud connection string)
+      - key: GOOGLE_SHEETS_CREDENTIALS
+        sync: false # Set in dashboard (JSON service account key)
+
+  # Celery Worker for Background Tasks (Google Sheets sync, notifications, etc.)
+  - type: worker
+    name: reviseit-celery-worker
+    runtime: python
+    region: singapore
+    rootDir: backend
+    buildCommand: pip install -r requirements.txt
+    startCommand: celery -A celery_app worker --loglevel=info --concurrency=2 --pool=solo -Q high,default,low
+    plan: free
+    envVars:
+      - key: FLASK_ENV
+        value: production
+      - key: REDIS_URL
+        sync: false
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: GOOGLE_SHEETS_CREDENTIALS
+        sync: false
+      - key: FIREBASE_SERVICE_ACCOUNT_KEY
+        sync: false

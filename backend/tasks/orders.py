@@ -22,6 +22,14 @@ except ImportError:
     CELERY_AVAILABLE = False
     celery_app = None
 
+# Import gspread for exception handling
+try:
+    import gspread
+    GSPREAD_AVAILABLE = True
+except ImportError:
+    GSPREAD_AVAILABLE = False
+    gspread = None
+
 logger = logging.getLogger('reviseit.tasks.orders')
 
 
@@ -244,37 +252,118 @@ def _get_sheets_config(user_id: str) -> Optional[Dict[str, Any]]:
     import os
     import re
     
+    logger.info(f"📊 [Sheets Config] Fetching configuration for user: {user_id}")
+    
     try:
         from supabase_client import get_supabase_client
         client = get_supabase_client()
         
         if not client:
+            logger.error("❌ [Sheets Config] Failed to get Supabase client")
             return None
         
-        # Query using the correct field names (order_sheet_url, order_sheet_sync_enabled)
+        # Query BOTH old and new field names for compatibility
+        # Frontend uses: order_sheet_url, order_sheet_sync_enabled
+        # Migration 007 created: sheets_sync_enabled, sheets_spreadsheet_id
+        logger.debug(f"📊 [Sheets Config] Querying ai_capabilities table for user {user_id}")
         result = client.table("ai_capabilities").select(
-            "order_sheet_url, order_sheet_sync_enabled"
+            "order_sheet_url, order_sheet_sync_enabled, sheets_sync_enabled, sheets_spreadsheet_id, sheets_sheet_name"
         ).eq("user_id", user_id).single().execute()
         
         if not result.data:
-            return {"enabled": False}
+            logger.warning(f"⚠️ [Sheets Config] No ai_capabilities record found for user {user_id}")
+            return {"enabled": False, "reason": "no_config"}
         
+        # Try frontend fields first (order_sheet_url, order_sheet_sync_enabled)
         sheet_url = result.data.get("order_sheet_url")
-        sync_enabled = result.data.get("order_sheet_sync_enabled", False)
+        sync_enabled_frontend = result.data.get("order_sheet_sync_enabled", False)
         
-        if not sync_enabled or not sheet_url:
-            logger.debug(f"Sheets sync not enabled for user {user_id}: sync_enabled={sync_enabled}, has_url={bool(sheet_url)}")
-            return {"enabled": False}
+        # Try backend fields (sheets_sync_enabled, sheets_spreadsheet_id)
+        sync_enabled_backend = result.data.get("sheets_sync_enabled", False)
+        spreadsheet_id_direct = result.data.get("sheets_spreadsheet_id")
+        sheet_name = result.data.get("sheets_sheet_name", "Orders")
         
-        # Extract spreadsheet ID from URL
-        # URL format: https://docs.google.com/spreadsheets/d/{SPREADSHEET_ID}/edit...
-        spreadsheet_id = None
-        match = re.search(r'/spreadsheets/d/([a-zA-Z0-9-_]+)', sheet_url)
-        if match:
-            spreadsheet_id = match.group(1)
+        # Merge sync enabled from both sources
+        sync_enabled = sync_enabled_frontend or sync_enabled_backend
+        
+        logger.info(f"📊 [Sheets Config] Retrieved from DB: "
+                   f"sync_enabled={sync_enabled}, "
+                   f"has_url={bool(sheet_url)}, "
+                   f"has_direct_id={bool(spreadsheet_id_direct)}")
+        
+        if not sync_enabled:
+            logger.info(f"📊 [Sheets Config] Sheets sync is disabled for user {user_id}")
+            return {"enabled": False, "reason": "sync_disabled"}
+        
+        # Determine spreadsheet_id (prefer direct ID, fallback to extracting from URL)
+        final_spreadsheet_id = None
+        
+        if spreadsheet_id_direct:
+            # Direct spreadsheet ID from DB (backend field)
+            final_spreadsheet_id = spreadsheet_id_direct
+            logger.info(f"📊 [Sheets Config] Using direct spreadsheet ID from DB")
+        elif sheet_url:
+            # Extract spreadsheet ID from URL (frontend field)
+            # URL format: https://docs.google.com/spreadsheets/d/{SPREADSHEET_ID}/edit...
+            match = re.search(r'/spreadsheets/d/([a-zA-Z0-9-_]+)', sheet_url)
+            if match:
+                final_spreadsheet_id = match.group(1)
+                logger.info(f"📊 [Sheets Config] Extracted spreadsheet ID from URL: {final_spreadsheet_id[:20]}...")
+            else:
+                logger.error(f"❌ [Sheets Config] Could not extract spreadsheet ID from URL: {sheet_url[:50]}...")
+                return {"enabled": False, "reason": "invalid_url"}
         else:
-            logger.warning(f"Could not extract spreadsheet ID from URL: {sheet_url[:50]}...")
-            return {"enabled": False}
+            logger.warning(f"⚠️ [Sheets Config] No spreadsheet_id or URL in database for user {user_id}")
+            return {"enabled": False, "reason": "no_spreadsheet_id"}
+        
+        # Get credentials - priority order: ENV → Firebase fallback
+        credentials = None
+        credential_source = None
+        
+        # Option 1: Shared service account from environment variable
+        credentials_json = os.getenv("GOOGLE_SHEETS_CREDENTIALS")
+        if credentials_json:
+            try:
+                import json
+                credentials = json.loads(credentials_json)
+                credential_source = "env_var"
+                logger.info("📊 [Sheets Config] Using shared credentials from GOOGLE_SHEETS_CREDENTIALS env var")
+            except Exception as e:
+                logger.error(f"❌ [Sheets Config] Failed to parse GOOGLE_SHEETS_CREDENTIALS env var: {e}")
+        
+        # Option 2: Try using Firebase service account (if it has Sheets API access)
+        if not credentials:
+            firebase_creds = os.getenv("FIREBASE_SERVICE_ACCOUNT_KEY")
+            if firebase_creds:
+                try:
+                    import json
+                    import base64
+                    creds_json = base64.b64decode(firebase_creds).decode('utf-8')
+                    credentials = json.loads(creds_json)
+                    credential_source = "firebase"
+                    logger.info("📊 [Sheets Config] Using Firebase service account for Google Sheets")
+                except Exception as e:
+                    logger.warning(f"⚠️ [Sheets Config] Failed to parse Firebase credentials for Sheets: {e}")
+        
+        if not credentials:
+            logger.error(
+                "❌ [Sheets Config] No Google Sheets credentials available. "
+                "Set GOOGLE_SHEETS_CREDENTIALS env var. "
+                f"User: {user_id}"
+            )
+            return {"enabled": False, "reason": "no_credentials"}
+        
+        logger.info(f"✅ [Sheets Config] Configuration complete for user {user_id}: "
+                   f"spreadsheet_id={final_spreadsheet_id[:20]}..., "
+                   f"sheet_name={sheet_name}, credential_source={credential_source}")
+        
+        return {
+            "enabled": True,
+            "spreadsheet_id": final_spreadsheet_id,
+            "sheet_name": sheet_name,
+            "credentials": credentials,
+            "credential_source": credential_source,
+        }
         
         # Get credentials - try shared service account from env first
         credentials = None
@@ -314,38 +403,67 @@ def _get_sheets_config(user_id: str) -> Optional[Dict[str, Any]]:
         }
         
     except Exception as e:
-        logger.warning(f"Could not get sheets config: {e}")
+        logger.error(f"❌ [Sheets Config] Unexpected error getting config for user {user_id}: {e}", exc_info=True)
         return None
+
+
 
 
 def _get_sheets_client(config: Dict[str, Any]):
     """Get Google Sheets API client."""
+    logger.info(f"📊 [Sheets Client] Creating Google Sheets client (credential_source={config.get('credential_source', 'unknown')})")
+    
     try:
         import gspread
         from google.oauth2.service_account import Credentials
         
+        logger.debug("📊 [Sheets Client] Successfully imported gspread and google.auth packages")
+        
         credentials_data = config.get("credentials")
         if not credentials_data:
+            logger.error("❌ [Sheets Client] No credentials provided in config")
             return None
+        
+        # Validate credential structure
+        if not isinstance(credentials_data, dict):
+            logger.error(f"❌ [Sheets Client] Credentials must be a dict, got {type(credentials_data)}")
+            return None
+        
+        required_fields = ["type", "project_id", "private_key", "client_email"]
+        missing_fields = [f for f in required_fields if f not in credentials_data]
+        if missing_fields:
+            logger.error(f"❌ [Sheets Client] Credentials missing required fields: {missing_fields}")
+            return None
+        
+        logger.info(f"📊 [Sheets Client] Valid credentials structure detected "
+                   f"(project_id={credentials_data.get('project_id', 'unknown')[:30]}...)")
         
         scopes = [
             'https://www.googleapis.com/auth/spreadsheets',
             'https://www.googleapis.com/auth/drive',
         ]
         
+        logger.debug(f"📊 [Sheets Client] Creating credentials with scopes: {scopes}")
         credentials = Credentials.from_service_account_info(
             credentials_data,
             scopes=scopes,
         )
         
-        return gspread.authorize(credentials)
+        logger.debug(f"📊 [Sheets Client] Authorizing gspread client with service account: "
+                    f"{credentials_data.get('client_email', 'unknown')}")
+        client = gspread.authorize(credentials)
         
-    except ImportError:
-        logger.warning("gspread not installed, sheets sync unavailable")
+        logger.info("✅ [Sheets Client] Google Sheets client created successfully")
+        return client
+        
+    except ImportError as e:
+        logger.error(f"❌ [Sheets Client] Required package not installed: {e}. "
+                    f"Run: pip install gspread google-auth google-auth-oauthlib google-auth-httplib2")
         return None
     except Exception as e:
-        logger.error(f"Failed to create sheets client: {e}")
+        logger.error(f"❌ [Sheets Client] Failed to create sheets client: {e}", exc_info=True)
         return None
+
 
 
 def _format_order_for_sheets(data: Dict[str, Any]) -> List[Any]:
@@ -377,27 +495,104 @@ def _upsert_sheet_row(
     row_data: List[Any],
 ) -> bool:
     """Insert or update row in Google Sheet (idempotent)."""
+    logger.info(f"📊 [Sheets Upsert] Starting upsert for order {order_id} to "
+               f"spreadsheet {spreadsheet_id[:20]}..., sheet '{sheet_name}'")
     try:
-        sheet = client.open_by_key(spreadsheet_id).worksheet(sheet_name)
+        logger.debug(f"📊 [Sheets Upsert] Opening spreadsheet by key: {spreadsheet_id[:20]}...")
+        spreadsheet = client.open_by_key(spreadsheet_id)
+        logger.debug(f"📊 [Sheets Upsert] Successfully opened spreadsheet: {spreadsheet.title}")
+        
+        logger.debug(f"📊 [Sheets Upsert] Accessing worksheet: {sheet_name}")
+        sheet = spreadsheet.worksheet(sheet_name)
+        logger.info(f"📊 [Sheets Upsert] Successfully accessed worksheet '{sheet_name}' "
+                   f"({sheet.row_count} rows, {sheet.col_count} cols)")
         
         # Try to find existing row with this order ID
+        logger.debug(f"📊 [Sheets Upsert] Searching for existing order ID: {order_id}")
         try:
             cell = sheet.find(order_id)
             if cell:
                 # Update existing row
                 row_num = cell.row
-                sheet.update(f"A{row_num}:I{row_num}", [row_data])
+                logger.info(f"📊 [Sheets Upsert] Found existing order at row {row_num}, updating...")
+                range_notation = f"A{row_num}:I{row_num}"
+                logger.debug(f"📊 [Sheets Upsert] Updating range: {range_notation}")
+                sheet.update(range_notation, [row_data])
+                logger.info(f"✅ [Sheets Upsert] Successfully updated existing order {order_id} at row {row_num}")
                 return True
-        except Exception:
-            pass  # Not found, will append
+        except gspread.exceptions.CellNotFound:
+            logger.debug(f"📊 [Sheets Upsert] Order ID not found, will append new row")
+        except Exception as find_error:
+            logger.warning(f"⚠️ [Sheets Upsert] Error during find operation: {find_error}, will append new row")
         
         # Append new row
+        logger.info(f"📊 [Sheets Upsert] Appending new row for order {order_id}")
+        logger.debug(f"📊 [Sheets Upsert] Row data: {row_data}")
         sheet.append_row(row_data)
+        logger.info(f"✅ [Sheets Upsert] Successfully appended new order {order_id}")
         return True
         
-    except Exception as e:
-        logger.error(f"Failed to upsert sheet row: {e}")
+    except gspread.exceptions.WorksheetNotFound:
+        # Auto-create the missing worksheet
+        logger.warning(f"⚠️ [Sheets Upsert] Worksheet '{sheet_name}' not found in spreadsheet {spreadsheet_id[:20]}...")
+        logger.info(f"🔧 [Sheets Upsert] Attempting to auto-create worksheet '{sheet_name}' with headers...")
+        
+        try:
+            # Create new worksheet with appropriate size
+            new_sheet = spreadsheet.add_worksheet(
+                title=sheet_name,
+                rows=1000,  # Start with 1000 rows
+                cols=9      # 9 columns for our data
+            )
+            
+            # Add header row
+            headers = [
+                "Order ID",
+                "Date", 
+                "Customer",
+                "Phone",
+                "Items",
+                "Total Qty",
+                "Status",
+                "Source",
+                "Notes"
+            ]
+            new_sheet.update('A1:I1', [headers])
+            
+            # Format header row (bold)
+            new_sheet.format('A1:I1', {
+                "textFormat": {"bold": True},
+                "backgroundColor": {"red": 0.9, "green": 0.9, "blue": 0.9}
+            })
+            
+            logger.info(f"✅ [Sheets Upsert] Successfully created worksheet '{sheet_name}' with headers")
+            
+            # Retry the append operation
+            logger.info(f"📊 [Sheets Upsert] Retrying append for order {order_id} on new worksheet")
+            new_sheet.append_row(row_data)
+            logger.info(f"✅ [Sheets Upsert] Successfully appended order {order_id} to new worksheet")
+            return True
+            
+        except Exception as create_error:
+            logger.error(
+                f"❌ [Sheets Upsert] Failed to auto-create worksheet '{sheet_name}': {create_error}. "
+                f"Please manually create a sheet named '{sheet_name}' in the spreadsheet.",
+                exc_info=True
+            )
+            return False
+    except gspread.exceptions.SpreadsheetNotFound:
+        logger.error(f"❌ [Sheets Upsert] Spreadsheet not found: {spreadsheet_id[:20]}... "
+                    f"Check if the spreadsheet exists and service account has access")
         return False
+    except gspread.exceptions.APIError as api_error:
+        logger.error(f"❌ [Sheets Upsert] Google Sheets API error: {api_error}. "
+                    f"Status: {getattr(api_error.response, 'status_code', 'unknown')}, "
+                    f"Details: {getattr(api_error, 'message', str(api_error))}")
+        return False
+    except Exception as e:
+        logger.error(f"❌ [Sheets Upsert] Failed to upsert sheet row for order {order_id}: {e}", exc_info=True)
+        return False
+
 
 
 # =============================================================================
