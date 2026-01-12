@@ -636,73 +636,180 @@ export default function OrdersPage() {
             </button>
           </div>
         ) : (
-          <table className={styles.ordersTable}>
-            <thead>
-              <tr>
-                <th>Customer</th>
-                <th>Items</th>
-                <th>Status</th>
-                <th>Source</th>
-                <th>Date</th>
-                <th>Actions</th>
-              </tr>
-            </thead>
-            <tbody>
+          <>
+            <table className={styles.ordersTable}>
+              <thead>
+                <tr>
+                  <th>Customer</th>
+                  <th>Items</th>
+                  <th>Status</th>
+                  <th>Source</th>
+                  <th>Date</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filteredOrders.map((order) => (
+                  <tr key={order.id} onClick={() => handleOpenModal(order)}>
+                    <td>
+                      <span className={styles.customerName}>
+                        {order.customer_name}
+                      </span>
+                    </td>
+                    <td>
+                      <div className={styles.itemsList}>
+                        {order.items.slice(0, 3).map((item, idx) => (
+                          <span key={idx} className={styles.itemName}>
+                            {item.name}
+                            {idx < Math.min(order.items.length, 3) - 1
+                              ? ", "
+                              : ""}
+                          </span>
+                        ))}
+                        {order.items.length > 3 && (
+                          <span className={styles.moreItems}>
+                            +{order.items.length - 3} more
+                          </span>
+                        )}
+                      </div>
+                    </td>
+                    <td>
+                      <span
+                        className={`${styles.statusBadge} ${
+                          styles[order.status]
+                        }`}
+                      >
+                        {order.status}
+                      </span>
+                    </td>
+                    <td>
+                      <span
+                        className={`${styles.sourceBadge} ${
+                          styles[order.source]
+                        }`}
+                      >
+                        {order.source === "ai" ? "🤖 AI" : "Manual"}
+                      </span>
+                    </td>
+                    <td>
+                      <span className={styles.orderDate}>
+                        {formatDate(order.created_at)}
+                      </span>
+                    </td>
+                    <td onClick={(e) => e.stopPropagation()}>
+                      <div className={styles.actionButtons}>
+                        <select
+                          className={styles.statusSelect}
+                          value={order.status}
+                          onChange={(e) =>
+                            handleStatusChange(order, e.target.value)
+                          }
+                          aria-label="Change order status"
+                        >
+                          {STATUS_OPTIONS.map((opt) => (
+                            <option key={opt.value} value={opt.value}>
+                              {opt.label}
+                            </option>
+                          ))}
+                        </select>
+                        <button
+                          className={`${styles.actionBtn} ${styles.danger}`}
+                          onClick={() => handleCancelOrder(order)}
+                          title="Cancel order"
+                          aria-label="Cancel order"
+                        >
+                          <svg
+                            width="14"
+                            height="14"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="2"
+                          >
+                            <line
+                              x1="18"
+                              y1="6"
+                              x2="6"
+                              y2="18"
+                              strokeLinecap="round"
+                            />
+                            <line
+                              x1="6"
+                              y1="6"
+                              x2="18"
+                              y2="18"
+                              strokeLinecap="round"
+                            />
+                          </svg>
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+
+            {/* Mobile Order Cards - shown on screens < 768px */}
+            <div className={styles.mobileOrderCards}>
               {filteredOrders.map((order) => (
-                <tr key={order.id} onClick={() => handleOpenModal(order)}>
-                  <td>
-                    <span className={styles.customerName}>
+                <div
+                  key={order.id}
+                  className={styles.orderCard}
+                  onClick={() => handleOpenModal(order)}
+                  role="button"
+                  tabIndex={0}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      handleOpenModal(order);
+                    }
+                  }}
+                >
+                  <div className={styles.orderCardHeader}>
+                    <span className={styles.orderCardCustomer}>
                       {order.customer_name}
                     </span>
-                  </td>
-                  <td>
-                    <div className={styles.itemsList}>
-                      {order.items.slice(0, 3).map((item, idx) => (
-                        <span key={idx} className={styles.itemName}>
-                          {item.name}
-                          {idx < Math.min(order.items.length, 3) - 1
-                            ? ", "
-                            : ""}
-                        </span>
-                      ))}
-                      {order.items.length > 3 && (
-                        <span className={styles.moreItems}>
-                          +{order.items.length - 3} more
-                        </span>
-                      )}
-                    </div>
-                  </td>
-                  <td>
-                    <span
-                      className={`${styles.statusBadge} ${
-                        styles[order.status]
-                      }`}
-                    >
-                      {order.status}
-                    </span>
-                  </td>
-                  <td>
-                    <span
-                      className={`${styles.sourceBadge} ${
-                        styles[order.source]
-                      }`}
-                    >
-                      {order.source === "ai" ? "🤖 AI" : "Manual"}
-                    </span>
-                  </td>
-                  <td>
-                    <span className={styles.orderDate}>
+                    <span className={styles.orderCardDate}>
                       {formatDate(order.created_at)}
                     </span>
-                  </td>
-                  <td onClick={(e) => e.stopPropagation()}>
-                    <div className={styles.actionButtons}>
+                  </div>
+                  <div className={styles.orderCardItems}>
+                    {order.items.map((item, idx) => (
+                      <span key={idx}>
+                        {item.quantity}× {item.name}
+                        {item.size ? ` (${item.size})` : ""}
+                        {item.color ? ` - ${item.color}` : ""}
+                        {idx < order.items.length - 1 ? ", " : ""}
+                      </span>
+                    ))}
+                  </div>
+                  <div
+                    className={styles.orderCardFooter}
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <div className={styles.orderCardBadges}>
+                      <span
+                        className={`${styles.statusBadge} ${
+                          styles[order.status]
+                        }`}
+                      >
+                        {order.status}
+                      </span>
+                      <span
+                        className={`${styles.sourceBadge} ${
+                          styles[order.source]
+                        }`}
+                      >
+                        {order.source === "ai" ? "🤖 AI" : "Manual"}
+                      </span>
+                    </div>
+                    <div className={styles.orderCardActions}>
                       <select
-                        className={styles.statusSelect}
+                        className={styles.statusSelectMobile}
                         value={order.status}
                         onChange={(e) =>
                           handleStatusChange(order, e.target.value)
                         }
+                        aria-label="Change order status"
                       >
                         {STATUS_OPTIONS.map((opt) => (
                           <option key={opt.value} value={opt.value}>
@@ -711,13 +818,13 @@ export default function OrdersPage() {
                         ))}
                       </select>
                       <button
-                        className={`${styles.actionBtn} ${styles.danger}`}
+                        className={`${styles.actionBtnMobile} ${styles.danger}`}
                         onClick={() => handleCancelOrder(order)}
-                        title="Cancel order"
+                        aria-label="Cancel order"
                       >
                         <svg
-                          width="14"
-                          height="14"
+                          width="16"
+                          height="16"
                           viewBox="0 0 24 24"
                           fill="none"
                           stroke="currentColor"
@@ -740,23 +847,37 @@ export default function OrdersPage() {
                         </svg>
                       </button>
                     </div>
-                  </td>
-                </tr>
+                  </div>
+                </div>
               ))}
-            </tbody>
-          </table>
+            </div>
+          </>
         )}
       </div>
 
       {/* Create/Edit Modal */}
       {showModal && (
-        <div className={styles.modalOverlay} onClick={handleCloseModal}>
-          <div className={styles.modal} onClick={(e) => e.stopPropagation()}>
+        <div
+          className={styles.modalOverlay}
+          onClick={handleCloseModal}
+          role="presentation"
+        >
+          <div
+            className={styles.modal}
+            onClick={(e) => e.stopPropagation()}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="order-modal-title"
+          >
             <div className={styles.modalHeader}>
-              <h3 className={styles.modalTitle}>
+              <h3 id="order-modal-title" className={styles.modalTitle}>
                 {editingOrder ? "Edit Order" : "Create New Order"}
               </h3>
-              <button className={styles.modalClose} onClick={handleCloseModal}>
+              <button
+                className={styles.modalClose}
+                onClick={handleCloseModal}
+                aria-label="Close modal"
+              >
                 <svg
                   width="16"
                   height="16"
@@ -935,10 +1056,17 @@ export default function OrdersPage() {
         <div
           className={styles.modalOverlay}
           onClick={() => setShowSheetModal(false)}
+          role="presentation"
         >
-          <div className={styles.modal} onClick={(e) => e.stopPropagation()}>
+          <div
+            className={styles.modal}
+            onClick={(e) => e.stopPropagation()}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="sheet-modal-title"
+          >
             <div className={styles.modalHeader}>
-              <h3 className={styles.modalTitle}>
+              <h3 id="sheet-modal-title" className={styles.modalTitle}>
                 <svg
                   width="24"
                   height="24"
@@ -967,6 +1095,7 @@ export default function OrdersPage() {
               <button
                 className={styles.modalClose}
                 onClick={() => setShowSheetModal(false)}
+                aria-label="Close modal"
               >
                 <svg
                   width="16"
