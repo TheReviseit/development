@@ -146,10 +146,10 @@ celery_app.conf.result_expires = 86400  # 24 hours
 celery_app.conf.task_default_retry_delay = 60  # 1 minute
 celery_app.conf.task_max_retries = 3
 
-# Broker connection: Fail fast if Redis unavailable (prevents retry storm)
-celery_app.conf.broker_connection_retry = False  # Don't retry broker connection
-celery_app.conf.broker_connection_retry_on_startup = False  # Don't retry on startup
-celery_app.conf.broker_connection_max_retries = 1  # Single attempt only
+# Broker connection: Allow retries for local development (handles temporary disconnections)
+celery_app.conf.broker_connection_retry = True  # Retry broker connection on failure
+celery_app.conf.broker_connection_retry_on_startup = True  # Retry on startup
+celery_app.conf.broker_connection_max_retries = 5  # Up to 5 attempts
 
 # Exponential backoff for task retries (not broker connection)
 celery_app.conf.broker_transport_options = {

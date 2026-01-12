@@ -641,6 +641,169 @@ def orders_health():
         )
 
 
+@orders_bp.route('/api/orders/sheets/initialize', methods=['POST'])
+@handle_domain_errors
+def initialize_order_sheet():
+    """
+    Initialize Google Sheet with column headers when user connects their sheet.
+    
+    Body:
+        {
+            "user_id": "string"  # Business user ID
+        }
+    
+    This endpoint:
+    1. Gets the configured sheet URL for the user
+    2. Creates/updates the "Orders" worksheet with proper headers
+    3. Returns success status
+    
+    Returns:
+        200: Sheet initialized successfully
+        400: No sheet configured
+        500: Failed to initialize
+    """
+    correlation_id = get_correlation_id()
+    
+    data = request.get_json() or {}
+    user_id = get_user_id_from_request() or data.get('user_id')
+    
+    if not user_id:
+        return api_response(
+            success=False,
+            error={"code": "MISSING_FIELD", "message": "user_id is required"},
+            status_code=400,
+        )
+    
+    try:
+        from tasks.orders import _get_sheets_config, _get_sheets_client
+        
+        # Get sheets configuration
+        sheets_config = _get_sheets_config(user_id)
+        
+        if not sheets_config or not sheets_config.get("enabled"):
+            reason = sheets_config.get("reason", "not_configured") if sheets_config else "no_config"
+            return api_response(
+                success=False,
+                error={
+                    "code": "SHEETS_NOT_CONFIGURED",
+                    "message": f"Google Sheets not configured: {reason}",
+                    "reason": reason
+                },
+                status_code=400,
+            )
+        
+        # Get sheets client
+        sheets_client = _get_sheets_client(sheets_config)
+        
+        if not sheets_client:
+            return api_response(
+                success=False,
+                error={"code": "SHEETS_CLIENT_ERROR", "message": "Failed to connect to Google Sheets"},
+                status_code=500,
+            )
+        
+        spreadsheet_id = sheets_config.get("spreadsheet_id")
+        sheet_name = sheets_config.get("sheet_name", "Orders")
+        
+        # Headers for the order sheet
+        headers = [
+            "Order ID",
+            "Date",
+            "Customer",
+            "Phone",
+            "Address",
+            "Items",
+            "Total Qty",
+            "Status",
+            "Source",
+            "Notes"
+        ]
+        
+        try:
+            import gspread
+            
+            spreadsheet = sheets_client.open_by_key(spreadsheet_id)
+            
+            # Try to get existing worksheet or create new one
+            try:
+                sheet = spreadsheet.worksheet(sheet_name)
+                logger.info(f"📊 Found existing worksheet '{sheet_name}', updating headers...")
+                
+                # Update headers in first row
+                sheet.update('A1:J1', [headers])
+                
+                # Format header row
+                sheet.format('A1:J1', {
+                    "textFormat": {"bold": True},
+                    "backgroundColor": {"red": 0.9, "green": 0.9, "blue": 0.9}
+                })
+                
+            except gspread.exceptions.WorksheetNotFound:
+                logger.info(f"📊 Creating new worksheet '{sheet_name}' with headers...")
+                
+                # Create new worksheet
+                sheet = spreadsheet.add_worksheet(
+                    title=sheet_name,
+                    rows=1000,
+                    cols=10
+                )
+                
+                # Add headers
+                sheet.update('A1:J1', [headers])
+                
+                # Format header row
+                sheet.format('A1:J1', {
+                    "textFormat": {"bold": True},
+                    "backgroundColor": {"red": 0.9, "green": 0.9, "blue": 0.9}
+                })
+            
+            logger.info(f"✅ Sheet initialized successfully for user {user_id}")
+            
+            return api_response(
+                success=True,
+                data={
+                    "spreadsheet_id": spreadsheet_id,
+                    "sheet_name": sheet_name,
+                    "headers": headers
+                },
+                meta={"message": "Google Sheet initialized with headers successfully"},
+            )
+            
+        except gspread.exceptions.SpreadsheetNotFound:
+            return api_response(
+                success=False,
+                error={
+                    "code": "SPREADSHEET_NOT_FOUND",
+                    "message": "Could not find the spreadsheet. Make sure the service account has edit access.",
+                },
+                status_code=400,
+            )
+        except gspread.exceptions.APIError as api_error:
+            return api_response(
+                success=False,
+                error={
+                    "code": "SHEETS_API_ERROR",
+                    "message": f"Google Sheets API error: {str(api_error)}",
+                },
+                status_code=500,
+            )
+            
+    except ImportError as e:
+        logger.error(f"Failed to import sheets tasks: {e}")
+        return api_response(
+            success=False,
+            error={"code": "MODULE_NOT_FOUND", "message": "Sheets sync module not available"},
+            status_code=500,
+        )
+    except Exception as e:
+        logger.error(f"Failed to initialize sheet: {e}", exc_info=True)
+        return api_response(
+            success=False,
+            error={"code": "INITIALIZATION_ERROR", "message": str(e)},
+            status_code=500,
+        )
+
+
 # =============================================================================
 # Legacy Compatibility Functions
 # =============================================================================

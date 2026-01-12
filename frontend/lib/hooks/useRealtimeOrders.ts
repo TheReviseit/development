@@ -38,6 +38,8 @@ interface UseRealtimeOrdersOptions {
  *
  * Uses Supabase Realtime to listen for INSERT, UPDATE, DELETE events
  * on the orders table filtered by user_id.
+ *
+ * FIX: Uses refs for callbacks to prevent subscription recreation on every render.
  */
 export function useRealtimeOrders({
   userId,
@@ -49,6 +51,27 @@ export function useRealtimeOrders({
   const channelRef = useRef<RealtimeChannel | null>(null);
   const [isConnected, setIsConnected] = useState(false);
   const [connectionError, setConnectionError] = useState<string | null>(null);
+
+  // =====================================================================
+  // FIX: Store callbacks in refs to prevent subscription recreation
+  // This ensures the subscription remains stable across renders
+  // =====================================================================
+  const onInsertRef = useRef(onInsert);
+  const onUpdateRef = useRef(onUpdate);
+  const onDeleteRef = useRef(onDelete);
+
+  // Update refs when callbacks change (without triggering re-subscription)
+  useEffect(() => {
+    onInsertRef.current = onInsert;
+  }, [onInsert]);
+
+  useEffect(() => {
+    onUpdateRef.current = onUpdate;
+  }, [onUpdate]);
+
+  useEffect(() => {
+    onDeleteRef.current = onDelete;
+  }, [onDelete]);
 
   const cleanup = useCallback(() => {
     if (channelRef.current) {
@@ -65,11 +88,17 @@ export function useRealtimeOrders({
       return;
     }
 
+    // Prevent duplicate subscriptions
+    if (channelRef.current) {
+      console.log("🔌 Channel already exists, skipping...");
+      return;
+    }
+
     console.log("🔌 Setting up realtime subscription for orders");
     console.log(`   User ID: ${userId}`);
 
-    // Create a unique channel name
-    const channelName = `orders:${userId}:${Date.now()}`;
+    // Create a unique channel name (without timestamp to prevent recreation)
+    const channelName = `orders:${userId}`;
 
     // Subscribe to orders table changes for this user
     const channel = supabase
@@ -84,8 +113,9 @@ export function useRealtimeOrders({
         },
         (payload) => {
           console.log("📦 New order received:", payload.new);
-          if (onInsert && payload.new) {
-            onInsert(payload.new as Order);
+          // Use ref to get latest callback
+          if (onInsertRef.current && payload.new) {
+            onInsertRef.current(payload.new as Order);
           }
         }
       )
@@ -99,8 +129,9 @@ export function useRealtimeOrders({
         },
         (payload) => {
           console.log("📦 Order updated:", payload.new);
-          if (onUpdate && payload.new) {
-            onUpdate(payload.new as Order);
+          // Use ref to get latest callback
+          if (onUpdateRef.current && payload.new) {
+            onUpdateRef.current(payload.new as Order);
           }
         }
       )
@@ -114,8 +145,9 @@ export function useRealtimeOrders({
         },
         (payload) => {
           console.log("📦 Order deleted:", payload.old);
-          if (onDelete && payload.old) {
-            onDelete({ id: (payload.old as { id: string }).id });
+          // Use ref to get latest callback
+          if (onDeleteRef.current && payload.old) {
+            onDeleteRef.current({ id: (payload.old as { id: string }).id });
           }
         }
       )
@@ -139,9 +171,9 @@ export function useRealtimeOrders({
 
     channelRef.current = channel;
 
-    // Cleanup on unmount or when dependencies change
+    // Cleanup on unmount or when userId/enabled change
     return cleanup;
-  }, [userId, enabled, onInsert, onUpdate, onDelete, cleanup]);
+  }, [userId, enabled, cleanup]); // FIX: Removed onInsert, onUpdate, onDelete from deps
 
   return { isConnected, connectionError, cleanup };
 }

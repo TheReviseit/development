@@ -28,6 +28,9 @@ class IdempotencyRecord:
     result_data: Optional[Dict[str, Any]] = None
     created_at: datetime = None
     expires_at: datetime = None
+    # BULLETPROOF ADDITIONS:
+    request_hash: Optional[str] = None  # Hash of request payload for collision detection
+    scope: Optional[str] = None  # Action scope: "order:create", "order:cancel", "refund:create"
     
     def is_expired(self) -> bool:
         """Check if record has expired."""

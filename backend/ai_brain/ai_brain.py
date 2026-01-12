@@ -1661,6 +1661,7 @@ class AIBrain:
             try:
                 from services.order_service import get_order_service
                 from domain.schemas import OrderCreate, OrderItem, OrderSource
+                from domain.exceptions import DuplicateOrderError
                 import hashlib
                 import json
                 
@@ -1679,15 +1680,38 @@ class AIBrain:
                         color=item.get("color"),
                     ))
                 
-                # Generate deterministic idempotency key
-                # Based on: user_id + customer_phone + product fingerprint
-                fingerprint_data = {
+                # =============================================================
+                # BULLETPROOF IDEMPOTENCY KEY GENERATION
+                # Includes: time window (5 min) + full payload hash (size, color, qty)
+                # =============================================================
+                from datetime import datetime as dt_module
+                
+                # 5-minute time window bucket (same order can be placed again after 5 min)
+                now = dt_module.utcnow()
+                window_bucket = now.replace(
+                    minute=(now.minute // 5) * 5,
+                    second=0,
+                    microsecond=0
+                )
+                
+                # Full payload for collision detection (includes variants: size, color)
+                payload_for_hash = {
                     "user_id": user_id,
                     "business": business_owner_id,
                     "phone": customer_phone,
-                    "items": sorted([{"n": i.get("name", "").lower(), "q": i.get("quantity", 1)} for i in items], key=lambda x: x["n"])
+                    "items": sorted([{
+                        "n": i.get("name", "").lower().strip(),
+                        "q": i.get("quantity", 1),
+                        "s": i.get("size"),      # Include size for collision detection
+                        "c": i.get("color"),     # Include color for collision detection
+                    } for i in items], key=lambda x: x["n"])
                 }
-                idempotency_key = f"ai_order_{hashlib.sha256(json.dumps(fingerprint_data, sort_keys=True).encode()).hexdigest()[:24]}"
+                request_hash = hashlib.sha256(
+                    json.dumps(payload_for_hash, sort_keys=True).encode()
+                ).hexdigest()[:16]
+                
+                # Idempotency key = scope + time window + payload hash
+                idempotency_key = f"order:create:{window_bucket.strftime('%Y%m%d%H%M')}_{request_hash}"
                 
                 # Create order via service
                 order_data = OrderCreate(
@@ -1727,7 +1751,41 @@ class AIBrain:
                     f"Your order has been received! We'll process it shortly. 🎉"
                 )
                 
-                logger.info(f"📦 ORDER PERSISTED: id={created_order.id}, customer={customer_name}, items={len(items)}")
+                # LOG SUCCESS with idempotency key for auditing
+                logger.info(
+                    f"📦 ORDER PERSISTED",
+                    extra={
+                        "order_id": created_order.id,
+                        "idempotency_key": idempotency_key,
+                        "customer": customer_name,
+                        "items_count": len(items),
+                        "request_hash": request_hash,
+                    }
+                )
+                
+            except DuplicateOrderError as dup_error:
+                # =============================================================
+                # DUPLICATE ORDER DETECTED - Clear feedback to user
+                # =============================================================
+                logger.warning(
+                    f"📦 DUPLICATE ORDER REJECTED",
+                    extra={
+                        "idempotency_key": idempotency_key if 'idempotency_key' in dir() else "unknown",
+                        "customer": customer_name,
+                        "phone": customer_phone,
+                        "reason": str(dup_error),
+                    }
+                )
+                
+                response_text = (
+                    "⚠️ *Order Already Placed*\n\n"
+                    "It looks like you already submitted this exact order recently.\n\n"
+                    "If you want to order again, please:\n"
+                    "• Change the quantity, OR\n"
+                    "• Wait a few minutes and try again\n\n"
+                    "If you believe this is an error, please contact the business directly."
+                )
+                order_id = "DUPLICATE"
                 
             except Exception as e:
                 logger.error(f"📦 Order persistence FAILED: {e}")

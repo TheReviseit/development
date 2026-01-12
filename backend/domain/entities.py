@@ -108,6 +108,9 @@ class Order:
     idempotency_key: Optional[str] = None
     fingerprint: Optional[str] = None
     
+    # Human-readable short order ID (e.g., "28C2CF22")
+    order_id: Optional[str] = None
+    
     # Audit fields
     version: int = 1
     created_by: Optional[str] = None
@@ -141,6 +144,9 @@ class Order:
             items=items_data
         )
         
+        # Generate short human-readable order ID (first 8 chars of UUID, uppercase)
+        short_order_id = order_id[:8].upper()
+        
         return cls(
             id=order_id,
             user_id=user_id,
@@ -156,6 +162,7 @@ class Order:
             updated_at=now,
             idempotency_key=idempotency_key,
             fingerprint=fingerprint.hash,
+            order_id=short_order_id,
         )
     
     def can_transition_to(self, new_status: OrderStatus) -> bool:
@@ -220,6 +227,7 @@ class Order:
         """Convert to dictionary for storage."""
         return {
             "id": self.id,
+            "order_id": self.order_id,  # Short human-readable ID
             "user_id": self.user_id,
             "customer_name": self.customer_name,
             "customer_phone": self.customer_phone,
@@ -239,6 +247,11 @@ class Order:
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> "Order":
         """Create from dictionary (database row)."""
+        # Generate order_id from id if not present (for backward compatibility)
+        order_id = data.get("order_id")
+        if not order_id and data.get("id"):
+            order_id = data["id"][:8].upper()
+        
         return cls(
             id=data["id"],
             user_id=data["user_id"],
@@ -254,6 +267,7 @@ class Order:
             updated_at=cls._parse_datetime(data.get("updated_at")),
             idempotency_key=data.get("idempotency_key"),
             fingerprint=data.get("fingerprint"),
+            order_id=order_id,
             version=data.get("version", 1),
         )
     

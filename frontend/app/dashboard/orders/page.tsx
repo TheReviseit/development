@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
+import Image from "next/image";
 import styles from "./orders.module.css";
 import { useRealtimeOrders } from "@/lib/hooks/useRealtimeOrders";
 
@@ -186,6 +187,7 @@ export default function OrdersPage() {
   const handleSaveSheetSettings = async () => {
     setSavingSheet(true);
     try {
+      // 1. Save sheet settings
       const response = await fetch("/api/ai-capabilities", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -198,7 +200,34 @@ export default function OrdersPage() {
       const data = await response.json();
       if (data.success) {
         setSheetConnected(!!sheetUrl);
-        setShowSheetModal(false);
+        setShowSheetModal(false); // Close modal immediately
+
+        // 2. If sheet URL is provided and sync is enabled, initialize sheet with headers
+        // Fire-and-forget: don't block the UI, run in background
+        if (sheetUrl && sheetSyncEnabled && userId) {
+          fetch("/api/orders/sheets/initialize", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ user_id: userId }),
+          })
+            .then((res) => res.json())
+            .then((initData) => {
+              if (initData.success) {
+                console.log(
+                  "✅ Sheet initialized with headers:",
+                  initData.data?.headers
+                );
+              } else {
+                console.warn("⚠️ Sheet init warning:", initData.error?.message);
+              }
+            })
+            .catch((err) =>
+              console.warn(
+                "⚠️ Sheet init error (will retry on first order):",
+                err
+              )
+            );
+        }
       } else {
         alert("Failed to save Google Sheet settings");
       }
@@ -485,7 +514,14 @@ export default function OrdersPage() {
       {/* Stats Row */}
       <div className={styles.statsRow}>
         <div className={styles.statCard}>
-          <div className={styles.statIcon}>📦</div>
+          <div className={styles.statIcon}>
+            <Image
+              src="/icons/orders/Pending.svg"
+              alt="Pending"
+              width={32}
+              height={32}
+            />
+          </div>
           <div className={styles.statContent}>
             <div className={styles.statValue}>{stats.pending}</div>
             <div className={`${styles.statLabel} ${styles.pendingLabel}`}>
@@ -494,7 +530,14 @@ export default function OrdersPage() {
           </div>
         </div>
         <div className={styles.statCard}>
-          <div className={styles.statIcon}>✓</div>
+          <div className={styles.statIcon}>
+            <Image
+              src="/icons/orders/confirmed.svg"
+              alt="Confirmed"
+              width={32}
+              height={32}
+            />
+          </div>
           <div className={styles.statContent}>
             <div className={styles.statValue}>{stats.confirmed}</div>
             <div className={`${styles.statLabel} ${styles.confirmedLabel}`}>
@@ -503,7 +546,14 @@ export default function OrdersPage() {
           </div>
         </div>
         <div className={styles.statCard}>
-          <div className={styles.statIcon}>⚙️</div>
+          <div className={styles.statIcon}>
+            <Image
+              src="/icons/orders/processing.svg"
+              alt="Processing"
+              width={32}
+              height={32}
+            />
+          </div>
           <div className={styles.statContent}>
             <div className={styles.statValue}>{stats.processing}</div>
             <div className={`${styles.statLabel} ${styles.processingLabel}`}>
@@ -512,7 +562,14 @@ export default function OrdersPage() {
           </div>
         </div>
         <div className={styles.statCard}>
-          <div className={styles.statIcon}>✅</div>
+          <div className={styles.statIcon}>
+            <Image
+              src="/icons/orders/completed.svg"
+              alt="Completed"
+              width={32}
+              height={32}
+            />
+          </div>
           <div className={styles.statContent}>
             <div className={styles.statValue}>{stats.completed}</div>
             <div className={`${styles.statLabel} ${styles.completedLabel}`}>
@@ -521,7 +578,14 @@ export default function OrdersPage() {
           </div>
         </div>
         <div className={styles.statCard}>
-          <div className={styles.statIcon}>📊</div>
+          <div className={styles.statIcon}>
+            <Image
+              src="/icons/orders/total.svg"
+              alt="Total"
+              width={32}
+              height={32}
+            />
+          </div>
           <div className={styles.statContent}>
             <div className={styles.statValue}>{stats.total}</div>
             <div className={styles.statLabel}>Total</div>
@@ -587,25 +651,9 @@ export default function OrdersPage() {
               {filteredOrders.map((order) => (
                 <tr key={order.id} onClick={() => handleOpenModal(order)}>
                   <td>
-                    <div className={styles.customerInfo}>
-                      <span className={styles.customerName}>
-                        {order.customer_name}
-                      </span>
-                      <span className={styles.customerPhone}>
-                        {order.customer_phone}
-                      </span>
-                      {order.customer_address && (
-                        <span
-                          className={styles.customerAddress}
-                          title={order.customer_address}
-                        >
-                          📍{" "}
-                          {order.customer_address.length > 30
-                            ? order.customer_address.substring(0, 30) + "..."
-                            : order.customer_address}
-                        </span>
-                      )}
-                    </div>
+                    <span className={styles.customerName}>
+                      {order.customer_name}
+                    </span>
                   </td>
                   <td>
                     <div className={styles.itemsList}>
@@ -934,10 +982,39 @@ export default function OrdersPage() {
               </button>
             </div>
             <div className={styles.modalBody}>
-              <p className={styles.sheetDescription}>
+              {/* <p className={styles.sheetDescription}>
                 Connect a Google Sheet to automatically sync your orders. New
                 orders will be appended as rows to your sheet.
-              </p>
+              </p> */}
+
+              {/* Service Account Email - Share Instructions */}
+              <div className={styles.shareEmailSection}>
+                <label>
+                  📧 Share your sheet with this email (Editor access):
+                </label>
+                <div className={styles.emailCopyBox}>
+                  <code className={styles.serviceEmail}>
+                    reviseit-sheets-sync@reviseit-def4c.iam.gserviceaccount.com
+                  </code>
+                  <button
+                    type="button"
+                    className={styles.copyBtn}
+                    onClick={() => {
+                      navigator.clipboard.writeText(
+                        "reviseit-sheets-sync@reviseit-def4c.iam.gserviceaccount.com"
+                      );
+                      alert("Email copied to clipboard!");
+                    }}
+                    title="Copy email"
+                  >
+                    📋
+                  </button>
+                </div>
+                <span className={styles.fieldHint}>
+                  Open your Google Sheet → Click Share → Paste this email → Give
+                  Editor access
+                </span>
+              </div>
 
               <div className={styles.formGroup}>
                 <label>Google Sheet URL</label>
@@ -948,8 +1025,7 @@ export default function OrdersPage() {
                   placeholder="https://docs.google.com/spreadsheets/d/..."
                 />
                 <span className={styles.fieldHint}>
-                  Paste the full URL of your Google Sheet. Make sure it&apos;s
-                  shared with edit access.
+                  Paste the full URL of your Google Sheet after sharing it.
                 </span>
               </div>
 

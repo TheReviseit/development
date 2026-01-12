@@ -467,19 +467,43 @@ def _get_sheets_client(config: Dict[str, Any]):
 
 
 def _format_order_for_sheets(data: Dict[str, Any]) -> List[Any]:
-    """Format order data for Google Sheets row."""
+    """Format order data for Google Sheets row.
+    
+    Columns: Order ID | Date | Customer | Phone | Address | Items (with size/color) | Total Qty | Status | Source | Notes
+    """
     items = data.get("items", [])
-    items_str = "; ".join([
-        f"{i.get('quantity', 1)}x {i.get('name', 'Unknown')}"
-        for i in items
-    ])
+    
+    # Build items string with size/color variants
+    items_parts = []
+    for i in items:
+        item_str = f"{i.get('quantity', 1)}x {i.get('name', 'Unknown')}"
+        
+        # Add variant details (size, color)
+        variant_parts = []
+        if i.get('size'):
+            variant_parts.append(f"Size: {i.get('size')}")
+        if i.get('color'):
+            variant_parts.append(f"Color: {i.get('color')}")
+        elif i.get('variant_display'):
+            variant_parts.append(i.get('variant_display'))
+        
+        if variant_parts:
+            item_str += f" ({', '.join(variant_parts)})"
+        
+        items_parts.append(item_str)
+    
+    items_str = "; ".join(items_parts)
+    
+    # Use order_id (short human-readable) if available, otherwise fallback to first 8 chars of id
+    order_id = data.get("order_id") or (data.get("id", "")[:8].upper() if data.get("id") else "")
     
     return [
-        data.get("id", ""),                                    # Order ID
-        data.get("created_at", "")[:10],                       # Date (YYYY-MM-DD)
+        order_id,                                               # Order ID (short, e.g., "28C2CF22")
+        data.get("created_at", "")[:10] if data.get("created_at") else "",  # Date (YYYY-MM-DD)
         data.get("customer_name", ""),                         # Customer Name
         data.get("customer_phone", ""),                        # Phone
-        items_str,                                              # Items
+        data.get("customer_address", ""),                      # Delivery Address
+        items_str,                                              # Items (with variants)
         data.get("total_quantity", 0),                         # Total Qty
         data.get("status", "pending").upper(),                 # Status
         data.get("source", "manual"),                          # Source
@@ -515,7 +539,7 @@ def _upsert_sheet_row(
                 # Update existing row
                 row_num = cell.row
                 logger.info(f"📊 [Sheets Upsert] Found existing order at row {row_num}, updating...")
-                range_notation = f"A{row_num}:I{row_num}"
+                range_notation = f"A{row_num}:J{row_num}"
                 logger.debug(f"📊 [Sheets Upsert] Updating range: {range_notation}")
                 sheet.update(range_notation, [row_data])
                 logger.info(f"✅ [Sheets Upsert] Successfully updated existing order {order_id} at row {row_num}")
@@ -542,7 +566,7 @@ def _upsert_sheet_row(
             new_sheet = spreadsheet.add_worksheet(
                 title=sheet_name,
                 rows=1000,  # Start with 1000 rows
-                cols=9      # 9 columns for our data
+                cols=10     # 10 columns for our data (added Address)
             )
             
             # Add header row
@@ -551,16 +575,17 @@ def _upsert_sheet_row(
                 "Date", 
                 "Customer",
                 "Phone",
+                "Address",
                 "Items",
                 "Total Qty",
                 "Status",
                 "Source",
                 "Notes"
             ]
-            new_sheet.update('A1:I1', [headers])
+            new_sheet.update('A1:J1', [headers])
             
             # Format header row (bold)
-            new_sheet.format('A1:I1', {
+            new_sheet.format('A1:J1', {
                 "textFormat": {"bold": True},
                 "backgroundColor": {"red": 0.9, "green": 0.9, "blue": 0.9}
             })
