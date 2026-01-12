@@ -957,6 +957,90 @@ class AIBrain:
                 }
         
         # =====================================================
+        # PRIORITY: Handle "Order This" button clicks FIRST
+        # Pattern: "order {product_id}" from WhatsApp button
+        # This takes precedence over category selection
+        # =====================================================
+        if msg_lower.startswith("order "):
+            products = business_data.get("products_services", [])
+            search_term = msg_lower.replace("order ", "").replace("_", " ").strip()
+            logger.info(f"📦 'Order This' button detected, searching for product: '{search_term}'")
+            
+            mentioned_product = None
+            for product in products:
+                if isinstance(product, dict):
+                    name = product.get("name", "").lower()
+                    product_id = str(product.get("id", "")).lower().replace("_", " ")
+                    sku = str(product.get("sku", "")).lower().replace("_", " ")
+                    
+                    # Match by name, id, or sku (flexible matching)
+                    if name and (name == search_term or name in search_term or search_term in name):
+                        mentioned_product = product
+                        logger.info(f"📦 Product matched by name: '{name}'")
+                        break
+                    if product_id and product_id != "none" and (product_id == search_term or product_id in search_term or search_term in product_id):
+                        mentioned_product = product
+                        logger.info(f"📦 Product matched by id: '{product_id}'")
+                        break
+                    if sku and sku != "none" and (sku == search_term or sku in search_term or search_term in sku):
+                        mentioned_product = product
+                        logger.info(f"📦 Product matched by sku: '{sku}'")
+                        break
+            
+            if mentioned_product:
+                # Clear any category selection state - we're directly ordering a product
+                for key in ["awaiting_category", "_available_categories", "awaiting_selection", "_product_map", "_available_products"]:
+                    if key in state.collected_fields:
+                        del state.collected_fields[key]
+                
+                product_name = mentioned_product.get("name", "item")
+                product_id = mentioned_product.get("id") or mentioned_product.get("sku") or product_name
+                product_price = mentioned_product.get("price", "")
+                sizes = mentioned_product.get("sizes", [])
+                colors = mentioned_product.get("colors", [])
+                
+                price_str = f" (₹{product_price})" if product_price else ""
+                
+                # Store product info
+                state.collect_field("pending_item", product_name)
+                state.collect_field("pending_product_id", product_id)
+                state.collect_field("pending_product_data", mentioned_product)
+                
+                # Determine next step based on variants
+                if sizes:
+                    state.collect_field("_needs_size", True)
+                    state.collect_field("_available_sizes", sizes)
+                    size_list = ", ".join(sizes[:6])
+                    response_text = f"Great choice! 🎉 *{product_name}*{price_str}\n\nAvailable sizes: {size_list}\n\nWhich size would you like?"
+                    suggested_actions = sizes[:4] + ["Cancel"]
+                elif colors:
+                    state.collect_field("_needs_color", True)
+                    state.collect_field("_available_colors", colors)
+                    color_list = ", ".join(colors[:6])
+                    response_text = f"Great choice! 🎉 *{product_name}*{price_str}\n\nAvailable colors: {color_list}\n\nWhich color would you like?"
+                    suggested_actions = colors[:4] + ["Cancel"]
+                else:
+                    response_text = f"Great choice! 🎉 You want to order *{product_name}*{price_str}.\n\nHow many would you like?"
+                    suggested_actions = ["1", "2", "3", "Cancel"]
+                
+                # Persist state after product selection
+                self.conversation_manager.persist_state(user_id)
+                
+                self.conversation_manager.add_message(user_id, "user", message)
+                self.conversation_manager.add_message(user_id, "assistant", response_text)
+                
+                return {
+                    "reply": response_text,
+                    "intent": "order_product_selected_direct",
+                    "confidence": 1.0,
+                    "needs_human": False,
+                    "suggested_actions": suggested_actions,
+                    "metadata": {"generation_method": "order_flow_button", "product": product_name}
+                }
+            else:
+                logger.warning(f"📦 'Order This' button product not found: '{search_term}' in {len(products)} products")
+        
+        # =====================================================
         # STEP 0: Handle category selection
         # =====================================================
         if state.collected_fields.get("awaiting_category"):
