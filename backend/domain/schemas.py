@@ -60,6 +60,9 @@ class OrderItem(BaseModel):
     product_id: Optional[str] = Field(None, max_length=255, description="Stable product identifier")
     variant_id: Optional[str] = Field(None, max_length=255, description="Variant identifier (size/color combo)")
     variant_display: Optional[str] = Field(None, max_length=255, description="Human-readable variant (e.g., 'Size: L, Color: Blue')")
+    # Explicit size and color fields for database storage
+    size: Optional[str] = Field(None, max_length=50, description="Selected size")
+    color: Optional[str] = Field(None, max_length=50, description="Selected color")
     
     @field_validator("name")
     @classmethod
@@ -89,6 +92,8 @@ class OrderItem(BaseModel):
             "product_id": self.product_id,
             "variant_id": self.variant_id,
             "variant_display": self.variant_display,
+            "size": self.size,
+            "color": self.color,
         }
 
 
@@ -163,6 +168,7 @@ class OrderCreate(BaseModel):
     user_id: str = Field(..., min_length=1, max_length=255)
     customer_name: str = Field(..., min_length=1, max_length=255)
     customer_phone: str = Field(..., min_length=10, max_length=20)
+    customer_address: Optional[str] = Field(None, max_length=500)
     items: List[OrderItem] = Field(..., min_length=1, max_length=100)
     status: OrderStatus = OrderStatus.PENDING
     source: OrderSource = OrderSource.MANUAL
@@ -214,6 +220,7 @@ class OrderUpdate(BaseModel):
     """Order update request schema."""
     customer_name: Optional[str] = Field(None, min_length=1, max_length=255)
     customer_phone: Optional[str] = Field(None, min_length=10, max_length=20)
+    customer_address: Optional[str] = Field(None, max_length=500)
     items: Optional[List[OrderItem]] = Field(None, min_length=1, max_length=100)
     notes: Optional[str] = Field(None, max_length=2000)
     status: Optional[OrderStatus] = None
@@ -235,6 +242,7 @@ class OrderResponse(BaseModel):
     user_id: str
     customer_name: str
     customer_phone: str
+    customer_address: Optional[str] = None
     items: List[Dict[str, Any]]
     total_quantity: int
     status: OrderStatus

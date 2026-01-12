@@ -10,6 +10,9 @@ interface OrderItem {
   quantity: number;
   price?: number;
   notes?: string;
+  size?: string;
+  color?: string;
+  variant_display?: string;
 }
 
 interface Order {
@@ -17,6 +20,7 @@ interface Order {
   user_id: string;
   customer_name: string;
   customer_phone: string;
+  customer_address?: string;
   items: OrderItem[];
   total_quantity: number;
   status: "pending" | "confirmed" | "processing" | "completed" | "cancelled";
@@ -29,6 +33,7 @@ interface Order {
 interface OrderFormData {
   customer_name: string;
   customer_phone: string;
+  customer_address: string;
   items: OrderItem[];
   notes: string;
 }
@@ -51,6 +56,7 @@ export default function OrdersPage() {
   const [formData, setFormData] = useState<OrderFormData>({
     customer_name: "",
     customer_phone: "",
+    customer_address: "",
     items: [{ name: "", quantity: 1 }],
     notes: "",
   });
@@ -236,6 +242,7 @@ export default function OrdersPage() {
       setFormData({
         customer_name: order.customer_name,
         customer_phone: order.customer_phone,
+        customer_address: order.customer_address || "",
         items:
           order.items.length > 0 ? order.items : [{ name: "", quantity: 1 }],
         notes: order.notes || "",
@@ -245,6 +252,7 @@ export default function OrdersPage() {
       setFormData({
         customer_name: "",
         customer_phone: "",
+        customer_address: "",
         items: [{ name: "", quantity: 1 }],
         notes: "",
       });
@@ -312,6 +320,7 @@ export default function OrdersPage() {
         body: JSON.stringify({
           customer_name: formData.customer_name,
           customer_phone: formData.customer_phone,
+          customer_address: formData.customer_address,
           items: validItems,
           notes: formData.notes,
           source: "manual",
@@ -585,21 +594,32 @@ export default function OrdersPage() {
                       <span className={styles.customerPhone}>
                         {order.customer_phone}
                       </span>
+                      {order.customer_address && (
+                        <span
+                          className={styles.customerAddress}
+                          title={order.customer_address}
+                        >
+                          📍{" "}
+                          {order.customer_address.length > 30
+                            ? order.customer_address.substring(0, 30) + "..."
+                            : order.customer_address}
+                        </span>
+                      )}
                     </div>
                   </td>
                   <td>
                     <div className={styles.itemsList}>
-                      {order.items.slice(0, 2).map((item, idx) => (
-                        <div key={idx} className={styles.itemRow}>
-                          <span className={styles.itemQuantity}>
-                            {item.quantity}x
-                          </span>
-                          <span className={styles.itemName}>{item.name}</span>
-                        </div>
+                      {order.items.slice(0, 3).map((item, idx) => (
+                        <span key={idx} className={styles.itemName}>
+                          {item.name}
+                          {idx < Math.min(order.items.length, 3) - 1
+                            ? ", "
+                            : ""}
+                        </span>
                       ))}
-                      {order.items.length > 2 && (
+                      {order.items.length > 3 && (
                         <span className={styles.moreItems}>
-                          +{order.items.length - 2} more
+                          +{order.items.length - 3} more
                         </span>
                       )}
                     </div>
@@ -737,6 +757,23 @@ export default function OrdersPage() {
                   </div>
                 </div>
 
+                <div className={styles.formRow}>
+                  <div className={styles.formGroup} style={{ width: "100%" }}>
+                    <label>Delivery Address</label>
+                    <input
+                      type="text"
+                      value={formData.customer_address}
+                      onChange={(e) =>
+                        setFormData({
+                          ...formData,
+                          customer_address: e.target.value,
+                        })
+                      }
+                      placeholder="Enter full address"
+                    />
+                  </div>
+                </div>
+
                 <div className={styles.itemsSection}>
                   <div className={styles.itemsSectionHeader}>
                     <span className={styles.itemsSectionTitle}>
@@ -751,36 +788,60 @@ export default function OrdersPage() {
                     </button>
                   </div>
                   {formData.items.map((item, index) => (
-                    <div key={index} className={styles.itemEntry}>
-                      <input
-                        type="text"
-                        placeholder="Item name"
-                        value={item.name}
-                        onChange={(e) =>
-                          handleItemChange(index, "name", e.target.value)
-                        }
-                      />
-                      <input
-                        type="number"
-                        min="1"
-                        placeholder="Qty"
-                        value={item.quantity}
-                        onChange={(e) =>
-                          handleItemChange(
-                            index,
-                            "quantity",
-                            parseInt(e.target.value) || 1
-                          )
-                        }
-                      />
-                      <button
-                        type="button"
-                        className={styles.removeItemBtn}
-                        onClick={() => handleRemoveItem(index)}
-                        disabled={formData.items.length === 1}
-                      >
-                        ×
-                      </button>
+                    <div key={index} className={styles.itemEntryRow}>
+                      <div className={styles.itemEntryMain}>
+                        <input
+                          type="text"
+                          placeholder="Item name"
+                          value={item.name}
+                          onChange={(e) =>
+                            handleItemChange(index, "name", e.target.value)
+                          }
+                          className={styles.itemNameInput}
+                        />
+                        <input
+                          type="number"
+                          min="1"
+                          placeholder="Qty"
+                          value={item.quantity}
+                          onChange={(e) =>
+                            handleItemChange(
+                              index,
+                              "quantity",
+                              parseInt(e.target.value) || 1
+                            )
+                          }
+                          className={styles.itemQtyInput}
+                        />
+                        <input
+                          type="text"
+                          placeholder="Size"
+                          value={item.size || ""}
+                          onChange={(e) =>
+                            handleItemChange(index, "size", e.target.value)
+                          }
+                          className={styles.itemSizeInput}
+                        />
+                      </div>
+                      <div className={styles.itemEntrySecondary}>
+                        <input
+                          type="text"
+                          placeholder="Color"
+                          value={item.color || ""}
+                          onChange={(e) =>
+                            handleItemChange(index, "color", e.target.value)
+                          }
+                          className={styles.itemColorInput}
+                        />
+                        <button
+                          type="button"
+                          className={styles.removeItemBtn}
+                          onClick={() => handleRemoveItem(index)}
+                          disabled={formData.items.length === 1}
+                        >
+                          ×
+                        </button>
+                      </div>
                     </div>
                   ))}
                 </div>

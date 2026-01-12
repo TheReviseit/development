@@ -1089,11 +1089,19 @@ class AIBrain:
             sizes = state.collected_fields.get("_available_sizes", [])
             matched_size = None
             
-            # Try direct match
+            # Try exact match first (fixes bug where "L" was matching "XL")
             for size in sizes:
-                if size.lower() == msg_lower or msg_lower in size.lower():
+                if size.lower() == msg_lower:
                     matched_size = size
                     break
+            
+            # Fallback: try partial match only if no exact match found
+            if not matched_size:
+                for size in sizes:
+                    # Only allow partial match if user typed most of the size name
+                    if msg_lower in size.lower() and len(msg_lower) >= max(1, len(size) - 1):
+                        matched_size = size
+                        break
             
             if matched_size:
                 del state.collected_fields["_needs_size"]
@@ -1148,10 +1156,18 @@ class AIBrain:
             colors = state.collected_fields.get("_available_colors", [])
             matched_color = None
             
+            # Try exact match first
             for color in colors:
-                if color.lower() == msg_lower or msg_lower in color.lower():
+                if color.lower() == msg_lower:
                     matched_color = color
                     break
+            
+            # Fallback: try partial match only if no exact match
+            if not matched_color:
+                for color in colors:
+                    if msg_lower in color.lower() and len(msg_lower) >= max(1, len(color) - 1):
+                        matched_color = color
+                        break
             
             if matched_color:
                 del state.collected_fields["_needs_color"]
@@ -1355,6 +1371,9 @@ class AIBrain:
                         "variant_display": state.collected_fields.get("variant_display"),
                         "price": product_data.get("price"),
                         "sku": product_data.get("sku"),
+                        # Store size and color explicitly for database persistence
+                        "size": state.collected_fields.get("selected_size"),
+                        "color": state.collected_fields.get("selected_color"),
                     }
                     
                     # Build variant_id from size/color
@@ -1531,6 +1550,11 @@ class AIBrain:
             customer_address = state.collected_fields.get("customer_address", "")
             business_owner_id = state.flow_config.get("business_owner_id", "")
             
+            # Validate business_owner_id - must be a valid UUID, not empty or "default"
+            if not business_owner_id or business_owner_id == "default" or len(business_owner_id) < 10:
+                logger.error(f"📦 Invalid business_owner_id: '{business_owner_id}' - cannot persist order to database")
+                raise ValueError(f"Invalid business_owner_id: {business_owner_id}")
+            
             # Collect all custom fields
             order_fields = state.flow_config.get("order_fields", [])
             custom_fields = {}
@@ -1541,10 +1565,8 @@ class AIBrain:
                     if value:
                         custom_fields[field_id] = value
             
-            # Build notes from address and custom fields
+            # Build notes from custom fields only (address is stored in dedicated column)
             notes_parts = []
-            if customer_address:
-                notes_parts.append(f"Address: {customer_address}")
             for key, value in custom_fields.items():
                 notes_parts.append(f"{key}: {value}")
             notes = " | ".join(notes_parts) if notes_parts else None
@@ -1569,6 +1591,8 @@ class AIBrain:
                         variant_display=item.get("variant_display"),
                         price=item.get("price"),
                         sku=item.get("sku"),
+                        size=item.get("size"),
+                        color=item.get("color"),
                     ))
                 
                 # Generate deterministic idempotency key
@@ -1586,6 +1610,7 @@ class AIBrain:
                     user_id=business_owner_id,
                     customer_name=customer_name,
                     customer_phone=customer_phone if customer_phone else "0000000000",  # Fallback for validation
+                    customer_address=customer_address,  # Now stored in dedicated column
                     items=order_items,
                     source=OrderSource.AI,
                     notes=notes,
@@ -1750,11 +1775,18 @@ class AIBrain:
         
         details_text = "\n".join(details_lines)
         
+        # CRITICAL FIX: Clear field collection state to prevent interference with confirmation
+        # This fixes bug where "yes" was being processed as phone number input
+        if "_current_field_index" in state.collected_fields:
+            del state.collected_fields["_current_field_index"]
+        if "_order_fields" in state.collected_fields:
+            del state.collected_fields["_order_fields"]
+        
         state.flow_status = FlowStatus.AWAITING_CONFIRMATION
         
         # CRITICAL: Persist state before showing confirmation (prevents loss during button send)
         self.conversation_manager.persist_state(user_id)
-        logger.info(f"📋 Order confirmation state persisted for {user_id[:12]}... (awaiting confirmation)")
+        logger.info(f"📋 Order confirmation state persisted for {user_id[:12]}... (awaiting confirmation, field collection cleared)")
         
         self.conversation_manager.add_message(user_id, "user", last_message)
         

@@ -571,6 +571,68 @@
   border-color: #ffffff;
 }
 
+/* Item Entry - New Layout */
+.itemEntryRow {
+  margin-bottom: 1rem;
+  padding-bottom: 1rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.itemEntryRow:last-child {
+  border-bottom: none;
+  margin-bottom: 0;
+  padding-bottom: 0;
+}
+
+.itemEntryMain {
+  display: grid;
+  grid-template-columns: 1fr 70px 80px;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
+}
+
+.itemEntrySecondary {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.itemNameInput {
+  padding: 0.5rem 0.75rem;
+  background: #1a1a1a;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 6px;
+  color: #ffffff;
+  font-size: 0.875rem;
+  width: 100%;
+}
+
+.itemQtyInput {
+  padding: 0.5rem 0.75rem;
+  background: #1a1a1a;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 6px;
+  color: #ffffff;
+  font-size: 0.875rem;
+  width: 70px;
+  text-align: center;
+}
+
+.itemSizeInput,
+.itemColorInput {
+  padding: 0.5rem 0.75rem;
+  background: #1a1a1a;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 6px;
+  color: #ffffff;
+  font-size: 0.875rem;
+  width: 80px;
+}
+
+.itemColorInput {
+  flex: 1;
+}
+
+/* Legacy itemEntry (keep for backwards compatibility) */
 .itemEntry {
   display: grid;
   grid-template-columns: 1fr 80px 36px;

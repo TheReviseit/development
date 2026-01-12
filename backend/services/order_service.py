@@ -129,6 +129,7 @@ class OrderService:
             user_id=order_data.user_id,
             customer_name=order_data.customer_name,
             customer_phone=order_data.customer_phone,
+            customer_address=order_data.customer_address,
             items=order_data.items,
             source=order_data.source,
             notes=order_data.notes,
