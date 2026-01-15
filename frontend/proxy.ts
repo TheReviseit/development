@@ -40,6 +40,7 @@ export async function proxy(request: NextRequest) {
     "/forgot-password",
     "/reset-password",
     "/verify-email",
+    "/store", // Public mini store pages
   ];
 
   const isPublicPath =
