@@ -105,7 +105,11 @@ export default function CartDrawer() {
         <div className={styles.cartItems}>
           {cartItems.length === 0 ? (
             <div className={styles.cartEmpty}>
-              <div className={styles.cartEmptyIcon}>🛒</div>
+              <img
+                src="/icons/cart.svg"
+                alt="Empty cart"
+                className={styles.cartEmptyIcon}
+              />
               <p className={styles.cartEmptyText}>Your cart is empty</p>
             </div>
           ) : (
@@ -141,11 +145,14 @@ export default function CartDrawer() {
                   <div className={styles.cartItemDetails}>
                     <h4 className={styles.cartItemName}>{item.name}</h4>
                     {(item.options?.size || item.options?.color) && (
-                      <p className={styles.cartItemOptions}>
-                        {item.options.size && `Size: ${item.options.size}`}
-                        {item.options.size && item.options.color && " • "}
-                        {item.options.color && `Color: ${item.options.color}`}
-                      </p>
+                      <div className={styles.cartItemOptions}>
+                        {item.options.size && (
+                          <span>Size: {item.options.size}</span>
+                        )}
+                        {item.options.color && (
+                          <span>Color: {item.options.color}</span>
+                        )}
+                      </div>
                     )}
                     <p className={styles.cartItemPrice}>
                       {formatPrice(item.price * item.quantity)}

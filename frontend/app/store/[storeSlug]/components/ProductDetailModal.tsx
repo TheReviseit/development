@@ -100,10 +100,10 @@ export default function ProductDetailModal({
           <motion.div
             className={styles.modalContent}
             onClick={(e) => e.stopPropagation()}
-            initial={{ scale: 0.9, opacity: 0 }}
-            animate={{ scale: 1, opacity: 1 }}
-            exit={{ scale: 0.9, opacity: 0 }}
-            transition={{ type: "spring", damping: 25, stiffness: 300 }}
+            initial={{ y: "100%" }}
+            animate={{ y: 0 }}
+            exit={{ y: "100%" }}
+            transition={{ duration: 0.15, ease: "easeOut" }}
           >
             <button
               className={styles.modalCloseBtn}
@@ -123,7 +123,7 @@ export default function ProductDetailModal({
               </svg>
             </button>
 
-            {/* Left Column - Image and Product Info */}
+            {/* Left Column - Image and Description */}
             <div className={styles.modalLeftColumn}>
               <div className={styles.modalImage}>
                 {product.imageUrl ? (
@@ -144,23 +144,31 @@ export default function ProductDetailModal({
                 )}
               </div>
 
-              {/* Product Info - Below Image on PC: Title and Description only */}
-              <div className={styles.modalProductInfo}>
-                <h2 className={styles.modalName}>{product.name}</h2>
-                {product.description && (
+              {/* Description only - Below Image */}
+              {product.description && (
+                <div className={styles.modalProductInfo}>
                   <div className={styles.modalDescriptionWrapper}>
                     <p className={styles.modalDescription}>
                       {product.description}
                     </p>
                   </div>
-                )}
-              </div>
+                </div>
+              )}
             </div>
 
-            {/* Right Column - Price, Options and Cart */}
+            {/* Right Column - Title, Price, Options and Cart */}
             <div className={styles.modalDetails}>
-              {/* Price at top of right column */}
+              {/* Title at top of right column */}
+              <h2 className={styles.modalName}>{product.name}</h2>
+              {/* Price */}
               <p className={styles.modalPrice}>{formatPrice(product.price)}</p>
+
+              {/* Description - visible on mobile (hidden on desktop via CSS) */}
+              {product.description && (
+                <p className={styles.modalDescriptionMobile}>
+                  {product.description}
+                </p>
+              )}
 
               {/* Size Selection */}
               {product.sizes && product.sizes.length > 0 && (
