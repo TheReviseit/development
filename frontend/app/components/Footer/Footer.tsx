@@ -23,6 +23,7 @@ export default function Footer() {
           <div className={styles.legal}>
             <p className={styles.copyright}>
               © 2025 ReviseIt. All rights reserved.
+              Legal Business Name:SIVASANKARA BOOPATHY RAJA RAMAN
             </p>
             <div className={styles.legalLinks}>
               <a href="/terms" className={styles.legalLink}>
