@@ -73,7 +73,7 @@ export default function FacebookLoginForBusinessButton({
       const redirectUri =
         (result as any).redirectUri ||
         process.env.NEXT_PUBLIC_FACEBOOK_REDIRECT_URI ||
-        "https://www.reviseit.in/onboarding";
+        "https://www.flowauxi.com/onboarding";
       console.log(
         "[LoginForBusiness] Using EXACT redirect_uri from SDK:",
         redirectUri

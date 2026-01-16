@@ -79,7 +79,7 @@ Content-Type: application/json
 
 {
   "to": "919876543210",
-  "message": "Hello from ReviseIt!"
+  "message": "Hello from Flowauxi!"
 }
 ```
 

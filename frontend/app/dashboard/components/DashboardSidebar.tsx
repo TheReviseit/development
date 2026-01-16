@@ -465,12 +465,12 @@ export default function DashboardSidebar({
         <div className={styles.sidebarLogo}>
           <img
             src="/logo.png"
-            alt="ReviseIt"
+            alt="Flowauxi"
             className={styles.logoImage}
             width={36}
             height={36}
           />
-          {!isCollapsed && <span className={styles.logoText}>ReviseIt</span>}
+          {!isCollapsed && <span className={styles.logoText}>Flowauxi</span>}
         </div>
         <button
           className={styles.collapseBtn}

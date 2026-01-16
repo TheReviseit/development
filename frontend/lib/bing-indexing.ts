@@ -85,7 +85,7 @@ export async function submitUrlsToBing(
  * Submit all URLs from your sitemap to Bing
  */
 export async function submitSitemapToBing(): Promise<BingSubmissionResponse[]> {
-  const baseUrl = "https://www.reviseit.in";
+  const baseUrl = "https://www.flowauxi.com";
 
   // These should match your sitemap.ts
   const urls = [

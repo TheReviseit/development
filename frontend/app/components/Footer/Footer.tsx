@@ -11,19 +11,23 @@ export default function Footer() {
             <div className={styles.logoContainer}>
               <Image
                 src="/logo.png"
-                alt="ReviseIt Logo"
+                alt="Flowauxi Logo"
                 width={40}
                 height={40}
                 className={styles.logo}
               />
-              <span className={styles.brandName}>ReviseIt</span>
+              <span className={styles.brandName}>Flowauxi</span>
             </div>
           </div>
 
           <div className={styles.legal}>
             <p className={styles.copyright}>
+<<<<<<< Updated upstream
               © 2025 ReviseIt. All rights reserved.
               Legal Business Name:SIVASANKARA BOOPATHY RAJA RAMAN
+=======
+              © 2025 Flowauxi. All rights reserved.
+>>>>>>> Stashed changes
             </p>
             <div className={styles.legalLinks}>
               <a href="/terms" className={styles.legalLink}>

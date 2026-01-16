@@ -105,8 +105,8 @@ export default function OnboardingPageEmbedded() {
       {/* Left Sidebar */}
       <div className="onboarding-sidebar">
         <div className="sidebar-brand">
-          <img src="/logo.png" alt="Revise It Logo" />
-          <span>Revise It</span>
+          <img src="/logo.png" alt="Flowauxi Logo" />
+          <span>Flowauxi</span>
         </div>
 
         <div className="sidebar-header">
@@ -198,8 +198,8 @@ export default function OnboardingPageEmbedded() {
       <div className="onboarding-main onboarding-main-embedded">
         {/* Mobile Header */}
         <div className="mobile-header">
-          <img src="/logo.png" alt="Revise It Logo" />
-          <span>Revise It</span>
+          <img src="/logo.png" alt="Flowauxi Logo" />
+          <span>Flowauxi</span>
         </div>
 
         {/* Main Content */}

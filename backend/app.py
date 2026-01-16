@@ -397,7 +397,7 @@ def verify_webhook():
     token = request.args.get('hub.verify_token')
     challenge = request.args.get('hub.challenge')
     
-    verify_token = os.getenv('WHATSAPP_VERIFY_TOKEN', 'reviseit_webhook_token')
+    verify_token = os.getenv('WHATSAPP_VERIFY_TOKEN', 'flowauxi_webhook_token')
     
     if mode == 'subscribe' and token == verify_token:
         logger.info("✅ Webhook verified successfully!")

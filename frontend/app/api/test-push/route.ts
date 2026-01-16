@@ -24,7 +24,7 @@ export async function POST(request: NextRequest) {
       body: JSON.stringify({
         user_id: user.id,
         title: "Test Notification",
-        body: "This is a test push notification from ReviseIt",
+        body: "This is a test push notification from Flowauxi",
         data: {
           type: "test",
           timestamp: new Date().toISOString(),

@@ -14,21 +14,21 @@ interface Testimonial {
 const testimonialsData: Testimonial[] = [
   {
     id: 1,
-    text: "ReviseIt has transformed how we communicate with our customers. The AI-powered responses are incredibly accurate and have reduced our response time by 80%. Our team can now focus on more complex customer needs.",
+    text: "Flowauxi has transformed how we communicate with our customers. The AI-powered responses are incredibly accurate and have reduced our response time by 80%. Our team can now focus on more complex customer needs.",
     name: "Sarah Johnson",
     role: "Head of Customer Success",
     image: "/testimonials/avatar-1.jpg",
   },
   {
     id: 2,
-    text: "The WhatsApp automation features are game-changing. We've seen a 3x increase in customer engagement since implementing ReviseIt. The platform is intuitive and the support team is outstanding.",
+    text: "The WhatsApp automation features are game-changing. We've seen a 3x increase in customer engagement since implementing Flowauxi. The platform is intuitive and the support team is outstanding.",
     name: "Michael Chen",
     role: "CEO & Founder",
     image: "/testimonials/avatar-2.jpg",
   },
   {
     id: 3,
-    text: "From setup to daily operations, ReviseIt has exceeded our expectations. The analytics dashboard provides invaluable insights that help us continuously improve our customer service strategy.",
+    text: "From setup to daily operations, Flowauxi has exceeded our expectations. The analytics dashboard provides invaluable insights that help us continuously improve our customer service strategy.",
     name: "Emily Rodriguez",
     role: "Operations Manager",
     image: "/testimonials/avatar-3.jpg",

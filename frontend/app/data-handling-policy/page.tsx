@@ -4,9 +4,9 @@ import Footer from "../components/Footer/Footer";
 import "./data-handling-policy.css";
 
 export const metadata: Metadata = {
-  title: "Data Handling Policy - Platform Data Processing | ReviseIt",
+  title: "Data Handling Policy - Platform Data Processing | Flowauxi",
   description:
-    "ReviseIt Data Handling Policy: How we process Meta Platform Data, our data processors (Supabase, Firebase, Vercel), government request policies, and data subject rights.",
+    "Flowauxi Data Handling Policy: How we process Meta Platform Data, our data processors (Supabase, Firebase, Vercel), government request policies, and data subject rights.",
   keywords: [
     "data handling policy",
     "platform data",
@@ -20,10 +20,10 @@ export const metadata: Metadata = {
     "data controller",
     "government data requests",
   ],
-  applicationName: "ReviseIt",
-  authors: [{ name: "ReviseIt Legal Team" }],
-  creator: "ReviseIt",
-  publisher: "ReviseIt",
+  applicationName: "Flowauxi",
+  authors: [{ name: "Flowauxi Legal Team" }],
+  creator: "Flowauxi",
+  publisher: "Flowauxi",
   category: "Legal Document",
   robots: {
     index: true,
@@ -32,14 +32,14 @@ export const metadata: Metadata = {
   openGraph: {
     type: "website",
     locale: "en_US",
-    url: "https://www.reviseit.in/data-handling-policy",
-    siteName: "ReviseIt",
-    title: "Data Handling Policy - ReviseIt",
+    url: "https://www.flowauxi.com/data-handling-policy",
+    siteName: "Flowauxi",
+    title: "Data Handling Policy - Flowauxi",
     description:
-      "Learn how ReviseIt processes and protects Platform Data from Meta and WhatsApp Business API.",
+      "Learn how Flowauxi processes and protects Platform Data from Meta and WhatsApp Business API.",
   },
   alternates: {
-    canonical: "https://www.reviseit.in/data-handling-policy",
+    canonical: "https://www.flowauxi.com/data-handling-policy",
   },
 };
 
@@ -63,7 +63,7 @@ export default function DataHandlingPolicy() {
                 </h2>
                 <div className="data-handling-highlight-box">
                   <p className="data-handling-text">
-                    <strong>ReviseIt</strong> acts as the Data Controller for
+                    <strong>Flowauxi</strong> acts as the Data Controller for
                     all Platform Data received from Meta, including WhatsApp
                     Business API data. We determine the purposes and means of
                     processing this data to provide our WhatsApp Business
@@ -376,10 +376,10 @@ export default function DataHandlingPolicy() {
                 <p className="data-handling-text">
                   To exercise these rights, contact us at{" "}
                   <a
-                    href="mailto:contact@reviseit.in"
+                    href="mailto:contact@flowauxi.com"
                     className="data-handling-link"
                   >
-                    contact@reviseit.in
+                    contact@flowauxi.com
                   </a>
                 </p>
               </section>
@@ -393,14 +393,14 @@ export default function DataHandlingPolicy() {
                   <p className="data-handling-text">
                     <strong>Email:</strong>{" "}
                     <a
-                      href="mailto:contact@reviseit.in"
+                      href="mailto:contact@flowauxi.com"
                       className="data-handling-link"
                     >
-                      contact@reviseit.in
+                      contact@flowauxi.com
                     </a>
                   </p>
                   <p className="data-handling-text">
-                    <strong>Data Protection Contact:</strong> ReviseIt Data
+                    <strong>Data Protection Contact:</strong> Flowauxi Data
                     Protection Team
                   </p>
                   <p className="data-handling-text">
@@ -412,7 +412,7 @@ export default function DataHandlingPolicy() {
               <div className="data-handling-footer">
                 <p className="data-handling-footer-text">
                   This Data Handling Policy is designed to provide transparency
-                  about how ReviseIt processes Platform Data obtained from Meta.
+                  about how Flowauxi processes Platform Data obtained from Meta.
                   For our full Privacy Policy, please visit{" "}
                   <a href="/privacy-policy" className="data-handling-link">
                     Privacy Policy

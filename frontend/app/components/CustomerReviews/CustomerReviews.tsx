@@ -23,7 +23,7 @@ const reviews: Review[] = [
     avatar: "from-purple-400 to-pink-400",
     rating: 4.9,
     review:
-      "ReviseIt cut our response time by 70%. The AI handles routine questions perfectly, and our team can focus on complex issues.",
+      "Flowauxi cut our response time by 70%. The AI handles routine questions perfectly, and our team can focus on complex issues.",
     category: "Customer Support",
   },
   {
@@ -132,7 +132,7 @@ export default function CustomerReviews() {
           </h2>
           <p className="reviews-subtitle">
             Join thousands of teams who are transforming their customer
-            engagement with ReviseIt
+            engagement with Flowauxi
           </p>
         </div>
 

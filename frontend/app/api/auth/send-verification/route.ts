@@ -58,7 +58,7 @@ export async function POST(request: NextRequest) {
       if (emailHtml) {
         const result = await sendEmail({
           to: email,
-          subject: "Verify your ReviseIt account",
+          subject: "Verify your Flowauxi account",
           html: emailHtml,
         });
 

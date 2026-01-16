@@ -5,7 +5,7 @@ import { adminAuth } from "@/lib/firebase-admin";
 /**
  * POST /api/upload-product-image
  * Generate a secure signature for uploading a product image to Cloudinary.
- * Uses multi-tenant folder structure: reviseit/users/{userId}/products/
+ * Uses multi-tenant folder structure: flowauxi/users/{userId}/products/
  * Gets userId from Firebase session for security.
  */
 export async function POST(request: NextRequest) {

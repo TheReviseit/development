@@ -16,7 +16,7 @@ export async function sendEmail({
   to,
   subject,
   html,
-  from = "ReviseIt <contact@reviseit.in>",
+  from = "Flowauxi <noreply@flowauxi.com>",
 }: {
   to: string | string[];
   subject: string;

@@ -39,12 +39,12 @@ export const viewport: Viewport = {
 
 // Comprehensive SEO Metadata Configuration
 export const metadata: Metadata = {
-  metadataBase: new URL("https://www.reviseit.in"),
+  metadataBase: new URL("https://www.flowauxi.com"),
 
   // Primary Meta Tags - Enhanced for better CTR
   title: {
-    default: "ReviseIt - AI WhatsApp Automation Platform | Free Trial",
-    template: "%s | ReviseIt",
+    default: "Flowauxi - AI WhatsApp Automation Platform | Free Trial",
+    template: "%s | Flowauxi",
   },
   description:
     "Transform your WhatsApp into a powerful business tool with AI automation. Get instant customer responses, automated follow-ups, and CRM integration. Trusted by 500+ businesses. Start your 14-day free trial today!",
@@ -75,14 +75,14 @@ export const metadata: Metadata = {
     "automated customer support",
   ],
   authors: [
-    { name: "ReviseIt Team", url: "https://www.reviseit.in" },
-    { name: "ReviseIt Support", url: "https://www.reviseit.in" },
+    { name: "Flowauxi Team", url: "https://www.flowauxi.com" },
+    { name: "Flowauxi Support", url: "https://www.flowauxi.com" },
   ],
-  creator: "ReviseIt - WhatsApp Automation Platform",
-  publisher: "ReviseIt Technologies",
+  creator: "Flowauxi - WhatsApp Automation Platform",
+  publisher: "Flowauxi Technologies",
 
   // App Configuration
-  applicationName: "ReviseIt",
+  applicationName: "Flowauxi",
   generator: "Next.js 16",
   referrer: "origin-when-cross-origin",
   formatDetection: {
@@ -110,26 +110,26 @@ export const metadata: Metadata = {
   openGraph: {
     type: "website",
     locale: "en_US",
-    url: "https://www.reviseit.in",
-    siteName: "ReviseIt - WhatsApp Automation Platform",
-    title: "ReviseIt - AI WhatsApp Automation Platform | Free Trial",
+    url: "https://www.flowauxi.com",
+    siteName: "Flowauxi - WhatsApp Automation Platform",
+    title: "Flowauxi - AI WhatsApp Automation Platform | Free Trial",
     description:
       "Transform your WhatsApp into a powerful business tool with AI automation. Get instant customer responses, automated follow-ups, and CRM integration. Trusted by 500+ businesses. Start free!",
     images: [
       {
-        url: "https://www.reviseit.in/og-image.png",
-        secureUrl: "https://www.reviseit.in/og-image.png",
+        url: "https://www.flowauxi.com/og-image.png",
+        secureUrl: "https://www.flowauxi.com/og-image.png",
         width: 1200,
         height: 630,
-        alt: "ReviseIt - AI-Powered WhatsApp Automation Platform for Business",
+        alt: "Flowauxi - AI-Powered WhatsApp Automation Platform for Business",
         type: "image/png",
       },
       {
-        url: "https://www.reviseit.in/logo.png",
-        secureUrl: "https://www.reviseit.in/logo.png",
+        url: "https://www.flowauxi.com/logo.png",
+        secureUrl: "https://www.flowauxi.com/logo.png",
         width: 512,
         height: 512,
-        alt: "ReviseIt Logo",
+        alt: "Flowauxi Logo",
         type: "image/png",
       },
     ],
@@ -138,14 +138,14 @@ export const metadata: Metadata = {
   // Twitter Card - Enhanced
   twitter: {
     card: "summary_large_image",
-    site: "@reviseit",
-    creator: "@reviseit",
-    title: "ReviseIt - AI WhatsApp Automation Platform | Free Trial",
+    site: "@flowauxi",
+    creator: "@flowauxi",
+    title: "Flowauxi - AI WhatsApp Automation Platform | Free Trial",
     description:
       "Transform your WhatsApp into a powerful business tool with AI automation. Get instant customer responses, automated follow-ups, and CRM integration. Start free today!",
     images: {
-      url: "https://www.reviseit.in/twitter-image.png",
-      alt: "ReviseIt - WhatsApp Automation Platform",
+      url: "https://www.flowauxi.com/twitter-image.png",
+      alt: "Flowauxi - WhatsApp Automation Platform",
     },
   },
 
@@ -184,10 +184,10 @@ export const metadata: Metadata = {
 
   // Alternate Languages and Canonical
   alternates: {
-    canonical: "https://www.reviseit.in",
+    canonical: "https://www.flowauxi.com",
     languages: {
-      "en-US": "https://www.reviseit.in",
-      "en-IN": "https://www.reviseit.in",
+      "en-US": "https://www.flowauxi.com",
+      "en-IN": "https://www.flowauxi.com",
     },
   },
 
@@ -196,8 +196,8 @@ export const metadata: Metadata = {
     "mobile-web-app-capable": "yes",
     "apple-mobile-web-app-capable": "yes",
     "apple-mobile-web-app-status-bar-style": "black-translucent",
-    "apple-mobile-web-app-title": "ReviseIt",
-    "application-name": "ReviseIt",
+    "apple-mobile-web-app-title": "Flowauxi",
+    "application-name": "Flowauxi",
     "msapplication-TileColor": "#22C15A",
     "msapplication-config": "/browserconfig.xml",
   },
@@ -209,30 +209,30 @@ export const metadata: Metadata = {
 const organizationSchema = {
   "@context": "https://schema.org",
   "@type": "Organization",
-  "@id": "https://www.reviseit.in/#organization",
-  name: "ReviseIt",
-  legalName: "ReviseIt Technologies",
+  "@id": "https://www.flowauxi.com/#organization",
+  name: "Flowauxi",
+  legalName: "Flowauxi Technologies",
   description:
     "AI-Powered WhatsApp Automation and Business Messaging Platform trusted by 500+ businesses",
-  url: "https://www.reviseit.in",
+  url: "https://www.flowauxi.com",
   logo: {
     "@type": "ImageObject",
-    "@id": "https://www.reviseit.in/#logo",
-    url: "https://www.reviseit.in/logo.png",
-    contentUrl: "https://www.reviseit.in/logo.png",
+    "@id": "https://www.flowauxi.com/#logo",
+    url: "https://www.flowauxi.com/logo.png",
+    contentUrl: "https://www.flowauxi.com/logo.png",
     width: "512",
     height: "512",
-    caption: "ReviseIt Logo",
+    caption: "Flowauxi Logo",
   },
   image: {
     "@type": "ImageObject",
-    url: "https://www.reviseit.in/og-image.png",
+    url: "https://www.flowauxi.com/og-image.png",
     width: "1200",
     height: "630",
   },
   founder: {
     "@type": "Person",
-    name: "ReviseIt Team",
+    name: "Flowauxi Team",
   },
   foundingDate: "2024",
   address: {
@@ -245,19 +245,19 @@ const organizationSchema = {
       "@type": "ContactPoint",
       contactType: "Customer Support",
       availableLanguage: ["English", "Hindi"],
-      email: "support@reviseit.in",
+      email: "support@flowauxi.com",
     },
     {
       "@type": "ContactPoint",
       contactType: "Sales",
       availableLanguage: ["English"],
-      email: "sales@reviseit.in",
+      email: "sales@flowauxi.com",
     },
   ],
   sameAs: [
-    "https://www.linkedin.com/company/reviseit",
-    "https://twitter.com/reviseit",
-    "https://www.facebook.com/reviseit",
+    "https://www.linkedin.com/company/flowauxi",
+    "https://twitter.com/flowauxi",
+    "https://www.facebook.com/flowauxi",
   ],
   areaServed: {
     "@type": "Country",
@@ -276,18 +276,18 @@ const organizationSchema = {
 const websiteSchema = {
   "@context": "https://schema.org",
   "@type": "WebSite",
-  "@id": "https://www.reviseit.in/#website",
-  name: "ReviseIt",
-  url: "https://www.reviseit.in",
+  "@id": "https://www.flowauxi.com/#website",
+  name: "Flowauxi",
+  url: "https://www.flowauxi.com",
   description: "AI-Powered WhatsApp Automation and Business Messaging Platform",
   publisher: {
-    "@id": "https://www.reviseit.in/#organization",
+    "@id": "https://www.flowauxi.com/#organization",
   },
   potentialAction: {
     "@type": "SearchAction",
     target: {
       "@type": "EntryPoint",
-      urlTemplate: "https://www.reviseit.in/search?q={search_term_string}",
+      urlTemplate: "https://www.flowauxi.com/search?q={search_term_string}",
     },
     "query-input": "required name=search_term_string",
   },
@@ -298,20 +298,20 @@ const websiteSchema = {
 const webPageSchema = {
   "@context": "https://schema.org",
   "@type": "WebPage",
-  "@id": "https://www.reviseit.in/#webpage",
-  url: "https://www.reviseit.in",
-  name: "ReviseIt - AI WhatsApp Automation & Business Messaging Platform",
+  "@id": "https://www.flowauxi.com/#webpage",
+  url: "https://www.flowauxi.com",
+  name: "Flowauxi - AI WhatsApp Automation & Business Messaging Platform",
   description:
     "Transform your WhatsApp into a powerful business tool with AI automation. Get instant customer responses, automated follow-ups, and CRM integration.",
   isPartOf: {
-    "@id": "https://www.reviseit.in/#website",
+    "@id": "https://www.flowauxi.com/#website",
   },
   about: {
-    "@id": "https://www.reviseit.in/#organization",
+    "@id": "https://www.flowauxi.com/#organization",
   },
   primaryImageOfPage: {
     "@type": "ImageObject",
-    url: "https://www.reviseit.in/og-image.png",
+    url: "https://www.flowauxi.com/og-image.png",
   },
   datePublished: "2024-01-01",
   dateModified: new Date().toISOString(),
@@ -322,7 +322,7 @@ const webPageSchema = {
 const softwareAppSchema = {
   "@context": "https://schema.org",
   "@type": "SoftwareApplication",
-  name: "ReviseIt",
+  name: "Flowauxi",
   applicationCategory: "BusinessApplication",
   applicationSubCategory: "Communication & Messaging",
   operatingSystem: "Web Browser, iOS, Android",
@@ -342,7 +342,7 @@ const softwareAppSchema = {
     worstRating: "1",
   },
   creator: {
-    "@id": "https://www.reviseit.in/#organization",
+    "@id": "https://www.flowauxi.com/#organization",
   },
   description:
     "AI-powered WhatsApp automation platform for businesses. Automate customer responses, manage conversations, and integrate with your CRM.",
@@ -354,7 +354,7 @@ const softwareAppSchema = {
     "Multi-Agent Support",
     "Template Management",
   ],
-  screenshot: "https://www.reviseit.in/og-image.png",
+  screenshot: "https://www.flowauxi.com/og-image.png",
 };
 
 // BreadcrumbList Schema - Helps with site navigation in search
@@ -366,7 +366,7 @@ const breadcrumbSchema = {
       "@type": "ListItem",
       position: 1,
       name: "Home",
-      item: "https://www.reviseit.in",
+      item: "https://www.flowauxi.com",
     },
   ],
 };
@@ -378,10 +378,10 @@ const faqSchema = {
   mainEntity: [
     {
       "@type": "Question",
-      name: "What is ReviseIt?",
+      name: "What is Flowauxi?",
       acceptedAnswer: {
         "@type": "Answer",
-        text: "ReviseIt is an AI-powered WhatsApp automation platform that helps businesses automate customer conversations, manage messaging at scale, and integrate with CRM systems.",
+        text: "Flowauxi is an AI-powered WhatsApp automation platform that helps businesses automate customer conversations, manage messaging at scale, and integrate with CRM systems.",
       },
     },
     {
@@ -389,7 +389,7 @@ const faqSchema = {
       name: "How does WhatsApp automation work?",
       acceptedAnswer: {
         "@type": "Answer",
-        text: "ReviseIt connects to WhatsApp Business API and uses AI to automatically respond to customer messages, send broadcasts, and manage conversations based on your business rules and workflows.",
+        text: "Flowauxi connects to WhatsApp Business API and uses AI to automatically respond to customer messages, send broadcasts, and manage conversations based on your business rules and workflows.",
       },
     },
     {
@@ -397,15 +397,15 @@ const faqSchema = {
       name: "Is there a free trial?",
       acceptedAnswer: {
         "@type": "Answer",
-        text: "Yes! ReviseIt offers a 14-day free trial with full access to all features. No credit card required to start.",
+        text: "Yes! Flowauxi offers a 14-day free trial with full access to all features. No credit card required to start.",
       },
     },
     {
       "@type": "Question",
-      name: "Can I integrate ReviseIt with my CRM?",
+      name: "Can I integrate Flowauxi with my CRM?",
       acceptedAnswer: {
         "@type": "Answer",
-        text: "Yes, ReviseIt integrates with popular CRM systems and business tools through our API and native integrations.",
+        text: "Yes, Flowauxi integrates with popular CRM systems and business tools through our API and native integrations.",
       },
     },
   ],
@@ -497,7 +497,7 @@ export default function RootLayout({
           name="apple-mobile-web-app-status-bar-style"
           content="black-translucent"
         />
-        <meta name="apple-mobile-web-app-title" content="ReviseIt" />
+        <meta name="apple-mobile-web-app-title" content="Flowauxi" />
 
         {/* Additional SEO Tags */}
         <meta name="rating" content="general" />
@@ -508,16 +508,24 @@ export default function RootLayout({
         <meta name="geo.placename" content="India" />
 
         {/* Canonical Link */}
-        <link rel="canonical" href="https://www.reviseit.in" />
+        <link rel="canonical" href="https://www.flowauxi.com" />
 
         {/* Alternate for hreflang */}
-        <link rel="alternate" hrefLang="en" href="https://www.reviseit.in" />
-        <link rel="alternate" hrefLang="en-US" href="https://www.reviseit.in" />
-        <link rel="alternate" hrefLang="en-IN" href="https://www.reviseit.in" />
+        <link rel="alternate" hrefLang="en" href="https://www.flowauxi.com" />
+        <link
+          rel="alternate"
+          hrefLang="en-US"
+          href="https://www.flowauxi.com"
+        />
+        <link
+          rel="alternate"
+          hrefLang="en-IN"
+          href="https://www.flowauxi.com"
+        />
         <link
           rel="alternate"
           hrefLang="x-default"
-          href="https://www.reviseit.in"
+          href="https://www.flowauxi.com"
         />
       </head>
       <body className={`${jakarta.variable} ${outfit.variable} antialiased`}>

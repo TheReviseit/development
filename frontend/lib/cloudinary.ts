@@ -34,7 +34,7 @@ export async function getSignature() {
   const signature = cloudinary.utils.api_sign_request(
     {
       timestamp,
-      folder: "reviseit/profile-pictures",
+      folder: "flowauxi/profile-pictures",
     },
     process.env.CLOUDINARY_API_SECRET!
   );
@@ -45,7 +45,7 @@ export async function getSignature() {
 /**
  * Generate a secure signature for product image uploads.
  * Uses multi-tenant folder structure for proper isolation:
- * reviseit/users/{userId}/products/{productId}/
+ * flowauxi/users/{userId}/products/{productId}/
  */
 export async function getProductImageSignature(
   userId: string,
@@ -53,8 +53,8 @@ export async function getProductImageSignature(
 ) {
   const timestamp = Math.round(new Date().getTime() / 1000);
 
-  // Multi-tenant folder structure: reviseit/users/{userId}/products/
-  const folder = `reviseit/users/${userId}/products`;
+  // Multi-tenant folder structure: flowauxi/users/{userId}/products/
+  const folder = `flowauxi/users/${userId}/products`;
 
   // Only sign the essential parameters
   const params = {

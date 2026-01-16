@@ -7,16 +7,16 @@ import { NextRequest, NextResponse } from "next/server";
  *
  * Usage:
  * POST /api/bing/submit-url
- * Body: { "urls": ["https://www.reviseit.in/page1", "https://www.reviseit.in/page2"] }
+ * Body: { "urls": ["https://www.flowauxi.com/page1", "https://www.flowauxi.com/page2"] }
  *
  * Or submit a single URL:
  * POST /api/bing/submit-url
- * Body: { "url": "https://www.reviseit.in/page1" }
+ * Body: { "url": "https://www.flowauxi.com/page1" }
  */
 
 const BING_API_ENDPOINT =
   "https://ssl.bing.com/webmaster/api.svc/json/SubmitUrlBatch";
-const SITE_URL = "https://www.reviseit.in";
+const SITE_URL = "https://www.flowauxi.com";
 
 export async function POST(request: NextRequest) {
   try {
@@ -155,7 +155,7 @@ export async function GET() {
     maxUrlsPerRequest: 10,
     usage: {
       single:
-        "POST /api/bing/submit-url with body: { url: 'https://www.reviseit.in/page' }",
+        "POST /api/bing/submit-url with body: { url: 'https://www.flowauxi.com/page' }",
       multiple:
         "POST /api/bing/submit-url with body: { urls: ['url1', 'url2'] }",
     },

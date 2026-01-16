@@ -25,7 +25,7 @@ self.addEventListener("push", (event) => {
   // FCM may also send fcmOptions with link
   const fcmOptions = payload.fcmOptions || {};
 
-  const title = notification.title || data.title || "ReviseIt - New Message";
+  const title = notification.title || data.title || "Flowauxi - New Message";
   const body = notification.body || data.body || "You have a new message";
   const icon = notification.icon || data.icon || "/logo-circle.png";
 
@@ -177,9 +177,9 @@ function setupBackgroundMessageHandler() {
 // ============================================
 
 const CACHE_VERSION = "v3";
-const STATIC_CACHE = `reviseit-static-${CACHE_VERSION}`;
-const IMAGE_CACHE = `reviseit-images-${CACHE_VERSION}`;
-const FONT_CACHE = `reviseit-fonts-${CACHE_VERSION}`;
+const STATIC_CACHE = `flowauxi-static-${CACHE_VERSION}`;
+const IMAGE_CACHE = `flowauxi-images-${CACHE_VERSION}`;
+const FONT_CACHE = `flowauxi-fonts-${CACHE_VERSION}`;
 
 // Static assets to precache (only files that definitely exist)
 const STATIC_ASSETS = [
@@ -239,7 +239,7 @@ self.addEventListener("activate", (event) => {
           .filter((name) => {
             // Delete caches that don't match current version
             return (
-              name.startsWith("reviseit-") && !name.includes(CACHE_VERSION)
+              name.startsWith("flowauxi-") && !name.includes(CACHE_VERSION)
             );
           })
           .map((name) => {

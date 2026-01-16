@@ -287,7 +287,7 @@ const WhatsAppFeatures = () => {
             </h3>
             <p className="features-cta-text">
               Join thousands of businesses already scaling their customer
-              engagement with ReviseIt.
+              engagement with Flowauxi.
             </p>
           </div>
           <div className="features-cta-buttons">

@@ -9,10 +9,10 @@ export const metadata: Metadata = {
   // ========================================
 
   title:
-    "User Data Deletion Instructions - Delete Your ReviseIt Account | DPDP Compliance",
+    "User Data Deletion Instructions - Delete Your Flowauxi Account | DPDP Compliance",
 
   description:
-    "Request deletion of your ReviseIt account and data. Step-by-step instructions for full or partial account deletion, timelines (30-90 days), and data portability. DPDP Act 2023 and Meta compliant.",
+    "Request deletion of your Flowauxi account and data. Step-by-step instructions for full or partial account deletion, timelines (30-90 days), and data portability. DPDP Act 2023 and Meta compliant.",
 
   keywords: [
     "data deletion",
@@ -33,10 +33,10 @@ export const metadata: Metadata = {
   // APPLICATION METADATA
   // ========================================
 
-  applicationName: "ReviseIt",
-  authors: [{ name: "ReviseIt Privacy Team" }],
-  creator: "ReviseIt",
-  publisher: "ReviseIt",
+  applicationName: "Flowauxi",
+  authors: [{ name: "Flowauxi Privacy Team" }],
+  creator: "Flowauxi",
+  publisher: "Flowauxi",
   category: "User Rights - Data Privacy",
   classification: "Data Deletion Instructions - DPDP Compliance",
 
@@ -64,9 +64,9 @@ export const metadata: Metadata = {
   openGraph: {
     type: "website",
     locale: "en_US",
-    url: "https://www.reviseit.in/data-deletion",
-    siteName: "ReviseIt",
-    title: "Delete Your ReviseIt Account - User Data Deletion Instructions",
+    url: "https://www.flowauxi.com/data-deletion",
+    siteName: "Flowauxi",
+    title: "Delete Your Flowauxi Account - User Data Deletion Instructions",
     description:
       "Exercise your right to erasure under DPDP Act 2023. Request full or partial account deletion with clear timelines and data portability options.",
     images: [
@@ -74,7 +74,7 @@ export const metadata: Metadata = {
         url: "/og-data-deletion.png",
         width: 1200,
         height: 630,
-        alt: "ReviseIt Data Deletion Instructions - DPDP Act 2023 Compliant",
+        alt: "Flowauxi Data Deletion Instructions - DPDP Act 2023 Compliant",
         type: "image/png",
       },
     ],
@@ -86,12 +86,12 @@ export const metadata: Metadata = {
 
   twitter: {
     card: "summary_large_image",
-    title: "Data Deletion Instructions - ReviseIt",
+    title: "Data Deletion Instructions - Flowauxi",
     description:
-      "Request deletion of your ReviseIt account and data. DPDP Act 2023 compliant process with clear timelines and verification steps.",
+      "Request deletion of your Flowauxi account and data. DPDP Act 2023 compliant process with clear timelines and verification steps.",
     images: ["/twitter-data-deletion.png"],
-    creator: "@reviseit",
-    site: "@reviseit",
+    creator: "@flowauxi",
+    site: "@flowauxi",
   },
 
   // ========================================
@@ -99,9 +99,9 @@ export const metadata: Metadata = {
   // ========================================
 
   alternates: {
-    canonical: "https://www.reviseit.in/data-deletion",
+    canonical: "https://www.flowauxi.com/data-deletion",
     languages: {
-      "en-US": "https://www.reviseit.in/data-deletion",
+      "en-US": "https://www.flowauxi.com/data-deletion",
     },
   },
 
@@ -136,7 +136,7 @@ export default function DataDeletion() {
               <section className="data-deletion-section">
                 <h2 className="data-deletion-section-title">1. Introduction</h2>
                 <p className="data-deletion-text">
-                  You can request deletion of your ReviseIt account and
+                  You can request deletion of your Flowauxi account and
                   associated data at any time. We are committed to processing
                   your request promptly and in compliance with applicable data
                   protection laws, including the DPDP Act 2023.
@@ -156,14 +156,14 @@ export default function DataDeletion() {
                   <p className="data-deletion-highlight-text">
                     <strong>Email:</strong>{" "}
                     <a
-                      href="mailto:connect@reviseit.in?subject=Data%20Deletion%20Request%20%E2%80%93%20ReviseIt"
+                      href="mailto:connect@flowauxi.com?subject=Data%20Deletion%20Request%20%E2%80%93%20Flowauxi"
                       className="data-deletion-link"
                     >
-                      connect@reviseit.in
+                      connect@flowauxi.com
                     </a>
                   </p>
                   <p className="data-deletion-highlight-text">
-                    <strong>Subject:</strong> "Data Deletion Request – ReviseIt"
+                    <strong>Subject:</strong> "Data Deletion Request – Flowauxi"
                   </p>
                   <p className="data-deletion-highlight-text">
                     <strong>Specify:</strong> "Full Deletion" or "Partial
@@ -184,7 +184,7 @@ export default function DataDeletion() {
                     <div className="data-deletion-bullet"></div>
                     <span className="data-deletion-item-text">
                       <strong>Registered Email:</strong> The email address
-                      associated with your ReviseIt account
+                      associated with your Flowauxi account
                     </span>
                   </li>
                   <li className="data-deletion-list-item">
@@ -271,7 +271,7 @@ export default function DataDeletion() {
                 </ul>
                 <p className="data-deletion-text" style={{ marginTop: "1rem" }}>
                   <strong>Third-Party Data:</strong> We will delete data stored
-                  on ReviseIt servers. Data stored directly by Meta/WhatsApp
+                  on Flowauxi servers. Data stored directly by Meta/WhatsApp
                   Business API is subject to their retention policies. You may
                   need to contact Meta directly for deletion of data on their
                   end.
@@ -355,14 +355,14 @@ export default function DataDeletion() {
                   <p className="data-deletion-text">
                     <strong>Email:</strong>{" "}
                     <a
-                      href="mailto:connect@reviseit.in"
+                      href="mailto:connect@flowauxi.com"
                       className="data-deletion-link"
                     >
-                      connect@reviseit.in
+                      connect@flowauxi.com
                     </a>
                   </p>
                   <p className="data-deletion-text">
-                    <strong>Business Name:</strong> ReviseIt
+                    <strong>Business Name:</strong> Flowauxi
                   </p>
                 </div>
               </section>

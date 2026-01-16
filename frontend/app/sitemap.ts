@@ -13,7 +13,7 @@ import { MetadataRoute } from "next";
  */
 
 export default function sitemap(): MetadataRoute.Sitemap {
-  const baseUrl = "https://www.reviseit.in";
+  const baseUrl = "https://www.flowauxi.com";
 
   // Use a stable date for lastModified to avoid constant changes
   // Update this date when you make significant changes to the site

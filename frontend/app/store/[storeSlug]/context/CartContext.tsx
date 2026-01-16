@@ -43,7 +43,7 @@ interface CartContextType {
 
 const CartContext = createContext<CartContextType | null>(null);
 
-const CART_STORAGE_KEY = "reviseit_store_cart";
+const CART_STORAGE_KEY = "flowauxi_store_cart";
 
 export function CartProvider({
   children,

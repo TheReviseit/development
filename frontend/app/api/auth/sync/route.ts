@@ -185,7 +185,7 @@ export async function POST(request: NextRequest) {
           // Send welcome email asynchronously (don't wait for it)
           sendEmail({
             to: email,
-            subject: "Welcome to ReviseIt! 🎉",
+            subject: "Welcome to Flowauxi! 🎉",
             html: welcomeHtml,
           })
             .then((result) => {

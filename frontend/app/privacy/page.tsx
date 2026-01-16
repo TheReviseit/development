@@ -8,10 +8,10 @@ export const metadata: Metadata = {
   // BASIC META TAGS
   // ========================================
 
-  title: "Privacy Policy - DPDP Act 2023 Compliance | ReviseIt",
+  title: "Privacy Policy - DPDP Act 2023 Compliance | Flowauxi",
 
   description:
-    "ReviseIt Privacy Policy: Learn how we collect, use, protect, and delete your data in compliance with India's DPDP Act 2023 and WhatsApp Business API requirements. Transparent data handling for your WhatsApp automation platform.",
+    "Flowauxi Privacy Policy: Learn how we collect, use, protect, and delete your data in compliance with India's DPDP Act 2023 and WhatsApp Business API requirements. Transparent data handling for your WhatsApp automation platform.",
 
   keywords: [
     "privacy policy",
@@ -32,10 +32,10 @@ export const metadata: Metadata = {
   // APPLICATION METADATA
   // ========================================
 
-  applicationName: "ReviseIt",
-  authors: [{ name: "ReviseIt Legal Team" }],
-  creator: "ReviseIt",
-  publisher: "ReviseIt",
+  applicationName: "Flowauxi",
+  authors: [{ name: "Flowauxi Legal Team" }],
+  creator: "Flowauxi",
+  publisher: "Flowauxi",
   category: "Legal Document",
   classification: "Privacy Policy - Data Protection Compliance",
 
@@ -63,17 +63,17 @@ export const metadata: Metadata = {
   openGraph: {
     type: "website",
     locale: "en_US",
-    url: "https://www.reviseit.in/privacy",
-    siteName: "ReviseIt",
-    title: "Privacy Policy - ReviseIt WhatsApp Automation",
+    url: "https://www.flowauxi.com/privacy",
+    siteName: "Flowauxi",
+    title: "Privacy Policy - Flowauxi WhatsApp Automation",
     description:
-      "Transparent privacy practices for ReviseIt users. DPDP Act 2023 compliant. Learn about data collection, user rights, and WhatsApp Business API data handling.",
+      "Transparent privacy practices for Flowauxi users. DPDP Act 2023 compliant. Learn about data collection, user rights, and WhatsApp Business API data handling.",
     images: [
       {
         url: "/og-image.png",
         width: 1200,
         height: 630,
-        alt: "ReviseIt Privacy Policy - DPDP Act 2023 Compliant",
+        alt: "Flowauxi Privacy Policy - DPDP Act 2023 Compliant",
         type: "image/png",
       },
     ],
@@ -85,12 +85,12 @@ export const metadata: Metadata = {
 
   twitter: {
     card: "summary_large_image",
-    title: "Privacy Policy - ReviseIt",
+    title: "Privacy Policy - Flowauxi",
     description:
-      "DPDP Act 2023 compliant privacy policy. Learn how ReviseIt protects your data when using our WhatsApp automation platform.",
+      "DPDP Act 2023 compliant privacy policy. Learn how Flowauxi protects your data when using our WhatsApp automation platform.",
     images: ["/twitter-image.png"],
-    creator: "@reviseit",
-    site: "@reviseit",
+    creator: "@flowauxi",
+    site: "@flowauxi",
   },
 
   // ========================================
@@ -98,9 +98,9 @@ export const metadata: Metadata = {
   // ========================================
 
   alternates: {
-    canonical: "https://www.reviseit.in/privacy",
+    canonical: "https://www.flowauxi.com/privacy",
     languages: {
-      "en-US": "https://www.reviseit.in/privacy",
+      "en-US": "https://www.flowauxi.com/privacy",
     },
   },
 
@@ -123,14 +123,14 @@ export default function PrivacyPolicy() {
               <section className="privacy-section">
                 <h2 className="privacy-section-title">1. Introduction</h2>
                 <p className="privacy-text">
-                  ReviseIt is an AI-powered WhatsApp automation platform. This
+                  Flowauxi is an AI-powered WhatsApp automation platform. This
                   Privacy Policy describes how we collect, use, and protect your
                   personal data in accordance with the Digital Personal Data
                   Protection (DPDP) Act, 2023.
                 </p>
                 <div className="privacy-highlight-box">
                   <p className="privacy-highlight-text">
-                    <strong>Data Fiduciary:</strong> ReviseIt
+                    <strong>Data Fiduciary:</strong> Flowauxi
                   </p>
                   <p className="privacy-highlight-text">
                     <strong>Registered Address:</strong> Ambasamudram,
@@ -194,7 +194,7 @@ export default function PrivacyPolicy() {
                   3. Information We Collect
                 </h2>
                 <p className="privacy-text">
-                  We collect the following information when you use ReviseIt:
+                  We collect the following information when you use Flowauxi:
                 </p>
                 <ul className="privacy-list">
                   <li className="privacy-list-item">
@@ -403,10 +403,10 @@ export default function PrivacyPolicy() {
                   <p className="privacy-text">
                     <strong>Email:</strong>{" "}
                     <a
-                      href="mailto:contact@reviseit.in"
+                      href="mailto:contact@flowauxi.com"
                       className="privacy-link"
                     >
-                      contact@reviseit.in
+                      contact@flowauxi.com
                     </a>
                   </p>
                   <p className="privacy-text">
@@ -430,14 +430,14 @@ export default function PrivacyPolicy() {
                   <p className="privacy-text">
                     <strong>Email:</strong>{" "}
                     <a
-                      href="mailto:contact@reviseit.in"
+                      href="mailto:contact@flowauxi.com"
                       className="privacy-link"
                     >
-                      contact@reviseit.in
+                      contact@flowauxi.com
                     </a>
                   </p>
                   <p className="privacy-text">
-                    <strong>Business Name:</strong> ReviseIt
+                    <strong>Business Name:</strong> Flowauxi
                   </p>
                 </div>
               </section>

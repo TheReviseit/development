@@ -209,7 +209,7 @@ export default function DashboardLayout({
                 <div className={styles.logoWithTitle}>
                   <img
                     src="/logo.png"
-                    alt="ReviseIt"
+                    alt="Flowauxi"
                     className={styles.headerLogo}
                   />
                   <h2 className={styles.mobileHeaderTitle}>

@@ -253,7 +253,7 @@ class ToolExecutor:
     
     # Frontend API URL for booking (booking endpoint is on frontend)
     FRONTEND_API_URL = os.environ.get('FRONTEND_URL', 'http://localhost:3000')
-    INTERNAL_API_KEY = os.environ.get('INTERNAL_API_KEY', 'reviseit-internal-key')
+    INTERNAL_API_KEY = os.environ.get('INTERNAL_API_KEY', 'flowauxi-internal-key')
     
     def __init__(self, business_data: Dict[str, Any], user_id: str = None, business_owner_id: str = None):
         self.business_data = business_data

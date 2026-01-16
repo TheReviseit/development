@@ -200,8 +200,8 @@ export default function VerifyEmailPage() {
         {/* Right Side - Form */}
         <div className="auth-right">
           <div className="brand-tag">
-            <img src="/logo.png" alt="Revise It Logo" width="24" height="24" />
-            <span>Revise It</span>
+            <img src="/logo.png" alt="Flowauxi Logo" width="24" height="24" />
+            <span>Flowauxi</span>
           </div>
 
           <div className="form-container">

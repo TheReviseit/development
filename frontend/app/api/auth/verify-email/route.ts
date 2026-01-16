@@ -130,7 +130,7 @@ export async function POST(request: NextRequest) {
         if (emailHtml && userData.email) {
           const emailResult = await sendEmail({
             to: userData.email,
-            subject: "Welcome to ReviseIt! 🎉",
+            subject: "Welcome to Flowauxi! 🎉",
             html: emailHtml,
           });
 

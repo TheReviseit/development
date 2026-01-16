@@ -12,8 +12,8 @@ function getSupabase() {
 // Internal API key for backend-to-frontend communication
 // For local development, we accept the default key without needing env vars
 const INTERNAL_API_KEY =
-  process.env.INTERNAL_API_KEY || "reviseit-internal-key";
-const DEFAULT_API_KEY = "reviseit-internal-key";
+  process.env.INTERNAL_API_KEY || "flowauxi-internal-key";
+const DEFAULT_API_KEY = "flowauxi-internal-key";
 
 // Validate internal API request
 function validateInternalRequest(request: NextRequest): boolean {
@@ -211,11 +211,16 @@ export async function POST(request: NextRequest) {
 
     // First, check if the user_id looks like a Firebase UID (they typically start with alphanumeric chars)
     // Supabase UUIDs have the format: xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
-    const isUUIDFormat = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(user_id);
-    
+    const isUUIDFormat =
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+        user_id
+      );
+
     if (isUUIDFormat) {
       // Looks like a Supabase UUID - try to get Firebase UID
-      console.log(`🔗 AI Appointment: user_id appears to be Supabase UUID format`);
+      console.log(
+        `🔗 AI Appointment: user_id appears to be Supabase UUID format`
+      );
       const { data: userData, error: userError } = await supabase
         .from("users")
         .select("firebase_uid")
@@ -227,12 +232,16 @@ export async function POST(request: NextRequest) {
         idResolutionMethod = "supabase_uuid_mapped";
         console.log(`✅ Mapped Supabase UUID → Firebase UID: ${firebaseUid}`);
       } else {
-        console.warn(`⚠️ Could not find Firebase UID for Supabase UUID: ${user_id}, error: ${userError?.message}`);
+        console.warn(
+          `⚠️ Could not find Firebase UID for Supabase UUID: ${user_id}, error: ${userError?.message}`
+        );
         idResolutionMethod = "supabase_uuid_not_found";
       }
     } else {
       // Looks like a Firebase UID - verify it exists in the users table
-      console.log(`🔗 AI Appointment: user_id appears to be Firebase UID format`);
+      console.log(
+        `🔗 AI Appointment: user_id appears to be Firebase UID format`
+      );
       const { data: fbUser, error: fbError } = await supabase
         .from("users")
         .select("id, firebase_uid")
@@ -242,18 +251,26 @@ export async function POST(request: NextRequest) {
       if (fbUser) {
         firebaseUid = user_id; // Confirmed it's a Firebase UID
         idResolutionMethod = "firebase_uid_verified";
-        console.log(`✅ Verified Firebase UID exists: ${firebaseUid} (Supabase user id: ${fbUser.id})`);
+        console.log(
+          `✅ Verified Firebase UID exists: ${firebaseUid} (Supabase user id: ${fbUser.id})`
+        );
       } else {
         // Firebase UID not found in users table - this is the likely problem!
-        console.warn(`⚠️ Firebase UID not found in users table: ${user_id}, error: ${fbError?.message}`);
-        console.warn(`⚠️ This may cause appointments to not appear in dashboard!`);
+        console.warn(
+          `⚠️ Firebase UID not found in users table: ${user_id}, error: ${fbError?.message}`
+        );
+        console.warn(
+          `⚠️ This may cause appointments to not appear in dashboard!`
+        );
         idResolutionMethod = "firebase_uid_not_in_db";
         // Still use it as-is since it came from the backend's Firebase lookup
         firebaseUid = user_id;
       }
     }
 
-    console.log(`📋 AI Appointment: Final user_id resolution: ${firebaseUid} (method: ${idResolutionMethod})`)
+    console.log(
+      `📋 AI Appointment: Final user_id resolution: ${firebaseUid} (method: ${idResolutionMethod})`
+    );
 
     // Get service configuration to check capacity
     const { data: aiConfig } = await supabase
@@ -264,16 +281,20 @@ export async function POST(request: NextRequest) {
 
     // Get capacity for the requested service (default to 1)
     const services = aiConfig?.appointment_services || [
-      { id: "default", name: "General Appointment", duration: 60, capacity: 1 }
+      { id: "default", name: "General Appointment", duration: 60, capacity: 1 },
     ];
-    
+
     // Find the matching service or use default capacity
-    const matchingService = services.find(
-      (s: { name: string }) => s.name.toLowerCase() === (service || "").toLowerCase()
-    ) || services[0];
-    
+    const matchingService =
+      services.find(
+        (s: { name: string }) =>
+          s.name.toLowerCase() === (service || "").toLowerCase()
+      ) || services[0];
+
     const serviceCapacity = matchingService?.capacity || 1;
-    console.log(`📋 Service capacity for "${service || 'General'}": ${serviceCapacity}`);
+    console.log(
+      `📋 Service capacity for "${service || "General"}": ${serviceCapacity}`
+    );
 
     // Check if the time slot is available (conflict check with capacity)
     const { data: existingAppointments, error: checkError } = await supabase
@@ -294,7 +315,9 @@ export async function POST(request: NextRequest) {
 
     // Check if capacity is exceeded
     const currentBookingsAtTime = existingAppointments?.length || 0;
-    console.log(`📋 Current bookings at ${finalTime}: ${currentBookingsAtTime}/${serviceCapacity}`);
+    console.log(
+      `📋 Current bookings at ${finalTime}: ${currentBookingsAtTime}/${serviceCapacity}`
+    );
 
     if (currentBookingsAtTime >= serviceCapacity) {
       // Capacity exceeded - get available slots
@@ -403,11 +426,14 @@ export async function GET(request: NextRequest) {
 
     // The user_id from backend could be a Supabase UUID - convert to Firebase UID
     let firebaseUid = userId;
-    
+
     console.log(`🔍 AI Appointment GET: Resolving user_id: ${userId}`);
 
     // First, check if the user_id looks like a UUID format
-    const isUUIDFormat = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(userId);
+    const isUUIDFormat =
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+        userId
+      );
 
     if (isUUIDFormat) {
       // Looks like a Supabase UUID - try to get Firebase UID
@@ -419,7 +445,9 @@ export async function GET(request: NextRequest) {
 
       if (userData?.firebase_uid) {
         firebaseUid = userData.firebase_uid;
-        console.log(`🔗 GET: Mapped Supabase UUID → Firebase UID: ${firebaseUid}`);
+        console.log(
+          `🔗 GET: Mapped Supabase UUID → Firebase UID: ${firebaseUid}`
+        );
       } else {
         console.log(`⚠️ GET: Supabase UUID not found, using as-is: ${userId}`);
       }
@@ -434,7 +462,9 @@ export async function GET(request: NextRequest) {
       if (fbUser) {
         console.log(`✅ GET: Verified Firebase UID: ${userId}`);
       } else {
-        console.log(`⚠️ GET: Firebase UID not in users table, using as-is: ${userId}`);
+        console.log(
+          `⚠️ GET: Firebase UID not in users table, using as-is: ${userId}`
+        );
       }
     }
 
@@ -498,7 +528,12 @@ export async function GET(request: NextRequest) {
         duration: 60,
       },
       services: config?.appointment_services || [
-        { id: "default", name: "General Appointment", duration: 60, capacity: 1 }
+        {
+          id: "default",
+          name: "General Appointment",
+          duration: 60,
+          capacity: 1,
+        },
       ],
       minimal_mode: config?.appointment_minimal_mode || false,
     };
@@ -575,7 +610,7 @@ async function getAvailableSlots(
       end: "18:00",
       duration: 60,
     };
-    
+
     // Get default capacity from services config
     const services = config?.appointment_services || [];
     const defaultCapacity = services[0]?.capacity || capacity;
@@ -601,7 +636,7 @@ async function getAvailableSlots(
     ) {
       const timeStr = formatTime(time);
       const currentBookings = bookingsPerSlot[timeStr] || 0;
-      
+
       // Slot is available if under capacity
       if (currentBookings < defaultCapacity) {
         availableSlots.push(timeStr);

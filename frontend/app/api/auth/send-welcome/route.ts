@@ -26,7 +26,7 @@ export async function POST(request: NextRequest) {
       if (emailHtml) {
         const result = await sendEmail({
           to: email,
-          subject: "Welcome to ReviseIt! 🎉",
+          subject: "Welcome to Flowauxi! 🎉",
           html: emailHtml,
         });
 

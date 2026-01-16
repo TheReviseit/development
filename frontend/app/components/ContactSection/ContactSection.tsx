@@ -332,10 +332,10 @@ export default function ContactSection() {
               <h3 className="contact-info-title">Email Us</h3>
               <p className="contact-info-text">Our team is here to help you</p>
               <a
-                href="mailto:contact@reviseit.in"
+                href="mailto:contact@flowauxi.com"
                 className="contact-info-link"
               >
-                contact@reviseit.in
+                contact@flowauxi.com
               </a>
             </div>
 

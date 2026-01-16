@@ -7,7 +7,7 @@ const baseEmailHtml = (content: string) => `
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>ReviseIt</title>
+  <title>Flowauxi</title>
   <style>
     body {
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Helvetica', 'Arial', sans-serif;
@@ -69,14 +69,14 @@ const baseEmailHtml = (content: string) => `
 <body>
   <div class="container">
     <div class="header">
-      <div class="logo">ReviseIt</div>
+      <div class="logo">Flowauxi</div>
     </div>
     <div class="content">
       ${content}
     </div>
     <div class="footer">
-      <p>© ${new Date().getFullYear()} ReviseIt. All rights reserved.</p>
-      <p>This email was sent from contact@reviseit.in</p>
+      <p>© ${new Date().getFullYear()} Flowauxi. All rights reserved.</p>
+      <p>This email was sent from noreply@flowauxi.com</p>
     </div>
   </div>
 </body>
@@ -86,7 +86,7 @@ const baseEmailHtml = (content: string) => `
 // Welcome email template
 export const welcomeTemplate: EmailTemplate = {
   name: "welcome",
-  subject: "Welcome to ReviseIt! 🎉",
+  subject: "Welcome to Flowauxi! 🎉",
   generateHtml: (data: TemplateData) => {
     const userName = data.userName || "there";
     const content = `
@@ -94,9 +94,9 @@ export const welcomeTemplate: EmailTemplate = {
       <p style="font-size: 16px; line-height: 1.8;">We're absolutely <strong>thrilled</strong> to have you here! You've just taken the first step towards revolutionizing how you manage customer conversations. Let's make magic happen! ✨</p>
       
       <p style="font-size: 16px; margin-top: 24px;">Ready to dive in? Your journey starts here!</p>
-      <a href="https://reviseit.in/dashboard" class="button" style="display: inline-block; padding: 12px 24px; background-color: #000000; color: #ffffff !important; text-decoration: none; border-radius: 6px; margin: 20px 0;">Go to Dashboard ❤️</a>
+      <a href="https://flowauxi.com/dashboard" class="button" style="display: inline-block; padding: 12px 24px; background-color: #000000; color: #ffffff !important; text-decoration: none; border-radius: 6px; margin: 20px 0;">Go to Dashboard ❤️</a>
       
-      <p style="font-size: 14px; color: #666; margin-top: 32px;">Got questions? We're here to help! Shoot us an email at <a href="mailto:contact@reviseit.in" style="color: #22c15a; text-decoration: none;">contact@reviseit.in</a> - we'd love to hear from you! 💚</p>
+      <p style="font-size: 14px; color: #666; margin-top: 32px;">Got questions? We're here to help! Shoot us an email at <a href="mailto:contact@flowauxi.com" style="color: #22c15a; text-decoration: none;">contact@flowauxi.com</a> - we'd love to hear from you! 💚</p>
     `;
     return baseEmailHtml(content);
   },
@@ -105,10 +105,10 @@ export const welcomeTemplate: EmailTemplate = {
 // Newsletter template
 export const newsletterTemplate: EmailTemplate = {
   name: "newsletter",
-  subject: "Newsletter from ReviseIt",
+  subject: "Newsletter from Flowauxi",
   generateHtml: (data: TemplateData) => {
     const userName = data.userName || "Valued User";
-    const message = data.message || "Here's what's new with ReviseIt!";
+    const message = data.message || "Here's what's new with Flowauxi!";
     const content = `
       <h1>Hello ${userName}!</h1>
       <div style="margin: 20px 0;">
@@ -123,7 +123,7 @@ export const newsletterTemplate: EmailTemplate = {
 // Custom message template
 export const customTemplate: EmailTemplate = {
   name: "custom",
-  subject: "Message from ReviseIt",
+  subject: "Message from Flowauxi",
   generateHtml: (data: TemplateData) => {
     const message = data.message || "";
     const content = `
@@ -138,7 +138,7 @@ export const customTemplate: EmailTemplate = {
 // Announcement template
 export const announcementTemplate: EmailTemplate = {
   name: "announcement",
-  subject: "Important Update from ReviseIt",
+  subject: "Important Update from Flowauxi",
   generateHtml: (data: TemplateData) => {
     const title = data.title || "Important Announcement";
     const message = data.message || "";
@@ -147,7 +147,7 @@ export const announcementTemplate: EmailTemplate = {
       <div style="margin: 20px 0; padding: 20px; background-color: #f0f9ff; border-left: 4px solid #2563eb; border-radius: 4px;">
         ${message}
       </div>
-      <p>Thank you for being part of the ReviseIt community!</p>
+      <p>Thank you for being part of the Flowauxi community!</p>
     `;
     return baseEmailHtml(content);
   },
@@ -156,18 +156,18 @@ export const announcementTemplate: EmailTemplate = {
 // Email Verification template
 export const emailVerificationTemplate: EmailTemplate = {
   name: "email-verification",
-  subject: "Verify your ReviseIt account",
+  subject: "Verify your Flowauxi account",
   generateHtml: (data: TemplateData) => {
     const code = data.code || "000000";
     const content = `
       <h1>Verify Your Email Address</h1>
-      <p>Welcome to ReviseIt! Please verify your email address to complete your registration.</p>
+      <p>Welcome to Flowauxi! Please verify your email address to complete your registration.</p>
       <p>Your verification code is:</p>
       <div style="background-color: #f5f5f5; padding: 20px; border-radius: 8px; text-align: center; margin: 30px 0;">
         <h1 style="font-size: 48px; letter-spacing: 12px; font-weight: bold; color: #000000; margin: 0; font-family: 'Courier New', monospace;">${code}</h1>
       </div>
       <p style="font-size: 14px; color: #666;">This code will expire in <strong>15 minutes</strong>.</p>
-      <p>If you didn't create an account with ReviseIt, you can safely ignore this email.</p>
+      <p>If you didn't create an account with Flowauxi, you can safely ignore this email.</p>
     `;
     return baseEmailHtml(content);
   },
@@ -176,7 +176,7 @@ export const emailVerificationTemplate: EmailTemplate = {
 // Welcome email after verification template
 export const welcomeAfterVerificationTemplate: EmailTemplate = {
   name: "welcome-verified",
-  subject: "Welcome to ReviseIt! 🎉",
+  subject: "Welcome to Flowauxi! 🎉",
   generateHtml: (data: TemplateData) => {
     const userName = data.userName || "there";
     const content = `
@@ -191,9 +191,9 @@ export const welcomeAfterVerificationTemplate: EmailTemplate = {
       </ul>
       
       <p style="font-size: 16px; margin-top: 24px;">Ready to dive in? Your journey starts here!</p>
-      <a href="https://www.reviseit.in/onboarding" class="button" style="display: inline-block; padding: 12px 24px; background-color: #000000; color: #ffffff !important; text-decoration: none; border-radius: 6px; margin: 20px 0;">Let's Get Started ❤️ </a>
+      <a href="https://www.flowauxi.com/onboarding" class="button" style="display: inline-block; padding: 12px 24px; background-color: #000000; color: #ffffff !important; text-decoration: none; border-radius: 6px; margin: 20px 0;">Let's Get Started ❤️ </a>
       
-      <p style="font-size: 14px; color: #666; margin-top: 32px;">Got questions? We're here to help! Shoot us an email at <a href="mailto:contact@reviseit.in" style="color: #22c15a; text-decoration: none;">contact@reviseit.in</a> - we'd love to hear from you! 💚</p>
+      <p style="font-size: 14px; color: #666; margin-top: 32px;">Got questions? We're here to help! Shoot us an email at <a href="mailto:contact@flowauxi.com" style="color: #22c15a; text-decoration: none;">contact@flowauxi.com</a> - we'd love to hear from you! 💚</p>
     `;
     return baseEmailHtml(content);
   },

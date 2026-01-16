@@ -3,8 +3,8 @@ import { MetadataRoute } from "next";
 export default function manifest(): MetadataRoute.Manifest {
   return {
     id: "/",
-    name: "ReviseIt - AI WhatsApp Automation & Business Messaging Platform",
-    short_name: "ReviseIt",
+    name: "Flowauxi - AI WhatsApp Automation & Business Messaging Platform",
+    short_name: "Flowauxi",
     description:
       "Transform your WhatsApp into a powerful business tool with AI automation. Automate customer responses, send broadcasts, and integrate with CRM systems.",
     start_url: "/",
@@ -59,14 +59,14 @@ export default function manifest(): MetadataRoute.Manifest {
         src: "/og-image.png",
         sizes: "1200x630",
         type: "image/png",
-        label: "ReviseIt Dashboard Overview",
+        label: "Flowauxi Dashboard Overview",
       },
     ],
     shortcuts: [
       {
         name: "Dashboard",
         short_name: "Dashboard",
-        description: "Go to your ReviseIt dashboard",
+        description: "Go to your Flowauxi dashboard",
         url: "/dashboard",
         icons: [
           {
@@ -79,7 +79,7 @@ export default function manifest(): MetadataRoute.Manifest {
       {
         name: "Login",
         short_name: "Login",
-        description: "Sign in to ReviseIt",
+        description: "Sign in to Flowauxi",
         url: "/login",
         icons: [
           {

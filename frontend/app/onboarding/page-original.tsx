@@ -287,8 +287,8 @@ export default function OnboardingPage() {
       {/* Left Sidebar */}
       <div className="onboarding-sidebar">
         <div className="sidebar-brand">
-          <img src="/logo.png" alt="Revise It Logo" />
-          <span>Revise It</span>
+          <img src="/logo.png" alt="Flowauxi Logo" />
+          <span>Flowauxi</span>
         </div>
 
         <div className="sidebar-header">
@@ -338,8 +338,8 @@ export default function OnboardingPage() {
       <div className="onboarding-main">
         {/* Mobile Header - Only visible on mobile */}
         <div className="mobile-header">
-          <img src="/logo.png" alt="Revise It Logo" />
-          <span>Revise It</span>
+          <img src="/logo.png" alt="Flowauxi Logo" />
+          <span>Flowauxi</span>
         </div>
 
         {/* Progress Bar */}

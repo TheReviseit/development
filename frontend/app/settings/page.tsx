@@ -70,7 +70,7 @@ export default function SettingsPage() {
       );
       formData.append("timestamp", timestamp.toString());
       formData.append("signature", signature);
-      formData.append("folder", "reviseit/profile-pictures");
+      formData.append("folder", "flowauxi/profile-pictures");
       // Use upload preset if configured, or relying on signed upload params
       // formData.append('upload_preset', process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET!);
 

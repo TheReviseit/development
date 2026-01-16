@@ -4,7 +4,7 @@
 
 services:
   - type: web
-    name: reviseit-backend
+    name: flowauxi-backend
     runtime: python
     region: singapore # Choose region closest to your users (oregon, frankfurt, singapore, ohio)
 
@@ -46,7 +46,7 @@ services:
 
   # Celery Worker for Background Tasks (Google Sheets sync, notifications, etc.)
   - type: worker
-    name: reviseit-celery-worker
+    name: flowauxi-celery-worker
     runtime: python
     region: singapore
     rootDir: backend

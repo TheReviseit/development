@@ -63,7 +63,7 @@ export async function POST(request: NextRequest) {
             <div class="success">
               <strong>Success!</strong> Your email configuration is working correctly.
             </div>
-            <p>This test email was sent from <strong>contact@reviseit.in</strong></p>
+            <p>This test email was sent from <strong>noreply@flowauxi.com</strong></p>
             <p>Resend API is properly configured and functional.</p>
             <hr />
             <p style="color: #666; font-size: 12px;">
@@ -77,7 +77,7 @@ export async function POST(request: NextRequest) {
 
     const result = await sendEmail({
       to: user.email,
-      subject: "✅ ReviseIt Email Configuration Test",
+      subject: "✅ Flowauxi Email Configuration Test",
       html: testHtml,
     });
 

@@ -26,7 +26,7 @@ export async function sendWelcomeEmail(email: string, userName: string) {
 
     const result = await sendEmail({
       to: email,
-      subject: "Welcome to ReviseIt! 🎉",
+      subject: "Welcome to Flowauxi! 🎉",
       html,
     });
 
@@ -92,7 +92,7 @@ export async function sendNewsletterEmail(
 
     const result = await sendEmail({
       to: email,
-      subject: "Newsletter from ReviseIt",
+      subject: "Newsletter from Flowauxi",
       html,
     });
 

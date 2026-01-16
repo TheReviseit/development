@@ -15,7 +15,7 @@ appointments_bp = Blueprint('appointments', __name__)
 
 # Frontend API URL
 FRONTEND_URL = os.environ.get('FRONTEND_URL', 'http://localhost:3000')
-INTERNAL_API_KEY = os.environ.get('INTERNAL_API_KEY', 'reviseit-internal-key')
+INTERNAL_API_KEY = os.environ.get('INTERNAL_API_KEY', 'flowauxi-internal-key')
 
 
 def get_internal_headers():

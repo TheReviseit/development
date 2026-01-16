@@ -44,6 +44,6 @@ export default function robots(): MetadataRoute.Robots {
         ],
       },
     ],
-    sitemap: "https://www.reviseit.in/sitemap.xml",
+    sitemap: "https://www.flowauxi.com/sitemap.xml",
   };
 }

@@ -8,10 +8,10 @@ export const metadata: Metadata = {
   // BASIC META TAGS
   // ========================================
 
-  title: "Terms of Service - WhatsApp Automation Agreement | ReviseIt",
+  title: "Terms of Service - WhatsApp Automation Agreement | Flowauxi",
 
   description:
-    "ReviseIt Terms of Service: User responsibilities, WhatsApp Business Policy compliance, data protection terms, SLA guarantees, and dispute resolution. Aligned with IT Act 2000 and DPDP Act 2023.",
+    "Flowauxi Terms of Service: User responsibilities, WhatsApp Business Policy compliance, data protection terms, SLA guarantees, and dispute resolution. Aligned with IT Act 2000 and DPDP Act 2023.",
 
   keywords: [
     "terms of service",
@@ -32,10 +32,10 @@ export const metadata: Metadata = {
   // APPLICATION METADATA
   // ========================================
 
-  applicationName: "ReviseIt",
-  authors: [{ name: "ReviseIt Legal Team" }],
-  creator: "ReviseIt",
-  publisher: "ReviseIt",
+  applicationName: "Flowauxi",
+  authors: [{ name: "Flowauxi Legal Team" }],
+  creator: "Flowauxi",
+  publisher: "Flowauxi",
   category: "Legal Document",
   classification: "Terms of Service - SaaS Agreement",
 
@@ -63,17 +63,17 @@ export const metadata: Metadata = {
   openGraph: {
     type: "website",
     locale: "en_US",
-    url: "https://www.reviseit.in/terms",
-    siteName: "ReviseIt",
-    title: "Terms of Service - ReviseIt WhatsApp Automation Platform",
+    url: "https://www.flowauxi.com/terms",
+    siteName: "Flowauxi",
+    title: "Terms of Service - Flowauxi WhatsApp Automation Platform",
     description:
-      "User agreement for ReviseIt: WhatsApp compliance requirements, data rights, service guarantees, and legal terms for businesses automating WhatsApp messaging.",
+      "User agreement for Flowauxi: WhatsApp compliance requirements, data rights, service guarantees, and legal terms for businesses automating WhatsApp messaging.",
     images: [
       {
         url: "/og-image.png",
         width: 1200,
         height: 630,
-        alt: "ReviseIt Terms of Service - WhatsApp Automation Agreement",
+        alt: "Flowauxi Terms of Service - WhatsApp Automation Agreement",
         type: "image/png",
       },
     ],
@@ -85,12 +85,12 @@ export const metadata: Metadata = {
 
   twitter: {
     card: "summary_large_image",
-    title: "Terms of Service - ReviseIt",
+    title: "Terms of Service - Flowauxi",
     description:
-      "Legal terms for using ReviseIt WhatsApp automation. Includes WhatsApp Business Policy compliance, data protection, and SLA guarantees.",
+      "Legal terms for using Flowauxi WhatsApp automation. Includes WhatsApp Business Policy compliance, data protection, and SLA guarantees.",
     images: ["/twitter-image.png"],
-    creator: "@reviseit",
-    site: "@reviseit",
+    creator: "@flowauxi",
+    site: "@flowauxi",
   },
 
   // ========================================
@@ -98,9 +98,9 @@ export const metadata: Metadata = {
   // ========================================
 
   alternates: {
-    canonical: "https://www.reviseit.in/terms",
+    canonical: "https://www.flowauxi.com/terms",
     languages: {
-      "en-US": "https://www.reviseit.in/terms",
+      "en-US": "https://www.flowauxi.com/terms",
     },
   },
 
@@ -123,7 +123,7 @@ export default function TermsOfService() {
               <section className="terms-section">
                 <h2 className="terms-section-title">1. Acceptance of Terms</h2>
                 <p className="terms-text">
-                  By accessing or using ReviseIt ("Service", "Platform"), you
+                  By accessing or using Flowauxi ("Service", "Platform"), you
                   agree to be bound by these Terms of Service ("Terms"). These
                   Terms align with the Information Technology Act, 2000 and the
                   Digital Personal Data Protection (DPDP) Act, 2023. If you do
@@ -136,7 +136,7 @@ export default function TermsOfService() {
                   2. Description of Service
                 </h2>
                 <p className="terms-text">
-                  ReviseIt is an AI-powered WhatsApp automation platform that
+                  Flowauxi is an AI-powered WhatsApp automation platform that
                   enables businesses to:
                 </p>
                 <ul className="terms-list-spaced">
@@ -210,7 +210,7 @@ export default function TermsOfService() {
                     <span className="terms-item-text">
                       <strong>Data Ownership:</strong> You retain full ownership
                       of all customer data, chatbot configurations, and content
-                      you upload to ReviseIt.
+                      you upload to Flowauxi.
                     </span>
                   </li>
                   <li className="terms-list-item">
@@ -247,14 +247,14 @@ export default function TermsOfService() {
                   5. Intellectual Property Rights
                 </h2>
                 <p className="terms-text">
-                  <strong>Your IP:</strong> You grant ReviseIt a worldwide,
+                  <strong>Your IP:</strong> You grant Flowauxi a worldwide,
                   non-exclusive license to host, copy, and use your data solely
                   as necessary to provide the Service. We do not use your
                   proprietary data to train our core AI models for other
                   customers without explicit consent.
                 </p>
                 <p className="terms-text">
-                  <strong>Our IP:</strong> ReviseIt owns all rights, title, and
+                  <strong>Our IP:</strong> Flowauxi owns all rights, title, and
                   interest in the Platform, software, code, and aggregated,
                   anonymized usage data.
                 </p>
@@ -310,9 +310,9 @@ export default function TermsOfService() {
                 </h2>
                 <p className="terms-text">
                   <strong>MAXIMUM LIABILITY:</strong> TO THE EXTENT PERMITTED BY
-                  LAW, REVISEIT'S TOTAL LIABILITY FOR ALL CLAIMS ARISING OUT OF
+                  LAW, FLOWAUXI'S TOTAL LIABILITY FOR ALL CLAIMS ARISING OUT OF
                   OR RELATED TO THESE TERMS SHALL NOT EXCEED THE TOTAL AMOUNT
-                  PAID BY YOU TO REVISEIT IN THE 12 MONTHS PRECEDING THE
+                  PAID BY YOU TO FLOWAUXI IN THE 12 MONTHS PRECEDING THE
                   INCIDENT.
                 </p>
                 <p className="terms-text">
@@ -327,7 +327,7 @@ export default function TermsOfService() {
                 <h2 className="terms-section-title">9. Indemnification</h2>
                 <p className="terms-text">
                   <strong>By You:</strong> You agree to indemnify and hold
-                  ReviseIt harmless from claims arising from your use of the
+                  Flowauxi harmless from claims arising from your use of the
                   Service, violation of these Terms, or violation of any
                   third-party rights (including WhatsApp policies).
                 </p>
@@ -369,19 +369,22 @@ export default function TermsOfService() {
                 <div className="terms-contact-box">
                   <p className="terms-text">
                     <strong>Email:</strong>{" "}
-                    <a href="mailto:contact@reviseit.in" className="terms-link">
-                      contact@reviseit.in
+                    <a
+                      href="mailto:contact@flowauxi.com"
+                      className="terms-link"
+                    >
+                      contact@flowauxi.com
                     </a>
                   </p>
                   <p className="terms-text">
-                    <strong>Business Name:</strong> ReviseIt
+                    <strong>Business Name:</strong> Flowauxi
                   </p>
                 </div>
               </section>
 
               <div className="terms-footer">
                 <p className="terms-footer-text">
-                  By using ReviseIt, you acknowledge that you have read,
+                  By using Flowauxi, you acknowledge that you have read,
                   understood, and agree to be bound by these Terms of Service.
                 </p>
               </div>

@@ -71,13 +71,13 @@ export default function Header({ minimal = false }: HeaderProps) {
           <a href="/" className="header-logo">
             <Image
               src="/logo.png"
-              alt="ReviseIt Logo"
+              alt="Flowauxi Logo"
               width={48}
               height={48}
               className="header-logo-img"
               priority
             />
-            <span className="header-logo-text">ReviseIt</span>
+            <span className="header-logo-text">Flowauxi</span>
           </a>
 
           {/* Desktop Navigation */}

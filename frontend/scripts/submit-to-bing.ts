@@ -10,7 +10,7 @@
 
 const BING_API_ENDPOINT =
   "https://ssl.bing.com/webmaster/api.svc/json/SubmitUrlBatch";
-const SITE_URL = "https://www.reviseit.in";
+const SITE_URL = "https://www.flowauxi.com";
 
 // Get API key from environment
 const API_KEY = process.env.BING_WEBMASTER_API_KEY;

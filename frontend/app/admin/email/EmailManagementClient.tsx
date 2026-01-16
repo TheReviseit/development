@@ -108,7 +108,7 @@ export default function EmailManagementClient({
             Email Management
           </h1>
           <p className="text-gray-600">
-            Send emails to your users from contact@reviseit.in
+            Send emails to your users from noreply@flowauxi.com
           </p>
           <p className="text-sm text-gray-500 mt-1">
             Logged in as: <strong>{adminName}</strong>
@@ -189,7 +189,7 @@ export default function EmailManagementClient({
           </div>
           <div className="bg-white p-4 rounded-lg shadow">
             <p className="text-sm text-gray-600">From Address</p>
-            <p className="text-lg font-semibold">contact@reviseit.in</p>
+            <p className="text-lg font-semibold">noreply@flowauxi.com</p>
           </div>
           <div className="bg-white p-4 rounded-lg shadow">
             <p className="text-sm text-gray-600">Free Tier Limit</p>
