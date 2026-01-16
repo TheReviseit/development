@@ -22,12 +22,9 @@ export default function Footer() {
 
           <div className={styles.legal}>
             <p className={styles.copyright}>
-<<<<<<< Updated upstream
-              © 2025 ReviseIt. All rights reserved.
-              Legal Business Name:SIVASANKARA BOOPATHY RAJA RAMAN
-=======
               © 2025 Flowauxi. All rights reserved.
->>>>>>> Stashed changes
+              <br />
+              Legal Business Name: SIVASANKARA BOOPATHY RAJA RAMAN
             </p>
             <div className={styles.legalLinks}>
               <a href="/terms" className={styles.legalLink}>
