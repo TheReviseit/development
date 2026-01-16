@@ -11,7 +11,7 @@ export default function Footer() {
             <div className={styles.logoContainer}>
               <Image
                 src="/logo.png"
-                alt="Flowauxi Logo"
+                alt="Flowauxi logo"
                 width={40}
                 height={40}
                 className={styles.logo}
