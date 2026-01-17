@@ -5,12 +5,19 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import styles from "../dashboard.module.css";
 
+interface SubNavItem {
+  id: string;
+  label: string;
+  href: string;
+}
+
 interface NavItem {
   id: string;
   label: string;
   icon: React.ReactNode;
   badge?: number;
   href: string;
+  subItems?: SubNavItem[];
 }
 
 interface AICapabilities {
@@ -344,6 +351,7 @@ export default function DashboardSidebar({
   const [showProfileMenu, setShowProfileMenu] = useState(false);
   const [hiddenItems, setHiddenItems] = useState<string[]>([]);
   const [showHiddenMenu, setShowHiddenMenu] = useState(false);
+  const [expandedItems, setExpandedItems] = useState<string[]>(["products"]);
 
   // Load hidden items from localStorage
   useEffect(() => {
@@ -371,7 +379,7 @@ export default function DashboardSidebar({
     setHiddenItems(newHiddenItems);
     localStorage.setItem(
       "sidebar-hidden-items",
-      JSON.stringify(newHiddenItems)
+      JSON.stringify(newHiddenItems),
     );
   };
 
@@ -411,13 +419,13 @@ export default function DashboardSidebar({
     };
     window.addEventListener(
       "ai-capabilities-updated",
-      handleCapabilitiesUpdate as EventListener
+      handleCapabilitiesUpdate as EventListener,
     );
 
     return () => {
       window.removeEventListener(
         "ai-capabilities-updated",
-        handleCapabilitiesUpdate as EventListener
+        handleCapabilitiesUpdate as EventListener,
       );
     };
   }, []);
@@ -507,6 +515,28 @@ export default function DashboardSidebar({
             label: "Products",
             icon: <ProductsIcon />,
             href: "/dashboard/products",
+            subItems: [
+              {
+                id: "products-list",
+                label: "Product",
+                href: "/dashboard/products",
+              },
+              {
+                id: "add-product",
+                label: "Add Product",
+                href: "/dashboard/products/add",
+              },
+              {
+                id: "categories",
+                label: "Add Category",
+                href: "/dashboard/products/categories",
+              },
+              {
+                id: "options",
+                label: "Add Size and Colors",
+                href: "/dashboard/products/options",
+              },
+            ],
           },
         ]
       : []),
@@ -560,50 +590,129 @@ export default function DashboardSidebar({
           .filter((item) => !hiddenItems.includes(item.id))
           .map((item) => (
             <div key={item.id} className={styles.navItemWrapper}>
-              <Link
-                href={item.href}
-                className={`${styles.navItem} ${
-                  activeSection === item.id ? styles.navItemActive : ""
-                }`}
-                title={isCollapsed ? item.label : undefined}
-              >
-                <span className={styles.navIcon}>{item.icon}</span>
-                {!isCollapsed && (
-                  <>
-                    <span className={styles.navLabel}>{item.label}</span>
-                    {item.badge && (
-                      <span className={styles.navBadge}>{item.badge}</span>
-                    )}
-                  </>
-                )}
-                {isCollapsed && item.badge && (
-                  <span className={styles.navBadgeCollapsed}>{item.badge}</span>
-                )}
-              </Link>
-              {/* Hide button - only visible on hover when not collapsed and item can be hidden */}
-              {!isCollapsed && canHideItem(item.id) && (
-                <button
-                  className={styles.hideItemBtn}
-                  onClick={(e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    toggleHideItem(item.id);
-                  }}
-                  title="Hide from sidebar"
-                >
-                  <svg
-                    width="14"
-                    height="14"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2"
+              {/* Header area - contains parent link/button and optional hide button */}
+              <div className={styles.navItemHeader}>
+                {/* Parent item - with or without sub-items */}
+                {item.subItems && item.subItems.length > 0 ? (
+                  // Expandable parent with sub-items
+                  <button
+                    className={`${styles.navItem} ${
+                      activeSection === item.id ||
+                      expandedItems.includes(item.id)
+                        ? styles.navItemActive
+                        : ""
+                    }`}
+                    onClick={() => {
+                      setExpandedItems((prev) =>
+                        prev.includes(item.id)
+                          ? prev.filter((id) => id !== item.id)
+                          : [...prev, item.id],
+                      );
+                    }}
+                    title={isCollapsed ? item.label : undefined}
                   >
-                    <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24" />
-                    <line x1="1" y1="1" x2="23" y2="23" />
-                  </svg>
-                </button>
-              )}
+                    <span className={styles.navIcon}>{item.icon}</span>
+                    {!isCollapsed && (
+                      <>
+                        <span className={styles.navLabel}>{item.label}</span>
+                        <svg
+                          className={styles.expandChevron}
+                          width="14"
+                          height="14"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="2"
+                          style={{
+                            transform: expandedItems.includes(item.id)
+                              ? "rotate(180deg)"
+                              : "rotate(0deg)",
+                            transition: "transform 0.2s ease",
+                          }}
+                        >
+                          <polyline
+                            points="6 9 12 15 18 9"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                          />
+                        </svg>
+                      </>
+                    )}
+                  </button>
+                ) : (
+                  // Regular nav item
+                  <Link
+                    href={item.href}
+                    className={`${styles.navItem} ${
+                      activeSection === item.id ? styles.navItemActive : ""
+                    }`}
+                    title={isCollapsed ? item.label : undefined}
+                  >
+                    <span className={styles.navIcon}>{item.icon}</span>
+                    {!isCollapsed && (
+                      <>
+                        <span className={styles.navLabel}>{item.label}</span>
+                        {item.badge && (
+                          <span className={styles.navBadge}>{item.badge}</span>
+                        )}
+                      </>
+                    )}
+                    {isCollapsed && item.badge && (
+                      <span className={styles.navBadgeCollapsed}>
+                        {item.badge}
+                      </span>
+                    )}
+                  </Link>
+                )}
+
+                {/* Hide button - only visible on hover when not collapsed and item can be hidden */}
+                {!isCollapsed && canHideItem(item.id) && !item.subItems && (
+                  <button
+                    className={styles.hideItemBtn}
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      toggleHideItem(item.id);
+                    }}
+                    title="Hide from sidebar"
+                  >
+                    <svg
+                      width="14"
+                      height="14"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                    >
+                      <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24" />
+                      <line x1="1" y1="1" x2="23" y2="23" />
+                    </svg>
+                  </button>
+                )}
+              </div>
+
+              {/* Sub-navigation items */}
+              {!isCollapsed &&
+                item.subItems &&
+                expandedItems.includes(item.id) && (
+                  <div className={styles.subNavContainer}>
+                    {item.subItems.map((subItem) => (
+                      <Link
+                        key={subItem.id}
+                        href={subItem.href}
+                        className={`${styles.subNavItem} ${
+                          activeSection === subItem.id
+                            ? styles.subNavItemActive
+                            : ""
+                        }`}
+                      >
+                        <span className={styles.subNavLabel}>
+                          {subItem.label}
+                        </span>
+                      </Link>
+                    ))}
+                  </div>
+                )}
             </div>
           ))}
       </nav>

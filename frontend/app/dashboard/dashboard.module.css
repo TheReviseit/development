@@ -391,7 +391,17 @@
 .navItemWrapper {
   position: relative;
   display: flex;
+  flex-direction: column;
+}
+
+.navItemHeader {
+  display: flex;
   align-items: center;
+  position: relative;
+}
+
+.navItemHeader .navItem {
+  flex: 1;
 }
 
 .navItemWrapper .navItem {
@@ -549,6 +559,128 @@
   background: rgba(34, 193, 90, 0.15);
   color: #22c55a;
   border-color: rgba(34, 193, 90, 0.3);
+}
+
+/* ============================================
+   Sub-Navigation (Dropdown) Styles
+   ============================================ */
+
+.expandChevron {
+  flex-shrink: 0;
+  color: var(--dash-text-muted);
+  margin-left: auto;
+}
+
+.subNavContainer {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding-left: 2.5rem;
+  padding-top: 0.25rem;
+  padding-bottom: 0.25rem;
+  animation: slideDown 0.2s ease;
+}
+
+@keyframes slideDown {
+  from {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.subNavItem {
+  display: flex;
+  align-items: center;
+  padding: 0.625rem 1rem;
+  border-radius: 8px;
+  cursor: pointer;
+  background: transparent;
+  color: var(--dash-text-muted);
+  font-size: 0.875rem;
+  font-weight: 500;
+  transition: all 0.2s ease;
+  text-decoration: none;
+  position: relative;
+}
+
+.subNavItem::before {
+  content: "";
+  position: absolute;
+  left: -1rem;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 6px;
+  height: 6px;
+  background: var(--dash-border);
+  border-radius: 50%;
+  transition: all 0.2s ease;
+}
+
+.subNavItem:hover {
+  background: var(--dash-bg-hover);
+  color: var(--dash-text-primary);
+}
+
+.subNavItem:hover::before {
+  background: var(--dash-text-secondary);
+}
+
+.subNavItemActive {
+  background: var(--dash-accent-muted);
+  color: var(--dash-accent);
+}
+
+.subNavItemActive::before {
+  background: var(--dash-accent);
+}
+
+.subNavLabel {
+  flex: 1;
+  white-space: nowrap;
+}
+
+/* Mobile Sub-Navigation Styles */
+.mobileNavItemWrapper {
+  display: flex;
+  flex-direction: column;
+}
+
+.mobileSubNavContainer {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding-left: 3rem;
+  background: rgba(255, 255, 255, 0.02);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.mobileSubNavLink {
+  display: flex;
+  align-items: center;
+  padding: 0.75rem 1rem;
+  color: var(--dash-text-muted);
+  font-size: 0.875rem;
+  font-weight: 500;
+  text-decoration: none;
+  transition: all 0.2s ease;
+}
+
+.mobileSubNavLinkActive {
+  color: var(--dash-accent);
+  background: var(--dash-accent-muted);
+}
+
+.mobileChevron {
+  margin-left: auto;
+  transition: transform 0.2s ease;
+}
+
+.mobileChevronRotated {
+  transform: rotate(180deg);
 }
 
 /* ============================================
@@ -2087,7 +2219,9 @@
   font-size: 0.875rem;
   font-weight: 600;
   cursor: pointer;
-  transition: transform 0.2s ease, box-shadow 0.2s ease;
+  transition:
+    transform 0.2s ease,
+    box-shadow 0.2s ease;
 }
 
 /* .sendBtn:hover {

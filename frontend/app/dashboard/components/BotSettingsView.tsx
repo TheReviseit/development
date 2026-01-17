@@ -309,7 +309,6 @@ type TabType =
   | "profile"
   | "brand"
   | "services"
-  | "categories"
   | "timings"
   | "policies"
   | "ecommerce"
@@ -431,7 +430,7 @@ export default function BotSettingsView() {
   // Product panel state
   const [isProductPanelOpen, setIsProductPanelOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState<ProductService | null>(
-    null
+    null,
   );
 
   // Appointment configuration state
@@ -474,7 +473,6 @@ export default function BotSettingsView() {
     { id: "default", name: "General Appointment", duration: 60, capacity: 1 },
   ]);
   const [configExpanded, setConfigExpanded] = useState(false);
-  const [newCategoryName, setNewCategoryName] = useState("");
 
   // Order fields configuration state
   const [orderFields, setOrderFields] = useState<OrderField[]>([
@@ -531,7 +529,7 @@ export default function BotSettingsView() {
           const result = await response.json();
           if (result.success && result.data) {
             setAppointmentBookingEnabled(
-              result.data.appointment_booking_enabled || false
+              result.data.appointment_booking_enabled || false,
             );
             // Load appointment configuration
             if (result.data.appointment_fields) {
@@ -585,7 +583,7 @@ export default function BotSettingsView() {
     window.dispatchEvent(
       new CustomEvent("ai-capabilities-updated", {
         detail: { appointment_booking_enabled: newValue },
-      })
+      }),
     );
 
     try {
@@ -637,7 +635,7 @@ export default function BotSettingsView() {
           appointment_booking_enabled: appointmentBookingEnabled,
           order_booking_enabled: newValue,
         },
-      })
+      }),
     );
 
     try {
@@ -692,7 +690,7 @@ export default function BotSettingsView() {
           order_booking_enabled: orderBookingEnabled,
           products_enabled: newValue,
         },
-      })
+      }),
     );
 
     try {
@@ -744,12 +742,12 @@ export default function BotSettingsView() {
 
   const updateAppointmentField = (
     id: string,
-    updates: Partial<AppointmentField>
+    updates: Partial<AppointmentField>,
   ) => {
     setAppointmentFields(
       appointmentFields.map((field) =>
-        field.id === id ? { ...field, ...updates } : field
-      )
+        field.id === id ? { ...field, ...updates } : field,
+      ),
     );
   };
 
@@ -768,7 +766,7 @@ export default function BotSettingsView() {
     setAppointmentFields(
       appointmentFields
         .filter((field) => field.id !== id)
-        .map((field, index) => ({ ...field, order: index + 1 }))
+        .map((field, index) => ({ ...field, order: index + 1 })),
     );
   };
 
@@ -808,8 +806,8 @@ export default function BotSettingsView() {
   const updateService = (id: string, updates: Partial<ServiceConfig>) => {
     setServices(
       services.map((service) =>
-        service.id === id ? { ...service, ...updates } : service
-      )
+        service.id === id ? { ...service, ...updates } : service,
+      ),
     );
   };
 
@@ -842,8 +840,8 @@ export default function BotSettingsView() {
   const updateOrderField = (id: string, updates: Partial<OrderField>) => {
     setOrderFields(
       orderFields.map((field) =>
-        field.id === id ? { ...field, ...updates } : field
-      )
+        field.id === id ? { ...field, ...updates } : field,
+      ),
     );
   };
 
@@ -862,7 +860,7 @@ export default function BotSettingsView() {
     setOrderFields(
       orderFields
         .filter((field) => field.id !== id)
-        .map((field, index) => ({ ...field, order: index + 1 }))
+        .map((field, index) => ({ ...field, order: index + 1 })),
     );
   };
 
@@ -1017,7 +1015,7 @@ export default function BotSettingsView() {
         .catch(() => {
           // Silently ignore Flask errors - it's optional
           console.log(
-            "Backend sync skipped (backend may not be running or timed out)"
+            "Backend sync skipped (backend may not be running or timed out)",
           );
         })
         .finally(() => {
@@ -1060,7 +1058,7 @@ export default function BotSettingsView() {
       Object.entries(d.timings).map(([day, timing]) => [
         day,
         { open: timing.open, close: timing.close, is_closed: timing.isClosed },
-      ])
+      ]),
     ),
     products_services: d.products.map((p) => ({
       id: p.id,
@@ -1150,12 +1148,12 @@ export default function BotSettingsView() {
   const updateProduct = (
     id: string,
     field: keyof ProductService,
-    value: any
+    value: any,
   ) => {
     setData({
       ...data,
       products: data.products.map((p) =>
-        p.id === id ? { ...p, [field]: value } : p
+        p.id === id ? { ...p, [field]: value } : p,
       ),
     });
   };
@@ -1178,7 +1176,7 @@ export default function BotSettingsView() {
   const updateFaq = (
     id: string,
     field: "question" | "answer",
-    value: string
+    value: string,
   ) => {
     setData({
       ...data,
@@ -1349,16 +1347,6 @@ export default function BotSettingsView() {
           },
         ]
       : []),
-    // Categories tab - only for e-commerce businesses
-    ...(currentConfig.hasEcommerce
-      ? [
-          {
-            id: "categories" as TabType,
-            label: "Categories",
-            iconPath: "/icons/ai_settings/services.svg",
-          },
-        ]
-      : []),
     // Timings - only for businesses with physical presence or appointments
     ...(currentConfig.hasTimings
       ? [
@@ -1425,7 +1413,7 @@ export default function BotSettingsView() {
         );
       case "timings":
         return Object.values(data.timings).some(
-          (t) => !t.isClosed && t.open && t.close
+          (t) => !t.isClosed && t.open && t.close,
         );
       case "policies":
         return !!(
@@ -1561,8 +1549,8 @@ export default function BotSettingsView() {
                 alertToast.variant === "success"
                   ? alertStyles.alertSuccess
                   : alertToast.variant === "warning"
-                  ? alertStyles.alertWarning
-                  : alertStyles.alertError
+                    ? alertStyles.alertWarning
+                    : alertStyles.alertError
               }`}
             >
               <div className={alertStyles.alertRow}>
@@ -1605,8 +1593,8 @@ export default function BotSettingsView() {
               getTabStatus(tab.id) === null
                 ? null
                 : getTabStatus(tab.id)
-                ? "complete"
-                : "incomplete",
+                  ? "complete"
+                  : "incomplete",
           }))}
           value={activeTab}
           onChange={(value) => setActiveTab(value as TabType)}
@@ -2050,91 +2038,6 @@ export default function BotSettingsView() {
                     }}
                   />
                 ))}
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* Categories Tab - Only for E-commerce */}
-        {activeTab === "categories" && (
-          <div className={styles.section}>
-            <div className={styles.sectionHeader}>
-              <h2 className={styles.sectionTitle}>Product Categories</h2>
-            </div>
-
-            <p className={styles.categoryDescription}>
-              Define categories to organize your products. These categories will
-              appear as options when adding products.
-            </p>
-
-            {/* Add Category Input */}
-            <div className={styles.addCategoryForm}>
-              <input
-                type="text"
-                value={newCategoryName}
-                onChange={(e) => setNewCategoryName(e.target.value)}
-                placeholder="Enter category name (e.g., Electronics, Clothing)"
-                className={styles.categoryInput}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" && newCategoryName.trim()) {
-                    setData({
-                      ...data,
-                      productCategories: [
-                        ...data.productCategories,
-                        newCategoryName.trim(),
-                      ],
-                    });
-                    setNewCategoryName("");
-                  }
-                }}
-              />
-              <button
-                className={styles.addButton}
-                onClick={() => {
-                  if (newCategoryName.trim()) {
-                    setData({
-                      ...data,
-                      productCategories: [
-                        ...data.productCategories,
-                        newCategoryName.trim(),
-                      ],
-                    });
-                    setNewCategoryName("");
-                  }
-                }}
-              >
-                + Add Category
-              </button>
-            </div>
-
-            {/* Categories List */}
-            {data.productCategories.length > 0 ? (
-              <div className={styles.categoriesList}>
-                {data.productCategories.map((category, index) => (
-                  <div key={index} className={styles.categoryItem}>
-                    <span className={styles.categoryName}>{category}</span>
-                    <button
-                      className={styles.removeButton}
-                      onClick={() => {
-                        setData({
-                          ...data,
-                          productCategories: data.productCategories.filter(
-                            (_, i) => i !== index
-                          ),
-                        });
-                      }}
-                    >
-                      ✕
-                    </button>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <div className={styles.emptyState}>
-                <p>
-                  No categories added yet. Add your first category above to
-                  organize your products!
-                </p>
               </div>
             )}
           </div>
@@ -2677,7 +2580,7 @@ export default function BotSettingsView() {
                                       updateService(service.id, {
                                         capacity: Math.max(
                                           1,
-                                          parseInt(e.target.value) || 1
+                                          parseInt(e.target.value) || 1,
                                         ),
                                       })
                                     }

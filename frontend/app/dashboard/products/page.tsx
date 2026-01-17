@@ -66,7 +66,7 @@ export default function ProductsPage() {
   const saveProducts = async (updatedProducts: Product[]) => {
     setSaving(true);
     try {
-      const response = await fetch("/api/business/update", {
+      const response = await fetch("/api/business/save", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -104,7 +104,7 @@ export default function ProductsPage() {
     let updatedProducts: Product[];
     if (editingProduct) {
       updatedProducts = products.map((p) =>
-        p.id === product.id ? product : p
+        p.id === product.id ? product : p,
       );
     } else {
       updatedProducts = [...products, product];
@@ -126,6 +126,65 @@ export default function ProductsPage() {
     const updatedProducts = products.filter((p) => p.id !== id);
     setProducts(updatedProducts);
     await saveProducts(updatedProducts);
+  };
+
+  // Add new category
+  const handleAddCategory = async (categoryName: string) => {
+    // Avoid duplicates
+    if (productCategories.includes(categoryName)) return;
+
+    const updatedCategories = [...productCategories, categoryName];
+    setProductCategories(updatedCategories);
+
+    // Save to backend
+    try {
+      await fetch("/api/business/save", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ productCategories: updatedCategories }),
+      });
+      setMessage({
+        type: "success",
+        text: `Category "${categoryName}" added!`,
+      });
+    } catch (error) {
+      console.error("Error saving category:", error);
+    }
+  };
+
+  // Delete category
+  const handleDeleteCategory = async (categoryName: string) => {
+    // Check if any product uses this category
+    const productsUsingCategory = products.filter(
+      (p) => p.category === categoryName,
+    );
+    if (productsUsingCategory.length > 0) {
+      setMessage({
+        type: "error",
+        text: `Cannot delete "${categoryName}" - ${productsUsingCategory.length} product(s) use this category`,
+      });
+      return;
+    }
+
+    const updatedCategories = productCategories.filter(
+      (cat) => cat !== categoryName,
+    );
+    setProductCategories(updatedCategories);
+
+    // Save to backend
+    try {
+      await fetch("/api/business/save", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ productCategories: updatedCategories }),
+      });
+      setMessage({
+        type: "success",
+        text: `Category "${categoryName}" deleted!`,
+      });
+    } catch (error) {
+      console.error("Error deleting category:", error);
+    }
   };
 
   // Auto-dismiss message
@@ -155,20 +214,6 @@ export default function ProductsPage() {
             products to customers.
           </p>
         </div>
-        <button className={styles.addButton} onClick={addProduct}>
-          <svg
-            width="20"
-            height="20"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-          >
-            <line x1="12" y1="5" x2="12" y2="19" />
-            <line x1="5" y1="12" x2="19" y2="12" />
-          </svg>
-          Add Product
-        </button>
       </div>
 
       {/* Toast Message */}
@@ -206,10 +251,7 @@ export default function ProductsPage() {
             />
           </svg>
           <h3>No products yet</h3>
-          <p>Add your first product to get started</p>
-          <button className={styles.addButton} onClick={addProduct}>
-            Add Your First Product
-          </button>
+          <p>Add products using the sidebar menu to get started</p>
         </div>
       ) : (
         <div className={styles.productsGrid}>
@@ -222,7 +264,7 @@ export default function ProductsPage() {
               productCategories={productCategories}
               onUpdate={(id, field, value) => {
                 const updatedProducts = products.map((p) =>
-                  p.id === id ? { ...p, [field]: value } : p
+                  p.id === id ? { ...p, [field]: value } : p,
                 );
                 setProducts(updatedProducts);
               }}
@@ -233,21 +275,6 @@ export default function ProductsPage() {
               }}
             />
           ))}
-          {/* Add New Product Card */}
-          <div className={styles.addProductCard} onClick={addProduct}>
-            <svg
-              width="48"
-              height="48"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="1.5"
-            >
-              <line x1="12" y1="5" x2="12" y2="19" />
-              <line x1="5" y1="12" x2="19" y2="12" />
-            </svg>
-            <span>Add Product</span>
-          </div>
         </div>
       )}
 
@@ -263,6 +290,8 @@ export default function ProductsPage() {
           productCategories={productCategories}
           onSave={handleProductSave}
           onCancel={handleProductCancel}
+          onAddCategory={handleAddCategory}
+          onDeleteCategory={handleDeleteCategory}
           onImageDeleted={(updatedProduct) => {
             handleProductSave(updatedProduct);
           }}

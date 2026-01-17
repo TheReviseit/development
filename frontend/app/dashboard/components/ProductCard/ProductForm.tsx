@@ -42,6 +42,8 @@ interface ProductFormProps {
   onSave: (product: ProductService) => void;
   onCancel: () => void;
   onImageDeleted?: (updatedProduct: ProductService) => void; // Auto-save after image deletion
+  onAddCategory?: (categoryName: string) => void; // Callback to add new category
+  onDeleteCategory?: (categoryName: string) => void; // Callback to delete category
 }
 
 // Predefined size options
@@ -194,10 +196,14 @@ export default function ProductForm({
   onSave,
   onCancel,
   onImageDeleted,
+  onAddCategory,
+  onDeleteCategory,
 }: ProductFormProps) {
   const [formData, setFormData] = useState<ProductService>(
-    product || createEmptyProduct()
+    product || createEmptyProduct(),
   );
+  const [showCategoryModal, setShowCategoryModal] = useState(false);
+  const [newCategoryName, setNewCategoryName] = useState("");
 
   const updateField = (field: keyof ProductService, value: unknown) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
@@ -285,24 +291,187 @@ export default function ProductForm({
       {/* Category */}
       <div className={styles.field}>
         <label className={styles.label}>Category</label>
-        {isEcommerce && productCategories.length > 0 ? (
-          <Dropdown
-            options={categoryOptions}
-            value={formData.category}
-            onChange={(value) => updateField("category", value)}
-            placeholder="Select a category"
-            className={styles.dropdown}
-          />
+        {isEcommerce ? (
+          productCategories.length > 0 ? (
+            <div className={styles.categoryRow}>
+              <div className={styles.categoryDropdownWrapper}>
+                <Dropdown
+                  options={categoryOptions}
+                  value={formData.category}
+                  onChange={(value) => updateField("category", value)}
+                  placeholder="Select a category"
+                  className={styles.dropdown}
+                />
+              </div>
+              <button
+                type="button"
+                className={styles.addCategoryBtn}
+                onClick={() => setShowCategoryModal(true)}
+              >
+                <svg
+                  width="16"
+                  height="16"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                >
+                  <line x1="12" y1="5" x2="12" y2="19" />
+                  <line x1="5" y1="12" x2="19" y2="12" />
+                </svg>
+                Add
+              </button>
+            </div>
+          ) : (
+            <button
+              type="button"
+              className={styles.addCategoryBtn}
+              onClick={() => setShowCategoryModal(true)}
+              style={{ width: "100%", justifyContent: "center" }}
+            >
+              <svg
+                width="16"
+                height="16"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+              >
+                <line x1="12" y1="5" x2="12" y2="19" />
+                <line x1="5" y1="12" x2="19" y2="12" />
+              </svg>
+              Add Category
+            </button>
+          )
         ) : (
           <input
             type="text"
             className={styles.input}
             value={formData.category}
             onChange={(e) => updateField("category", e.target.value)}
-            placeholder={isEcommerce ? "e.g., Sarees" : "e.g., Hair"}
+            placeholder="e.g., Hair"
           />
         )}
       </div>
+
+      {/* Category Modal */}
+      {showCategoryModal && (
+        <div
+          className={styles.categoryModalOverlay}
+          onClick={() => setShowCategoryModal(false)}
+        >
+          <div
+            className={styles.categoryModal}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className={styles.categoryModalHeader}>
+              <h3 className={styles.categoryModalTitle}>Add Category</h3>
+              <button
+                type="button"
+                className={styles.categoryModalClose}
+                onClick={() => setShowCategoryModal(false)}
+              >
+                <svg
+                  width="18"
+                  height="18"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                >
+                  <line x1="18" y1="6" x2="6" y2="18" />
+                  <line x1="6" y1="6" x2="18" y2="18" />
+                </svg>
+              </button>
+            </div>
+            <div className={styles.categoryModalBody}>
+              {/* Existing Categories List */}
+              {productCategories.length > 0 && (
+                <div className={styles.existingCategoriesList}>
+                  <label className={styles.label}>Existing Categories</label>
+                  <div className={styles.categoryChips}>
+                    {productCategories.map((cat, index) => (
+                      <div key={index} className={styles.categoryChip}>
+                        <span>{cat}</span>
+                        {onDeleteCategory && (
+                          <button
+                            type="button"
+                            className={styles.categoryChipDelete}
+                            onClick={() => onDeleteCategory(cat)}
+                            title="Delete category"
+                          >
+                            <svg
+                              width="14"
+                              height="14"
+                              viewBox="0 0 24 24"
+                              fill="none"
+                              stroke="currentColor"
+                              strokeWidth="2"
+                            >
+                              <line x1="18" y1="6" x2="6" y2="18" />
+                              <line x1="6" y1="6" x2="18" y2="18" />
+                            </svg>
+                          </button>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Add New Category */}
+              <div className={styles.addNewCategorySection}>
+                <label className={styles.label}>Add New Category</label>
+                <input
+                  type="text"
+                  className={styles.input}
+                  value={newCategoryName}
+                  onChange={(e) => setNewCategoryName(e.target.value)}
+                  placeholder="Enter category name (e.g., Electronics)"
+                  autoFocus
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && newCategoryName.trim()) {
+                      if (onAddCategory) {
+                        onAddCategory(newCategoryName.trim());
+                      }
+                      updateField("category", newCategoryName.trim());
+                      setNewCategoryName("");
+                    }
+                  }}
+                />
+              </div>
+
+              <div className={styles.categoryModalActions}>
+                <button
+                  type="button"
+                  className={styles.cancelButton}
+                  onClick={() => {
+                    setNewCategoryName("");
+                    setShowCategoryModal(false);
+                  }}
+                >
+                  Close
+                </button>
+                <button
+                  type="button"
+                  className={styles.saveButton}
+                  onClick={() => {
+                    if (newCategoryName.trim()) {
+                      if (onAddCategory) {
+                        onAddCategory(newCategoryName.trim());
+                      }
+                      updateField("category", newCategoryName.trim());
+                      setNewCategoryName("");
+                    }
+                  }}
+                >
+                  Add Category
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Duration - For services only */}
       {!isEcommerce && (

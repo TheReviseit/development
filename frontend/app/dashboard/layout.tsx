@@ -64,6 +64,7 @@ export default function DashboardLayout({
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
   const [showMobileMenu, setShowMobileMenu] = useState(false);
+  const [expandedMobileItems, setExpandedMobileItems] = useState<string[]>([]);
   const [appointmentBookingEnabled, setAppointmentBookingEnabled] =
     useState(false);
   const [orderBookingEnabled, setOrderBookingEnabled] = useState(false);
@@ -81,7 +82,7 @@ export default function DashboardLayout({
         const data = await response.json();
         if (data.success && data.data) {
           setAppointmentBookingEnabled(
-            data.data.appointment_booking_enabled || false
+            data.data.appointment_booking_enabled || false,
           );
           setOrderBookingEnabled(data.data.order_booking_enabled || false);
           setProductsEnabled(data.data.products_enabled || false);
@@ -101,7 +102,7 @@ export default function DashboardLayout({
       }>;
       if (customEvent.detail) {
         setAppointmentBookingEnabled(
-          customEvent.detail.appointment_booking_enabled
+          customEvent.detail.appointment_booking_enabled,
         );
         if (customEvent.detail.order_booking_enabled !== undefined) {
           setOrderBookingEnabled(customEvent.detail.order_booking_enabled);
@@ -115,12 +116,12 @@ export default function DashboardLayout({
     };
     window.addEventListener(
       "ai-capabilities-updated",
-      handleUpdate as EventListener
+      handleUpdate as EventListener,
     );
     return () =>
       window.removeEventListener(
         "ai-capabilities-updated",
-        handleUpdate as EventListener
+        handleUpdate as EventListener,
       );
   }, []);
 
@@ -537,37 +538,124 @@ export default function DashboardLayout({
                       </button>
                     )}
                     {productsEnabled && (
-                      <button
-                        className={`${styles.mobileNavLink} ${
-                          activeSection === "products"
-                            ? styles.mobileNavLinkActive
-                            : ""
-                        }`}
-                        onClick={() => handleSectionChange("products")}
-                      >
-                        <svg
-                          width="20"
-                          height="20"
-                          fill="none"
-                          stroke="currentColor"
-                          viewBox="0 0 24 24"
+                      <div className={styles.mobileNavItemWrapper}>
+                        <button
+                          className={`${styles.mobileNavLink} ${
+                            activeSection === "products" ||
+                            expandedMobileItems.includes("products")
+                              ? styles.mobileNavLinkActive
+                              : ""
+                          }`}
+                          onClick={() => {
+                            setExpandedMobileItems((prev) =>
+                              prev.includes("products")
+                                ? prev.filter((id) => id !== "products")
+                                : [...prev, "products"],
+                            );
+                          }}
                         >
-                          <path
-                            d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            strokeWidth={2}
-                          />
-                          <line x1="3" y1="6" x2="21" y2="6" strokeWidth={2} />
-                          <path
-                            d="M16 10a4 4 0 0 1-8 0"
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            strokeWidth={2}
-                          />
-                        </svg>
-                        <span>Products</span>
-                      </button>
+                          <svg
+                            width="20"
+                            height="20"
+                            fill="none"
+                            stroke="currentColor"
+                            viewBox="0 0 24 24"
+                          >
+                            <path
+                              d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              strokeWidth={2}
+                            />
+                            <line
+                              x1="3"
+                              y1="6"
+                              x2="21"
+                              y2="6"
+                              strokeWidth={2}
+                            />
+                            <path
+                              d="M16 10a4 4 0 0 1-8 0"
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              strokeWidth={2}
+                            />
+                          </svg>
+                          <span>Products</span>
+                          <svg
+                            className={`${styles.mobileChevron} ${
+                              expandedMobileItems.includes("products")
+                                ? styles.mobileChevronRotated
+                                : ""
+                            }`}
+                            width="16"
+                            height="16"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="2"
+                          >
+                            <polyline points="6 9 12 15 18 9" />
+                          </svg>
+                        </button>
+
+                        {expandedMobileItems.includes("products") && (
+                          <div className={styles.mobileSubNavContainer}>
+                            <button
+                              className={`${styles.mobileSubNavLink} ${
+                                pathname === "/dashboard/products"
+                                  ? styles.mobileSubNavLinkActive
+                                  : ""
+                              }`}
+                              onClick={() => {
+                                router.push("/dashboard/products");
+                                setShowMobileMenu(false);
+                              }}
+                            >
+                              Product
+                            </button>
+                            <button
+                              className={`${styles.mobileSubNavLink} ${
+                                pathname === "/dashboard/products/add"
+                                  ? styles.mobileSubNavLinkActive
+                                  : ""
+                              }`}
+                              onClick={() => {
+                                router.push("/dashboard/products/add");
+                                setShowMobileMenu(false);
+                              }}
+                            >
+                              Add Product
+                            </button>
+                            <button
+                              className={`${styles.mobileSubNavLink} ${
+                                pathname === "/dashboard/products/categories"
+                                  ? styles.mobileSubNavLinkActive
+                                  : ""
+                              }`}
+                              onClick={() => {
+                                router.push("/dashboard/products/categories");
+                                setShowMobileMenu(false);
+                              }}
+                            >
+                              Add Category
+                            </button>
+                            <button
+                              className={`${styles.mobileSubNavLink} ${
+                                pathname === "/dashboard/products/options"
+                                  ? styles.mobileSubNavLinkActive
+                                  : ""
+                              }`}
+                              onClick={() => {
+                                router.push("/dashboard/products/options");
+                                setShowMobileMenu(false);
+                              }}
+                            >
+                              Add Size and Colors
+                            </button>
+                          </div>
+                        )}
+                      </div>
                     )}
                     <button
                       className={`${styles.mobileNavLink} ${

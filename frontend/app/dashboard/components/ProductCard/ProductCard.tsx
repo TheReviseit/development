@@ -3,9 +3,20 @@
 import React from "react";
 import styles from "./ProductCard.module.css";
 import ProductImageUpload from "../ProductImageUpload";
+import ImageModal from "../ImageModal";
 import Dropdown, { DropdownOption } from "@/app/utils/ui/Dropdown";
 
 // Types
+interface ProductVariant {
+  id: string;
+  color: string;
+  size: string;
+  price: number;
+  stock: number;
+  imageUrl: string;
+  imagePublicId: string;
+}
+
 interface ProductService {
   id: string;
   name: string;
@@ -21,7 +32,7 @@ interface ProductService {
   imagePublicId: string;
   originalSize: number;
   optimizedSize: number;
-  variants: string[];
+  variants: ProductVariant[] | string[];
   sizes: string[];
   colors: string[];
   brand: string;
@@ -184,6 +195,103 @@ function SizeMultiSelect({
   );
 }
 
+// Variants Display Component - Collapsible section to view saved variants
+function VariantsDisplay({ variants }: { variants: ProductVariant[] }) {
+  const [isExpanded, setIsExpanded] = React.useState(false);
+  const [selectedImageUrl, setSelectedImageUrl] = React.useState<string | null>(
+    null,
+  );
+
+  if (!variants || variants.length === 0) return null;
+
+  return (
+    <div className={styles.variantsSection}>
+      <button
+        type="button"
+        className={styles.variantsToggle}
+        onClick={() => setIsExpanded(!isExpanded)}
+      >
+        <span className={styles.variantsLabel}>
+          📦 {variants.length} Variant{variants.length > 1 ? "s" : ""}
+        </span>
+        <svg
+          className={`${styles.variantsArrow} ${isExpanded ? styles.expanded : ""}`}
+          width="16"
+          height="16"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+        >
+          <polyline
+            points="6 9 12 15 18 9"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        </svg>
+      </button>
+
+      {isExpanded && (
+        <div className={styles.variantsList}>
+          {variants.map((variant, idx) => (
+            <div key={variant.id || idx} className={styles.variantItem}>
+              {variant.imageUrl ? (
+                <img
+                  src={variant.imageUrl}
+                  alt={`${variant.color} ${variant.size}`}
+                  className={styles.variantImage}
+                  onClick={() => setSelectedImageUrl(variant.imageUrl)}
+                  style={{ cursor: "zoom-in" }}
+                  title="Click to enlarge"
+                />
+              ) : (
+                <div className={styles.variantImagePlaceholder}>
+                  <svg
+                    width="24"
+                    height="24"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="1.5"
+                  >
+                    <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
+                    <circle cx="8.5" cy="8.5" r="1.5" />
+                    <polyline points="21 15 16 10 5 21" />
+                  </svg>
+                </div>
+              )}
+              <div className={styles.variantDetails}>
+                {variant.color && (
+                  <span className={styles.variantColor}>{variant.color}</span>
+                )}
+                {variant.size && (
+                  <span className={styles.variantSize}>{variant.size}</span>
+                )}
+                {variant.price > 0 && (
+                  <span className={styles.variantPrice}>₹{variant.price}</span>
+                )}
+                {variant.stock > 0 && (
+                  <span className={styles.variantStock}>
+                    Stock: {variant.stock}
+                  </span>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {selectedImageUrl && (
+        <ImageModal
+          isOpen={!!selectedImageUrl}
+          onClose={() => setSelectedImageUrl(null)}
+          imageUrl={selectedImageUrl}
+        />
+      )}
+    </div>
+  );
+}
+
 export default function ProductCard({
   product,
   index,
@@ -232,7 +340,7 @@ export default function ProductCard({
                   onUpdate(
                     product.id,
                     "originalSize",
-                    result.original_size || 0
+                    result.original_size || 0,
                   );
                   onUpdate(product.id, "optimizedSize", result.bytes);
                 }}
@@ -381,6 +489,15 @@ export default function ProductCard({
           />
         </div>
       </div>
+
+      {/* Variants Section - Only show if variants exist and is e-commerce */}
+      {isEcommerce &&
+        product.variants &&
+        Array.isArray(product.variants) &&
+        product.variants.length > 0 &&
+        typeof product.variants[0] === "object" && (
+          <VariantsDisplay variants={product.variants as ProductVariant[]} />
+        )}
     </div>
   );
 }

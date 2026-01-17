@@ -22,7 +22,7 @@ export default function ContactSection() {
   }>({ type: null, message: "" });
 
   const handleChange = (
-    e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>
+    e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>,
   ) => {
     const { name, value } = e.target;
     setFormData((prev) => ({ ...prev, [name]: value }));
@@ -369,7 +369,7 @@ export default function ContactSection() {
                 there!
               </p>
               <a href="tel:+918123456789" className="contact-info-link">
-                +91 81234 56789
+                +91 8438147100
               </a>
             </div>
 
