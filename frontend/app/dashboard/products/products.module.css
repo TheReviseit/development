@@ -1,0 +1,186 @@
+.container {
+  padding: 2rem;
+  max-width: 1400px;
+  margin: 0 auto;
+  min-height: 100vh;
+}
+
+.loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 300px;
+  color: #888;
+  font-size: 1rem;
+}
+
+.header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  margin-bottom: 2rem;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.title {
+  font-size: 1.75rem;
+  font-weight: 700;
+  color: #fff;
+  margin: 0 0 0.5rem 0;
+}
+
+.subtitle {
+  color: #888;
+  font-size: 0.95rem;
+  margin: 0;
+  max-width: 500px;
+}
+
+.addButton {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.75rem 1.5rem;
+  background: white;
+  color: #000000;
+  border: 1px solid #fff;
+  border-radius: 8px;
+  font-size: 0.95rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.addButton:hover {
+  background: rgba(255, 255, 255, 0.1);
+  transform: translateY(-2px);
+}
+
+.toast {
+  position: fixed;
+  top: 100px;
+  right: 20px;
+  padding: 1rem 1.5rem;
+  border-radius: 8px;
+  font-size: 0.95rem;
+  font-weight: 500;
+  z-index: 1000;
+  animation: slideIn 0.3s ease;
+}
+
+@keyframes slideIn {
+  from {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+.toastSuccess {
+  background: linear-gradient(135deg, #059669, #10b981);
+  color: #fff;
+}
+
+.toastError {
+  background: linear-gradient(135deg, #dc2626, #ef4444);
+  color: #fff;
+}
+
+.emptyState {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 4rem 2rem;
+  text-align: center;
+  background: #1a1a1a;
+  border: 1px dashed #333;
+  border-radius: 16px;
+  margin-top: 2rem;
+}
+
+.emptyState svg {
+  color: #555;
+  margin-bottom: 1.5rem;
+}
+
+.emptyState h3 {
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: #fff;
+  margin: 0 0 0.5rem 0;
+}
+
+.emptyState p {
+  color: #888;
+  margin: 0 0 1.5rem 0;
+}
+
+.productsGrid {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.addProductCard {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 3rem 2rem;
+  background: #1a1a1a;
+  border: 2px dashed #333;
+  border-radius: 16px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  color: #888;
+  gap: 1rem;
+}
+
+.addProductCard:hover {
+  border-color: #7c3aed;
+  color: #7c3aed;
+  transform: translateY(-2px);
+}
+
+.addProductCard svg {
+  transition: transform 0.2s ease;
+}
+
+.addProductCard:hover svg {
+  transform: scale(1.1);
+}
+
+.addProductCard span {
+  font-size: 1rem;
+  font-weight: 500;
+}
+
+/* Mobile Responsiveness */
+@media (max-width: 768px) {
+  .container {
+    padding: 1rem;
+  }
+
+  .header {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .title {
+    font-size: 1.5rem;
+  }
+
+  .addButton {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .productsGrid {
+    gap: 1rem;
+  }
+}

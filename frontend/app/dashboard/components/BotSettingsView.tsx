@@ -418,6 +418,7 @@ export default function BotSettingsView() {
   const [appointmentBookingEnabled, setAppointmentBookingEnabled] =
     useState(false);
   const [orderBookingEnabled, setOrderBookingEnabled] = useState(false);
+  const [productsEnabled, setProductsEnabled] = useState(false);
   const [capabilitiesLoading, setCapabilitiesLoading] = useState(false);
   const [capabilityExpanded, setCapabilityExpanded] = useState(false);
   const [alertToast, setAlertToast] = useState<{
@@ -559,6 +560,10 @@ export default function BotSettingsView() {
             if (result.data.order_minimal_mode !== undefined) {
               setOrderMinimalMode(result.data.order_minimal_mode);
             }
+            // Load products enabled state
+            if (result.data.products_enabled !== undefined) {
+              setProductsEnabled(result.data.products_enabled);
+            }
           }
         }
       } catch (error) {
@@ -649,6 +654,59 @@ export default function BotSettingsView() {
           title: newValue
             ? "Order Booking Enabled!"
             : "Order Booking Disabled!",
+          description: "",
+        });
+      } else {
+        setAlertToast({
+          show: true,
+          variant: "warning",
+          title: newValue ? "Enabled Locally" : "Disabled Locally",
+          description: "",
+        });
+      }
+    } catch (error) {
+      setAlertToast({
+        show: true,
+        variant: "warning",
+        title: newValue ? "Enabled Locally" : "Disabled Locally",
+        description: "",
+      });
+    } finally {
+      setCapabilitiesLoading(false);
+    }
+  };
+
+  // Handle products toggle
+  const handleProductsToggle = async () => {
+    const newValue = !productsEnabled;
+    setCapabilitiesLoading(true);
+
+    // Immediately update local state for instant UI feedback
+    setProductsEnabled(newValue);
+
+    // Immediately dispatch event to update sidebar (don't wait for API)
+    window.dispatchEvent(
+      new CustomEvent("ai-capabilities-updated", {
+        detail: {
+          appointment_booking_enabled: appointmentBookingEnabled,
+          order_booking_enabled: orderBookingEnabled,
+          products_enabled: newValue,
+        },
+      })
+    );
+
+    try {
+      const response = await fetch("/api/ai-capabilities", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ products_enabled: newValue }),
+      });
+
+      if (response.ok) {
+        setAlertToast({
+          show: true,
+          variant: "success",
+          title: newValue ? "Products Enabled!" : "Products Disabled!",
           description: "",
         });
       } else {
@@ -1281,12 +1339,16 @@ export default function BotSettingsView() {
       label: "Brand Voice",
       iconPath: "/icons/ai_settings/brand_voice.svg",
     },
-    // Services/Products tab - label adapts to business type
-    {
-      id: "services",
-      label: currentConfig.servicesLabel,
-      iconPath: "/icons/ai_settings/services.svg",
-    },
+    // Services/Products tab - hide for e-commerce (moved to sidebar as Products)
+    ...(!currentConfig.hasEcommerce
+      ? [
+          {
+            id: "services" as TabType,
+            label: currentConfig.servicesLabel,
+            iconPath: "/icons/ai_settings/services.svg",
+          },
+        ]
+      : []),
     // Categories tab - only for e-commerce businesses
     ...(currentConfig.hasEcommerce
       ? [
@@ -2404,16 +2466,6 @@ export default function BotSettingsView() {
 
         {activeTab === "capabilities" && (
           <div className={styles.section}>
-            <h2 className={`${styles.sectionTitle} ${styles.hideOnMobile}`}>
-              AI Capabilities
-            </h2>
-            <p
-              className={`${styles.capabilityDescription} ${styles.hideOnMobile}`}
-              style={{ marginBottom: "24px" }}
-            >
-              Enable or disable AI-powered features for your business.
-            </p>
-
             {/* Appointment Booking Toggle - Hidden for ecommerce businesses */}
             {!currentConfig.hasEcommerce && (
               <>
@@ -3126,6 +3178,63 @@ export default function BotSettingsView() {
                 </div>
               </div>
             )}
+          </div>
+        )}
+
+        {activeTab === "capabilities" && (
+          <div style={{ marginTop: "2rem" }}>
+            {/* Products Toggle */}
+            <div
+              className={styles.capabilitiesSection}
+              style={{ cursor: "default" }}
+            >
+              <div className={styles.capabilityRow}>
+                <div className={styles.capabilityInfo}>
+                  <div className={styles.capabilityTitle}>
+                    <svg
+                      width="20"
+                      height="20"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      style={{ marginRight: "8px" }}
+                    >
+                      <path
+                        d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      />
+                      <line x1="3" y1="6" x2="21" y2="6" />
+                      <path
+                        d="M16 10a4 4 0 0 1-8 0"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      />
+                    </svg>
+                    Products Catalog
+                    <span className={styles.newBadge}>NEW</span>
+                  </div>
+                  <p className={styles.capabilityDescription}>
+                    When enabled, a Products menu appears in the sidebar where
+                    you can manage your product catalog. Your AI assistant can
+                    recommend products to customers.
+                  </p>
+                </div>
+                <label
+                  className={styles.toggleSwitch}
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <input
+                    type="checkbox"
+                    checked={productsEnabled}
+                    onChange={handleProductsToggle}
+                    disabled={capabilitiesLoading}
+                  />
+                  <span className={styles.toggleSlider}></span>
+                </label>
+              </div>
+            </div>
           </div>
         )}
       </div>

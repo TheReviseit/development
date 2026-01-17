@@ -76,13 +76,13 @@ importScripts(
 // Get these from Firebase Console -> Project Settings -> General
 // ============================================
 const FIREBASE_CONFIG = {
-  apiKey: "AIzaSyAll4KrhbRPu5W7MR3TVj3-X60Hexapk8k",
-  authDomain: "reviseit-def4c.firebaseapp.com",
-  projectId: "reviseit-def4c",
-  storageBucket: "reviseit-def4c.firebasestorage.app",
-  messagingSenderId: "636743724509",
-  appId: "1:636743724509:web:25460ed67da07100555a34",
-  measurementId: "G-N6F5JK2FKE",
+  apiKey: "AIzaSyC0z-YBr7DPJuCFfCpaY2gnZuJ1KfMhoUs",
+  authDomain: "flowauxi.firebaseapp.com",
+  projectId: "flowauxi",
+  storageBucket: "flowauxi.firebasestorage.app",
+  messagingSenderId: "553746179466",
+  appId: "1:553746179466:web:2a9417320aa63841045473",
+  measurementId: "G-YW8D3PSS04",
 };
 
 let firebaseApp = null;

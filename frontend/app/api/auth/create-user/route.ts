@@ -1,5 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createUser, getUserByFirebaseUID } from "@/lib/supabase/queries";
+import {
+  createUser,
+  getUserByFirebaseUID,
+  getUserByEmail,
+  updateUserFirebaseUID,
+} from "@/lib/supabase/queries";
 import { sendWelcomeEmail } from "@/lib/email/automated-emails";
 import { createUserSchema } from "@/lib/validation/schemas";
 import { getUserCache } from "@/app/utils/userCache";
@@ -23,14 +28,37 @@ export async function POST(request: NextRequest) {
 
     const { firebase_uid, email, full_name } = validationResult.data;
 
-    // Check if user already exists
+    // Check if user already exists by firebase_uid
     const existingUser = await getUserByFirebaseUID(firebase_uid);
     if (existingUser) {
-      // User exists - add to cache if not already there
+      // User exists with same firebase_uid - add to cache if not already there
       const cache = getUserCache();
       cache.set(existingUser);
 
       return NextResponse.json({ user: existingUser, created: false });
+    }
+
+    // Check if user exists by email (handles Firebase project migration)
+    const existingUserByEmail = await getUserByEmail(email);
+    if (existingUserByEmail) {
+      console.log(
+        `[create-user] Email ${email} exists with different firebase_uid. Updating...`
+      );
+      // User exists with different firebase_uid - this happens when switching Firebase projects
+      const updatedUser = await updateUserFirebaseUID(email, firebase_uid);
+
+      // Update cache with new firebase_uid
+      const cache = getUserCache();
+      cache.set(updatedUser);
+
+      console.log(
+        `[create-user] Successfully migrated user ${email} to new Firebase project`
+      );
+      return NextResponse.json({
+        user: updatedUser,
+        created: false,
+        migrated: true,
+      });
     }
 
     // Create new user

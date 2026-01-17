@@ -17,7 +17,6 @@
 
 .imageUploadWrapper {
   width: 100%;
-  max-width: 280px;
   min-height: 200px;
   border-radius: 12px;
   overflow: hidden;

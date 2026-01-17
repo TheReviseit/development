@@ -385,6 +385,173 @@
 }
 
 /* ============================================
+   Sidebar Hide/Unhide Feature
+   ============================================ */
+
+.navItemWrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.navItemWrapper .navItem {
+  flex: 1;
+}
+
+.hideItemBtn {
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 24px;
+  height: 24px;
+  border-radius: 6px;
+  background: transparent;
+  border: none;
+  color: var(--dash-text-muted);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transition: all 0.2s ease;
+  z-index: 5;
+}
+
+.navItemWrapper:hover .hideItemBtn {
+  opacity: 1;
+}
+
+.hideItemBtn:hover {
+  background: rgba(255, 68, 68, 0.15);
+  color: var(--dash-danger);
+}
+
+/* Hidden Items Container */
+.hiddenItemsContainer {
+  position: relative;
+  padding: 0.5rem 0.75rem;
+  border-top: 1px solid var(--dash-border-light);
+  margin-top: auto;
+}
+
+.hiddenItemsToggle {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  width: 100%;
+  padding: 0.625rem 0.75rem;
+  background: var(--dash-bg-tertiary);
+  border: 1px solid var(--dash-border);
+  border-radius: 8px;
+  color: var(--dash-text-muted);
+  font-size: 0.8125rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.hiddenItemsToggle:hover {
+  background: var(--dash-bg-hover);
+  color: var(--dash-text-secondary);
+  border-color: var(--dash-border);
+}
+
+.hiddenItemsToggle span {
+  flex: 1;
+  text-align: left;
+}
+
+/* Hidden Items Dropdown - Opens upward */
+.hiddenMenuOverlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 198;
+}
+
+.hiddenItemsDropdown {
+  position: absolute;
+  bottom: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  background: var(--dash-bg-secondary);
+  border: 1px solid var(--dash-border);
+  border-radius: 12px;
+  padding: 0.5rem;
+  z-index: 200;
+  box-shadow: 0 -8px 32px rgba(0, 0, 0, 0.5);
+  animation: hiddenDropdownSlideUp 0.15s ease;
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+@keyframes hiddenDropdownSlideUp {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.hiddenItemRow {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.125rem;
+}
+
+.hiddenItemLink {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.625rem 0.75rem;
+  border-radius: 8px;
+  color: var(--dash-text-secondary);
+  font-size: 0.875rem;
+  text-decoration: none;
+  transition: all 0.15s ease;
+}
+
+.hiddenItemLink:hover {
+  background: var(--dash-bg-hover);
+  color: var(--dash-text-primary);
+}
+
+.hiddenItemLink .navIcon {
+  width: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.unhideItemBtn {
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--dash-text-muted);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+  flex-shrink: 0;
+}
+
+.unhideItemBtn:hover {
+  background: rgba(34, 193, 90, 0.15);
+  color: #22c55a;
+  border-color: rgba(34, 193, 90, 0.3);
+}
+
+/* ============================================
    Main Content Area
    ============================================ */
 

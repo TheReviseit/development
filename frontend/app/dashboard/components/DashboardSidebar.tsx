@@ -16,6 +16,7 @@ interface NavItem {
 interface AICapabilities {
   appointment_booking_enabled: boolean;
   order_booking_enabled: boolean;
+  products_enabled: boolean;
 }
 
 interface DashboardSidebarProps {
@@ -277,6 +278,30 @@ const OrdersIcon = () => (
   </svg>
 );
 
+// Shopping bag icon for Products
+const ProductsIcon = () => (
+  <svg
+    width="20"
+    height="20"
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2"
+  >
+    <path
+      d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+    <line x1="3" y1="6" x2="21" y2="6" />
+    <path
+      d="M16 10a4 4 0 0 1-8 0"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+  </svg>
+);
+
 const CollapseIcon = ({ collapsed }: { collapsed: boolean }) => (
   <svg
     width="18"
@@ -314,8 +339,44 @@ export default function DashboardSidebar({
   const [aiCapabilities, setAiCapabilities] = useState<AICapabilities>({
     appointment_booking_enabled: false,
     order_booking_enabled: false,
+    products_enabled: false,
   });
   const [showProfileMenu, setShowProfileMenu] = useState(false);
+  const [hiddenItems, setHiddenItems] = useState<string[]>([]);
+  const [showHiddenMenu, setShowHiddenMenu] = useState(false);
+
+  // Load hidden items from localStorage
+  useEffect(() => {
+    const stored = localStorage.getItem("sidebar-hidden-items");
+    if (stored) {
+      try {
+        setHiddenItems(JSON.parse(stored));
+      } catch {
+        setHiddenItems([]);
+      }
+    }
+  }, []);
+
+  // Items that cannot be hidden (essential navigation)
+  const NON_HIDEABLE_ITEMS = ["analytics", "messages", "bot-settings"];
+
+  // Save hidden items to localStorage
+  const toggleHideItem = (itemId: string) => {
+    // Prevent hiding essential items
+    if (NON_HIDEABLE_ITEMS.includes(itemId)) return;
+
+    const newHiddenItems = hiddenItems.includes(itemId)
+      ? hiddenItems.filter((id) => id !== itemId)
+      : [...hiddenItems, itemId];
+    setHiddenItems(newHiddenItems);
+    localStorage.setItem(
+      "sidebar-hidden-items",
+      JSON.stringify(newHiddenItems)
+    );
+  };
+
+  // Check if an item can be hidden
+  const canHideItem = (itemId: string) => !NON_HIDEABLE_ITEMS.includes(itemId);
 
   // Fetch AI capabilities to determine which features to show
   useEffect(() => {
@@ -339,6 +400,7 @@ export default function DashboardSidebar({
       const customEvent = event as CustomEvent<{
         appointment_booking_enabled: boolean;
         order_booking_enabled: boolean;
+        products_enabled: boolean;
       }>;
       if (customEvent.detail) {
         console.log("Sidebar: Received capability update:", customEvent.detail);
@@ -437,6 +499,17 @@ export default function DashboardSidebar({
           },
         ]
       : []),
+    // Products - only show when toggle is enabled
+    ...(aiCapabilities.products_enabled
+      ? [
+          {
+            id: "products",
+            label: "Products",
+            icon: <ProductsIcon />,
+            href: "/dashboard/products",
+          },
+        ]
+      : []),
     {
       id: "bot-settings",
       label: "AI Settings",
@@ -483,30 +556,141 @@ export default function DashboardSidebar({
 
       {/* Navigation */}
       <nav className={styles.sidebarNav}>
-        {navItems.map((item) => (
-          <Link
-            key={item.id}
-            href={item.href}
-            className={`${styles.navItem} ${
-              activeSection === item.id ? styles.navItemActive : ""
-            }`}
-            title={isCollapsed ? item.label : undefined}
-          >
-            <span className={styles.navIcon}>{item.icon}</span>
-            {!isCollapsed && (
-              <>
-                <span className={styles.navLabel}>{item.label}</span>
-                {item.badge && (
-                  <span className={styles.navBadge}>{item.badge}</span>
+        {navItems
+          .filter((item) => !hiddenItems.includes(item.id))
+          .map((item) => (
+            <div key={item.id} className={styles.navItemWrapper}>
+              <Link
+                href={item.href}
+                className={`${styles.navItem} ${
+                  activeSection === item.id ? styles.navItemActive : ""
+                }`}
+                title={isCollapsed ? item.label : undefined}
+              >
+                <span className={styles.navIcon}>{item.icon}</span>
+                {!isCollapsed && (
+                  <>
+                    <span className={styles.navLabel}>{item.label}</span>
+                    {item.badge && (
+                      <span className={styles.navBadge}>{item.badge}</span>
+                    )}
+                  </>
                 )}
-              </>
-            )}
-            {isCollapsed && item.badge && (
-              <span className={styles.navBadgeCollapsed}>{item.badge}</span>
-            )}
-          </Link>
-        ))}
+                {isCollapsed && item.badge && (
+                  <span className={styles.navBadgeCollapsed}>{item.badge}</span>
+                )}
+              </Link>
+              {/* Hide button - only visible on hover when not collapsed and item can be hidden */}
+              {!isCollapsed && canHideItem(item.id) && (
+                <button
+                  className={styles.hideItemBtn}
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    toggleHideItem(item.id);
+                  }}
+                  title="Hide from sidebar"
+                >
+                  <svg
+                    width="14"
+                    height="14"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                  >
+                    <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24" />
+                    <line x1="1" y1="1" x2="23" y2="23" />
+                  </svg>
+                </button>
+              )}
+            </div>
+          ))}
       </nav>
+
+      {/* Hidden Items Dropdown - Above Footer */}
+      {hiddenItems.length > 0 && !isCollapsed && (
+        <div className={styles.hiddenItemsContainer}>
+          <button
+            className={styles.hiddenItemsToggle}
+            onClick={() => setShowHiddenMenu(!showHiddenMenu)}
+            title="Show hidden items"
+          >
+            <svg
+              width="16"
+              height="16"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+            >
+              <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24" />
+              <line x1="1" y1="1" x2="23" y2="23" />
+            </svg>
+            <span>Hidden ({hiddenItems.length})</span>
+            <svg
+              width="12"
+              height="12"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              style={{
+                transform: showHiddenMenu ? "rotate(180deg)" : "rotate(0deg)",
+                transition: "transform 0.2s",
+              }}
+            >
+              <polyline points="18 15 12 9 6 15" />
+            </svg>
+          </button>
+
+          {showHiddenMenu && (
+            <>
+              <div
+                className={styles.hiddenMenuOverlay}
+                onClick={() => setShowHiddenMenu(false)}
+              />
+              <div className={styles.hiddenItemsDropdown}>
+                {navItems
+                  .filter((item) => hiddenItems.includes(item.id))
+                  .map((item) => (
+                    <div key={item.id} className={styles.hiddenItemRow}>
+                      <Link
+                        href={item.href}
+                        className={styles.hiddenItemLink}
+                        onClick={() => setShowHiddenMenu(false)}
+                      >
+                        <span className={styles.navIcon}>{item.icon}</span>
+                        <span>{item.label}</span>
+                      </Link>
+                      <button
+                        className={styles.unhideItemBtn}
+                        onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          toggleHideItem(item.id);
+                        }}
+                        title="Show in sidebar"
+                      >
+                        <svg
+                          width="14"
+                          height="14"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="2"
+                        >
+                          <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+                          <circle cx="12" cy="12" r="3" />
+                        </svg>
+                      </button>
+                    </div>
+                  ))}
+              </div>
+            </>
+          )}
+        </div>
+      )}
 
       {/* Bottom Section */}
       <div className={styles.sidebarFooter}>

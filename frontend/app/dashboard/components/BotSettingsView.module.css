@@ -1185,12 +1185,12 @@
    AI Capabilities Section
    ============================================ */
 .capabilitiesSection {
-  background: white !important;
+  background: var(--bg-secondary);
   border: 1px solid rgba(34, 193, 90, 0.2);
   border-radius: var(--radius-xl);
   padding: var(--space-xl);
   margin-bottom: var(--space-2xl);
-  color: black !important;
+  color: var(--text-primary);
   cursor: pointer;
   transition: all var(--transition-base);
 }
@@ -1214,7 +1214,7 @@
 .capabilityTitle {
   font-size: 15px;
   font-weight: 600;
-  color: black;
+  color: var(--text-primary);
   margin-bottom: 4px;
   display: flex;
   align-items: center;
@@ -1230,7 +1230,7 @@
 
 .chevron {
   font-size: 10px;
-  color: rgba(0, 0, 0, 0.5);
+  color: var(--text-muted);
   transition: transform var(--transition-base);
   margin-left: auto;
 }
@@ -1255,11 +1255,11 @@
 
 .capabilityDropdownText {
   font-size: 13px;
-  color: rgba(0, 0, 0, 0.6);
+  color: var(--text-muted);
   line-height: 1.6;
   margin: 0;
   padding-top: var(--space-md);
-  border-top: 1px solid rgba(0, 0, 0, 0.1);
+  border-top: 1px solid var(--border-subtle);
 }
 
 .hideOnMobile {
@@ -1287,8 +1287,8 @@
   left: 0;
   right: 0;
   bottom: 0;
-  background: rgba(255, 255, 255, 0.1);
-  border: 1px solid rgba(0, 0, 0, 0.2);
+  background: var(--bg-hover);
+  border: 1px solid var(--border-default);
   border-radius: 28px;
   transition: all var(--transition-base);
 }
@@ -1300,19 +1300,20 @@
   width: 20px;
   left: 3px;
   bottom: 3px;
-  background: white;
+  background: var(--text-secondary);
   border-radius: 50%;
   transition: all var(--transition-base);
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
 }
 
 .toggleSwitch input:checked + .toggleSlider {
-  background: black;
-  border-color: black;
+  background: var(--accent-success);
+  border-color: var(--accent-success);
 }
 
 .toggleSwitch input:checked + .toggleSlider::before {
   transform: translateX(24px);
+  background: white;
 }
 
 .toggleSwitch input:focus + .toggleSlider {

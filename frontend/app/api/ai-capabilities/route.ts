@@ -93,9 +93,27 @@ const DEFAULT_BUSINESS_HOURS: BusinessHours = {
 // Default order fields
 const DEFAULT_ORDER_FIELDS: OrderField[] = [
   { id: "name", label: "Full Name", type: "text", required: true, order: 1 },
-  { id: "phone", label: "Phone Number", type: "phone", required: true, order: 2 },
-  { id: "address", label: "Delivery Address", type: "textarea", required: true, order: 3 },
-  { id: "notes", label: "Order Notes", type: "textarea", required: false, order: 4 },
+  {
+    id: "phone",
+    label: "Phone Number",
+    type: "phone",
+    required: true,
+    order: 2,
+  },
+  {
+    id: "address",
+    label: "Delivery Address",
+    type: "textarea",
+    required: true,
+    order: 3,
+  },
+  {
+    id: "notes",
+    label: "Order Notes",
+    type: "textarea",
+    required: false,
+    order: 4,
+  },
 ];
 
 // Helper to get user ID from Firebase token
@@ -158,6 +176,7 @@ export async function GET(request: NextRequest) {
       order_minimal_mode: false,
       order_sheet_url: null,
       order_sheet_sync_enabled: false,
+      products_enabled: false,
     };
 
     // Ensure defaults are set for any missing fields
@@ -185,6 +204,10 @@ export async function GET(request: NextRequest) {
     }
     if (capabilities.order_minimal_mode === undefined) {
       capabilities.order_minimal_mode = false;
+    }
+    // Ensure products defaults
+    if (capabilities.products_enabled === undefined) {
+      capabilities.products_enabled = false;
     }
 
     return NextResponse.json({
@@ -221,6 +244,7 @@ export async function POST(request: NextRequest) {
       order_minimal_mode,
       order_sheet_url,
       order_sheet_sync_enabled,
+      products_enabled,
     } = body;
 
     // Build update object with only provided fields
@@ -316,6 +340,11 @@ export async function POST(request: NextRequest) {
     // Validate and add order_sheet_sync_enabled
     if (typeof order_sheet_sync_enabled === "boolean") {
       updateData.order_sheet_sync_enabled = order_sheet_sync_enabled;
+    }
+
+    // Validate and add products_enabled
+    if (typeof products_enabled === "boolean") {
+      updateData.products_enabled = products_enabled;
     }
 
     // Check if we have at least one valid field to update

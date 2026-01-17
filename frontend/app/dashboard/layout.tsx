@@ -18,6 +18,7 @@ type Section =
   | "campaigns"
   | "appointments"
   | "orders"
+  | "products"
   | "bot-settings"
   | "preview-bot"
   | "settings";
@@ -31,6 +32,7 @@ const sectionLabels: Record<Section, string> = {
   campaigns: "Campaigns",
   appointments: "Appointments",
   orders: "Orders",
+  products: "Products",
   "bot-settings": "AI Settings",
   "preview-bot": "Preview Bot",
   settings: "Settings",
@@ -45,6 +47,7 @@ const getActiveSection = (pathname: string): Section => {
   if (pathname.includes("/campaigns")) return "campaigns";
   if (pathname.includes("/appointments")) return "appointments";
   if (pathname.includes("/orders")) return "orders";
+  if (pathname.includes("/products")) return "products";
   if (pathname.includes("/bot-settings")) return "bot-settings";
   if (pathname.includes("/preview-bot")) return "preview-bot";
   if (pathname.includes("/settings")) return "settings";
@@ -64,6 +67,7 @@ export default function DashboardLayout({
   const [appointmentBookingEnabled, setAppointmentBookingEnabled] =
     useState(false);
   const [orderBookingEnabled, setOrderBookingEnabled] = useState(false);
+  const [productsEnabled, setProductsEnabled] = useState(false);
   const router = useRouter();
   const pathname = usePathname();
 
@@ -80,6 +84,7 @@ export default function DashboardLayout({
             data.data.appointment_booking_enabled || false
           );
           setOrderBookingEnabled(data.data.order_booking_enabled || false);
+          setProductsEnabled(data.data.products_enabled || false);
         }
       } catch (error) {
         console.log("Error fetching AI capabilities");
@@ -92,6 +97,7 @@ export default function DashboardLayout({
       const customEvent = event as CustomEvent<{
         appointment_booking_enabled: boolean;
         order_booking_enabled?: boolean;
+        products_enabled?: boolean;
       }>;
       if (customEvent.detail) {
         setAppointmentBookingEnabled(
@@ -99,6 +105,9 @@ export default function DashboardLayout({
         );
         if (customEvent.detail.order_booking_enabled !== undefined) {
           setOrderBookingEnabled(customEvent.detail.order_booking_enabled);
+        }
+        if (customEvent.detail.products_enabled !== undefined) {
+          setProductsEnabled(customEvent.detail.products_enabled);
         }
       } else {
         fetchCapabilities();
@@ -525,6 +534,39 @@ export default function DashboardLayout({
                           />
                         </svg>
                         <span>Orders</span>
+                      </button>
+                    )}
+                    {productsEnabled && (
+                      <button
+                        className={`${styles.mobileNavLink} ${
+                          activeSection === "products"
+                            ? styles.mobileNavLinkActive
+                            : ""
+                        }`}
+                        onClick={() => handleSectionChange("products")}
+                      >
+                        <svg
+                          width="20"
+                          height="20"
+                          fill="none"
+                          stroke="currentColor"
+                          viewBox="0 0 24 24"
+                        >
+                          <path
+                            d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth={2}
+                          />
+                          <line x1="3" y1="6" x2="21" y2="6" strokeWidth={2} />
+                          <path
+                            d="M16 10a4 4 0 0 1-8 0"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth={2}
+                          />
+                        </svg>
+                        <span>Products</span>
                       </button>
                     )}
                     <button

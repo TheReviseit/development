@@ -11,7 +11,10 @@ export const createUserSchema = z.object({
     .string()
     .min(1, "Firebase UID is required")
     .max(128, "Firebase UID too long"),
-  email: z.string().email("Invalid email address"),
+  email: z
+    .string()
+    .email("Invalid email address")
+    .transform((val) => val.toLowerCase().trim()),
   full_name: z.string().max(255, "Name too long").optional(),
   phone: z.string().max(20, "Phone number too long").optional(),
 });

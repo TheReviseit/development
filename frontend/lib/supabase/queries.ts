@@ -60,6 +60,40 @@ export async function getUserByFirebaseUID(firebaseUID: string) {
   return data as User | null;
 }
 
+// Get user by email (useful for Firebase project migrations)
+export async function getUserByEmail(email: string) {
+  const { data, error } = await supabaseAdmin
+    .from("users")
+    .select("*")
+    .eq("email", email)
+    .maybeSingle();
+
+  if (error) {
+    console.error("Error fetching user by email:", error);
+    return null;
+  }
+  return data as User | null;
+}
+
+// Update user's firebase_uid (for Firebase project migrations)
+export async function updateUserFirebaseUID(
+  email: string,
+  newFirebaseUID: string
+) {
+  const { data, error } = await supabaseAdmin
+    .from("users")
+    .update({ firebase_uid: newFirebaseUID })
+    .eq("email", email)
+    .select()
+    .single();
+
+  if (error) {
+    console.error("Error updating firebase_uid:", error);
+    throw error;
+  }
+  return data as User;
+}
+
 export async function createUser(userData: {
   firebase_uid: string;
   full_name: string;
