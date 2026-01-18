@@ -261,6 +261,9 @@ export default function ProductImageUpload({
           onClick={() => setIsModalOpen(true)}
           style={{ cursor: "zoom-in" }}
           title="Click to enlarge"
+          loading="eager"
+          fetchPriority="high"
+          decoding="async"
         />
 
         {showDeleteConfirm ? (

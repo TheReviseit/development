@@ -64,10 +64,10 @@ self.addEventListener("push", (event) => {
 
 // Import Firebase SDKs for service worker
 importScripts(
-  "https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"
+  "https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js",
 );
 importScripts(
-  "https://www.gstatic.com/firebasejs/10.7.1/firebase-messaging-compat.js"
+  "https://www.gstatic.com/firebasejs/10.7.1/firebase-messaging-compat.js",
 );
 
 // ============================================
@@ -167,7 +167,7 @@ function setupBackgroundMessageHandler() {
 
     return self.registration.showNotification(
       notificationTitle,
-      notificationOptions
+      notificationOptions,
     );
   });
 }
@@ -176,7 +176,7 @@ function setupBackgroundMessageHandler() {
 // PWA Caching Configuration
 // ============================================
 
-const CACHE_VERSION = "v3";
+const CACHE_VERSION = "v4";
 const STATIC_CACHE = `flowauxi-static-${CACHE_VERSION}`;
 const IMAGE_CACHE = `flowauxi-images-${CACHE_VERSION}`;
 const FONT_CACHE = `flowauxi-fonts-${CACHE_VERSION}`;
@@ -219,13 +219,13 @@ self.addEventListener("install", (event) => {
           STATIC_ASSETS.map((url) =>
             cache.add(url).catch((err) => {
               console.warn(`Failed to cache ${url}:`, err);
-            })
-          )
+            }),
+          ),
         );
       })
       .then(() => {
         console.log("SW installed, static assets cached");
-      })
+      }),
   );
   self.skipWaiting();
 });
@@ -245,9 +245,9 @@ self.addEventListener("activate", (event) => {
           .map((name) => {
             console.log("Deleting old cache:", name);
             return caches.delete(name);
-          })
+          }),
       );
-    })
+    }),
   );
   self.clients.claim();
 });
@@ -294,7 +294,7 @@ self.addEventListener("fetch", (event) => {
             if (cached) return cached;
             return caches.match("/offline");
           });
-        })
+        }),
     );
     return;
   }
@@ -317,7 +317,7 @@ self.addEventListener("fetch", (event) => {
             })
             .catch(() => cached);
         });
-      })
+      }),
     );
     return;
   }
@@ -340,7 +340,7 @@ self.addEventListener("fetch", (event) => {
             .catch(() => null);
           return cached || fetchPromise;
         });
-      })
+      }),
     );
     return;
   }
@@ -360,7 +360,7 @@ self.addEventListener("fetch", (event) => {
         })
         .catch(() => {
           return caches.match(request);
-        })
+        }),
     );
   }
 });

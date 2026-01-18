@@ -502,6 +502,12 @@ export default function BotSettingsView() {
   const [orderMinimalMode, setOrderMinimalMode] = useState(false);
   const [orderConfigExpanded, setOrderConfigExpanded] = useState(false);
 
+  // Ref to always have latest data for async operations (fixes stale closure in setTimeout)
+  const dataRef = useRef(data);
+  useEffect(() => {
+    dataRef.current = data;
+  }, [data]);
+
   // Load saved data on mount
   useEffect(() => {
     const loadData = async () => {
@@ -510,7 +516,98 @@ export default function BotSettingsView() {
         if (response.ok) {
           const saved = await response.json();
           if (saved.data) {
-            setData({ ...INITIAL_DATA, ...saved.data });
+            // Convert from API format (snake_case) to frontend format (camelCase)
+            const apiData = saved.data;
+            const convertedData: Partial<BusinessData> = {
+              businessId: apiData.business_id || apiData.businessId || "",
+              businessName: apiData.business_name || apiData.businessName || "",
+              industry: apiData.industry || "",
+              customIndustry: apiData.customIndustry || "",
+              description: apiData.description || "",
+              contact: apiData.contact || INITIAL_DATA.contact,
+              socialMedia:
+                apiData.social_media ||
+                apiData.socialMedia ||
+                INITIAL_DATA.socialMedia,
+              location: apiData.location
+                ? {
+                    ...INITIAL_DATA.location,
+                    ...apiData.location,
+                    googleMapsLink:
+                      apiData.location.google_maps_link ||
+                      apiData.location.googleMapsLink ||
+                      "",
+                  }
+                : INITIAL_DATA.location,
+              timings: apiData.timings
+                ? Object.fromEntries(
+                    Object.entries(apiData.timings).map(
+                      ([day, timing]: [string, any]) => [
+                        day,
+                        {
+                          open: timing.open || "09:00",
+                          close: timing.close || "18:00",
+                          isClosed:
+                            timing.is_closed ?? timing.isClosed ?? false,
+                        },
+                      ],
+                    ),
+                  )
+                : INITIAL_DATA.timings,
+              products: (
+                apiData.products_services ||
+                apiData.products ||
+                []
+              ).map((p: any) => ({
+                id: p.id || "",
+                name: p.name || "",
+                category: p.category || "",
+                price: p.price || 0,
+                priceUnit: p.price_unit || p.priceUnit || "",
+                duration: p.duration || "",
+                available: p.available ?? true,
+                description: p.description || "",
+                sku: p.sku || "",
+                stockStatus: p.stock_status || p.stockStatus || "in_stock",
+                // IMPORTANT: Handle both snake_case and camelCase for image fields
+                imageUrl: p.imageUrl || p.image_url || "",
+                imagePublicId: p.imagePublicId || p.image_public_id || "",
+                originalSize: p.originalSize || p.original_size || 0,
+                optimizedSize: p.optimizedSize || p.optimized_size || 0,
+                variants: p.variants || [],
+                sizes: p.sizes || [],
+                colors: p.colors || [],
+                brand: p.brand || "",
+                materials: p.materials || [],
+              })),
+              productCategories:
+                apiData.productCategories || apiData.product_categories || [],
+              policies: apiData.policies
+                ? {
+                    refund: apiData.policies.refund || "",
+                    cancellation: apiData.policies.cancellation || "",
+                    delivery: apiData.policies.delivery || "",
+                    paymentMethods:
+                      apiData.policies.payment_methods ||
+                      apiData.policies.paymentMethods ||
+                      [],
+                  }
+                : INITIAL_DATA.policies,
+              ecommercePolicies:
+                apiData.ecommerce_policies ||
+                apiData.ecommercePolicies ||
+                INITIAL_DATA.ecommercePolicies,
+              faqs: (apiData.faqs || []).map((f: any) => ({
+                id: f.id || Date.now().toString(),
+                question: f.question || "",
+                answer: f.answer || "",
+              })),
+              brandVoice:
+                apiData.brand_voice ||
+                apiData.brandVoice ||
+                INITIAL_DATA.brandVoice,
+            };
+            setData({ ...INITIAL_DATA, ...convertedData });
           }
         }
       } catch (error) {
@@ -989,15 +1086,23 @@ export default function BotSettingsView() {
   }, [alertToast]);
 
   const handleSave = async () => {
+    console.log("[handleSave] Starting save...");
     setSaving(true);
     setMessage(null);
 
     try {
+      // Use dataRef.current to get the latest data (avoids stale closure in setTimeout)
+      const currentData = dataRef.current;
+      console.log("[handleSave] Saving products:", currentData.products);
+
+      // Convert data to API format for consistent storage
+      const apiFormattedData = convertToApiFormat(currentData);
+
       // Prepare both requests
       const firestoreSave = fetch("/api/business/save", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(data),
+        body: JSON.stringify(apiFormattedData),
       });
 
       // Flask backend sync with 5-second timeout (fire-and-forget, don't block)
@@ -1009,7 +1114,7 @@ export default function BotSettingsView() {
       const flaskSync = fetch(`${backendUrl}/api/whatsapp/set-business-data`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(convertToApiFormat(data)),
+        body: JSON.stringify(apiFormattedData),
         signal: controller.signal,
       })
         .catch(() => {
@@ -1029,14 +1134,18 @@ export default function BotSettingsView() {
       flaskSync; // Fire and forget
 
       if (response.ok) {
+        console.log("[handleSave] Save successful!");
         setMessage({
           type: "success",
-          text: "Business profile saved successfully! 🎉",
+          text: "Product saved successfully! 🎉",
         });
       } else {
+        const errorText = await response.text();
+        console.error("[handleSave] Save failed:", response.status, errorText);
         throw new Error("Failed to save");
       }
     } catch (error) {
+      console.error("[handleSave] Error:", error);
       setMessage({ type: "error", text: "Failed to save. Please try again." });
     } finally {
       setSaving(false);
@@ -2033,6 +2142,9 @@ export default function BotSettingsView() {
                       // Auto-save after image deletion to sync Firestore with Cloudinary
                       // Use setTimeout to ensure React state update has processed
                       setTimeout(() => handleSave(), 200);
+                    }}
+                    onSave={() => {
+                      setTimeout(() => handleSave(), 300);
                     }}
                   />
                 ))}

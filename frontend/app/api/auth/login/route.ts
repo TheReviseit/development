@@ -10,18 +10,21 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Missing ID token" }, { status: 400 });
     }
 
-    // specific expiration time (5 days)
-    const expiresIn = 60 * 60 * 24 * 5 * 1000;
+    // Session expiration: 5 days
+    // Firebase createSessionCookie expects milliseconds
+    const expiresInMs = 60 * 60 * 24 * 5 * 1000; // 5 days in milliseconds
+    // Cookie maxAge expects seconds
+    const expiresInSeconds = 60 * 60 * 24 * 5; // 5 days in seconds
 
     // Create the session cookie
     const sessionCookie = await adminAuth.createSessionCookie(idToken, {
-      expiresIn,
+      expiresIn: expiresInMs,
     });
 
     const cookieStore = await cookies();
 
     cookieStore.set("session", sessionCookie, {
-      maxAge: expiresIn,
+      maxAge: expiresInSeconds,
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",
       path: "/",
@@ -33,7 +36,7 @@ export async function POST(request: NextRequest) {
     console.error("Login error:", error);
     return NextResponse.json(
       { error: "Internal server error" },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

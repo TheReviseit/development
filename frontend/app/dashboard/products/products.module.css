@@ -37,6 +37,66 @@
   max-width: 500px;
 }
 
+/* Search Box Styles */
+.searchBox {
+  position: relative;
+  display: flex;
+  align-items: center;
+  background: #1a1a1a;
+  border: 1px solid #333;
+  border-radius: 10px;
+  padding: 0.5rem 1rem;
+  min-width: 250px;
+  transition: all 0.2s ease;
+}
+
+.searchBox:focus-within {
+  border-color: #555;
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.05);
+}
+
+.searchIcon {
+  color: #666;
+  flex-shrink: 0;
+  margin-right: 0.5rem;
+}
+
+.searchBox:focus-within .searchIcon {
+  color: #888;
+}
+
+.searchInput {
+  flex: 1;
+  background: transparent;
+  border: none;
+  outline: none;
+  color: #fff;
+  font-size: 0.95rem;
+  padding: 0.25rem 0;
+}
+
+.searchInput::placeholder {
+  color: #666;
+}
+
+.clearButton {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: none;
+  color: #666;
+  cursor: pointer;
+  padding: 0.25rem;
+  border-radius: 4px;
+  transition: all 0.2s ease;
+}
+
+.clearButton:hover {
+  color: #fff;
+  background: #333;
+}
+
 .addButton {
   display: flex;
   align-items: center;
@@ -173,8 +233,14 @@
     align-items: stretch;
   }
 
-  .title {
-    font-size: 1.5rem;
+  /* Hide title and subtitle on mobile */
+  .headerText {
+    display: none;
+  }
+
+  .searchBox {
+    width: 100%;
+    min-width: unset;
   }
 
   .addButton {

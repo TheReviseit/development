@@ -14,6 +14,7 @@ interface DropdownProps {
   onChange: (value: string) => void;
   placeholder?: string;
   className?: string;
+  disabled?: boolean;
 }
 
 export default function Dropdown({
@@ -22,6 +23,7 @@ export default function Dropdown({
   onChange,
   placeholder = "Select...",
   className = "",
+  disabled = false,
 }: DropdownProps) {
   const [isOpen, setIsOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -75,16 +77,17 @@ export default function Dropdown({
   return (
     <div
       ref={dropdownRef}
-      className={`${styles.dropdown} ${className}`}
-      tabIndex={0}
-      onKeyDown={handleKeyDown}
+      className={`${styles.dropdown} ${className} ${disabled ? styles.disabled : ""}`}
+      tabIndex={disabled ? -1 : 0}
+      onKeyDown={disabled ? undefined : handleKeyDown}
     >
       <button
         type="button"
-        className={`${styles.dropdownTrigger} ${isOpen ? styles.open : ""}`}
-        onClick={() => setIsOpen(!isOpen)}
+        className={`${styles.dropdownTrigger} ${isOpen ? styles.open : ""} ${disabled ? styles.triggerDisabled : ""}`}
+        onClick={() => !disabled && setIsOpen(!isOpen)}
         aria-haspopup="listbox"
         aria-expanded={isOpen}
+        disabled={disabled}
       >
         <span className={styles.dropdownLabel}>{displayLabel}</span>
         <svg

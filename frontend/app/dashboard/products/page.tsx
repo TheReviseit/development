@@ -1,10 +1,11 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import styles from "./products.module.css";
 import SlidePanel from "@/app/utils/ui/SlidePanel";
 import ProductForm from "@/app/dashboard/components/ProductCard/ProductForm";
 import { ProductCard } from "@/app/dashboard/components/ProductCard";
+import Toast from "@/app/components/Toast/Toast";
 
 // Product type definition
 interface Product {
@@ -36,10 +37,22 @@ export default function ProductsPage() {
   const [saving, setSaving] = useState(false);
   const [isProductPanelOpen, setIsProductPanelOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
+  const [searchQuery, setSearchQuery] = useState("");
   const [message, setMessage] = useState<{
     type: "success" | "error";
     text: string;
   } | null>(null);
+
+  // Filter products based on search query
+  const filteredProducts = products.filter((product) =>
+    product.name.toLowerCase().includes(searchQuery.toLowerCase()),
+  );
+
+  // Ref to always have latest products for async operations (fixes stale closure)
+  const productsRef = useRef(products);
+  useEffect(() => {
+    productsRef.current = products;
+  }, [products]);
 
   // Load products and categories on mount
   useEffect(() => {
@@ -207,24 +220,67 @@ export default function ProductsPage() {
     <div className={styles.container}>
       {/* Header */}
       <div className={styles.header}>
-        <div>
+        <div className={styles.headerText}>
           <h1 className={styles.title}>Products</h1>
           <p className={styles.subtitle}>
             Manage your product catalog. Your AI assistant can recommend these
             products to customers.
           </p>
         </div>
+        <div className={styles.searchBox}>
+          <svg
+            className={styles.searchIcon}
+            width="20"
+            height="20"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
+            <circle cx="11" cy="11" r="8" />
+            <path d="m21 21-4.35-4.35" />
+          </svg>
+          <input
+            type="text"
+            className={styles.searchInput}
+            placeholder="Search products..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+          />
+          {searchQuery && (
+            <button
+              className={styles.clearButton}
+              onClick={() => setSearchQuery("")}
+              aria-label="Clear search"
+            >
+              <svg
+                width="16"
+                height="16"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <line x1="18" y1="6" x2="6" y2="18" />
+                <line x1="6" y1="6" x2="18" y2="18" />
+              </svg>
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Toast Message */}
       {message && (
-        <div
-          className={`${styles.toast} ${
-            message.type === "success" ? styles.toastSuccess : styles.toastError
-          }`}
-        >
-          {message.text}
-        </div>
+        <Toast
+          message={message.text}
+          type={message.type}
+          onClose={() => setMessage(null)}
+          duration={3000}
+        />
       )}
 
       {/* Products Grid */}
@@ -253,9 +309,25 @@ export default function ProductsPage() {
           <h3>No products yet</h3>
           <p>Add products using the sidebar menu to get started</p>
         </div>
+      ) : filteredProducts.length === 0 ? (
+        <div className={styles.emptyState}>
+          <svg
+            width="64"
+            height="64"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.5"
+          >
+            <circle cx="11" cy="11" r="8" />
+            <path d="m21 21-4.35-4.35" />
+          </svg>
+          <h3>No products found</h3>
+          <p>Try a different search term</p>
+        </div>
       ) : (
         <div className={styles.productsGrid}>
-          {products.map((product, index) => (
+          {filteredProducts.map((product, index) => (
             <ProductCard
               key={product.id}
               product={product}
@@ -270,8 +342,15 @@ export default function ProductsPage() {
               }}
               onRemove={removeProduct}
               onImageDeleted={() => {
-                // Auto-save after image deletion
-                saveProducts(products);
+                // Auto-save after image deletion - use ref for latest state
+                saveProducts(productsRef.current);
+              }}
+              onSave={() => {
+                // Save when tick button is clicked - use ref for latest state
+                console.log(
+                  "[ProductCard] onSave triggered, saving products...",
+                );
+                setTimeout(() => saveProducts(productsRef.current), 300);
               }}
             />
           ))}

@@ -102,3 +102,20 @@
   color: #22c15a;
   flex-shrink: 0;
 }
+
+/* Disabled state */
+.disabled {
+  pointer-events: none;
+  opacity: 0.7;
+}
+
+.triggerDisabled {
+  cursor: not-allowed;
+  background: rgba(255, 255, 255, 0.02) !important;
+  border-color: rgba(255, 255, 255, 0.08) !important;
+}
+
+.triggerDisabled:hover {
+  background: rgba(255, 255, 255, 0.02) !important;
+  border-color: rgba(255, 255, 255, 0.08) !important;
+}

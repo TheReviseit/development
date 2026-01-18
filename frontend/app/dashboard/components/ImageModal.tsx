@@ -27,8 +27,12 @@ export default function ImageModal({
       setOffset({ x: 0, y: 0 });
       document.body.style.overflow = "hidden";
     } else {
-      document.body.style.overflow = "unset";
+      document.body.style.overflow = "";
     }
+    // Cleanup: always restore scroll when component unmounts
+    return () => {
+      document.body.style.overflow = "";
+    };
   }, [isOpen, imageUrl]);
 
   const handleZoomIn = (e?: React.MouseEvent) => {

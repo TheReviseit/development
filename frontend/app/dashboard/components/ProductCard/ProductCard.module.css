@@ -11,16 +11,16 @@
     rgba(255, 255, 255, 0.01) 100%
   );
   --card-border: rgba(255, 255, 255, 0.08);
-  --card-border-hover: rgba(34, 193, 90, 0.4);
-  --accent-green: #22c15a;
-  --accent-green-light: rgba(34, 193, 90, 0.15);
+  --card-border-hover: rgba(255, 255, 255, 0.4);
+  --accent-primary: #ffffff;
+  --accent-primary-light: rgba(255, 255, 255, 0.15);
   --text-primary: #ffffff;
   --text-secondary: rgba(255, 255, 255, 0.85);
   --text-muted: rgba(255, 255, 255, 0.5);
   --text-placeholder: rgba(255, 255, 255, 0.35);
   --input-bg: rgba(255, 255, 255, 0.03);
   --input-border: rgba(255, 255, 255, 0.12);
-  --input-border-focus: #22c15a;
+  --input-border-focus: #ffffff;
   --danger: #ef4444;
 
   background: var(--card-bg);
@@ -122,16 +122,11 @@
 .imageWrapper {
   position: relative;
   width: 200px;
-  min-height: 200px;
-  height: auto;
+  height: 200px;
   border-radius: 16px;
   overflow: hidden;
-  background: linear-gradient(
-    145deg,
-    rgba(34, 193, 90, 0.06) 0%,
-    rgba(45, 212, 191, 0.03) 100%
-  );
-  border: 2px solid var(--input-border);
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid rgba(255, 255, 255, 0.1);
   transition: all 0.3s ease;
 }
 
@@ -146,7 +141,8 @@
 .imageWrapper :global(.imagePreviewContainer) {
   width: 100%;
   height: auto;
-  min-height: 196px;
+  min-height: 120px;
+  max-height: 280px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -156,6 +152,7 @@
   max-width: 100%;
   width: 100%;
   height: auto;
+  max-height: 280px;
   object-fit: contain;
   border-radius: 14px;
 }
@@ -215,8 +212,8 @@
 .detailSelect:focus {
   outline: none;
   border-color: var(--input-border-focus);
-  background: rgba(34, 193, 90, 0.06);
-  box-shadow: 0 0 0 4px rgba(34, 193, 90, 0.12);
+  background: rgba(255, 255, 255, 0.06);
+  box-shadow: 0 0 0 4px rgba(255, 255, 255, 0.08);
 }
 
 .detailInput:hover:not(:focus),
@@ -247,6 +244,10 @@
    Category Dropdown
    ============================================ */
 .categoryDropdown {
+  width: 100%;
+}
+
+.colorSearchDropdown {
   width: 100%;
 }
 
@@ -456,8 +457,8 @@
 .descriptionInput:focus {
   outline: none;
   border-color: var(--input-border-focus);
-  background: rgba(34, 193, 90, 0.06);
-  box-shadow: 0 0 0 4px rgba(34, 193, 90, 0.12);
+  background: rgba(255, 255, 255, 0.06);
+  box-shadow: 0 0 0 4px rgba(255, 255, 255, 0.08);
 }
 
 /* ============================================
@@ -485,75 +486,330 @@
 }
 
 @media (max-width: 768px) {
-  .mainContent {
-    grid-template-columns: 1fr;
-    gap: 24px;
-    padding: 20px;
+  /* ============================================
+     Compact Mobile Card Layout
+     Optimized for many products (100+)
+     ============================================ */
+  .card {
+    border-radius: 12px;
   }
 
+  /* Compact header for mobile */
+  .header {
+    padding: 10px 14px;
+  }
+
+  .productNumber {
+    font-size: 11px;
+    gap: 8px;
+  }
+
+  .numberIndicator {
+    width: 8px;
+    height: 8px;
+  }
+
+  /* Compact horizontal layout for VIEW mode */
+  .mainContent {
+    grid-template-columns: 70px 1fr;
+    gap: 12px;
+    padding: 12px;
+  }
+
+  /* When editing: vertical stack with image on top, full width */
+  .card:not(.viewMode) .mainContent {
+    grid-template-columns: 1fr;
+    gap: 16px;
+    padding: 16px;
+    width: 100%;
+  }
+
+  /* Small square thumbnail in view mode */
   .imageSection {
     display: flex;
     justify-content: center;
+    align-items: flex-start;
   }
 
   .imageWrapper {
-    width: 220px;
-    height: 220px;
-    max-width: 100%;
+    width: 70px;
+    height: 70px;
+    border-radius: 10px;
+    overflow: hidden;
+  }
+
+  /* Larger image when editing - full width */
+  .card:not(.viewMode) .imageWrapper {
+    width: 100%;
+    max-width: 200px;
+    height: auto;
+    aspect-ratio: 1;
+    border-radius: 12px;
   }
 
   .imageWrapper :global(.uploadZone),
   .imageWrapper :global(.imagePreviewContainer),
   .imageWrapper :global(.imagePreview) {
-    min-height: 216px !important;
-    height: 216px;
-    max-height: 216px;
+    min-height: 66px !important;
+    height: 66px;
+    max-height: 66px;
   }
 
-  .detailsGrid {
-    grid-template-columns: 1fr;
-    gap: 16px;
+  .card:not(.viewMode) .imageWrapper :global(.uploadZone),
+  .card:not(.viewMode) .imageWrapper :global(.imagePreviewContainer),
+  .card:not(.viewMode) .imageWrapper :global(.imagePreview) {
+    min-height: 196px !important;
+    height: auto;
+    max-height: none;
   }
 
-  .descriptionSection {
-    padding: 0 20px 20px;
+  .viewImage {
+    width: 70px;
+    height: 70px;
+    border-radius: 10px;
+    object-fit: contain;
+    background: rgba(0, 0, 0, 0.2);
   }
 
-  .header {
-    padding: 14px 20px;
-  }
-}
-
-@media (max-width: 480px) {
-  .card {
-    border-radius: 16px;
+  .noImage {
+    width: 70px;
+    height: 70px;
+    border-radius: 10px;
   }
 
-  .mainContent {
-    padding: 16px;
-    gap: 20px;
-  }
-
-  .imageWrapper {
+  .card:not(.viewMode) .viewImage {
     width: 100%;
     max-width: 200px;
     height: auto;
     aspect-ratio: 1;
+    border-radius: 12px;
+    object-fit: cover;
+  }
+
+  .card:not(.viewMode) .noImage {
+    width: 100%;
+    max-width: 200px;
+    height: auto;
+    aspect-ratio: 1;
+    border-radius: 12px;
+  }
+
+  .noImage svg {
+    width: 24px;
+    height: 24px;
+  }
+
+  .card:not(.viewMode) .noImage svg {
+    width: 40px;
+    height: 40px;
+  }
+
+  .noImage span {
+    display: none;
+  }
+
+  .card:not(.viewMode) .noImage span {
+    display: block;
+  }
+
+  /* Compact details - show only essential info in view mode */
+  .detailsSection {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    min-height: 70px;
+    width: 100%;
+  }
+
+  .card:not(.viewMode) .detailsSection {
+    min-height: auto;
+  }
+
+  .detailsGrid {
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+
+  /* Only show name and price on mobile in VIEW mode, show all when editing */
+  .detailItem {
+    gap: 4px;
+  }
+
+  /* Hide extra fields ONLY in view mode (not editing) */
+  .viewMode .detailItem:nth-child(n + 3) {
+    display: none;
+  }
+
+  .detailLabel {
+    font-size: 10px;
+    letter-spacing: 0.5px;
   }
 
   .detailInput,
   .detailSelect,
   .sizeSelectTrigger {
-    padding: 12px 14px;
-    font-size: 15px; /* Prevent iOS zoom */
+    padding: 8px 10px;
+    font-size: 13px;
+    min-height: 36px;
+    border-radius: 8px;
+  }
+
+  /* Hide description section on mobile in view mode */
+  .viewMode .descriptionSection {
+    display: none;
   }
 
   .descriptionSection {
-    padding: 0 16px 16px;
+    padding: 0 12px 12px;
   }
 
   .descriptionBox {
-    padding: 16px;
+    padding: 12px;
+    border-radius: 10px;
+  }
+
+  .descriptionInput {
+    min-height: 60px;
+    padding: 10px 12px;
+    font-size: 13px;
+    border-radius: 8px;
+  }
+
+  /* Compact header actions */
+  .headerActions {
+    gap: 6px;
+  }
+
+  .editButton,
+  .removeButton,
+  .cancelButton {
+    width: 30px;
+    height: 30px;
+    border-radius: 8px;
+  }
+
+  .editButton svg,
+  .removeButton svg {
+    width: 14px;
+    height: 14px;
+  }
+
+  /* Compact variants section */
+  .variantsSection {
+    padding: 0 12px 12px;
+  }
+
+  .variantsToggle {
+    padding: 10px 14px;
+    border-radius: 10px;
+  }
+
+  .variantsLabel {
+    font-size: 12px;
+  }
+
+  .variantItem {
+    gap: 10px;
+    padding: 10px 12px;
+    border-radius: 8px;
+  }
+
+  .variantImage,
+  .variantImagePlaceholder {
+    width: 40px;
+    height: 40px;
+    border-radius: 6px;
+  }
+
+  .variantColor,
+  .variantSize,
+  .variantPrice,
+  .variantStock {
+    padding: 3px 10px;
+    font-size: 11px;
+  }
+}
+
+@media (max-width: 480px) {
+  .card {
+    border-radius: 10px;
+  }
+
+  .header {
+    padding: 8px 12px;
+  }
+
+  .productNumber {
+    font-size: 10px;
+    gap: 6px;
+  }
+
+  .numberIndicator {
+    width: 6px;
+    height: 6px;
+  }
+
+  .mainContent {
+    grid-template-columns: 60px 1fr;
+    gap: 10px;
+    padding: 10px;
+  }
+
+  .imageWrapper {
+    width: 60px;
+    height: 60px;
+  }
+
+  .imageWrapper :global(.uploadZone),
+  .imageWrapper :global(.imagePreviewContainer),
+  .imageWrapper :global(.imagePreview) {
+    min-height: 56px !important;
+    height: 56px;
+    max-height: 56px;
+  }
+
+  .viewImage,
+  .noImage {
+    width: 60px;
+    height: 60px;
+  }
+
+  .noImage svg {
+    width: 20px;
+    height: 20px;
+  }
+
+  .detailsSection {
+    min-height: 60px;
+  }
+
+  .detailInput,
+  .detailSelect,
+  .sizeSelectTrigger {
+    padding: 6px 8px;
+    font-size: 14px;
+    min-height: 32px;
+  }
+
+  .descriptionSection {
+    padding: 0 10px 10px;
+  }
+
+  .descriptionBox {
+    padding: 10px;
+  }
+
+  .editButton,
+  .removeButton,
+  .cancelButton {
+    width: 28px;
+    height: 28px;
+  }
+
+  .editButton svg,
+  .removeButton svg {
+    width: 12px;
+    height: 12px;
   }
 }
 
@@ -671,4 +927,146 @@
   font-size: 12px;
   font-weight: 500;
   color: #60a5fa;
+}
+
+/* ============================================
+   Header Actions Container
+   ============================================ */
+.headerActions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.editButton {
+  width: 36px;
+  height: 36px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: transparent;
+  color: rgba(255, 255, 255, 0.7);
+  border-radius: 10px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+}
+
+.editButton:hover {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.3);
+  color: white;
+}
+
+.editButton.editing {
+  background: #ffffff;
+  border-color: #ffffff;
+  color: #000000;
+}
+
+.editButton.editing:hover {
+  background: #e0e0e0;
+}
+
+/* Cancel Button */
+.cancelButton {
+  width: 36px;
+  height: 36px;
+  border: 1px solid rgba(239, 68, 68, 0.4);
+  background: transparent;
+  color: rgba(239, 68, 68, 0.8);
+  border-radius: 10px;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+}
+
+.cancelButton:hover {
+  background: rgba(239, 68, 68, 0.15);
+  border-color: rgba(239, 68, 68, 0.6);
+  color: #ef4444;
+}
+
+/* ============================================
+   View Mode - Fixed Square Image
+   ============================================ */
+.viewImage {
+  width: 200px;
+  height: 200px;
+  object-fit: cover;
+  border-radius: 14px;
+  display: block;
+}
+
+.noImage {
+  width: 200px;
+  height: 200px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: 14px;
+  border: 2px dashed rgba(255, 255, 255, 0.15);
+  color: rgba(255, 255, 255, 0.3);
+  font-size: 12px;
+}
+
+/* ============================================
+   Disabled Input Styles
+   ============================================ */
+.inputDisabled {
+  cursor: not-allowed;
+  opacity: 0.7;
+  background: rgba(255, 255, 255, 0.02) !important;
+  border-color: rgba(255, 255, 255, 0.08) !important;
+}
+
+.inputDisabled:hover {
+  border-color: rgba(255, 255, 255, 0.08) !important;
+  background: rgba(255, 255, 255, 0.02) !important;
+}
+
+.disabledWrapper {
+  pointer-events: none;
+  opacity: 0.7;
+}
+
+.disabledWrapper .sizeSelectTrigger {
+  cursor: not-allowed;
+  background: rgba(255, 255, 255, 0.02);
+  border-color: rgba(255, 255, 255, 0.08);
+}
+
+/* ============================================
+   Responsive - View Mode
+   ============================================ */
+@media (max-width: 768px) {
+  .viewImage,
+  .noImage {
+    width: 180px;
+    height: 180px;
+  }
+}
+
+@media (max-width: 480px) {
+  .viewImage,
+  .noImage {
+    width: 160px;
+    height: 160px;
+  }
+
+  .headerActions {
+    gap: 8px;
+  }
+
+  .editButton {
+    width: 32px;
+    height: 32px;
+  }
 }
