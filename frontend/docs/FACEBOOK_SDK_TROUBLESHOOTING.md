@@ -61,7 +61,7 @@ Check your Next.js config for CSP settings that might block Facebook SDK
 
 - Clear browser cache
 - Hard refresh (Ctrl+Shift+R or Cmd+Shift+R)
-- Check for duplicate `facebook-jssdk` script tags
+- Check for duplicate `facebook-jssdk` script tagssfd
 
 ### Cause 5: Facebook App Configuration
 
@@ -152,7 +152,6 @@ NEXT_PUBLIC_FACEBOOK_APP_ID=716209008213794
 
 1. Go to: https://developers.facebook.com/apps/716209008213794
 2. Check **Settings → Basic**
-
    - App Domains: Should include your domain
    - Privacy Policy URL: Should be set
    - Terms of Service URL: Should be set
@@ -221,7 +220,6 @@ document.body.appendChild(script);
    ```
 
 3. **Test in Different Browser**
-
    - Chrome (regular window)
    - Chrome (incognito)
    - Firefox
@@ -229,7 +227,6 @@ document.body.appendChild(script);
 
 4. **Check Console for EXACT Error**
    With the improved logging, you should now see EXACTLY where it fails:
-
    - Before script injection?
    - During script loading?
    - After script loads but before init?
