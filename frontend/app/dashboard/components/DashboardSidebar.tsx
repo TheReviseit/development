@@ -527,6 +527,11 @@ export default function DashboardSidebar({
                 href: "/dashboard/products/add",
               },
               {
+                id: "banners",
+                label: "Add Banners",
+                href: "/dashboard/products/banners",
+              },
+              {
                 id: "categories",
                 label: "Add Category",
                 href: "/dashboard/products/categories",

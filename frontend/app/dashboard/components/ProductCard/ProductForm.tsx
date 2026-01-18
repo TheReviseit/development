@@ -26,6 +26,7 @@ interface ProductService {
   colors: string[];
   brand: string;
   materials: string[];
+  variantImages?: Record<string, { imageUrl: string; imagePublicId: string }>;
 }
 
 interface UploadResult {
@@ -218,6 +219,30 @@ export default function ProductForm({
     value: cat,
     label: cat,
   }));
+
+  const handleVariantImageUpload = (color: string, result: UploadResult) => {
+    setFormData((prev) => ({
+      ...prev,
+      variantImages: {
+        ...(prev.variantImages || {}),
+        [color]: {
+          imageUrl: result.secure_url,
+          imagePublicId: result.public_id,
+        },
+      },
+    }));
+  };
+
+  const handleVariantImageDelete = (color: string) => {
+    setFormData((prev) => {
+      const newVariantImages = { ...(prev.variantImages || {}) };
+      delete newVariantImages[color];
+      return {
+        ...prev,
+        variantImages: newVariantImages,
+      };
+    });
+  };
 
   return (
     <div className={styles.form}>
@@ -505,6 +530,29 @@ export default function ProductForm({
             }}
             placeholder="e.g., Red, Green, Gold"
           />
+        </div>
+      )}
+
+      {/* Variant Images - For each color */}
+      {isEcommerce && formData.colors && formData.colors.length > 0 && (
+        <div className={styles.field}>
+          <label className={styles.label}>Color Variant Images</label>
+          <div className={styles.variantImagesGrid}>
+            {formData.colors.map((color) => (
+              <div key={color} className={styles.variantImageItem}>
+                <span className={styles.variantColorLabel}>{color}</span>
+                <ProductImageUpload
+                  productId={`${formData.id}-${color}`}
+                  imageUrl={formData.variantImages?.[color]?.imageUrl || ""}
+                  imagePublicId={
+                    formData.variantImages?.[color]?.imagePublicId || ""
+                  }
+                  onUpload={(result) => handleVariantImageUpload(color, result)}
+                  onDelete={() => handleVariantImageDelete(color)}
+                />
+              </div>
+            ))}
+          </div>
         </div>
       )}
 

@@ -6,6 +6,7 @@ import SlidePanel from "@/app/utils/ui/SlidePanel";
 import ProductForm from "@/app/dashboard/components/ProductCard/ProductForm";
 import { ProductCard } from "@/app/dashboard/components/ProductCard";
 import Toast from "@/app/components/Toast/Toast";
+import { useAuth } from "@/app/components/auth/AuthProvider";
 
 // Product type definition
 interface Product {
@@ -28,9 +29,11 @@ interface Product {
   colors: string[];
   brand: string;
   materials: string[];
+  variantImages?: Record<string, { imageUrl: string; imagePublicId: string }>;
 }
 
 export default function ProductsPage() {
+  const { firebaseUser } = useAuth();
   const [products, setProducts] = useState<Product[]>([]);
   const [productCategories, setProductCategories] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
@@ -38,10 +41,28 @@ export default function ProductsPage() {
   const [isProductPanelOpen, setIsProductPanelOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
+  const [copied, setCopied] = useState(false);
   const [message, setMessage] = useState<{
     type: "success" | "error";
     text: string;
   } | null>(null);
+
+  // Store URL
+  const storeSlug = firebaseUser?.uid || "";
+  const storeUrl =
+    typeof window !== "undefined"
+      ? `${window.location.origin}/store/${storeSlug}`
+      : `/store/${storeSlug}`;
+
+  const handleCopyStoreLink = async () => {
+    try {
+      await navigator.clipboard.writeText(storeUrl);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch (err) {
+      console.error("Failed to copy:", err);
+    }
+  };
 
   // Filter products based on search query
   const filteredProducts = products.filter((product) =>
@@ -281,6 +302,84 @@ export default function ProductsPage() {
           onClose={() => setMessage(null)}
           duration={3000}
         />
+      )}
+
+      {/* Store Link Banner */}
+      {storeSlug && (
+        <div className={styles.storeLinkBanner}>
+          <div className={styles.storeLinkInfo}>
+            <svg
+              width="18"
+              height="18"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
+              <polyline points="9 22 9 12 15 12 15 22" />
+            </svg>
+            <span className={styles.storeLinkLabel}>Your Store:</span>
+            <span className={styles.storeLinkUrl}>{storeUrl}</span>
+          </div>
+          <div className={styles.storeLinkActions}>
+            <button
+              className={styles.copyLinkBtn}
+              onClick={handleCopyStoreLink}
+            >
+              {copied ? (
+                <>
+                  <svg
+                    width="16"
+                    height="16"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                  >
+                    <polyline points="20 6 9 17 4 12" />
+                  </svg>
+                  Copied!
+                </>
+              ) : (
+                <>
+                  <svg
+                    width="16"
+                    height="16"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                  >
+                    <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+                    <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+                  </svg>
+                  Copy
+                </>
+              )}
+            </button>
+            <button
+              className={styles.openStoreBtn}
+              onClick={() => window.open(storeUrl, "_blank")}
+            >
+              <svg
+                width="16"
+                height="16"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+              >
+                <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+                <polyline points="15 3 21 3 21 9" />
+                <line x1="10" y1="14" x2="21" y2="3" />
+              </svg>
+              Open Store
+            </button>
+          </div>
+        </div>
       )}
 
       {/* Products Grid */}

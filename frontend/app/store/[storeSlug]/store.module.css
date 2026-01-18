@@ -37,7 +37,11 @@
   min-height: 100vh;
   background: var(--store-bg-gradient);
   color: var(--text-primary);
-  font-family: var(--font-jakarta), -apple-system, BlinkMacSystemFont, system-ui,
+  font-family:
+    var(--font-jakarta),
+    -apple-system,
+    BlinkMacSystemFont,
+    system-ui,
     sans-serif;
   position: relative;
   overflow-x: hidden;
@@ -117,6 +121,13 @@
   font-size: 18px;
   color: white;
   box-shadow: var(--shadow-glow);
+  overflow: hidden;
+}
+
+.storeLogoImg {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
 }
 
 .storeName {
@@ -1198,7 +1209,8 @@
 .premiumCard:hover {
   background: rgba(255, 255, 255, 0.06);
   border-color: rgba(255, 255, 255, 0.1);
-  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.16),
+  box-shadow:
+    0 16px 48px rgba(0, 0, 0, 0.16),
     0 0 0 1px rgba(255, 255, 255, 0.08);
 }
 
@@ -2313,6 +2325,54 @@
   gap: 8px;
 }
 
+/* Color Swatches Container */
+.modalColorSwatches {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+}
+
+/* Individual Color Swatch */
+.modalColorSwatch {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  border: 2px solid transparent;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
+  outline: none;
+  position: relative;
+}
+
+.modalColorSwatch:hover {
+  transform: scale(1.1);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+}
+
+.modalColorSwatch:focus {
+  outline: none;
+}
+
+.modalColorSwatchActive {
+  border-width: 3px;
+  transform: scale(1.1);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
+}
+
+.selectedColorName {
+  font-size: 13px;
+  font-weight: 500;
+  color: #666666;
+  margin: 8px 0 0 0;
+  text-transform: capitalize;
+}
+
 .modalOptionBtn {
   padding: 10px 20px;
   border: 1px solid #e0e0e0;
@@ -3352,4 +3412,89 @@
     bottom: 16px;
     right: 20px;
   }
+}
+
+/* ============================================
+   Loading & Error States
+   ============================================ */
+
+.loadingContainer {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 60vh;
+  gap: 16px;
+}
+
+.loadingSpinner {
+  width: 40px;
+  height: 40px;
+  border: 3px solid rgba(34, 193, 90, 0.2);
+  border-top-color: var(--accent-primary);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.loadingContainer p {
+  font-size: 15px;
+  color: var(--text-muted);
+}
+
+.errorContainer {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 60vh;
+  gap: 20px;
+  text-align: center;
+  padding: 24px;
+}
+
+.errorContainer p {
+  font-size: 16px;
+  color: var(--text-secondary);
+}
+
+.errorContainer button {
+  padding: 12px 28px;
+  border: none;
+  background: var(--accent-primary);
+  color: white;
+  font-size: 14px;
+  font-weight: 600;
+  border-radius: 999px;
+  cursor: pointer;
+  transition: var(--transition-fast);
+}
+
+.errorContainer button:hover {
+  background: #1eaa50;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 16px rgba(34, 193, 90, 0.3);
+}
+
+/* Demo Banner */
+.demoBanner {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
+  border: 1px solid #fcd34d;
+  border-radius: var(--radius-md);
+  padding: 12px 20px;
+  margin-bottom: 24px;
+}
+
+.demoBanner span {
+  font-size: 14px;
+  font-weight: 500;
+  color: #92400e;
 }

@@ -1,0 +1,37 @@
+"use client";
+
+import React, { useState } from "react";
+import styles from "./ProductForm.module.css";
+import ProductImageUpload from "../ProductImageUpload";
+import Dropdown, { DropdownOption } from "@/app/utils/ui/Dropdown";
+
+// Types
+interface ProductService {
+  id: string;
+  name: string;
+  category: string;
+  price: number;
+  priceUnit: string;
+  duration: string;
+  available: boolean;
+  description: string;
+  sku: string;
+  stockStatus: string;
+  imageUrl: string;
+  imagePublicId: string;
+  originalSize: number;
+  optimizedSize: number;
+  variants: string[];
+  sizes: string[];
+  colors: string[];
+  brand: string;
+  materials: string[];
+  variantImages?: Record<string, { imageUrl: string; imagePublicId: string }>;
+}
+
+interface UploadResult {
+  secure_url: string;
+  public_id: string;
+  bytes: number;
+  original_size?: number;
+}

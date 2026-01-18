@@ -62,6 +62,34 @@ export default function ProductDetailModal({
     }).format(price);
   };
 
+  // Color mapping for visual swatches
+  const getColorHex = (colorName: string) => {
+    const colorMap: { [key: string]: string } = {
+      black: "#1a1a1a",
+      white: "#ffffff",
+      red: "#ef4444",
+      blue: "#3b82f6",
+      green: "#22c55e",
+      yellow: "#eab308",
+      pink: "#ec4899",
+      purple: "#a855f7",
+      orange: "#f97316",
+      gray: "#6b7280",
+      grey: "#6b7280",
+      navy: "#1e3a5f",
+      brown: "#8b5a2b",
+      beige: "#d4b896",
+      gold: "#ffd700",
+      silver: "#c0c0c0",
+      maroon: "#800000",
+      olive: "#808000",
+      teal: "#008080",
+      coral: "#ff7f50",
+      cyan: "#00ffff",
+    };
+    return colorMap[colorName.toLowerCase()] || "#6b7280";
+  };
+
   const handleAddToCart = () => {
     if (!product) return;
 
@@ -76,7 +104,7 @@ export default function ProductDetailModal({
       {
         size: selectedSize || undefined,
         color: selectedColor || undefined,
-      }
+      },
     );
 
     onClose();
@@ -84,6 +112,10 @@ export default function ProductDetailModal({
   };
 
   if (!product) return null;
+
+  const selectedVariantImage =
+    selectedColor && product.variantImages?.[selectedColor]?.imageUrl;
+  const displayImageUrl = selectedVariantImage || product.imageUrl;
 
   return (
     <AnimatePresence>
@@ -126,8 +158,12 @@ export default function ProductDetailModal({
             {/* Left Column - Image and Description */}
             <div className={styles.modalLeftColumn}>
               <div className={styles.modalImage}>
-                {product.imageUrl ? (
-                  <img src={product.imageUrl} alt={product.name} />
+                {displayImageUrl ? (
+                  <img
+                    key={displayImageUrl}
+                    src={displayImageUrl}
+                    alt={product.name}
+                  />
                 ) : (
                   <div
                     style={{
@@ -192,25 +228,62 @@ export default function ProductDetailModal({
                 </div>
               )}
 
-              {/* Color Selection */}
+              {/* Color Selection - Visual Swatches */}
               {product.colors && product.colors.length > 0 && (
                 <div className={styles.modalOptions}>
                   <p className={styles.modalOptionLabel}>Color</p>
-                  <div className={styles.modalOptionList}>
-                    {product.colors.map((color) => (
-                      <button
-                        key={color}
-                        className={`${styles.modalOptionBtn} ${
-                          selectedColor === color
-                            ? styles.modalOptionBtnActive
-                            : ""
-                        }`}
-                        onClick={() => setSelectedColor(color)}
-                      >
-                        {color}
-                      </button>
-                    ))}
+                  <div className={styles.modalColorSwatches}>
+                    {product.colors.map((color) => {
+                      const colorHex = getColorHex(color);
+                      const isSelected = selectedColor === color;
+                      const isLightColor = [
+                        "white",
+                        "beige",
+                        "yellow",
+                        "gold",
+                        "silver",
+                        "cream",
+                        "ivory",
+                      ].includes(color.toLowerCase());
+                      return (
+                        <button
+                          key={color}
+                          className={`${styles.modalColorSwatch} ${
+                            isSelected ? styles.modalColorSwatchActive : ""
+                          }`}
+                          onClick={() => setSelectedColor(color)}
+                          title={color}
+                          aria-label={`Select ${color} color`}
+                          style={{
+                            backgroundColor: colorHex,
+                            borderColor: isSelected
+                              ? "#1a1a1a"
+                              : isLightColor
+                                ? "#e0e0e0"
+                                : "transparent",
+                          }}
+                        >
+                          {isSelected && (
+                            <svg
+                              width="14"
+                              height="14"
+                              viewBox="0 0 24 24"
+                              fill="none"
+                              stroke={isLightColor ? "#1a1a1a" : "#ffffff"}
+                              strokeWidth="3"
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                            >
+                              <polyline points="20 6 9 17 4 12" />
+                            </svg>
+                          )}
+                        </button>
+                      );
+                    })}
                   </div>
+                  {selectedColor && (
+                    <p className={styles.selectedColorName}>{selectedColor}</p>
+                  )}
                 </div>
               )}
 

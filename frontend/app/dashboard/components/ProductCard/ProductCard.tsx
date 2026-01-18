@@ -38,6 +38,7 @@ interface ProductService {
   colors: string[];
   brand: string;
   materials: string[];
+  variantImages?: Record<string, { imageUrl: string; imagePublicId: string }>;
 }
 
 interface UploadResult {
@@ -572,32 +573,24 @@ export default function ProductCard({
               <div className={styles.detailItem}>
                 <label className={styles.detailLabel}>Color</label>
                 {isEditing ? (
-                  <SearchableDropdown
-                    options={COLOR_OPTIONS.map((color) => ({
-                      id: color,
-                      label: color,
-                    }))}
-                    value={(product.colors && product.colors[0]) || ""}
-                    onChange={(value) =>
-                      onUpdate(product.id, "colors", value ? [value] : [])
-                    }
-                    placeholder="Search or add color..."
-                    className={styles.colorSearchDropdown}
+                  <input
+                    type="text"
+                    className={styles.detailInput}
+                    value={(product.colors || []).join(", ")}
+                    onChange={(e) => {
+                      const colors = e.target.value
+                        .split(",")
+                        .map((s) => s.trim());
+                      onUpdate(product.id, "colors", colors);
+                    }}
+                    placeholder="e.g., Red, Blue"
                   />
                 ) : (
-                  <Dropdown
-                    options={COLOR_OPTIONS.map((color) => ({
-                      value: color,
-                      label: color,
-                    }))}
-                    value={(product.colors && product.colors[0]) || ""}
-                    onChange={(value) =>
-                      onUpdate(product.id, "colors", value ? [value] : [])
-                    }
-                    placeholder="Select a color"
-                    className={styles.categoryDropdown}
-                    disabled={true}
-                  />
+                  <div
+                    className={`${styles.detailInput} ${styles.inputDisabled}`}
+                  >
+                    {(product.colors || []).join(", ") || "None"}
+                  </div>
                 )}
               </div>
             )}

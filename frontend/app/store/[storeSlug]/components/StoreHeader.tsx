@@ -6,11 +6,13 @@ import { useCart } from "../context/CartContext";
 
 interface StoreHeaderProps {
   storeName: string;
+  logoUrl?: string;
   onSearchClick: () => void;
 }
 
 export default function StoreHeader({
   storeName,
+  logoUrl,
   onSearchClick,
 }: StoreHeaderProps) {
   const { cartCount, setIsCartOpen } = useCart();
@@ -25,7 +27,7 @@ export default function StoreHeader({
     return () => window.removeEventListener("scroll", handleScroll);
   }, []);
 
-  // Get store initials for logo
+  // Get store initials for logo fallback
   const initials = storeName
     .split(" ")
     .map((word) => word[0])
@@ -39,7 +41,17 @@ export default function StoreHeader({
     >
       <div className={styles.headerInner}>
         <div className={styles.storeBrand}>
-          <div className={styles.storeLogo}>{initials}</div>
+          <div className={styles.storeLogo}>
+            {logoUrl ? (
+              <img
+                src={logoUrl}
+                alt={storeName}
+                className={styles.storeLogoImg}
+              />
+            ) : (
+              initials
+            )}
+          </div>
           <h1 className={styles.storeName}>{storeName}</h1>
         </div>
 

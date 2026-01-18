@@ -34,6 +34,7 @@ interface ProductService {
   colors: string[];
   brand: string;
   materials: string[];
+  variantImages?: Record<string, { imageUrl: string; imagePublicId: string }>;
 }
 
 interface DayTiming {
@@ -540,7 +541,7 @@ export default function BotSettingsView() {
                   }
                 : INITIAL_DATA.location,
               timings: apiData.timings
-                ? Object.fromEntries(
+                ? (Object.fromEntries(
                     Object.entries(apiData.timings).map(
                       ([day, timing]: [string, any]) => [
                         day,
@@ -552,7 +553,7 @@ export default function BotSettingsView() {
                         },
                       ],
                     ),
-                  )
+                  ) as typeof INITIAL_DATA.timings)
                 : INITIAL_DATA.timings,
               products: (
                 apiData.products_services ||

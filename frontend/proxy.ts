@@ -40,6 +40,7 @@ export async function proxy(request: NextRequest) {
     "/forgot-password",
     "/reset-password",
     "/verify-email",
+    "/api/store", // Public API for mini store data
     "/store", // Public mini store pages
   ];
 

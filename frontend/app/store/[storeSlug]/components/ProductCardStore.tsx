@@ -19,6 +19,7 @@ export interface Product {
   sizes?: string[];
   colors?: string[];
   available?: boolean;
+  variantImages?: Record<string, { imageUrl: string; imagePublicId: string }>;
   badge?: "new" | "premium" | "bestseller" | "hot" | null;
   isWishlisted?: boolean;
 }
@@ -44,7 +45,7 @@ export default function ProductCardStore({
   const [isImageLoaded, setIsImageLoaded] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [isWishlisted, setIsWishlisted] = useState(
-    product.isWishlisted || false
+    product.isWishlisted || false,
   );
 
   // Get quantity from cart
@@ -53,9 +54,12 @@ export default function ProductCardStore({
 
   // Simulate initial loading for skeleton effect
   useEffect(() => {
-    const timer = setTimeout(() => {
-      setIsLoading(false);
-    }, 600 + index * 80);
+    const timer = setTimeout(
+      () => {
+        setIsLoading(false);
+      },
+      600 + index * 80,
+    );
     return () => clearTimeout(timer);
   }, [index]);
 

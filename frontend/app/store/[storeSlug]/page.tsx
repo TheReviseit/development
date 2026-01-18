@@ -1,6 +1,7 @@
 "use client";
 
-import React, { useState, useMemo, use } from "react";
+import React, { useState, useMemo, useEffect } from "react";
+import { notFound } from "next/navigation";
 import styles from "./store.module.css";
 import {
   StoreHeader,
@@ -13,10 +14,12 @@ import {
   Product,
 } from "./components";
 
-// Mock data for development - will be replaced with API fetch
-const MOCK_PRODUCTS: Product[] = [
+// ============================================================
+// Demo/Mock Data - Shown only if store has no real products
+// ============================================================
+const DEMO_PRODUCTS: Product[] = [
   {
-    id: "1",
+    id: "demo-1",
     name: "Premium Silk Saree - Kanchipuram",
     category: "Sarees",
     price: 12999,
@@ -28,7 +31,7 @@ const MOCK_PRODUCTS: Product[] = [
     colors: ["Red", "Gold", "Maroon", "Green"],
   },
   {
-    id: "2",
+    id: "demo-2",
     name: "Cotton Kurta Set - Block Print",
     category: "Kurtas",
     price: 2499,
@@ -40,7 +43,7 @@ const MOCK_PRODUCTS: Product[] = [
     colors: ["Blue", "White", "Yellow"],
   },
   {
-    id: "3",
+    id: "demo-3",
     name: "Designer Lehenga Choli",
     category: "Lehengas",
     price: 18999,
@@ -52,7 +55,7 @@ const MOCK_PRODUCTS: Product[] = [
     colors: ["Pink", "Peach", "Wine"],
   },
   {
-    id: "4",
+    id: "demo-4",
     name: "Banarasi Dupatta",
     category: "Dupattas",
     price: 3499,
@@ -64,7 +67,7 @@ const MOCK_PRODUCTS: Product[] = [
     colors: ["Red", "Blue", "Purple", "Orange"],
   },
   {
-    id: "5",
+    id: "demo-5",
     name: "Embroidered Anarkali Suit",
     category: "Suits",
     price: 5999,
@@ -76,7 +79,7 @@ const MOCK_PRODUCTS: Product[] = [
     colors: ["Navy", "Teal", "Burgundy"],
   },
   {
-    id: "6",
+    id: "demo-6",
     name: "Printed Palazzo Set",
     category: "Palazzos",
     price: 1999,
@@ -88,7 +91,7 @@ const MOCK_PRODUCTS: Product[] = [
     colors: ["Multicolor", "Black", "White"],
   },
   {
-    id: "7",
+    id: "demo-7",
     name: "Handloom Cotton Saree",
     category: "Sarees",
     price: 4999,
@@ -100,7 +103,7 @@ const MOCK_PRODUCTS: Product[] = [
     colors: ["White", "Yellow", "Orange"],
   },
   {
-    id: "8",
+    id: "demo-8",
     name: "Lucknowi Chikankari Kurta",
     category: "Kurtas",
     price: 3299,
@@ -113,22 +116,120 @@ const MOCK_PRODUCTS: Product[] = [
   },
 ];
 
+// ============================================================
+// Types
+// ============================================================
 interface StorePageProps {
   params: Promise<{ storeSlug: string }>;
 }
 
-export default function StorePage({ params }: StorePageProps) {
-  const { storeSlug } = use(params);
+interface StoreData {
+  id: string;
+  businessName: string;
+  logoUrl?: string;
+  bannerUrl?: string;
+  products: Product[];
+  categories: string[];
+  banners: Array<{
+    id: string;
+    title: string;
+    subtitle?: string;
+    description?: string;
+    buttonText?: string;
+    buttonLink?: string;
+    imageUrl: string;
+    gradientFrom?: string;
+    gradientTo?: string;
+  }>;
+}
 
+// ============================================================
+// Store Page Component
+// ============================================================
+export default function StorePage({ params }: StorePageProps) {
+  // Unwrap params using React.use()
+  const resolvedParams = React.use(params);
+  const { storeSlug } = resolvedParams;
+
+  // State
+  const [storeData, setStoreData] = useState<StoreData | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [activeCategory, setActiveCategory] = useState("All");
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [isProductModalOpen, setIsProductModalOpen] = useState(false);
   const [isSearchOpen, setIsSearchOpen] = useState(false);
 
-  // For now, using mock products - will be replaced with API fetch
-  const products = MOCK_PRODUCTS;
+  // Fetch store data on mount
+  useEffect(() => {
+    async function fetchStoreData() {
+      try {
+        setLoading(true);
+        setError(null);
 
-  // Derive unique categories from products
+        const response = await fetch(`/api/store/${storeSlug}`);
+        const result = await response.json();
+
+        if (!response.ok || !result.success) {
+          if (response.status === 404) {
+            // Store not found - will trigger notFound()
+            setError("not_found");
+          } else {
+            setError(result.error || "Failed to load store");
+          }
+          return;
+        }
+
+        // Map API response to our types
+        const data = result.data;
+        setStoreData({
+          id: data.id,
+          businessName: data.businessName,
+          logoUrl: data.logoUrl,
+          bannerUrl: data.bannerUrl,
+          products: data.products.map((p: Product) => ({
+            id: p.id,
+            name: p.name,
+            category: p.category || "",
+            price: p.price,
+            description: p.description,
+            imageUrl: p.imageUrl,
+            sizes: p.sizes || [],
+            colors: p.colors || [],
+            available: true,
+            variantImages: p.variantImages || {},
+          })),
+          categories: data.categories || [],
+          banners: data.banners || [],
+        });
+      } catch (err) {
+        console.error("[StorePage] Error fetching store:", err);
+        setError("Failed to load store");
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    fetchStoreData();
+  }, [storeSlug]);
+
+  // Handle 404 - store not found
+  if (error === "not_found") {
+    notFound();
+  }
+
+  // Products: use real products if available, otherwise fall back to demo
+  const products = useMemo(() => {
+    if (!storeData || storeData.products.length === 0) {
+      return DEMO_PRODUCTS;
+    }
+    return storeData.products;
+  }, [storeData]);
+
+  // Check if using demo mode
+  const isDemoMode = !storeData || storeData.products.length === 0;
+
+  // Derive categories from products
   const categories = useMemo(() => {
     const cats = new Set(products.map((p) => p.category).filter(Boolean));
     return Array.from(cats) as string[];
@@ -140,26 +241,63 @@ export default function StorePage({ params }: StorePageProps) {
     return products.filter((p) => p.category === activeCategory);
   }, [products, activeCategory]);
 
-  // Generate display name from slug
-  const storeName = storeSlug
-    .split("-")
-    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
-    .join(" ");
+  // Store name: from API or derive from slug
+  const storeName = storeData?.businessName || formatSlugToName(storeSlug);
 
   const handleProductClick = (product: Product) => {
     setSelectedProduct(product);
     setIsProductModalOpen(true);
   };
 
+  // Loading state
+  if (loading) {
+    return (
+      <div className={styles.storeContainer}>
+        <div className={styles.loadingContainer}>
+          <div className={styles.loadingSpinner} />
+          <p>Loading store...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Error state (non-404)
+  if (error && error !== "not_found") {
+    return (
+      <div className={styles.storeContainer}>
+        <div className={styles.errorContainer}>
+          <p>Unable to load store. Please try again later.</p>
+          <button onClick={() => window.location.reload()}>Retry</button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className={styles.storeContainer}>
       <StoreHeader
         storeName={storeName}
+        logoUrl={storeData?.logoUrl}
         onSearchClick={() => setIsSearchOpen(true)}
       />
 
       <main className={styles.storeContent}>
-        <CarouselBanner />
+        <CarouselBanner
+          slides={
+            storeData?.banners && storeData.banners.length > 0
+              ? storeData.banners
+              : undefined
+          }
+        />
+
+        {/* Demo mode indicator (optional - for store owner only) */}
+        {isDemoMode && (
+          <div className={styles.demoBanner}>
+            <span>
+              📦 Demo Products - Add your own products to see them here
+            </span>
+          </div>
+        )}
 
         <CategoryNav
           categories={categories}
@@ -189,4 +327,19 @@ export default function StorePage({ params }: StorePageProps) {
       />
     </div>
   );
+}
+
+// ============================================================
+// Helper Functions
+// ============================================================
+
+/**
+ * Convert URL slug to readable store name
+ * e.g., "my-awesome-store" -> "My Awesome Store"
+ */
+function formatSlugToName(slug: string): string {
+  return slug
+    .split("-")
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(" ");
 }
