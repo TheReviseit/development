@@ -36,11 +36,12 @@ except ImportError:
 
 # Import Supabase client
 try:
-    from supabase_client import get_supabase_client
+    from supabase_client import get_supabase_client, get_user_id_from_firebase_uid
     SUPABASE_AVAILABLE = True
 except ImportError:
     SUPABASE_AVAILABLE = False
     get_supabase_client = None
+    get_user_id_from_firebase_uid = None
 
 # Plan configuration
 PLAN_CONFIG = {
@@ -140,12 +141,22 @@ def create_subscription():
         customer_name = data.get('customer_name', '')
         customer_phone = data.get('customer_phone', '')
         
-        user_id = get_user_id_from_request()
-        if not user_id:
+        firebase_uid = get_user_id_from_request()
+        if not firebase_uid:
             return jsonify({
                 'success': False,
                 'error': 'Authentication required'
             }), 401
+        
+        # Convert Firebase UID to Supabase user ID for database FK constraint
+        user_id = None
+        if SUPABASE_AVAILABLE and get_user_id_from_firebase_uid:
+            user_id = get_user_id_from_firebase_uid(firebase_uid)
+        
+        if not user_id:
+            logger.warning(f"Could not map Firebase UID {firebase_uid} to Supabase user ID")
+            # Use Firebase UID directly if mapping fails - may work if users table doesn't have this user
+            user_id = firebase_uid
         
         # Validate plan
         if plan_name not in PLAN_CONFIG:
@@ -161,17 +172,44 @@ def create_subscription():
                 'error': f'Plan {plan_name} not configured in Razorpay'
             }), 500
         
-        # Create or get Razorpay customer
-        customer_data = {
-            'name': customer_name,
-            'email': customer_email,
-            'contact': customer_phone,
-            'notes': {
-                'user_id': user_id
+        # Create or get existing Razorpay customer
+        customer_id = None
+        try:
+            customer_data = {
+                'name': customer_name,
+                'email': customer_email,
+                'contact': customer_phone,
+                'notes': {
+                    'user_id': user_id
+                }
             }
-        }
-        customer = razorpay_client.customer.create(data=customer_data)
-        customer_id = customer['id']
+            customer = razorpay_client.customer.create(data=customer_data)
+            customer_id = customer['id']
+        except razorpay.errors.BadRequestError as e:
+            # Customer might already exist, try to find by email
+            if 'already exists' in str(e).lower():
+                # Fetch customers and find by email
+                customers = razorpay_client.customer.all({'count': 100})
+                for c in customers.get('items', []):
+                    if c.get('email') == customer_email:
+                        customer_id = c['id']
+                        break
+                if not customer_id:
+                    # Create without email to avoid conflict
+                    customer = razorpay_client.customer.create(data={
+                        'name': customer_name,
+                        'contact': customer_phone,
+                        'notes': {'user_id': user_id}
+                    })
+                    customer_id = customer['id']
+            else:
+                raise e
+        
+        if not customer_id:
+            return jsonify({
+                'success': False,
+                'error': 'Failed to create or find customer'
+            }), 500
         
         # Create subscription
         subscription_data = {
@@ -218,10 +256,12 @@ def create_subscription():
             'error': str(e)
         }), 400
     except Exception as e:
+        import traceback
         logger.error(f"Error creating subscription: {e}")
+        logger.error(f"Traceback: {traceback.format_exc()}")
         return jsonify({
             'success': False,
-            'error': 'Failed to create subscription'
+            'error': f'Failed to create subscription: {str(e)}'
         }), 500
 
 
@@ -242,12 +282,21 @@ def verify_subscription():
         payment_id = data.get('razorpay_payment_id')
         signature = data.get('razorpay_signature')
         
-        user_id = get_user_id_from_request()
-        if not user_id:
+        firebase_uid = get_user_id_from_request()
+        if not firebase_uid:
             return jsonify({
                 'success': False,
                 'error': 'Authentication required'
             }), 401
+        
+        # Convert Firebase UID to Supabase user ID for database FK constraint
+        user_id = None
+        if SUPABASE_AVAILABLE and get_user_id_from_firebase_uid:
+            user_id = get_user_id_from_firebase_uid(firebase_uid)
+        
+        if not user_id:
+            logger.warning(f"Could not map Firebase UID {firebase_uid} to Supabase user ID for verify")
+            user_id = firebase_uid
         
         # Verify signature
         verify_data = f"{payment_id}|{subscription_id}"
@@ -332,12 +381,20 @@ def get_subscription_status():
         - current_period_end
     """
     try:
-        user_id = get_user_id_from_request()
-        if not user_id:
+        firebase_uid = get_user_id_from_request()
+        if not firebase_uid:
             return jsonify({
                 'success': False,
                 'error': 'Authentication required'
             }), 401
+        
+        # Convert Firebase UID to Supabase user ID for database lookup
+        user_id = None
+        if SUPABASE_AVAILABLE and get_user_id_from_firebase_uid:
+            user_id = get_user_id_from_firebase_uid(firebase_uid)
+        
+        if not user_id:
+            user_id = firebase_uid  # Fallback to Firebase UID
         
         if not SUPABASE_AVAILABLE:
             return jsonify({
@@ -385,12 +442,20 @@ def get_subscription_status():
 def cancel_subscription():
     """Cancel a subscription at period end."""
     try:
-        user_id = get_user_id_from_request()
-        if not user_id:
+        firebase_uid = get_user_id_from_request()
+        if not firebase_uid:
             return jsonify({
                 'success': False,
                 'error': 'Authentication required'
             }), 401
+        
+        # Convert Firebase UID to Supabase user ID for database lookup
+        user_id = None
+        if SUPABASE_AVAILABLE and get_user_id_from_firebase_uid:
+            user_id = get_user_id_from_firebase_uid(firebase_uid)
+        
+        if not user_id:
+            user_id = firebase_uid  # Fallback to Firebase UID
         
         if not SUPABASE_AVAILABLE:
             return jsonify({

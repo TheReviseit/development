@@ -216,9 +216,17 @@ export default function OnboardingPageEmbedded() {
           setPaymentLoading(null);
         },
         onError: (err) => {
-          setPaymentError(
-            err.description || "Payment failed. Please try again.",
+          console.error(
+            "Razorpay payment error:",
+            JSON.stringify(err, null, 2),
           );
+          const errorMsg =
+            err?.description ||
+            err?.reason ||
+            err?.message ||
+            "Payment failed. Please try again.";
+          const errorCode = err?.code ? ` (${err.code})` : "";
+          setPaymentError(`${errorMsg}${errorCode}`);
           setPaymentLoading(null);
         },
         onClose: () => {

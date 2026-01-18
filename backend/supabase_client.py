@@ -215,6 +215,36 @@ def get_firebase_uid_from_user_id(user_id: str) -> Optional[str]:
     return None
 
 
+def get_user_id_from_firebase_uid(firebase_uid: str) -> Optional[str]:
+    """
+    Get Supabase user ID from Firebase UID.
+    
+    The frontend uses Firebase Auth, which provides Firebase UID.
+    But Supabase tables (like subscriptions) reference auth.users(id) which is the Supabase UUID.
+    
+    Args:
+        firebase_uid: Firebase Auth UID
+        
+    Returns:
+        Supabase user UUID string or None if not found
+    """
+    client = get_supabase_client()
+    if not client:
+        return None
+    
+    try:
+        result = client.table('users').select('id').eq('firebase_uid', firebase_uid).single().execute()
+        
+        if result.data:
+            user_id = result.data.get('id')
+            print(f"🔗 Mapped Firebase UID {firebase_uid[:10]}... → Supabase user {user_id[:8] if user_id else 'None'}...")
+            return user_id
+    except Exception as e:
+        print(f"⚠️ Could not get Supabase user ID for Firebase UID {firebase_uid}: {e}")
+    
+    return None
+
+
 def get_business_data_for_user(user_id: str) -> Optional[Dict[str, Any]]:
     """
     Fetch business data for AI context based on user_id.
