@@ -70,7 +70,7 @@ export default function WhatsAppEmbeddedSignupForm({
       gsap.fromTo(
         contentRef.current,
         { opacity: 0, y: 10 },
-        { opacity: 1, y: 0, duration: 0.4, ease: "power2.out" }
+        { opacity: 1, y: 0, duration: 0.4, ease: "power2.out" },
       );
     }
   }, [connectionState]);
@@ -132,33 +132,42 @@ export default function WhatsAppEmbeddedSignupForm({
       const { whatsappAccount, phoneNumbers } = data.data || {};
       const primaryPhone = phoneNumbers?.[0];
 
-      if (!whatsappAccount || !primaryPhone) {
+      // Use embedded data as fallback if server data is incomplete
+      const wabaId = whatsappAccount?.waba_id || setupData.wabaId;
+      const phoneNumberId =
+        primaryPhone?.phone_number_id || setupData.phoneNumberId;
+      const displayPhoneNumber =
+        primaryPhone?.display_phone_number || "Connected";
+      const wabaName = whatsappAccount?.waba_name || "WhatsApp Business";
+
+      if (!wabaId || !phoneNumberId) {
         throw new Error("Incomplete data from server");
       }
 
-      const expiresAt = whatsappAccount.token_expires_at
+      const expiresAt = whatsappAccount?.token_expires_at
         ? new Date(whatsappAccount.token_expires_at)
         : new Date(Date.now() + 60 * 24 * 60 * 60 * 1000);
       const daysUntilExpiry = Math.floor(
-        (expiresAt.getTime() - Date.now()) / (1000 * 60 * 60 * 24)
+        (expiresAt.getTime() - Date.now()) / (1000 * 60 * 60 * 24),
       );
 
       setConnectionData({
-        wabaName: whatsappAccount.waba_name || "WhatsApp Business",
-        displayPhoneNumber: primaryPhone.display_phone_number || "",
-        accountReviewStatus: whatsappAccount.account_review_status || "PENDING",
+        wabaName: wabaName,
+        displayPhoneNumber: displayPhoneNumber,
+        accountReviewStatus:
+          whatsappAccount?.account_review_status || "PENDING",
         tokenExpiresIn: daysUntilExpiry,
-        hasSystemUserToken: whatsappAccount.has_system_user_token || false,
+        hasSystemUserToken: whatsappAccount?.has_system_user_token || false,
       });
 
       setConnectionState("success");
       facebookSDK.clearEmbeddedSignupData();
 
       onSuccess({
-        wabaId: whatsappAccount.waba_id,
-        phoneNumberId: primaryPhone.phone_number_id,
-        displayPhoneNumber: primaryPhone.display_phone_number,
-        wabaName: whatsappAccount.waba_name,
+        wabaId: wabaId,
+        phoneNumberId: phoneNumberId,
+        displayPhoneNumber: displayPhoneNumber,
+        wabaName: wabaName,
       });
     } catch (error: any) {
       console.error("❌ Connection error:", error);

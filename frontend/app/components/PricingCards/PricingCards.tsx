@@ -1,7 +1,104 @@
-import React from "react";
-import styles from "./PricingCards.module.css";
+"use client";
 
-export default function PricingCards() {
+import React, { useState } from "react";
+import styles from "./PricingCards.module.css";
+import {
+  createSubscription,
+  openRazorpayCheckout,
+  verifyPayment,
+} from "../../../lib/api/razorpay";
+
+interface PricingCardsProps {
+  userEmail?: string;
+  userName?: string;
+  userPhone?: string;
+  userId?: string;
+  onSubscriptionSuccess?: (planName: string) => void;
+}
+
+type PlanName = "starter" | "business" | "pro";
+
+export default function PricingCards({
+  userEmail,
+  userName,
+  userPhone,
+  userId,
+  onSubscriptionSuccess,
+}: PricingCardsProps) {
+  const [isLoading, setIsLoading] = useState<PlanName | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const handleSubscribe = async (planName: PlanName) => {
+    // Check if user is logged in
+    if (!userEmail) {
+      // Redirect to login or show login modal
+      window.location.href = "/login?redirect=/pricing";
+      return;
+    }
+
+    setIsLoading(planName);
+    setError(null);
+
+    try {
+      // Step 1: Create subscription order
+      const order = await createSubscription(
+        planName,
+        userEmail,
+        userName,
+        userPhone,
+        userId,
+      );
+
+      if (!order.success) {
+        setError(order.error || "Failed to create subscription");
+        setIsLoading(null);
+        return;
+      }
+
+      // Step 2: Open Razorpay checkout
+      await openRazorpayCheckout({
+        subscriptionId: order.subscription_id,
+        keyId: order.key_id,
+        planName: order.plan_name,
+        amount: order.amount,
+        customerEmail: userEmail,
+        customerName: userName,
+        customerPhone: userPhone,
+        onSuccess: async (response) => {
+          // Step 3: Verify payment
+          const verification = await verifyPayment(
+            {
+              razorpay_subscription_id: response.razorpay_subscription_id,
+              razorpay_payment_id: response.razorpay_payment_id,
+              razorpay_signature: response.razorpay_signature,
+            },
+            userId,
+          );
+
+          if (verification.success) {
+            onSubscriptionSuccess?.(planName);
+            // Redirect to dashboard
+            window.location.href = "/dashboard?subscription=success";
+          } else {
+            setError(verification.error || "Payment verification failed");
+          }
+          setIsLoading(null);
+        },
+        onError: (err) => {
+          setError(err.description || "Payment failed. Please try again.");
+          setIsLoading(null);
+        },
+        onClose: () => {
+          setIsLoading(null);
+        },
+      });
+    } catch (err) {
+      console.error("Subscription error:", err);
+      setError("Something went wrong. Please try again.");
+      setIsLoading(null);
+    }
+  };
+
   return (
     <section id="pricing" className={styles.pricingSection}>
       <div className={styles.container}>
@@ -13,6 +110,14 @@ export default function PricingCards() {
             answers customer questions automatically.
           </p>
         </div>
+
+        {/* Error Message */}
+        {error && (
+          <div className={styles.errorBanner}>
+            <p>{error}</p>
+            <button onClick={() => setError(null)}>✕</button>
+          </div>
+        )}
 
         {/* Pricing Cards Grid */}
         <div className={styles.cardsGrid}>
@@ -122,7 +227,17 @@ export default function PricingCards() {
               </li>
             </ul>
 
-            <button className={styles.ctaButton}>Get Started</button>
+            <button
+              className={styles.ctaButton}
+              onClick={() => handleSubscribe("starter")}
+              disabled={isLoading !== null}
+            >
+              {isLoading === "starter" ? (
+                <span className={styles.loadingSpinner}>Processing...</span>
+              ) : (
+                "Get Started"
+              )}
+            </button>
           </div>
 
           {/* Business Plan - 60% Features */}
@@ -262,8 +377,14 @@ export default function PricingCards() {
 
             <button
               className={`${styles.ctaButton} ${styles.ctaButtonFeatured}`}
+              onClick={() => handleSubscribe("business")}
+              disabled={isLoading !== null}
             >
-              Get Started
+              {isLoading === "business" ? (
+                <span className={styles.loadingSpinner}>Processing...</span>
+              ) : (
+                "Get Started"
+              )}
             </button>
           </div>
 
@@ -416,8 +537,14 @@ export default function PricingCards() {
 
             <button
               className={`${styles.ctaButton} ${styles.ctaButtonFeatured}`}
+              onClick={() => handleSubscribe("pro")}
+              disabled={isLoading !== null}
             >
-              Get Started
+              {isLoading === "pro" ? (
+                <span className={styles.loadingSpinner}>Processing...</span>
+              ) : (
+                "Get Started"
+              )}
             </button>
           </div>
         </div>
@@ -425,8 +552,8 @@ export default function PricingCards() {
         {/* Trust Section */}
         <div className={styles.trustSection}>
           <p className={styles.trustText}>
-            Trusted by Indian businesses • No credit card required • WhatsApp
-            API costs included
+            🔒 Secure payments by Razorpay • No credit card required for trial •
+            WhatsApp API costs included
           </p>
         </div>
       </div>
