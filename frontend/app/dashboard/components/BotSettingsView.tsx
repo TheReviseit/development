@@ -1419,8 +1419,6 @@ export default function BotSettingsView() {
         return !!(
           data.policies.refund.trim() || data.policies.cancellation.trim()
         );
-      case "categories":
-        return data.productCategories.length > 0;
       case "ecommerce":
         return !!(
           data.ecommercePolicies.shippingPolicy.trim() ||
