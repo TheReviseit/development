@@ -164,23 +164,14 @@ export async function openRazorpayCheckout(options: {
   const razorpayOptions = {
     key: options.keyId,
     subscription_id: options.subscriptionId,
-    name: "ReviseIt",
+    name: "Flowauxi",
     description: `${options.planName} Plan Subscription`,
-    image: "/logo.svg",
-    prefill: {
-      name: options.customerName,
-      email: options.customerEmail,
-      contact: options.customerPhone,
-    },
     // Enable all payment methods (UPI, Cards, Netbanking, Wallets)
     method: {
       netbanking: true,
       card: true,
       upi: true,
       wallet: true,
-    },
-    theme: {
-      color: "#6366f1", // Indigo to match your UI
     },
     handler: (response: any) => {
       options.onSuccess({
