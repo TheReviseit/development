@@ -184,9 +184,14 @@ if PRODUCTION_CONFIG_AVAILABLE and prod_config:
 # Configure CORS
 frontend_url = os.getenv('FRONTEND_URL', 'http://localhost:3000')
 allowed_origins = [
+    # Development URLs
     'http://localhost:3000',
     'http://localhost:3001',
+    # Production frontend URLs
+    'https://flowauxi.com',
+    'https://www.flowauxi.com',
 ]
+# Add FRONTEND_URL from env if not already in list
 if frontend_url and frontend_url not in allowed_origins:
     allowed_origins.append(frontend_url)
 

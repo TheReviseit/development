@@ -114,9 +114,23 @@ export default function OnboardingPageEmbedded() {
       const onboardingData = await onboardingResponse.json();
 
       if (onboardingData.onboardingCompleted) {
+        // Fully onboarded - go to dashboard
         router.push("/dashboard");
         return true; // Indicate that we're redirecting
       }
+
+      // Check if WhatsApp is already connected
+      if (onboardingData.whatsappConnected) {
+        // WhatsApp connected but onboarding not complete
+        // Show pricing step instead of connection step
+        console.log("✅ WhatsApp already connected, showing pricing step");
+        setStep("pricing");
+      } else {
+        // No WhatsApp connection, show connection step
+        console.log("⚪ No WhatsApp connection, showing connection step");
+        setStep("whatsapp");
+      }
+
       return false; // Not redirecting, show onboarding
     } catch (error) {
       console.error("Error checking onboarding status:", error);
