@@ -172,6 +172,13 @@ export async function openRazorpayCheckout(options: {
       email: options.customerEmail,
       contact: options.customerPhone,
     },
+    // Enable all payment methods (UPI, Cards, Netbanking, Wallets)
+    method: {
+      netbanking: true,
+      card: true,
+      upi: true,
+      wallet: true,
+    },
     theme: {
       color: "#6366f1", // Indigo to match your UI
     },
