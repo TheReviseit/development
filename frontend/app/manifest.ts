@@ -25,8 +25,26 @@ export default function manifest(): MetadataRoute.Manifest {
     icons: [
       {
         src: "/favicon.ico",
-        sizes: "48x48",
+        sizes: "16x16 32x32 48x48",
         type: "image/x-icon",
+        purpose: "any",
+      },
+      {
+        src: "/favicon-16x16.png",
+        sizes: "16x16",
+        type: "image/png",
+        purpose: "any",
+      },
+      {
+        src: "/favicon-32x32.png",
+        sizes: "32x32",
+        type: "image/png",
+        purpose: "any",
+      },
+      {
+        src: "/favicon-48x48.png",
+        sizes: "48x48",
+        type: "image/png",
         purpose: "any",
       },
       {
@@ -39,7 +57,7 @@ export default function manifest(): MetadataRoute.Manifest {
         src: "/icon-512.png",
         sizes: "512x512",
         type: "image/png",
-        purpose: "any",
+        purpose: "maskable",
       },
       {
         src: "/logo.png",

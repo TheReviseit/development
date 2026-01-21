@@ -153,10 +153,13 @@ export const metadata: Metadata = {
   category: "Business Software",
   classification: "Business Automation & Communication Software",
 
-  // Icons and Manifest - Enhanced
+  // Icons and Manifest - Enhanced with all sizes for Google
   icons: {
     icon: [
       { url: "/favicon.ico", sizes: "any" },
+      { url: "/favicon-16x16.png", sizes: "16x16", type: "image/png" },
+      { url: "/favicon-32x32.png", sizes: "32x32", type: "image/png" },
+      { url: "/favicon-48x48.png", sizes: "48x48", type: "image/png" },
       { url: "/icon-192.png", sizes: "192x192", type: "image/png" },
       { url: "/icon-512.png", sizes: "512x512", type: "image/png" },
     ],
@@ -218,11 +221,12 @@ const organizationSchema = {
   logo: {
     "@type": "ImageObject",
     "@id": "https://www.flowauxi.com/#logo",
-    url: "https://www.flowauxi.com/logo.png",
-    contentUrl: "https://www.flowauxi.com/logo.png",
+    url: "https://www.flowauxi.com/icon-512.png",
+    contentUrl: "https://www.flowauxi.com/icon-512.png",
     width: "512",
     height: "512",
     caption: "Flowauxi Logo",
+    inLanguage: "en-US",
   },
   image: {
     "@type": "ImageObject",
@@ -430,6 +434,39 @@ export default function RootLayout({
           rel="preconnect"
           href="https://fonts.gstatic.com"
           crossOrigin="anonymous"
+        />
+
+        {/* Explicit Favicon Links for Google & Browser Compatibility */}
+        <link rel="icon" type="image/x-icon" href="/favicon.ico" sizes="any" />
+        <link
+          rel="icon"
+          type="image/png"
+          sizes="16x16"
+          href="/favicon-16x16.png"
+        />
+        <link
+          rel="icon"
+          type="image/png"
+          sizes="32x32"
+          href="/favicon-32x32.png"
+        />
+        <link
+          rel="icon"
+          type="image/png"
+          sizes="48x48"
+          href="/favicon-48x48.png"
+        />
+        <link
+          rel="icon"
+          type="image/png"
+          sizes="192x192"
+          href="/icon-192.png"
+        />
+        <link
+          rel="icon"
+          type="image/png"
+          sizes="512x512"
+          href="/icon-512.png"
         />
 
         {/* Structured Data - Organization (Critical for Logo in Google) */}
