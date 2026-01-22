@@ -65,7 +65,7 @@ export default function PricingCards({
         customerName: userName,
         customerPhone: userPhone,
         onSuccess: async (response) => {
-          // Step 3: Verify payment
+          // Step 3: Verify payment (sets status to PROCESSING)
           const verification = await verifyPayment(
             {
               razorpay_subscription_id: response.razorpay_subscription_id,
@@ -76,13 +76,13 @@ export default function PricingCards({
           );
 
           if (verification.success) {
-            onSubscriptionSuccess?.(planName);
-            // Redirect to dashboard
-            window.location.href = "/dashboard?subscription=success";
+            // Redirect to payment status page (don't trust client-side success)
+            // Status page will poll until webhook confirms COMPLETED
+            window.location.href = `/payment/status?subscription_id=${response.razorpay_subscription_id}`;
           } else {
             setError(verification.error || "Payment verification failed");
+            setIsLoading(null);
           }
-          setIsLoading(null);
         },
         onError: (err) => {
           setError(err.description || "Payment failed. Please try again.");

@@ -190,7 +190,7 @@ export default function OnboardingPageEmbedded() {
         customerEmail: user.email,
         customerName: user.displayName || undefined,
         onSuccess: async (response) => {
-          // Verify payment
+          // Verify payment (sets status to PROCESSING)
           const verification = await verifyPayment(
             {
               razorpay_subscription_id: response.razorpay_subscription_id,
@@ -201,33 +201,28 @@ export default function OnboardingPageEmbedded() {
           );
 
           if (verification.success) {
-            // Mark onboarding as complete
-            try {
-              await fetch("/api/onboarding/complete", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                  whatsappConnected: true,
-                  wabaId: wabaData?.wabaId,
-                  phoneNumberId: wabaData?.phoneNumberId,
-                  subscriptionPlan: planId,
-                }),
-              });
-            } catch (error) {
-              console.error("Error completing onboarding:", error);
-            }
+            // Store onboarding data in sessionStorage for completion after payment confirmed
+            sessionStorage.setItem(
+              "pending_onboarding",
+              JSON.stringify({
+                whatsappConnected: true,
+                wabaId: wabaData?.wabaId,
+                phoneNumberId: wabaData?.phoneNumberId,
+                subscriptionPlan: planId,
+              }),
+            );
 
-            // Show success and redirect
-            setStep("complete");
-            setTimeout(() => {
-              router.push("/dashboard");
-            }, 2000);
+            // Redirect to payment status page (don't trust client-side success)
+            // Status page will poll until webhook confirms COMPLETED
+            router.push(
+              `/payment/status?subscription_id=${response.razorpay_subscription_id}`,
+            );
           } else {
             setPaymentError(
               verification.error || "Payment verification failed",
             );
+            setPaymentLoading(null);
           }
-          setPaymentLoading(null);
         },
         onError: (err) => {
           console.error(
