@@ -44,7 +44,7 @@ CREATE INDEX IF NOT EXISTS idx_webhook_events_created_at ON webhook_events(creat
 -- Create payment_attempts table for audit trail
 CREATE TABLE IF NOT EXISTS payment_attempts (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+    user_id TEXT NOT NULL,  -- Text to support both UUIDs and Firebase UIDs
     subscription_id UUID REFERENCES subscriptions(id) ON DELETE SET NULL,
     request_id TEXT NOT NULL,  -- Correlates with frontend x-request-id
     plan_name TEXT NOT NULL,

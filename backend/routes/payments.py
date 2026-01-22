@@ -445,11 +445,17 @@ def create_subscription():
         })
         
     except razorpay.errors.BadRequestError as e:
-        logger.error(f"[{request_id}] Razorpay error: {e}")
-        return error_response('Payment service error', 'RAZORPAY_ERROR', 400)
+        error_msg = str(e)
+        logger.error(f"[{request_id}] Razorpay BadRequest: {error_msg}")
+        return error_response(f'Razorpay error: {error_msg}', 'RAZORPAY_BAD_REQUEST', 400)
+    except razorpay.errors.ServerError as e:
+        error_msg = str(e)
+        logger.error(f"[{request_id}] Razorpay ServerError: {error_msg}")
+        return error_response('Razorpay server error, please try again', 'RAZORPAY_SERVER_ERROR', 503)
     except Exception as e:
-        logger.exception(f"[{request_id}] Error creating subscription: {e}")
-        return error_response('Failed to create subscription', 'INTERNAL_ERROR', 500)
+        error_msg = str(e)
+        logger.exception(f"[{request_id}] Error creating subscription: {error_msg}")
+        return error_response(f'Failed to create subscription: {error_msg}', 'INTERNAL_ERROR', 500)
 
 
 @payments_bp.route('/subscriptions/verify', methods=['POST'])
