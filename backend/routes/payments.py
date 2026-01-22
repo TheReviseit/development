@@ -190,6 +190,38 @@ def require_auth(f):
     return decorated_function
 
 
+def retry_api_call(max_retries=3, initial_delay=1):
+    """Decorator to retry API calls on network errors."""
+    def decorator(f):
+        @wraps(f)
+        def wrapper(*args, **kwargs):
+            retries = 0
+            delay = initial_delay
+            while True:
+                try:
+                    return f(*args, **kwargs)
+                except Exception as e:
+                    # Detect network-related errors
+                    msg = str(e).lower()
+                    is_network_error = any(x in msg for x in [
+                        'connection', 'timeout', 'reset by peer', 'aborted', 'protocol', 'remote end closed'
+                    ])
+                    
+                    if not is_network_error:
+                        raise e
+                        
+                    retries += 1
+                    if retries > max_retries:
+                        logger.error(f"API call failed after {retries} retries: {e}")
+                        raise e
+                    
+                    logger.warning(f"API connection error (attempt {retries}/{max_retries}): {e}. Retrying in {delay}s...")
+                    time.sleep(delay)
+                    delay *= 2  # Exponential backoff
+        return wrapper
+    return decorator
+
+
 # =============================================================================
 # Helper Functions
 # =============================================================================
@@ -308,6 +340,17 @@ def record_webhook_event(event_id: str, event_type: str, subscription_id: str = 
 # Subscription Endpoints
 # =============================================================================
 
+@retry_api_call(max_retries=3, initial_delay=0.5)
+def create_razorpay_customer(data):
+    """Create Razorpay customer with retry logic."""
+    return razorpay_client.customer.create(data=data)
+
+@retry_api_call(max_retries=3, initial_delay=0.5)
+def create_razorpay_subscription(data):
+    """Create Razorpay subscription with retry logic."""
+    return razorpay_client.subscription.create(data=data)
+
+
 @payments_bp.route('/subscriptions/create', methods=['POST'])
 @require_razorpay
 @require_auth
@@ -380,7 +423,7 @@ def create_subscription():
                 'contact': data.customer_phone or '',
                 'notes': {'user_id': user_id}
             }
-            customer = razorpay_client.customer.create(data=customer_data)
+            customer = create_razorpay_customer(customer_data)
             customer_id = customer['id']
         except razorpay.errors.BadRequestError as e:
             if 'already exists' in str(e).lower():
@@ -406,7 +449,7 @@ def create_subscription():
                 'request_id': request_id
             }
         }
-        subscription = razorpay_client.subscription.create(data=subscription_data)
+        subscription = create_razorpay_subscription(subscription_data)
         
         # Store in database with PENDING status
         if SUPABASE_AVAILABLE:
