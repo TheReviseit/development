@@ -57,7 +57,10 @@ const PHASE_2_INTERVAL = 5000; // 5 seconds
 const PHASE_2_DURATION = 120000; // 2 minutes total
 const MAX_POLL_TIME = PHASE_2_DURATION;
 
-export default function PaymentStatusPage() {
+import { Suspense } from "react";
+
+// Move all logic to a content component
+function PaymentStatusContent() {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
   const [subscription, setSubscription] = useState<SubscriptionData | null>(
@@ -403,5 +406,20 @@ export default function PaymentStatusPage() {
         </p>
       </div>
     </div>
+  );
+}
+
+// Default export wrapper
+export default function PaymentStatusPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="payment-status-container">
+          <div className="loading-spinner">Loading payment status...</div>
+        </div>
+      }
+    >
+      <PaymentStatusContent />
+    </Suspense>
   );
 }

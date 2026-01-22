@@ -20,7 +20,15 @@ type PlanName = "starter" | "business" | "pro";
 interface Subscription {
   id: string;
   plan_name: PlanName;
-  status: "pending" | "active" | "cancelled" | "expired" | "halted";
+  status:
+    | "pending"
+    | "active"
+    | "cancelled"
+    | "expired"
+    | "halted"
+    | "processing"
+    | "completed"
+    | "failed";
   ai_responses_limit: number;
   ai_responses_used: number;
   current_period_start: string;
