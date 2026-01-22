@@ -509,13 +509,19 @@ def verify_subscription():
         # Fetch subscription details from Razorpay
         subscription = razorpay_client.subscription.fetch(subscription_id)
         
-        # Calculate period dates
+        # Calculate period dates (handle None values safely)
+        current_start_ts = subscription.get('current_start')
+        current_end_ts = subscription.get('current_end')
+        
+        now = datetime.now(timezone.utc)
+        
         current_start = datetime.fromtimestamp(
-            subscription.get('current_start', datetime.now(timezone.utc).timestamp()),
+            current_start_ts if current_start_ts is not None else now.timestamp(),
             tz=timezone.utc
         ).isoformat()
+        
         current_end = datetime.fromtimestamp(
-            subscription.get('current_end', datetime.now(timezone.utc).timestamp()),
+            current_end_ts if current_end_ts is not None else now.timestamp(),
             tz=timezone.utc
         ).isoformat()
         
