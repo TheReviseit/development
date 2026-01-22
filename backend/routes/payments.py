@@ -47,7 +47,7 @@ except ImportError:
 PLAN_CONFIG = {
     'starter': {
         'plan_id': os.getenv('RAZORPAY_PLAN_STARTER'),
-        'amount': 149900,  # ₹1,499 in paise
+        'amount': 100,  # ₹1 in paise (for testing)
         'ai_responses_limit': 2500,
         'display_name': 'Starter'
     },

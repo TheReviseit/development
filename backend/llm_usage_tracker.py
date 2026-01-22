@@ -33,7 +33,7 @@ PLANS = {
     "starter": {
         "monthly_llm_token_limit": 1_600_000,     # 1.6M tokens for ~1000 replies
         "max_llm_replies_per_month": 1000,
-        "monthly_price_inr": 1499,
+        "monthly_price_inr": 1,
         # Detailed token breakdown
         "input_token_limit": 1_000_000,
         "output_token_limit": 600_000,

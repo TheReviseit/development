@@ -1,158 +1,237 @@
 import { MetadataRoute } from "next";
 
 /**
- * Professional SEO Sitemap Configuration
- * Automatically generates XML sitemap for search engine optimization
+ * WORLD-CLASS SEO SITEMAP CONFIGURATION
+ * =====================================
  *
- * Best Practices Implemented:
- * - Proper priority hierarchy (1.0 for homepage, decreasing for other pages)
- * - Realistic change frequencies based on content type
- * - ISO 8601 date formatting for lastModified
- * - All publicly accessible pages included
- * - Private/auth-required pages excluded
+ * This sitemap follows Google's best practices and includes:
+ * ✅ Proper priority hierarchy (1.0 for homepage, decreasing for other pages)
+ * ✅ Realistic change frequencies based on actual content update patterns
+ * ✅ ISO 8601 date formatting for lastModified timestamps
+ * ✅ All publicly accessible pages with proper indexing metadata
+ * ✅ Strategic inclusion of conversion-focused pages
+ * ✅ Exclusion of private/auth-gated pages (onboarding, dashboard)
+ *
+ * IMPORTANT: Login/Signup pages ARE included because they have valuable
+ * content and CTAs, but marked with noindex in their page metadata.
+ * This tells search engines about their existence without indexing content.
  */
 
 export default function sitemap(): MetadataRoute.Sitemap {
   const baseUrl = "https://www.flowauxi.com";
 
-  // Use a stable date for lastModified to avoid constant changes
-  // Update this date when you make significant changes to the site
-  const lastModified = new Date("2025-12-15T00:00:00Z");
+  // Update this date when making significant site-wide changes
+  // Using a stable date prevents unnecessary re-crawling
+  const lastModified = new Date("2026-01-21T00:00:00Z");
+  const recentUpdate = new Date("2026-01-21T00:00:00Z");
 
   return [
     // ==========================================
-    // HOMEPAGE - Highest Priority
+    // HOMEPAGE - Maximum Priority
     // ==========================================
     {
       url: baseUrl,
-      lastModified: lastModified,
+      lastModified: recentUpdate,
       changeFrequency: "daily",
       priority: 1.0,
     },
 
     // ==========================================
-    // CONVERSION PAGES - High Priority
+    // PRIMARY CONVERSION PAGES - Highest Priority
+    // These drive user acquisition and revenue
     // ==========================================
     {
       url: `${baseUrl}/signup`,
       lastModified: lastModified,
       changeFrequency: "monthly",
-      priority: 0.9, // Very important for conversions
+      priority: 0.95, // Critical for conversions - sign up flow
+    },
+    {
+      url: `${baseUrl}/login`,
+      lastModified: lastModified,
+      changeFrequency: "monthly",
+      priority: 0.9, // Important for returning users
     },
 
     // ==========================================
-    // NOTE: Login, forgot-password, reset-password, verify-email
-    // are excluded from sitemap because they have noindex meta tags.
-    // Sitemap should only contain indexable pages.
-    // ==========================================
-
-    // ==========================================
-    // LEGAL & POLICY PAGES - Lower Priority
-    // These change infrequently but are important for compliance
+    // LEGAL & COMPLIANCE PAGES - Medium Priority
+    // Essential for trust, compliance, and user transparency
     // ==========================================
     {
       url: `${baseUrl}/terms`,
       lastModified: lastModified,
       changeFrequency: "yearly",
-      priority: 0.5,
+      priority: 0.6,
     },
     {
       url: `${baseUrl}/privacy`,
       lastModified: lastModified,
       changeFrequency: "yearly",
-      priority: 0.5,
+      priority: 0.6,
     },
     {
       url: `${baseUrl}/data-deletion`,
       lastModified: lastModified,
       changeFrequency: "yearly",
-      priority: 0.4,
+      priority: 0.5,
     },
     {
       url: `${baseUrl}/data-handling-policy`,
+      lastModified: lastModified,
+      changeFrequency: "yearly",
+      priority: 0.5,
+    },
+
+    // ==========================================
+    // AUTHENTICATION SUPPORT PAGES - Lower Priority
+    // Utility pages for user account management
+    // ==========================================
+    {
+      url: `${baseUrl}/forgot-password`,
+      lastModified: lastModified,
+      changeFrequency: "yearly",
+      priority: 0.4,
+    },
+    {
+      url: `${baseUrl}/verify-email`,
       lastModified: lastModified,
       changeFrequency: "yearly",
       priority: 0.4,
     },
 
     // ==========================================
-    // FUTURE PAGES - Uncomment when ready
+    // NOTE: Excluded Pages (Not in Sitemap)
     // ==========================================
-    // Features page (when created)
-    // {
-    //   url: `${baseUrl}/features`,
-    //   lastModified: lastModified,
-    //   changeFrequency: "weekly",
-    //   priority: 0.9,
-    // },
+    // - /dashboard/* - Requires authentication, dynamic content
+    // - /onboarding* - User-specific onboarding flows
+    // - /reset-password - One-time use with tokens, should not be indexed
+    // - /api/* - API endpoints, not web pages
+    // - /offline - PWA offline fallback page
 
-    // Pricing page (when created)
+    // ==========================================
+    // FUTURE PAGES - Ready to Activate
+    // Uncomment when these pages are live
+    // ==========================================
+
+    // Pricing Page (High Priority - Direct Revenue Impact)
     // {
     //   url: `${baseUrl}/pricing`,
     //   lastModified: lastModified,
     //   changeFrequency: "weekly",
-    //   priority: 0.9,
+    //   priority: 0.95,
     // },
 
-    // Blog (when created)
+    // Features/Product Page (High Priority - Product Discovery)
     // {
-    //   url: `${baseUrl}/blog`,
+    //   url: `${baseUrl}/features`,
     //   lastModified: lastModified,
-    //   changeFrequency: "daily",
-    //   priority: 0.8,
+    //   changeFrequency: "weekly",
+    //   priority: 0.90,
     // },
 
-    // About page (when created)
+    // About Us Page (Medium-High Priority - Brand Trust)
     // {
     //   url: `${baseUrl}/about`,
     //   lastModified: lastModified,
     //   changeFrequency: "monthly",
-    //   priority: 0.7,
+    //   priority: 0.75,
     // },
 
-    // Contact page (when created)
+    // Contact Page (Medium-High Priority - Lead Generation)
     // {
     //   url: `${baseUrl}/contact`,
     //   lastModified: lastModified,
     //   changeFrequency: "monthly",
-    //   priority: 0.8,
+    //   priority: 0.80,
     // },
 
-    // Documentation (when created)
+    // Blog/Resources (High Priority - SEO Content Hub)
+    // {
+    //   url: `${baseUrl}/blog`,
+    //   lastModified: lastModified,
+    //   changeFrequency: "daily",
+    //   priority: 0.85,
+    // },
+
+    // Documentation (Medium Priority - User Support)
     // {
     //   url: `${baseUrl}/docs`,
     //   lastModified: lastModified,
     //   changeFrequency: "weekly",
-    //   priority: 0.7,
+    //   priority: 0.70,
     // },
 
-    // Help/Support (when created)
+    // Help/Support Center (Medium Priority - Customer Success)
     // {
     //   url: `${baseUrl}/help`,
     //   lastModified: lastModified,
     //   changeFrequency: "weekly",
-    //   priority: 0.6,
+    //   priority: 0.65,
+    // },
+
+    // Use Cases Page (Medium-High Priority - Product Marketing)
+    // {
+    //   url: `${baseUrl}/use-cases`,
+    //   lastModified: lastModified,
+    //   changeFrequency: "monthly",
+    //   priority: 0.75,
+    // },
+
+    // Integration Marketplace (Medium Priority - Feature Discovery)
+    // {
+    //   url: `${baseUrl}/integrations`,
+    //   lastModified: lastModified,
+    //   changeFrequency: "weekly",
+    //   priority: 0.70,
+    // },
+
+    // Customer Success Stories / Case Studies
+    // {
+    //   url: `${baseUrl}/customers`,
+    //   lastModified: lastModified,
+    //   changeFrequency: "monthly",
+    //   priority: 0.75,
+    // },
+
+    // Security & Compliance Page
+    // {
+    //   url: `${baseUrl}/security`,
+    //   lastModified: lastModified,
+    //   changeFrequency: "quarterly",
+    //   priority: 0.65,
     // },
   ];
 }
 
 /**
- * SITEMAP PRIORITY GUIDELINES:
+ * SITEMAP PRIORITY GUIDELINES (Google's Recommendations):
+ * ========================================================
  *
- * 1.0  = Homepage only
- * 0.9  = Main conversion pages (Signup, Pricing, Features)
- * 0.8  = Important content pages (Blog, Contact, Docs)
- * 0.7  = Secondary content pages (About, Help)
- * 0.5  = Legal pages (Terms, Privacy)
- * 0.3  = Utility pages (Login, Password Reset)
+ * 1.0  = Homepage only (your most important page)
+ * 0.9-0.95 = Primary conversion pages (Signup, Pricing, Features, Login)
+ * 0.8-0.85 = Important content / revenue pages (Blog, Contact, Product Pages)
+ * 0.7-0.75 = Secondary content pages (About, Docs, Use Cases, Customers)
+ * 0.6-0.65 = Supporting pages (Help, Security, Integrations)
+ * 0.5  = Legal/Compliance pages (Privacy, Terms, Data Deletion)
+ * 0.3-0.4 = Utility pages (Forgot Password, Verify Email)
  *
  * CHANGE FREQUENCY GUIDELINES:
+ * ============================
  *
- * always  = Never use (reserved for real-time data)
- * hourly  = News sites, real-time dashboards
- * daily   = Blogs, frequently updated content, homepage
- * weekly  = Product pages, documentation, pricing
- * monthly = About pages, company info, signup/login
- * yearly  = Legal documents, utility pages
- * never   = Archived content only
+ * always  = Never use (reserved for real-time/constantly changing data)
+ * hourly  = News sites, live feeds, stock tickers
+ * daily   = Blogs, news content, homepage with frequent updates
+ * weekly  = Product pages, pricing, documentation, features
+ * monthly = Company info, about pages, auth pages, use cases
+ * yearly  = Legal documents, terms, privacy policies
+ * never   = Archived content, historical pages
+ *
+ * PRO TIP: Be honest with change frequencies. Over-promising
+ * "daily" when content changes "monthly" can hurt your SEO.
+ *
+ * PRIORITY VS CRAWL FREQUENCY:
+ * ============================
+ * Priority does NOT determine crawl frequency - it's relative
+ * importance WITHIN YOUR SITE. All pages are valuable, priority
+ * just helps search engines understand your site structure.
  */

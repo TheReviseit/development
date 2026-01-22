@@ -166,12 +166,30 @@ export async function openRazorpayCheckout(options: {
     subscription_id: options.subscriptionId,
     name: "Flowauxi",
     description: `${options.planName} Plan Subscription`,
+    // Pre-fill customer details to reduce form friction
+    prefill: {
+      name: options.customerName || "",
+      email: options.customerEmail,
+      contact: options.customerPhone || "",
+    },
+    // 5 minutes (300 seconds) timeout for UPI QR code scanning
+    // This prevents the modal from timing out while user scans QR on mobile
+    timeout: 300,
+    // Enable retry for failed payments
+    retry: {
+      enabled: true,
+      max_count: 4,
+    },
     // Enable all payment methods (UPI, Cards, Netbanking, Wallets)
     method: {
       netbanking: true,
       card: true,
       upi: true,
       wallet: true,
+    },
+    // Theme to match Flowauxi branding
+    theme: {
+      color: "#22c15a",
     },
     handler: (response: any) => {
       options.onSuccess({
@@ -181,7 +199,12 @@ export async function openRazorpayCheckout(options: {
       });
     },
     modal: {
+      // Prevent accidental dismissal during payment
+      confirm_close: true, // Ask for confirmation before closing
+      escape: false, // Don't close on Escape key press
+      backdropclose: false, // Don't close when clicking outside modal
       ondismiss: () => {
+        console.log("Payment modal dismissed by user");
         options.onClose?.();
       },
     },
@@ -198,7 +221,7 @@ export async function openRazorpayCheckout(options: {
 export const PLAN_DETAILS = {
   starter: {
     name: "Starter",
-    price: 1499,
+    price: 1,
     aiResponses: 2500,
     features: [
       "2,500 AI Responses / month",

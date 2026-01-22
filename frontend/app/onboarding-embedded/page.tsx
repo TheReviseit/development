@@ -30,8 +30,8 @@ const PLANS = [
   {
     id: "starter" as PlanName,
     name: "Starter",
-    price: 1499,
-    priceDisplay: "₹1,499",
+    price: 1,
+    priceDisplay: "₹1",
     description: "Perfect for solo entrepreneurs",
     features: [
       "2,500 AI Responses / month",
@@ -244,6 +244,11 @@ export default function OnboardingPageEmbedded() {
           setPaymentLoading(null);
         },
         onClose: () => {
+          // User closed the modal without completing payment
+          // This is intentional, not an error - don't show error message
+          console.log(
+            "Payment modal closed by user without completing payment",
+          );
           setPaymentLoading(null);
         },
       });
@@ -319,7 +324,7 @@ export default function OnboardingPageEmbedded() {
             {step === "whatsapp" &&
               "Your WhatsApp Business Account credentials remain with Meta. We only access what you explicitly authorize."}
             {step === "pricing" &&
-              "🔒 Secure payments powered by Razorpay. All plans include WhatsApp API costs."}
+              "Secure payments powered by Razorpay. All plans include WhatsApp API costs."}
             {step === "complete" &&
               "You can manage your subscription from the dashboard settings."}
           </p>
@@ -467,22 +472,51 @@ export default function OnboardingPageEmbedded() {
           font-size: 14px;
         }
 
+        .sidebar-note {
+          position: absolute;
+          bottom: 30px;
+          left: 0;
+          right: 0;
+          padding: 0 2.5rem;
+          display: flex;
+          align-items: flex-start;
+          gap: 12px;
+        }
+
+        .sidebar-note svg {
+          flex-shrink: 0;
+          color: rgba(255, 255, 255, 0.4);
+          margin-top: 2px;
+        }
+
+        .sidebar-note p {
+          margin: 0;
+          font-size: 13px;
+          line-height: 1.5;
+          color: rgba(255, 255, 255, 0.6);
+        }
+
         .pricing-step {
-          max-width: 900px;
-          padding: 20px;
+          width: 100%;
+          max-width: 1200px;
+          padding: 40px 20px;
+          margin: 0 auto;
+          box-sizing: border-box;
         }
 
         .pricing-step h2 {
-          font-size: 28px;
+          font-size: 32px;
           font-weight: 700;
-          margin: 0 0 8px;
+          margin: 0 0 12px;
           color: var(--text-primary, #111);
+          text-align: center;
         }
 
         .pricing-subtitle {
           color: var(--text-secondary, #6b7280);
-          margin: 0 0 32px;
+          margin: 0 0 40px;
           font-size: 16px;
+          text-align: center;
         }
 
         .payment-error {
@@ -513,28 +547,76 @@ export default function OnboardingPageEmbedded() {
         .pricing-cards-grid {
           display: grid;
           grid-template-columns: repeat(3, 1fr);
-          gap: 20px;
+          gap: 24px;
+          max-width: 1100px;
+          margin: 0 auto;
         }
 
-        @media (max-width: 900px) {
+        @media (max-width: 1024px) {
+          .pricing-cards-grid {
+            grid-template-columns: repeat(2, 1fr);
+            gap: 20px;
+          }
+        }
+
+        @media (max-width: 768px) {
+          .onboarding-main-embedded {
+            overflow-y: auto !important;
+            -webkit-overflow-scrolling: touch;
+            height: auto !important;
+            min-height: auto !important;
+          }
+
+          .embedded-content {
+            max-height: none !important;
+            height: auto !important;
+            overflow: visible !important;
+            align-items: flex-start;
+            display: block;
+            padding-bottom: 40px;
+          }
+
+          .pricing-step {
+            padding: 20px 16px 40px;
+            width: 100%;
+            min-height: auto !important;
+          }
+
+          .pricing-step h2 {
+            font-size: 24px;
+          }
+
           .pricing-cards-grid {
             grid-template-columns: 1fr;
+            gap: 20px;
+            width: 100%;
+            display: flex !important;
+            flex-direction: column;
+          }
+
+          .pricing-card {
+            width: 100% !important;
+            max-width: 100% !important;
+            margin: 0 auto;
           }
         }
 
         .pricing-card {
           background: white;
           border: 2px solid #e5e7eb;
-          border-radius: 16px;
-          padding: 24px;
+          border-radius: 20px;
+          padding: 32px 28px;
           position: relative;
           transition: all 0.3s ease;
+          display: flex;
+          flex-direction: column;
+          min-width: 280px;
         }
 
         .pricing-card:hover {
           border-color: #22c15a;
-          transform: translateY(-4px);
-          box-shadow: 0 12px 40px rgba(0, 0, 0, 0.1);
+          transform: translateY(-6px);
+          box-shadow: 0 16px 48px rgba(0, 0, 0, 0.12);
         }
 
         .pricing-card.popular {
@@ -565,38 +647,45 @@ export default function OnboardingPageEmbedded() {
 
         .plan-description {
           color: #6b7280;
-          font-size: 14px;
-          margin: 0 0 16px;
+          font-size: 15px;
+          margin: 0 0 20px;
+          line-height: 1.4;
         }
 
         .plan-price {
-          margin-bottom: 20px;
+          margin-bottom: 24px;
+          padding-bottom: 24px;
+          border-bottom: 1px solid #f3f4f6;
         }
 
         .plan-price .price {
-          font-size: 32px;
+          font-size: 36px;
           font-weight: 800;
           color: #111;
+          letter-spacing: -0.02em;
         }
 
         .plan-price .period {
           font-size: 16px;
           color: #6b7280;
+          font-weight: 500;
         }
 
         .plan-features {
           list-style: none;
           padding: 0;
-          margin: 0 0 24px;
+          margin: 0 0 28px;
+          flex: 1;
         }
 
         .plan-features li {
           display: flex;
-          align-items: center;
-          gap: 8px;
-          padding: 8px 0;
+          align-items: flex-start;
+          gap: 10px;
+          padding: 10px 0;
           font-size: 14px;
           color: #374151;
+          line-height: 1.5;
         }
 
         .plan-features li svg {

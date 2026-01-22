@@ -67,8 +67,11 @@ html:has(.onboarding-container.onboarding-two-step) {
 
 /* Embedded content wrapper */
 .embedded-content {
-  max-width: 600px;
   width: 100%;
+  max-width: 100%;
+  display: flex;
+  justify-content: center;
+  align-items: center;
 }
 
 /* ============================================
@@ -96,7 +99,8 @@ html:has(.onboarding-container.onboarding-two-step) {
   cursor: pointer;
   overflow: hidden;
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.25),
+  box-shadow:
+    0 4px 20px rgba(0, 0, 0, 0.25),
     0 0 0 1px rgba(255, 255, 255, 0.05) inset;
 }
 
@@ -118,7 +122,8 @@ html:has(.onboarding-container.onboarding-two-step) {
 
 .whatsapp-connect-btn:hover {
   transform: translateY(-3px);
-  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.35),
+  box-shadow:
+    0 8px 30px rgba(0, 0, 0, 0.35),
     0 0 0 1px rgba(255, 255, 255, 0.08) inset;
   background: linear-gradient(135deg, #2a2a2a 0%, #0a0a0a 100%);
 }
@@ -186,7 +191,9 @@ html:has(.onboarding-container.onboarding-two-step) {
   background: #ffffff;
   border-radius: 28px;
   padding: 40px 36px;
-  box-shadow: 0 4px 40px rgba(0, 0, 0, 0.06), 0 0 0 1px rgba(0, 0, 0, 0.03);
+  box-shadow:
+    0 4px 40px rgba(0, 0, 0, 0.06),
+    0 0 0 1px rgba(0, 0, 0, 0.03);
   position: relative;
   overflow: hidden;
 }
@@ -431,13 +438,14 @@ html:has(.onboarding-container.onboarding-two-step) {
 }
 
 @media (max-width: 768px) {
-  /* Full page layout for mobile - NO SCROLL */
+  /* Full page layout for mobile - WITH SCROLL */
   .onboarding-container.onboarding-two-step {
     display: flex;
     flex-direction: column;
-    height: 100vh;
-    max-height: 100vh;
-    overflow: hidden;
+    min-height: 100vh;
+    height: auto;
+    overflow-x: hidden;
+    overflow-y: auto;
   }
 
   .onboarding-two-step .onboarding-sidebar {
@@ -447,9 +455,10 @@ html:has(.onboarding-container.onboarding-two-step) {
   .onboarding-two-step .onboarding-main {
     margin-left: 0;
     width: 100%;
-    height: 100vh;
-    max-height: 100vh;
-    overflow: hidden;
+    min-height: 100vh;
+    height: auto;
+    overflow-x: hidden;
+    overflow-y: auto;
   }
 
   /* Mobile header - Fixed at top */
@@ -484,21 +493,27 @@ html:has(.onboarding-container.onboarding-two-step) {
     letter-spacing: -0.01em;
   }
 
-  /* Main content area - FIXED HEIGHT accounting for header */
+  /* Main content area - FULLY SCROLLABLE on mobile */
   .onboarding-main-embedded {
     margin-top: 60px;
-    padding: 16px !important;
-    height: calc(100vh - 60px) !important;
-    max-height: calc(100vh - 60px) !important;
-    min-height: calc(100vh - 60px) !important;
-    overflow: hidden !important;
-    align-items: center !important;
+    padding: 20px 16px 60px !important;
+    min-height: calc(100vh - 60px);
+    height: auto !important;
+    max-height: none !important;
+    overflow-y: auto !important;
+    overflow-x: hidden !important;
+    -webkit-overflow-scrolling: touch;
+    align-items: flex-start !important;
     box-sizing: border-box;
   }
 
   .embedded-content {
-    max-height: calc(100vh - 100px);
-    overflow: hidden;
+    max-height: none !important;
+    height: auto !important;
+    overflow: visible !important;
+    width: 100%;
+    display: block;
+    align-items: flex-start;
   }
 
   /* Mobile form card */
@@ -539,9 +554,10 @@ html:has(.onboarding-container.onboarding-two-step) {
 @media (max-width: 480px) {
   .onboarding-main-embedded {
     margin-top: 60px;
-    padding: 12px !important;
-    height: calc(100vh - 60px) !important;
-    max-height: calc(100vh - 60px) !important;
+    padding: 16px 12px 60px !important;
+    min-height: calc(100vh - 60px);
+    height: auto !important;
+    max-height: none !important;
   }
 
   .signup-form-card {
@@ -1242,7 +1258,9 @@ html:has(.onboarding-container.onboarding-two-step) {
   background: #ffffff;
   border-radius: 28px;
   padding: 40px 36px;
-  box-shadow: 0 4px 40px rgba(0, 0, 0, 0.06), 0 0 0 1px rgba(0, 0, 0, 0.03);
+  box-shadow:
+    0 4px 40px rgba(0, 0, 0, 0.06),
+    0 0 0 1px rgba(0, 0, 0, 0.03);
   position: relative;
   overflow: hidden;
 }
@@ -1382,7 +1400,9 @@ html:has(.onboarding-container.onboarding-two-step) {
   background: #ffffff;
   border-radius: 24px;
   padding: 36px 32px;
-  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.06), 0 0 0 1px rgba(0, 0, 0, 0.03);
+  box-shadow:
+    0 4px 24px rgba(0, 0, 0, 0.06),
+    0 0 0 1px rgba(0, 0, 0, 0.03);
   position: relative;
   overflow: hidden;
   text-align: center;
