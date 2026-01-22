@@ -1,7 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { adminAuth } from "@/lib/firebase-admin";
-import { getUserByFirebaseUID } from "@/lib/supabase/queries";
+import {
+  getUserByFirebaseUID,
+  getSubscriptionByUserId,
+} from "@/lib/supabase/queries";
 import { getWhatsAppAccountsByUserId } from "@/lib/supabase/facebook-whatsapp-queries";
 
 export async function GET(request: NextRequest) {
@@ -40,9 +43,21 @@ export async function GET(request: NextRequest) {
       whatsappConnected = false;
     }
 
+    // Check for active subscription
+    let hasActiveSubscription = false;
+    try {
+      const subscription = await getSubscriptionByUserId(user.id);
+      if (subscription) {
+        hasActiveSubscription = true;
+      }
+    } catch (error) {
+      console.error("Error checking subscription:", error);
+    }
+
     return NextResponse.json({
       onboardingCompleted: user.onboarding_completed,
       whatsappConnected: whatsappConnected,
+      hasActiveSubscription: hasActiveSubscription,
     });
   } catch (error: any) {
     console.error("Error checking onboarding status:", error);

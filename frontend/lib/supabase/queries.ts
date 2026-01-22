@@ -78,7 +78,7 @@ export async function getUserByEmail(email: string) {
 // Update user's firebase_uid (for Firebase project migrations)
 export async function updateUserFirebaseUID(
   email: string,
-  newFirebaseUID: string
+  newFirebaseUID: string,
 ) {
   const { data, error } = await supabaseAdmin
     .from("users")
@@ -146,7 +146,7 @@ export async function getBusinessByUserId(userId: string) {
 
 export async function createOrUpdateBusiness(
   userId: string,
-  businessData: Omit<Business, "id" | "user_id" | "created_at" | "updated_at">
+  businessData: Omit<Business, "id" | "user_id" | "created_at" | "updated_at">,
 ) {
   // Check if business exists
   const existing = await getBusinessByUserId(userId);
@@ -201,7 +201,7 @@ export async function createOrUpdateWhatsAppConnection(
   connectionData: Omit<
     WhatsAppConnection,
     "id" | "business_id" | "created_at" | "updated_at"
-  >
+  >,
 ) {
   // Check if connection exists
   const existing = await getWhatsAppConnection(businessId);
@@ -291,4 +291,22 @@ export async function getUsersByFilter(filters: {
       "id" | "firebase_uid" | "full_name" | "email" | "role" | "created_at"
     >
   >;
+}
+
+// Subscription queries
+export async function getSubscriptionByUserId(userId: string) {
+  const { data, error } = await supabaseAdmin
+    .from("subscriptions")
+    .select("*")
+    .eq("user_id", userId)
+    .in("status", ["active", "completed", "processing"])
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (error) {
+    console.error("Error fetching subscription:", error);
+    return null;
+  }
+  return data;
 }

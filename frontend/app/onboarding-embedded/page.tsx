@@ -113,8 +113,14 @@ export default function OnboardingPageEmbedded() {
       const onboardingResponse = await fetch("/api/onboarding/check");
       const onboardingData = await onboardingResponse.json();
 
-      if (onboardingData.onboardingCompleted) {
-        // Fully onboarded - go to dashboard
+      if (
+        onboardingData.onboardingCompleted ||
+        onboardingData.hasActiveSubscription
+      ) {
+        // Fully onboarded or has active subscription - go to dashboard
+        console.log(
+          "✅ User already onboarded or subscribed, redirecting to dashboard",
+        );
         router.push("/dashboard");
         return true; // Indicate that we're redirecting
       }

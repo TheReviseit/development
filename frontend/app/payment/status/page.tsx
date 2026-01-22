@@ -110,9 +110,15 @@ function PaymentStatusContent() {
         // If completed/active, stop polling and redirect
         if (status === "completed" || status === "active") {
           setLoading(false);
+
+          // Explicitly mark onboarding as complete
+          fetch("/api/onboarding/complete", { method: "POST" }).catch((err) =>
+            console.error("Error marking onboarding complete:", err),
+          );
+
           // Wait 2 seconds to show success state, then redirect
           setTimeout(() => {
-            router.push("/dashboard?subscription=success");
+            router.push("/dashboard");
           }, 2000);
           return true; // Payment complete
         }

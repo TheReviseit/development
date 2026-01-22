@@ -148,9 +148,16 @@ export default function DashboardLayout({
 
           const data = await response.json();
 
-          if (!data.onboardingCompleted) {
+          if (!data.onboardingCompleted && !data.hasActiveSubscription) {
             router.push("/onboarding");
             return;
+          }
+
+          // Self-healing: If user has a subscription but onboarding flag is false, fix it
+          if (data.hasActiveSubscription && !data.onboardingCompleted) {
+            fetch("/api/onboarding/complete", { method: "POST" }).catch((err) =>
+              console.error("Error auto-completing onboarding:", err),
+            );
           }
 
           setUser(currentUser);
