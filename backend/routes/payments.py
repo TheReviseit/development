@@ -41,7 +41,27 @@ try:
     VALIDATION_AVAILABLE = True
 except ImportError:
     VALIDATION_AVAILABLE = False
+    ValidationError = Exception  # Fallback
     logger.warning("⚠️ Validation schemas not available")
+    
+    # Fallback implementations when Pydantic not available
+    def generate_request_id():
+        """Generate a unique request ID for tracing."""
+        return f"req_{uuid.uuid4().hex[:16]}"
+    
+    def generate_stable_idempotency_key(user_id, plan_id, currency="INR", interval="monthly"):
+        """Generate stable idempotency key."""
+        import hashlib
+        data = f"{user_id}:{plan_id}:{currency}:{interval}"
+        return f"idem_{hashlib.sha256(data.encode()).hexdigest()[:24]}"
+    
+    def can_transition(current_status, new_status):
+        """Check if state transition is valid."""
+        return True  # Allow all transitions when validation unavailable
+    
+    def should_ignore_webhook_event(current_status, event_type):
+        """Check if webhook event should be ignored."""
+        return False  # Process all events when validation unavailable
 
 # Import rate limiter
 try:

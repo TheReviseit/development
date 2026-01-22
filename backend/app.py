@@ -199,7 +199,7 @@ CORS(app, resources={
     r"/api/*": {
         "origins": allowed_origins,
         "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-        "allow_headers": ["Content-Type", "Authorization", "X-User-ID", "X-User-Id"]
+        "allow_headers": ["Content-Type", "Authorization", "X-User-ID", "X-User-Id", "X-Request-Id"]
     }
 })
 
