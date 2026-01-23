@@ -18,6 +18,7 @@ import hmac
 import hashlib
 import logging
 import uuid
+import requests
 from functools import wraps
 from flask import Blueprint, request, jsonify, g
 from datetime import datetime, timezone
@@ -234,6 +235,28 @@ def error_response(message: str, code: str, status: int = 400) -> Tuple:
         'error_code': code,
         'request_id': getattr(g, 'request_id', 'unknown')
     }), status
+
+
+def send_razorpay_tracking(key_id: str):
+    """Send a tracking ping to Razorpay analytics endpoint.
+    This helps Razorpay monitor usage. Network errors are logged but do not affect the main flow.
+    """
+    url = f"https://lumberjack.razorpay.com/v1/track?key_id={key_id}"
+    headers = {
+        "content-type": "text/plain;charset=UTF-8",
+        "dnt": "1",
+        "referer": "https://flowauxi.com/",
+        "sec-ch-ua": "\"Not(A:Brand\";v=\"8\", \"Chromium\";v=\"144\", \"Google Chrome\";v=\"144\"",
+        "sec-ch-ua-mobile": "?1",
+        "sec-ch-ua-platform": "\"Android\"",
+        "user-agent": "Mozilla/5.0 (Linux; Android 6.0; Nexus 5 Build/MRA58N) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Mobile Safari/537.36"
+    }
+    try:
+        response = requests.get(url, headers=headers, timeout=5)
+        response.raise_for_status()
+        logger.info(f"Razorpay tracking ping successful: {response.status_code}")
+    except Exception as e:
+        logger.warning(f"Razorpay tracking ping failed: {e}")
 
 
 def success_response(data: dict, status: int = 200) -> Tuple:
@@ -479,6 +502,10 @@ def create_subscription():
         
         logger.info(f"[{request_id}] Created subscription {subscription['id']} for user {user_id}")
         
+        # Send tracking request to Razorpay (non-critical)
+        if RAZORPAY_KEY_ID:
+            send_razorpay_tracking(RAZORPAY_KEY_ID)
+
         return success_response({
             'subscription_id': subscription['id'],
             'key_id': RAZORPAY_KEY_ID,
