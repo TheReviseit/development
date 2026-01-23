@@ -11,6 +11,9 @@ Key Features:
 - Event ordering safety (ignore outdated events)
 - Dual rate limiting (user + IP)
 - Request ID tracing
+- Payment-level idempotency (not just event-level)
+- UPSERT for payment_history to handle concurrent requests
+- Graceful duplicate handling (always returns 200 for processed/duplicate)
 """
 
 import os
@@ -18,11 +21,13 @@ import hmac
 import hashlib
 import logging
 import uuid
+import time
 import requests
 from functools import wraps
 from flask import Blueprint, request, jsonify, g
 from datetime import datetime, timezone
-from typing import Optional, Tuple
+from typing import Optional, Tuple, Dict, Any
+from contextlib import contextmanager
 
 # Configure logging
 logger = logging.getLogger('reviseit.payments')
@@ -334,9 +339,14 @@ def record_webhook_event(event_id: str, event_type: str, subscription_id: str = 
     """
     Record a webhook event for deduplication and audit.
     Returns True if new event, False if duplicate.
+    
+    IMPORTANT: This is event-level deduplication. Payment-level deduplication
+    is handled separately by upsert_payment_history().
     """
     if not SUPABASE_AVAILABLE:
         return True  # Allow if no DB
+    
+    request_id = getattr(g, 'request_id', 'unknown')
     
     try:
         supabase = get_supabase_client()
@@ -349,14 +359,239 @@ def record_webhook_event(event_id: str, event_type: str, subscription_id: str = 
             'processing_result': result,
             'raw_payload': raw_payload
         }).execute()
+        logger.debug(f"[{request_id}] Recorded webhook event: {event_id}")
         return True
     except Exception as e:
+        error_str = str(e).lower()
         # Unique constraint violation means duplicate
-        if 'duplicate key' in str(e).lower() or 'unique' in str(e).lower():
-            logger.info(f"[{getattr(g, 'request_id', 'unknown')}] Duplicate webhook event: {event_id}")
+        if 'duplicate key' in error_str or 'unique' in error_str or '23505' in str(e):
+            logger.info(f"[{request_id}] Duplicate webhook event: {event_id}")
             return False
-        logger.error(f"Failed to record webhook event: {e}")
+        logger.error(f"[{request_id}] Failed to record webhook event: {e}")
         return True  # Allow on other errors
+
+
+def is_duplicate_error(error: Exception) -> bool:
+    """Check if an exception is a duplicate key/unique constraint violation."""
+    error_str = str(error).lower()
+    return any(x in error_str for x in ['duplicate key', 'unique', '23505', 'uniqueviolation'])
+
+
+def upsert_payment_history(
+    user_id: str,
+    razorpay_payment_id: str,
+    amount: int,
+    currency: str = 'INR',
+    status: str = 'captured',
+    payment_method: str = None,
+    subscription_id: str = None,
+    razorpay_order_id: str = None,
+    razorpay_signature: str = None,
+    error_code: str = None,
+    error_description: str = None
+) -> Dict[str, Any]:
+    """
+    UPSERT payment into payment_history with idempotency on razorpay_payment_id.
+    
+    This handles:
+    1. Concurrent webhook requests with same payment_id
+    2. Multiple event types (subscription.charged, payment.captured) for same payment
+    3. Verify endpoint + webhook collision
+    
+    Returns:
+        {'success': True, 'is_new': True/False, 'payment_id': str}
+        {'success': False, 'error': str}
+    """
+    if not SUPABASE_AVAILABLE:
+        return {'success': True, 'is_new': True, 'payment_id': razorpay_payment_id}
+    
+    request_id = getattr(g, 'request_id', 'unknown')
+    
+    if not razorpay_payment_id:
+        logger.warning(f"[{request_id}] Attempted to insert payment without payment_id")
+        return {'success': False, 'error': 'missing_payment_id'}
+    
+    payment_data = {
+        'user_id': user_id,
+        'razorpay_payment_id': razorpay_payment_id,
+        'amount': amount,
+        'currency': currency,
+        'status': status,
+    }
+    
+    # Add optional fields only if provided
+    if payment_method:
+        payment_data['payment_method'] = payment_method
+    if subscription_id:
+        payment_data['subscription_id'] = subscription_id
+    if razorpay_order_id:
+        payment_data['razorpay_order_id'] = razorpay_order_id
+    if razorpay_signature:
+        payment_data['razorpay_signature'] = razorpay_signature
+    if error_code:
+        payment_data['error_code'] = error_code
+    if error_description:
+        payment_data['error_description'] = error_description
+    
+    try:
+        supabase = get_supabase_client()
+        
+        # Use Supabase upsert with on_conflict
+        # This performs: INSERT ... ON CONFLICT (razorpay_payment_id) DO UPDATE
+        result = supabase.table('payment_history').upsert(
+            payment_data,
+            on_conflict='razorpay_payment_id'
+        ).execute()
+        
+        logger.info(f"[{request_id}] Payment {razorpay_payment_id} upserted successfully")
+        return {'success': True, 'is_new': True, 'payment_id': razorpay_payment_id}
+        
+    except Exception as e:
+        # Even with upsert, handle edge cases
+        if is_duplicate_error(e):
+            logger.info(f"[{request_id}] Payment {razorpay_payment_id} already exists (concurrent upsert race)")
+            return {'success': True, 'is_new': False, 'payment_id': razorpay_payment_id}
+        
+        logger.error(f"[{request_id}] Failed to upsert payment {razorpay_payment_id}: {e}")
+        return {'success': False, 'error': str(e)}
+
+
+def safe_insert_payment_history(
+    user_id: str,
+    razorpay_payment_id: str,
+    amount: int,
+    currency: str = 'INR',
+    status: str = 'captured',
+    payment_method: str = None,
+    subscription_id: str = None,
+    razorpay_order_id: str = None,
+    razorpay_signature: str = None
+) -> Dict[str, Any]:
+    """
+    Safely insert payment history, handling duplicates gracefully.
+    
+    Alternative to upsert when you want INSERT with conflict handling
+    (useful if you don't want to update existing records).
+    
+    Returns:
+        {'success': True, 'is_new': True} - new payment inserted
+        {'success': True, 'is_new': False} - duplicate, already exists
+        {'success': False, 'error': str} - real error
+    """
+    if not SUPABASE_AVAILABLE:
+        return {'success': True, 'is_new': True}
+    
+    request_id = getattr(g, 'request_id', 'unknown')
+    
+    if not razorpay_payment_id:
+        logger.warning(f"[{request_id}] Attempted to insert payment without payment_id")
+        return {'success': False, 'error': 'missing_payment_id'}
+    
+    payment_data = {
+        'user_id': user_id,
+        'razorpay_payment_id': razorpay_payment_id,
+        'amount': amount,
+        'currency': currency,
+        'status': status,
+    }
+    
+    if payment_method:
+        payment_data['payment_method'] = payment_method
+    if subscription_id:
+        payment_data['subscription_id'] = subscription_id
+    if razorpay_order_id:
+        payment_data['razorpay_order_id'] = razorpay_order_id
+    if razorpay_signature:
+        payment_data['razorpay_signature'] = razorpay_signature
+    
+    try:
+        supabase = get_supabase_client()
+        supabase.table('payment_history').insert(payment_data).execute()
+        logger.info(f"[{request_id}] Payment {razorpay_payment_id} recorded")
+        return {'success': True, 'is_new': True}
+        
+    except Exception as e:
+        if is_duplicate_error(e):
+            logger.info(f"[{request_id}] Payment {razorpay_payment_id} already recorded (duplicate)")
+            return {'success': True, 'is_new': False}
+        
+        logger.error(f"[{request_id}] Failed to insert payment {razorpay_payment_id}: {e}")
+        return {'success': False, 'error': str(e)}
+
+
+def update_subscription_status(
+    razorpay_subscription_id: str,
+    status: str,
+    current_period_start: datetime = None,
+    current_period_end: datetime = None,
+    event_created_at: datetime = None,
+    reset_usage: bool = False
+) -> Dict[str, Any]:
+    """
+    Update subscription status with event ordering safety.
+    
+    Returns:
+        {'success': True, 'updated': True}
+        {'success': True, 'updated': False, 'reason': 'ignored_ordering'}
+        {'success': False, 'error': str}
+    """
+    if not SUPABASE_AVAILABLE:
+        return {'success': True, 'updated': True}
+    
+    request_id = getattr(g, 'request_id', 'unknown')
+    
+    try:
+        supabase = get_supabase_client()
+        
+        update_data = {
+            'status': status,
+        }
+        
+        if event_created_at:
+            update_data['last_webhook_event_at'] = event_created_at.isoformat()
+        
+        if current_period_start:
+            update_data['current_period_start'] = current_period_start.isoformat()
+        
+        if current_period_end:
+            update_data['current_period_end'] = current_period_end.isoformat()
+        
+        if reset_usage:
+            update_data['ai_responses_used'] = 0
+        
+        result = supabase.table('subscriptions').update(update_data).eq(
+            'razorpay_subscription_id', razorpay_subscription_id
+        ).execute()
+        
+        if result.data:
+            logger.info(f"[{request_id}] Subscription {razorpay_subscription_id} → {status}")
+            return {'success': True, 'updated': True}
+        else:
+            logger.warning(f"[{request_id}] Subscription {razorpay_subscription_id} not found")
+            return {'success': True, 'updated': False, 'reason': 'not_found'}
+        
+    except Exception as e:
+        logger.error(f"[{request_id}] Failed to update subscription {razorpay_subscription_id}: {e}")
+        return {'success': False, 'error': str(e)}
+
+
+def get_subscription_by_razorpay_id(razorpay_subscription_id: str) -> Optional[Dict]:
+    """Get subscription record by Razorpay subscription ID."""
+    if not SUPABASE_AVAILABLE:
+        return None
+    
+    try:
+        supabase = get_supabase_client()
+        result = supabase.table('subscriptions').select(
+            'id, user_id, status, last_webhook_event_at, plan_name, ai_responses_limit'
+        ).eq(
+            'razorpay_subscription_id', razorpay_subscription_id
+        ).limit(1).execute()
+        
+        return result.data[0] if result.data else None
+    except Exception as e:
+        logger.error(f"Failed to fetch subscription {razorpay_subscription_id}: {e}")
+        return None
 
 
 # =============================================================================
@@ -608,26 +843,35 @@ def verify_subscription():
                 'ai_responses_used': 0  # Reset usage on activation
             }).eq('razorpay_subscription_id', subscription_id).execute()
             
-            # Record payment (use upsert to handle retries/duplicates)
+            # Record payment using UPSERT for idempotency
+            # This handles: retry by user, concurrent verify + webhook
             payment = razorpay_client.payment.fetch(payment_id)
-            try:
-                supabase.table('payment_history').insert({
-                    'user_id': user_id,
-                    'razorpay_payment_id': payment_id,
-                    'razorpay_order_id': payment.get('order_id'),
-                    'razorpay_signature': signature,
-                    'amount': payment.get('amount', 0),
-                    'currency': payment.get('currency', 'INR'),
-                    'status': 'captured',
-                    'payment_method': payment.get('method')
-                }).execute()
-            except Exception as payment_error:
-                # If duplicate payment_id (user retried verification), it's fine - payment already recorded
-                if 'duplicate key' in str(payment_error).lower() or '23505' in str(payment_error):
-                    logger.info(f"[{request_id}] Payment {payment_id} already recorded (retry detected)")
+            
+            # Get subscription UUID for foreign key
+            sub_result = supabase.table('subscriptions').select('id').eq(
+                'razorpay_subscription_id', subscription_id
+            ).limit(1).execute()
+            subscription_uuid = sub_result.data[0]['id'] if sub_result.data else None
+            
+            payment_result = upsert_payment_history(
+                user_id=user_id,
+                razorpay_payment_id=payment_id,
+                amount=payment.get('amount', 0),
+                currency=payment.get('currency', 'INR'),
+                status='captured',
+                payment_method=payment.get('method'),
+                subscription_id=subscription_uuid,
+                razorpay_order_id=payment.get('order_id'),
+                razorpay_signature=signature
+            )
+            
+            if payment_result.get('success'):
+                if payment_result.get('is_new'):
+                    logger.info(f"[{request_id}] Payment {payment_id} recorded via verify")
                 else:
-                    # Re-raise other errors
-                    raise payment_error
+                    logger.info(f"[{request_id}] Payment {payment_id} already recorded (verify retry or webhook)")
+            else:
+                logger.warning(f"[{request_id}] Payment recording issue: {payment_result.get('error')}")
             
             # Update payment attempt
             supabase.table('payment_attempts').update({
@@ -755,173 +999,478 @@ def cancel_subscription():
 
 
 # =============================================================================
-# Webhook Handler
+# Webhook Handler - Production Grade with Idempotency
 # =============================================================================
+
+class WebhookResult:
+    """Structured webhook processing result."""
+    
+    def __init__(self, status: str, http_code: int = 200, message: str = None):
+        self.status = status
+        self.http_code = http_code
+        self.message = message or status
+    
+    def to_response(self):
+        return jsonify({'status': self.status, 'message': self.message}), self.http_code
+
+
+# Webhook result constants
+WEBHOOK_OK = WebhookResult('ok', 200)
+WEBHOOK_DUPLICATE_EVENT = WebhookResult('ignored_duplicate', 200, 'Event already processed')
+WEBHOOK_DUPLICATE_PAYMENT = WebhookResult('ignored_duplicate_payment', 200, 'Payment already recorded')
+WEBHOOK_IGNORED_ORDERING = WebhookResult('ignored_ordering', 200, 'Event ignored due to state ordering')
+WEBHOOK_INVALID_SIGNATURE = WebhookResult('invalid_signature', 400, 'Invalid webhook signature')
+WEBHOOK_INVALID_PAYLOAD = WebhookResult('invalid_payload', 400, 'Invalid payload format')
+WEBHOOK_DB_UNAVAILABLE = WebhookResult('db_unavailable', 503, 'Database unavailable')
+
+
+def parse_webhook_event(raw_body: bytes) -> Optional[Dict]:
+    """
+    Parse webhook event from raw body.
+    Returns None if parsing fails.
+    """
+    try:
+        import json
+        return json.loads(raw_body.decode('utf-8'))
+    except Exception as e:
+        logger.error(f"Failed to parse webhook payload: {e}")
+        return None
+
+
+def extract_event_metadata(event: Dict) -> Dict:
+    """Extract standardized metadata from webhook event."""
+    payload = event.get('payload', {})
+    
+    # Get event timestamp
+    event_created_at = event.get('created_at')
+    if event_created_at:
+        if isinstance(event_created_at, int):
+            event_created_at = datetime.fromtimestamp(event_created_at, tz=timezone.utc)
+        else:
+            event_created_at = datetime.now(timezone.utc)
+    else:
+        event_created_at = datetime.now(timezone.utc)
+    
+    # Extract IDs from nested payload structure
+    subscription_entity = payload.get('subscription', {}).get('entity', {})
+    payment_entity = payload.get('payment', {}).get('entity', {})
+    
+    return {
+        'event_id': event.get('id') or event.get('event_id') or f"evt_{uuid.uuid4().hex[:16]}",
+        'event_type': event.get('event', 'unknown'),
+        'created_at': event_created_at,
+        'subscription_id': subscription_entity.get('id'),
+        'subscription_data': subscription_entity,
+        'payment_id': payment_entity.get('id'),
+        'payment_data': payment_entity,
+        'raw_payload': event
+    }
+
+
+def process_subscription_activated(meta: Dict) -> WebhookResult:
+    """Handle subscription.activated event."""
+    request_id = getattr(g, 'request_id', 'unknown')
+    sub_data = meta['subscription_data']
+    sub_id = meta['subscription_id']
+    
+    if not sub_id:
+        logger.warning(f"[{request_id}] subscription.activated missing subscription_id")
+        return WEBHOOK_OK  # Return 200 anyway, don't make Razorpay retry
+    
+    # Get current subscription state for ordering check
+    current = get_subscription_by_razorpay_id(sub_id)
+    
+    if current:
+        current_status = current.get('status', 'unknown')
+        
+        # Event ordering safety - don't downgrade completed to activated
+        if should_ignore_webhook_event(current_status, 'subscription.activated'):
+            logger.info(f"[{request_id}] Ignoring subscription.activated - already {current_status}")
+            return WEBHOOK_IGNORED_ORDERING
+    
+    # Calculate period timestamps safely
+    current_start = sub_data.get('current_start', 0)
+    current_end = sub_data.get('current_end', 0)
+    
+    period_start = datetime.fromtimestamp(current_start, tz=timezone.utc) if current_start else None
+    period_end = datetime.fromtimestamp(current_end, tz=timezone.utc) if current_end else None
+    
+    # Update subscription to COMPLETED (active)
+    result = update_subscription_status(
+        razorpay_subscription_id=sub_id,
+        status='completed',
+        current_period_start=period_start,
+        current_period_end=period_end,
+        event_created_at=meta['created_at'],
+        reset_usage=True
+    )
+    
+    if result.get('success'):
+        logger.info(f"[{request_id}] Subscription {sub_id} → COMPLETED (activated)")
+    
+    return WEBHOOK_OK
+
+
+def process_subscription_charged(meta: Dict) -> WebhookResult:
+    """
+    Handle subscription.charged event.
+    
+    CRITICAL: This is where duplicate payment inserts were happening.
+    Now uses upsert_payment_history() for idempotency.
+    """
+    request_id = getattr(g, 'request_id', 'unknown')
+    sub_data = meta['subscription_data']
+    payment_data = meta['payment_data']
+    sub_id = meta['subscription_id']
+    payment_id = meta['payment_id']
+    
+    if not sub_id:
+        logger.warning(f"[{request_id}] subscription.charged missing subscription_id")
+        return WEBHOOK_OK
+    
+    # Get subscription to find user_id
+    subscription = get_subscription_by_razorpay_id(sub_id)
+    
+    if not subscription:
+        logger.warning(f"[{request_id}] Subscription {sub_id} not found in database")
+        return WEBHOOK_OK  # Return 200, subscription might not be synced yet
+    
+    user_id = subscription.get('user_id')
+    subscription_uuid = subscription.get('id')
+    
+    # Calculate period timestamps
+    current_start = sub_data.get('current_start', 0)
+    current_end = sub_data.get('current_end', 0)
+    period_start = datetime.fromtimestamp(current_start, tz=timezone.utc) if current_start else None
+    period_end = datetime.fromtimestamp(current_end, tz=timezone.utc) if current_end else None
+    
+    # Update subscription status and reset usage
+    update_subscription_status(
+        razorpay_subscription_id=sub_id,
+        status='completed',
+        current_period_start=period_start,
+        current_period_end=period_end,
+        event_created_at=meta['created_at'],
+        reset_usage=True
+    )
+    
+    # Record payment with UPSERT (idempotent)
+    if payment_id and user_id:
+        payment_result = upsert_payment_history(
+            user_id=user_id,
+            razorpay_payment_id=payment_id,
+            amount=payment_data.get('amount', 0),
+            currency=payment_data.get('currency', 'INR'),
+            status='captured',
+            payment_method=payment_data.get('method'),
+            subscription_id=subscription_uuid
+        )
+        
+        if payment_result.get('success'):
+            if payment_result.get('is_new'):
+                logger.info(f"[{request_id}] Subscription {sub_id} charged, payment {payment_id} recorded")
+            else:
+                logger.info(f"[{request_id}] Subscription {sub_id} charged, payment {payment_id} already existed")
+        else:
+            logger.error(f"[{request_id}] Failed to record payment: {payment_result.get('error')}")
+    else:
+        logger.info(f"[{request_id}] Subscription {sub_id} charged (no payment_id in event)")
+    
+    return WEBHOOK_OK
+
+
+def process_subscription_cancelled(meta: Dict) -> WebhookResult:
+    """Handle subscription.cancelled event."""
+    request_id = getattr(g, 'request_id', 'unknown')
+    sub_id = meta['subscription_id']
+    
+    if not sub_id:
+        logger.warning(f"[{request_id}] subscription.cancelled missing subscription_id")
+        return WEBHOOK_OK
+    
+    update_subscription_status(
+        razorpay_subscription_id=sub_id,
+        status='cancelled',
+        event_created_at=meta['created_at']
+    )
+    
+    logger.info(f"[{request_id}] Subscription {sub_id} → CANCELLED")
+    return WEBHOOK_OK
+
+
+def process_subscription_halted(meta: Dict) -> WebhookResult:
+    """Handle subscription.halted event."""
+    request_id = getattr(g, 'request_id', 'unknown')
+    sub_id = meta['subscription_id']
+    
+    if not sub_id:
+        logger.warning(f"[{request_id}] subscription.halted missing subscription_id")
+        return WEBHOOK_OK
+    
+    update_subscription_status(
+        razorpay_subscription_id=sub_id,
+        status='halted',
+        event_created_at=meta['created_at']
+    )
+    
+    logger.info(f"[{request_id}] Subscription {sub_id} → HALTED")
+    return WEBHOOK_OK
+
+
+def process_subscription_paused(meta: Dict) -> WebhookResult:
+    """Handle subscription.paused event."""
+    request_id = getattr(g, 'request_id', 'unknown')
+    sub_id = meta['subscription_id']
+    
+    if not sub_id:
+        return WEBHOOK_OK
+    
+    update_subscription_status(
+        razorpay_subscription_id=sub_id,
+        status='paused',
+        event_created_at=meta['created_at']
+    )
+    
+    logger.info(f"[{request_id}] Subscription {sub_id} → PAUSED")
+    return WEBHOOK_OK
+
+
+def process_subscription_resumed(meta: Dict) -> WebhookResult:
+    """Handle subscription.resumed event."""
+    request_id = getattr(g, 'request_id', 'unknown')
+    sub_id = meta['subscription_id']
+    
+    if not sub_id:
+        return WEBHOOK_OK
+    
+    update_subscription_status(
+        razorpay_subscription_id=sub_id,
+        status='completed',
+        event_created_at=meta['created_at']
+    )
+    
+    logger.info(f"[{request_id}] Subscription {sub_id} → COMPLETED (resumed)")
+    return WEBHOOK_OK
+
+
+def process_payment_captured(meta: Dict) -> WebhookResult:
+    """
+    Handle payment.captured event.
+    
+    This event can arrive for the same payment_id as subscription.charged.
+    Using upsert ensures idempotency.
+    """
+    request_id = getattr(g, 'request_id', 'unknown')
+    payment_data = meta['payment_data']
+    payment_id = meta['payment_id']
+    
+    if not payment_id:
+        logger.warning(f"[{request_id}] payment.captured missing payment_id")
+        return WEBHOOK_OK
+    
+    # Try to find user from notes or subscription
+    notes = payment_data.get('notes', {})
+    user_id = notes.get('user_id')
+    
+    # If no user_id in notes, try to find via subscription
+    if not user_id:
+        # payment.captured may not have subscription context
+        # Log and return OK - the subscription.charged event will handle payment recording
+        logger.info(f"[{request_id}] payment.captured for {payment_id} - no user context, skipping")
+        return WEBHOOK_OK
+    
+    # Record payment with UPSERT
+    payment_result = upsert_payment_history(
+        user_id=user_id,
+        razorpay_payment_id=payment_id,
+        amount=payment_data.get('amount', 0),
+        currency=payment_data.get('currency', 'INR'),
+        status='captured',
+        payment_method=payment_data.get('method'),
+        razorpay_order_id=payment_data.get('order_id')
+    )
+    
+    if payment_result.get('is_new'):
+        logger.info(f"[{request_id}] Payment {payment_id} captured and recorded")
+    else:
+        logger.info(f"[{request_id}] Payment {payment_id} captured (already recorded)")
+    
+    return WEBHOOK_OK
+
+
+def process_payment_failed(meta: Dict) -> WebhookResult:
+    """Handle payment.failed event."""
+    request_id = getattr(g, 'request_id', 'unknown')
+    payment_data = meta['payment_data']
+    
+    error_code = payment_data.get('error_code', 'unknown')
+    error_desc = payment_data.get('error_description', 'No description')
+    payment_id = meta['payment_id'] or 'unknown'
+    
+    logger.warning(f"[{request_id}] Payment {payment_id} failed: {error_code} - {error_desc}")
+    
+    # Optionally record failed payment for audit
+    notes = payment_data.get('notes', {})
+    user_id = notes.get('user_id')
+    
+    if user_id and meta['payment_id']:
+        upsert_payment_history(
+            user_id=user_id,
+            razorpay_payment_id=meta['payment_id'],
+            amount=payment_data.get('amount', 0),
+            currency=payment_data.get('currency', 'INR'),
+            status='failed',
+            payment_method=payment_data.get('method'),
+            error_code=error_code,
+            error_description=error_desc
+        )
+    
+    return WEBHOOK_OK
+
+
+# Event handler routing table
+WEBHOOK_HANDLERS = {
+    'subscription.activated': process_subscription_activated,
+    'subscription.charged': process_subscription_charged,
+    'subscription.cancelled': process_subscription_cancelled,
+    'subscription.halted': process_subscription_halted,
+    'subscription.paused': process_subscription_paused,
+    'subscription.resumed': process_subscription_resumed,
+    'payment.captured': process_payment_captured,
+    'payment.failed': process_payment_failed,
+}
+
 
 @payments_bp.route('/payments/webhook', methods=['POST'])
 def razorpay_webhook():
     """
-    Handle Razorpay webhook events.
+    Handle Razorpay webhook events - Production Grade.
     
     CRITICAL PATTERNS:
-    1. Uses RAW body for signature verification
-    2. Returns 200 for duplicates (not 400)
-    3. Only this handler can set COMPLETED status
-    4. Event ordering safety (ignores outdated events)
+    1. Uses RAW body for signature verification (before any parsing)
+    2. ALWAYS returns 200 for duplicates (never 400/500)
+    3. Payment-level idempotency via UPSERT
+    4. Event-level deduplication via webhook_events table
+    5. Event ordering safety (ignores outdated events)
+    6. Structured error handling - only 400 for invalid signature/payload
+    
+    RESPONSE CODES:
+    - 200: Success, duplicate, or any business logic outcome
+    - 400: Invalid signature or malformed payload ONLY
+    - 503: Database unavailable (Razorpay will retry)
     """
-    # Generate request ID for webhook
+    # Generate request ID for tracing
     g.request_id = generate_request_id()
     request_id = g.request_id
     
+    webhook_start = datetime.now(timezone.utc)
+    
     try:
-        # Get RAW body for signature verification
+        # ============================================================
+        # STEP 1: Get RAW body BEFORE any parsing (critical for signature)
+        # ============================================================
         raw_body = request.get_data()
         signature = request.headers.get('X-Razorpay-Signature', '')
         
-        # Verify webhook signature
+        if not raw_body:
+            logger.warning(f"[{request_id}] Empty webhook body")
+            return WEBHOOK_INVALID_PAYLOAD.to_response()
+        
+        # ============================================================
+        # STEP 2: Verify webhook signature
+        # ============================================================
         if not verify_webhook_signature_raw(raw_body, signature):
             logger.warning(f"[{request_id}] Invalid webhook signature")
-            return jsonify({'error': 'Invalid signature'}), 400
+            return WEBHOOK_INVALID_SIGNATURE.to_response()
         
-        # Parse event
-        event = request.get_json()
-        event_id = event.get('id') or event.get('event_id') or str(uuid.uuid4())
-        event_type = event.get('event')
-        payload_data = event.get('payload', {})
+        # ============================================================
+        # STEP 3: Parse event payload
+        # ============================================================
+        event = parse_webhook_event(raw_body)
+        if not event:
+            logger.warning(f"[{request_id}] Failed to parse webhook JSON")
+            return WEBHOOK_INVALID_PAYLOAD.to_response()
         
-        # Get event created_at for ordering
-        event_created_at = event.get('created_at')
-        if event_created_at:
-            event_created_at = datetime.fromtimestamp(event_created_at, tz=timezone.utc)
-        else:
-            event_created_at = datetime.now(timezone.utc)
+        # Extract standardized metadata
+        meta = extract_event_metadata(event)
+        event_id = meta['event_id']
+        event_type = meta['event_type']
         
-        logger.info(f"[{request_id}] Received webhook: {event_type} (event_id: {event_id})")
+        logger.info(f"[{request_id}] Webhook received: {event_type} (event_id={event_id})")
         
-        # Check for duplicate - return 200 OK (not 400)
-        is_new = record_webhook_event(
+        # ============================================================
+        # STEP 4: Event-level deduplication
+        # ============================================================
+        is_new_event = record_webhook_event(
             event_id=event_id,
             event_type=event_type,
-            subscription_id=payload_data.get('subscription', {}).get('entity', {}).get('id'),
-            payment_id=payload_data.get('payment', {}).get('entity', {}).get('id'),
-            created_at=event_created_at,
-            result='processed',
-            raw_payload=event
+            subscription_id=meta['subscription_id'],
+            payment_id=meta['payment_id'],
+            created_at=meta['created_at'],
+            result='processing',
+            raw_payload=meta['raw_payload']
         )
         
-        if not is_new:
-            logger.info(f"[{request_id}] Duplicate webhook ignored: {event_id}")
-            return jsonify({'status': 'ignored_duplicate'}), 200
+        if not is_new_event:
+            logger.info(f"[{request_id}] Duplicate event ignored: {event_id}")
+            return WEBHOOK_DUPLICATE_EVENT.to_response()
         
+        # ============================================================
+        # STEP 5: Database availability check
+        # ============================================================
         if not SUPABASE_AVAILABLE:
-            logger.error(f"[{request_id}] Database not available for webhook processing")
-            return jsonify({'error': 'Database unavailable'}), 503
+            logger.error(f"[{request_id}] Database unavailable for webhook processing")
+            return WEBHOOK_DB_UNAVAILABLE.to_response()
         
-        supabase = get_supabase_client()
+        # ============================================================
+        # STEP 6: Route to specific event handler
+        # ============================================================
+        handler = WEBHOOK_HANDLERS.get(event_type)
         
-        # Handle subscription events
-        if event_type == 'subscription.activated':
-            subscription = payload_data.get('subscription', {}).get('entity', {})
-            sub_id = subscription.get('id')
+        if handler:
+            result = handler(meta)
             
-            # Get current status for ordering check
-            current = supabase.table('subscriptions').select('status, last_webhook_event_at').eq(
-                'razorpay_subscription_id', sub_id
-            ).limit(1).execute()
+            # Log processing time
+            duration = (datetime.now(timezone.utc) - webhook_start).total_seconds() * 1000
+            logger.info(f"[{request_id}] Webhook {event_type} processed in {duration:.0f}ms")
             
-            if current.data:
-                current_status = current.data[0]['status']
-                
-                # Event ordering safety
-                if should_ignore_webhook_event(current_status, event_type):
-                    logger.info(f"[{request_id}] Ignoring {event_type} - subscription already {current_status}")
-                    return jsonify({'status': 'ignored_ordering'}), 200
-            
-            # Set to COMPLETED (active) - ONLY webhooks can do this
-            supabase.table('subscriptions').update({
-                'status': 'completed',  # = active
-                'current_period_start': datetime.fromtimestamp(
-                    subscription.get('current_start', 0), tz=timezone.utc
-                ).isoformat(),
-                'current_period_end': datetime.fromtimestamp(
-                    subscription.get('current_end', 0), tz=timezone.utc
-                ).isoformat(),
-                'last_webhook_event_at': event_created_at.isoformat(),
-                'ai_responses_used': 0  # Reset on activation
-            }).eq('razorpay_subscription_id', sub_id).execute()
-            
-            logger.info(f"[{request_id}] Subscription {sub_id} → COMPLETED")
-            
-        elif event_type == 'subscription.charged':
-            subscription = payload_data.get('subscription', {}).get('entity', {})
-            payment = payload_data.get('payment', {}).get('entity', {})
-            sub_id = subscription.get('id')
-            
-            # Reset usage for new billing period
-            supabase.table('subscriptions').update({
-                'status': 'completed',
-                'ai_responses_used': 0,
-                'current_period_start': datetime.fromtimestamp(
-                    subscription.get('current_start', 0), tz=timezone.utc
-                ).isoformat(),
-                'current_period_end': datetime.fromtimestamp(
-                    subscription.get('current_end', 0), tz=timezone.utc
-                ).isoformat(),
-                'last_webhook_event_at': event_created_at.isoformat()
-            }).eq('razorpay_subscription_id', sub_id).execute()
-            
-            # Record recurring payment
-            user_result = supabase.table('subscriptions').select('user_id, id').eq(
-                'razorpay_subscription_id', sub_id
-            ).limit(1).execute()
-            
-            if user_result.data:
-                supabase.table('payment_history').insert({
-                    'subscription_id': user_result.data[0]['id'],
-                    'user_id': user_result.data[0]['user_id'],
-                    'razorpay_payment_id': payment.get('id'),
-                    'amount': payment.get('amount', 0),
-                    'currency': payment.get('currency', 'INR'),
-                    'status': 'captured',
-                    'payment_method': payment.get('method')
-                }).execute()
-            
-            logger.info(f"[{request_id}] Subscription {sub_id} charged, usage reset")
-            
-        elif event_type == 'subscription.cancelled':
-            subscription = payload_data.get('subscription', {}).get('entity', {})
-            sub_id = subscription.get('id')
-            
-            supabase.table('subscriptions').update({
-                'status': 'cancelled',
-                'last_webhook_event_at': event_created_at.isoformat()
-            }).eq('razorpay_subscription_id', sub_id).execute()
-            
-            logger.info(f"[{request_id}] Subscription {sub_id} cancelled")
-            
-        elif event_type == 'subscription.halted':
-            subscription = payload_data.get('subscription', {}).get('entity', {})
-            sub_id = subscription.get('id')
-            
-            supabase.table('subscriptions').update({
-                'status': 'halted',
-                'last_webhook_event_at': event_created_at.isoformat()
-            }).eq('razorpay_subscription_id', sub_id).execute()
-            
-            logger.info(f"[{request_id}] Subscription {sub_id} halted")
-            
-        elif event_type == 'payment.failed':
-            payment = payload_data.get('payment', {}).get('entity', {})
-            error_code = payment.get('error_code', '')
-            error_desc = payment.get('error_description', '')
-            
-            logger.warning(f"[{request_id}] Payment failed: {error_code} - {error_desc}")
-        
-        return jsonify({'status': 'ok'}), 200
+            return result.to_response()
+        else:
+            # Unknown event type - log and return 200 (don't make Razorpay retry)
+            logger.info(f"[{request_id}] Unhandled webhook event type: {event_type}")
+            return WEBHOOK_OK.to_response()
         
     except Exception as e:
-        logger.exception(f"[{request_id}] Webhook processing error: {e}")
-        return jsonify({'error': 'Webhook processing failed'}), 500
+        # ============================================================
+        # CRITICAL: Determine if this is a retriable error
+        # ============================================================
+        error_str = str(e).lower()
+        request_id = getattr(g, 'request_id', 'unknown')
+        
+        # Check if this is a duplicate key error (should return 200)
+        if is_duplicate_error(e):
+            logger.info(f"[{request_id}] Webhook duplicate detected in exception handler: {e}")
+            return WEBHOOK_DUPLICATE_PAYMENT.to_response()
+        
+        # Check if this is a connection/timeout error (return 503 for retry)
+        is_transient = any(x in error_str for x in [
+            'connection', 'timeout', 'temporarily unavailable', 'reset by peer'
+        ])
+        
+        if is_transient:
+            logger.error(f"[{request_id}] Transient webhook error (will retry): {e}")
+            return jsonify({
+                'status': 'error',
+                'message': 'Temporary error, please retry'
+            }), 503
+        
+        # For all other errors, log but return 200 to prevent infinite retries
+        # The raw_payload is already stored in webhook_events for manual review
+        logger.exception(f"[{request_id}] Webhook processing error (non-retriable): {e}")
+        return jsonify({
+            'status': 'error_logged',
+            'message': 'Error logged for review'
+        }), 200
 
 
 # =============================================================================
