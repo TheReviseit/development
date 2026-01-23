@@ -595,16 +595,17 @@ def verify_subscription():
             tz=timezone.utc
         ).isoformat()
         
-        # Update subscription to PROCESSING (NOT COMPLETED)
-        # Only webhooks can set COMPLETED
+        # Update subscription to COMPLETED immediately (don't wait for webhook)
+        # Signature verification already confirms payment is valid
         if SUPABASE_AVAILABLE:
             supabase = get_supabase_client()
             
-            # Update subscription status to PROCESSING
+            # Set to COMPLETED immediately - payment signature is verified
             supabase.table('subscriptions').update({
-                'status': 'processing',
+                'status': 'completed',  # Mark as active immediately
                 'current_period_start': current_start,
-                'current_period_end': current_end
+                'current_period_end': current_end,
+                'ai_responses_used': 0  # Reset usage on activation
             }).eq('razorpay_subscription_id', subscription_id).execute()
             
             # Record payment (use upsert to handle retries/duplicates)
@@ -630,16 +631,16 @@ def verify_subscription():
             
             # Update payment attempt
             supabase.table('payment_attempts').update({
-                'status': 'verification_completed',
+                'status': 'completed',  # Mark as completed, not just verification_completed
                 'razorpay_payment_id': payment_id
             }).eq('razorpay_subscription_id', subscription_id).eq('user_id', user_id).execute()
         
-        logger.info(f"[{request_id}] Verified subscription {subscription_id} → PROCESSING")
+        logger.info(f"[{request_id}] Subscription {subscription_id} → COMPLETED (immediate activation)")
         
         return success_response({
-            'message': 'Payment verified, awaiting webhook confirmation',
+            'message': 'Payment verified and subscription activated',
             'subscription_id': subscription_id,
-            'status': 'processing'  # NOT completed/active
+            'status': 'active'  # Return 'active' to frontend
         })
         
     except Exception as e:
@@ -650,13 +651,20 @@ def verify_subscription():
 @payments_bp.route('/subscriptions/status', methods=['GET'])
 @require_auth
 def get_subscription_status():
-    """Get current user's subscription status."""
+    """Get current user's subscription status (with caching)."""
     request_id = g.request_id
     user_id = g.user_id
     
     try:
         if not SUPABASE_AVAILABLE:
             return error_response('Database not available', 'DB_UNAVAILABLE', 503)
+        
+        # Check cache first (10 second TTL to reduce database load from polling)
+        cache_key = f"subscription_status:{user_id}"
+        if cache_manager:
+            cached_response = cache_manager.get(cache_key)
+            if cached_response:
+                return jsonify(cached_response), 200
         
         supabase = get_supabase_client()
         
@@ -678,7 +686,9 @@ def get_subscription_status():
         if status == 'completed':
             status = 'active'
         
-        return success_response({
+        response_data = {
+            'success': True,
+            'request_id': request_id,
             'has_subscription': True,
             'subscription': {
                 'id': subscription['id'],
@@ -690,7 +700,13 @@ def get_subscription_status():
                 'current_period_start': subscription['current_period_start'],
                 'current_period_end': subscription['current_period_end']
             }
-        })
+        }
+        
+        # Cache for 10 seconds to reduce database load
+        if cache_manager:
+            cache_manager.set(cache_key, response_data, ttl=10)
+        
+        return jsonify(response_data), 200
         
     except Exception as e:
         logger.exception(f"[{request_id}] Error fetching subscription status: {e}")
