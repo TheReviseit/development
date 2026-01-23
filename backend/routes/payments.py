@@ -106,6 +106,15 @@ except ImportError:
     get_supabase_client = None
     get_user_id_from_firebase_uid = None
 
+# Import cache manager (optional)
+try:
+    from cache import get_cache_manager
+    cache_manager = get_cache_manager()
+except ImportError:
+    cache_manager = None
+except Exception:
+    cache_manager = None
+
 # Plan configuration with plan_id for stable idempotency
 PLAN_CONFIG = {
     'starter': {
@@ -873,9 +882,11 @@ def verify_subscription():
             else:
                 logger.warning(f"[{request_id}] Payment recording issue: {payment_result.get('error')}")
             
-            # Update payment attempt
+            # Update payment attempt status
+            # Note: payment_attempts.status CHECK constraint allows:
+            # 'initiated', 'checkout_opened', 'payment_completed', 'verification_started', 'verification_completed', 'failed'
             supabase.table('payment_attempts').update({
-                'status': 'completed',  # Mark as completed, not just verification_completed
+                'status': 'verification_completed',
                 'razorpay_payment_id': payment_id
             }).eq('razorpay_subscription_id', subscription_id).eq('user_id', user_id).execute()
         
