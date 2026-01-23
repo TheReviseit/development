@@ -607,18 +607,26 @@ def verify_subscription():
                 'current_period_end': current_end
             }).eq('razorpay_subscription_id', subscription_id).execute()
             
-            # Record payment
+            # Record payment (use upsert to handle retries/duplicates)
             payment = razorpay_client.payment.fetch(payment_id)
-            supabase.table('payment_history').insert({
-                'user_id': user_id,
-                'razorpay_payment_id': payment_id,
-                'razorpay_order_id': payment.get('order_id'),
-                'razorpay_signature': signature,
-                'amount': payment.get('amount', 0),
-                'currency': payment.get('currency', 'INR'),
-                'status': 'captured',
-                'payment_method': payment.get('method')
-            }).execute()
+            try:
+                supabase.table('payment_history').insert({
+                    'user_id': user_id,
+                    'razorpay_payment_id': payment_id,
+                    'razorpay_order_id': payment.get('order_id'),
+                    'razorpay_signature': signature,
+                    'amount': payment.get('amount', 0),
+                    'currency': payment.get('currency', 'INR'),
+                    'status': 'captured',
+                    'payment_method': payment.get('method')
+                }).execute()
+            except Exception as payment_error:
+                # If duplicate payment_id (user retried verification), it's fine - payment already recorded
+                if 'duplicate key' in str(payment_error).lower() or '23505' in str(payment_error):
+                    logger.info(f"[{request_id}] Payment {payment_id} already recorded (retry detected)")
+                else:
+                    # Re-raise other errors
+                    raise payment_error
             
             # Update payment attempt
             supabase.table('payment_attempts').update({
