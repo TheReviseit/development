@@ -12,9 +12,11 @@ from typing import Optional, Dict, Any
 try:
     import firebase_admin
     from firebase_admin import credentials, firestore
+    from google.cloud.firestore_v1.base_query import FieldFilter
     FIREBASE_AVAILABLE = True
 except ImportError:
     FIREBASE_AVAILABLE = False
+    FieldFilter = None
     print("⚠️ firebase-admin not installed. Run: pip install firebase-admin")
 
 # Singleton for Firebase app
@@ -108,11 +110,35 @@ def get_business_data_from_firestore(user_id: str) -> Optional[Dict[str, Any]]:
         return None
     
     try:
-        doc_ref = db.collection('businesses').document(user_id)
-        print(f"📍 Document path: businesses/{user_id}")
-        doc = doc_ref.get()
+        # Debug: Print project info
+        try:
+            app = firebase_admin.get_app()
+            project_id = app.project_id
+            print(f"🔧 Firebase Project ID: {project_id}")
+            print(f"🔧 Firebase App Name: {app.name}")
+        except Exception as e:
+            print(f"⚠️ Could not get project ID: {e}")
         
-        if doc.exists:
+        # Try to find document by userId field first (in case document ID != userId)
+        # Query by userId field - using filter keyword to avoid deprecation warning
+        query = db.collection('businesses').where(filter=FieldFilter('userId', '==', user_id)).limit(1)
+        docs = list(query.stream())
+        
+        doc = None
+        if docs:
+            # Found by userId field
+            doc = docs[0]
+            print(f"✅ Found document by userId field")
+            print(f"📍 Document ID: {doc.id}, userId field: {user_id}")
+        else:
+            # Fallback: Try document ID directly
+            print(f"⚠️ No document found with userId={user_id}, trying document ID...")
+            doc_ref = db.collection('businesses').document(user_id)
+            doc = doc_ref.get()
+            print(f"📍 Document path: businesses/{user_id}")
+            print(f"📄 Document exists: {doc.exists}")
+        
+        if doc and doc.exists:
             data = doc.to_dict()
             products = data.get('products', [])
             business_name = data.get('businessName', 'Unknown')

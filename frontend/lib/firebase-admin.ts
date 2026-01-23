@@ -81,3 +81,64 @@ export async function getFirebaseUser(uid: string) {
     };
   }
 }
+
+/**
+ * Safely verify session cookie with proper error handling
+ * Handles common Firebase Auth errors like user-not-found, session-expired, etc.
+ *
+ * @param sessionCookie - The session cookie value
+ * @param checkRevoked - Whether to check if the session was revoked (default: true)
+ * @returns Result object with success status and either decoded claims or error info
+ */
+export async function verifySessionCookieSafe(
+  sessionCookie: string,
+  checkRevoked: boolean = true
+): Promise<{
+  success: boolean;
+  data?: admin.auth.DecodedIdToken;
+  error?: string;
+  errorCode?: string;
+  shouldClearSession?: boolean;
+}> {
+  try {
+    const decodedClaims = await adminAuth.verifySessionCookie(
+      sessionCookie,
+      checkRevoked
+    );
+    return {
+      success: true,
+      data: decodedClaims,
+    };
+  } catch (error: any) {
+    const errorCode =
+      error?.errorInfo?.code || error?.code || "auth/unknown-error";
+    const errorMessage = error?.message || "Session verification failed";
+
+    // Determine if we should clear the session cookie
+    const sessionInvalidErrors = [
+      "auth/user-not-found",
+      "auth/user-disabled",
+      "auth/session-cookie-expired",
+      "auth/session-cookie-revoked",
+      "auth/invalid-session-cookie",
+      "auth/argument-error",
+    ];
+
+    const shouldClearSession =
+      sessionInvalidErrors.includes(errorCode) ||
+      errorMessage.includes("no user record") ||
+      errorMessage.includes("user record corresponding");
+
+    // Only log non-routine errors
+    if (!shouldClearSession) {
+      console.error("Session verification failed:", errorCode, errorMessage);
+    }
+
+    return {
+      success: false,
+      error: errorMessage,
+      errorCode: errorCode,
+      shouldClearSession: shouldClearSession,
+    };
+  }
+}

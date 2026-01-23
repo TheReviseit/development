@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { cookies } from "next/headers";
-import { adminAuth } from "@/lib/firebase-admin";
+import { verifySessionCookieSafe } from "@/lib/firebase-admin";
 
 // Initialize Supabase client
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
@@ -126,11 +126,12 @@ async function getUserId(request: NextRequest): Promise<string | null> {
       return null;
     }
 
-    const decodedToken = await adminAuth.verifySessionCookie(
-      sessionCookie,
-      true
-    );
-    return decodedToken.uid;
+    const result = await verifySessionCookieSafe(sessionCookie, true);
+    if (!result.success) {
+      // Don't log routine session expiry/invalid errors
+      return null;
+    }
+    return result.data!.uid;
   } catch (error) {
     console.error("Error verifying session:", error);
     return null;

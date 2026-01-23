@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
-import { adminAuth } from "@/lib/firebase-admin";
+import { verifySessionCookieSafe } from "@/lib/firebase-admin";
 import {
   getUserByFirebaseUID,
   getSubscriptionByUserId,
@@ -16,12 +16,22 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    // Verify the session cookie
-    const decodedClaims = await adminAuth.verifySessionCookie(
-      sessionCookie,
-      true,
-    );
-    const firebaseUID = decodedClaims.uid;
+    // Verify the session cookie with safe error handling
+    const authResult = await verifySessionCookieSafe(sessionCookie, true);
+
+    if (!authResult.success) {
+      const response = NextResponse.json(
+        { error: authResult.error || "Unauthorized" },
+        { status: 401 }
+      );
+      // Clear invalid session cookie
+      if (authResult.shouldClearSession) {
+        response.cookies.delete("session");
+      }
+      return response;
+    }
+
+    const firebaseUID = authResult.data!.uid;
 
     const user = await getUserByFirebaseUID(firebaseUID);
 

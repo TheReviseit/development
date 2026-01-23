@@ -334,6 +334,131 @@ def get_business_id_for_user(user_id: str) -> Optional[str]:
     return None
 
 
+def get_ai_capabilities_from_supabase(firebase_uid: str) -> Optional[Dict[str, Any]]:
+    """
+    Load AI capabilities/settings from Supabase ai_capabilities table.
+    
+    This is used when Firestore business data is not available.
+    The ai_capabilities table stores settings like:
+    - appointment_booking_enabled
+    - appointment_fields
+    - appointment_business_hours
+    - order_booking_enabled
+    - order_fields
+    - products_enabled
+    
+    Args:
+        firebase_uid: The Firebase UID (same as used in frontend)
+        
+    Returns:
+        AI capabilities dict or None if not found
+    """
+    client = get_supabase_client()
+    if not client:
+        return None
+    
+    try:
+        result = client.table('ai_capabilities').select('*').eq(
+            'user_id', firebase_uid
+        ).single().execute()
+        
+        if result.data:
+            print(f"✅ Loaded AI capabilities from Supabase for user: {firebase_uid[:15]}...")
+            return result.data
+        else:
+            print(f"⚠️ No AI capabilities found in Supabase for user: {firebase_uid[:15]}...")
+    except Exception as e:
+        # PGRST116 = no rows returned (user doesn't have settings yet)
+        if 'PGRST116' not in str(e):
+            print(f"⚠️ Could not load AI capabilities: {e}")
+    
+    return None
+
+
+def get_business_data_from_supabase(firebase_uid: str, credentials: Dict[str, Any] = None) -> Optional[Dict[str, Any]]:
+    """
+    Build business data from Supabase sources when Firestore is not available.
+    
+    Combines:
+    1. AI capabilities from ai_capabilities table
+    2. Business info from connected_business_managers
+    3. Credentials info (if provided)
+    
+    Args:
+        firebase_uid: The Firebase UID
+        credentials: Optional WhatsApp credentials dict
+        
+    Returns:
+        Business data dict compatible with AI Brain format
+    """
+    # Load AI capabilities
+    ai_caps = get_ai_capabilities_from_supabase(firebase_uid)
+    
+    # Get business info from connected_business_managers
+    client = get_supabase_client()
+    business_info = None
+    
+    if client:
+        try:
+            # Get user_id from firebase_uid first
+            user_id = get_user_id_from_firebase_uid(firebase_uid)
+            if user_id:
+                result = client.table('connected_business_managers').select(
+                    'id, business_name, business_email'
+                ).eq('user_id', user_id).eq('is_active', True).limit(1).execute()
+                
+                if result.data:
+                    business_info = result.data[0]
+        except Exception as e:
+            print(f"⚠️ Could not load business info from Supabase: {e}")
+    
+    # Determine business name with priority:
+    # 1. Business info from connected_business_managers
+    # 2. Credentials
+    # 3. Default
+    business_name = 'Our Business'
+    if business_info and business_info.get('business_name'):
+        business_name = business_info['business_name']
+    elif credentials and credentials.get('business_name'):
+        business_name = credentials['business_name']
+    
+    # Build business data
+    business_data = {
+        'business_id': firebase_uid,
+        'business_name': business_name,
+        'industry': 'other',
+        'description': '',
+        'contact': {
+            'phone': credentials.get('display_phone_number', '') if credentials else '',
+            'email': business_info.get('business_email', '') if business_info else '',
+        },
+        'location': {},
+        'timings': {},
+        'products_services': [],
+        'policies': {},
+        'faqs': [],
+        'social_media': {},
+        'categories': [],
+    }
+    
+    # Merge AI capabilities if available
+    if ai_caps:
+        business_data['ai_capabilities'] = {
+            'appointment_booking_enabled': ai_caps.get('appointment_booking_enabled', False),
+            'appointment_fields': ai_caps.get('appointment_fields', []),
+            'appointment_business_hours': ai_caps.get('appointment_business_hours', {}),
+            'appointment_minimal_mode': ai_caps.get('appointment_minimal_mode', False),
+            'appointment_services': ai_caps.get('appointment_services', []),
+            'order_booking_enabled': ai_caps.get('order_booking_enabled', False),
+            'order_fields': ai_caps.get('order_fields', []),
+            'order_minimal_mode': ai_caps.get('order_minimal_mode', False),
+            'products_enabled': ai_caps.get('products_enabled', False),
+        }
+        print(f"📋 AI Capabilities: appointment={ai_caps.get('appointment_booking_enabled')}, order={ai_caps.get('order_booking_enabled')}")
+    
+    return business_data
+
+
 def get_or_create_conversation(
     business_id: str,
     customer_phone: str,
@@ -720,6 +845,7 @@ def update_message_status(
         print(f"⚠️ Could not update message status: {e}")
         return False
 
+
 def get_user_push_tokens(user_id: str) -> list[str]:
     """
     Fetch all active FCM push tokens for a user.
@@ -777,3 +903,163 @@ def delete_push_token(token: str) -> bool:
         print(f"⚠️ Error deleting push token: {e}")
         return False
 
+
+# =============================================================================
+# Businesses Table Functions (New consolidated storage)
+# =============================================================================
+
+def get_business_from_supabase(firebase_uid: str) -> Optional[Dict[str, Any]]:
+    """
+    Get business data from the new consolidated businesses table.
+    
+    Args:
+        firebase_uid: The Firebase UID
+        
+    Returns:
+        Business data dict or None
+    """
+    client = get_supabase_client()
+    if not client:
+        return None
+    
+    try:
+        result = client.table('businesses').select('*').eq(
+            'user_id', firebase_uid
+        ).single().execute()
+        
+        if result.data:
+            print(f"✅ Loaded business from Supabase businesses table: {result.data.get('business_name', 'Unknown')}")
+            return convert_supabase_business_to_ai_format(result.data)
+    except Exception as e:
+        # PGRST116 = no rows returned (user doesn't have data yet)
+        if 'PGRST116' not in str(e):
+            print(f"⚠️ Error loading business from Supabase: {e}")
+    
+    return None
+
+
+def save_business_to_supabase(firebase_uid: str, business_data: Dict[str, Any]) -> bool:
+    """
+    Save/update business data in the Supabase businesses table.
+    
+    Args:
+        firebase_uid: The Firebase UID
+        business_data: The business data to save (frontend format)
+        
+    Returns:
+        True if saved successfully
+    """
+    client = get_supabase_client()
+    if not client:
+        return False
+    
+    try:
+        # Convert from frontend camelCase to database snake_case
+        db_data = {
+            'user_id': firebase_uid,
+            'business_name': business_data.get('businessName', business_data.get('business_name', '')),
+            'industry': business_data.get('industry', ''),
+            'custom_industry': business_data.get('customIndustry', business_data.get('custom_industry', '')),
+            'description': business_data.get('description', ''),
+            'contact': business_data.get('contact', {}),
+            'social_media': business_data.get('socialMedia', business_data.get('social_media', {})),
+            'location': business_data.get('location', {}),
+            'timings': business_data.get('timings', {}),
+            'products': business_data.get('products', []),
+            'product_categories': business_data.get('productCategories', business_data.get('product_categories', [])),
+            'policies': business_data.get('policies', {}),
+            'ecommerce_policies': business_data.get('ecommercePolicies', business_data.get('ecommerce_policies', {})),
+            'faqs': business_data.get('faqs', []),
+            'brand_voice': business_data.get('brandVoice', business_data.get('brand_voice', {})),
+        }
+        
+        # Upsert - insert or update
+        result = client.table('businesses').upsert(
+            db_data,
+            on_conflict='user_id'
+        ).execute()
+        
+        if result.data:
+            print(f"💾 Saved business data to Supabase for user: {firebase_uid[:15]}...")
+            return True
+        return False
+        
+    except Exception as e:
+        print(f"❌ Error saving business to Supabase: {e}")
+        return False
+
+
+def convert_supabase_business_to_ai_format(data: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Convert Supabase businesses table format to AI Brain expected format.
+    
+    Args:
+        data: Database row from businesses table
+        
+    Returns:
+        Business data dict in AI Brain format
+    """
+    products = data.get('products', [])
+    
+    # Convert products to AI format
+    converted_products = []
+    for p in products:
+        if not isinstance(p, dict):
+            continue
+        converted_products.append({
+            'id': p.get('id', ''),
+            'sku': p.get('sku', ''),
+            'name': p.get('name', ''),
+            'category': p.get('category', ''),
+            'description': p.get('description', ''),
+            'price': p.get('price', 0),
+            'price_unit': p.get('priceUnit', p.get('price_unit', 'INR')),
+            'duration': p.get('duration', ''),
+            'available': p.get('available', True),
+            'sizes': p.get('sizes', []),
+            'colors': p.get('colors', []),
+            'variants': p.get('variants', []),
+            'brand': p.get('brand', ''),
+            'materials': p.get('materials', []),
+            'imageUrl': p.get('imageUrl', p.get('image_url', '')),
+        })
+    
+    # Convert timings
+    timings = data.get('timings', {})
+    converted_timings = {}
+    for day, timing in timings.items():
+        if isinstance(timing, dict):
+            converted_timings[day] = {
+                'open': timing.get('open', '09:00'),
+                'close': timing.get('close', '18:00'),
+                'is_closed': timing.get('isClosed', timing.get('is_closed', False)),
+            }
+    
+    location = data.get('location', {})
+    social_media = data.get('social_media', {})
+    
+    return {
+        'business_id': data.get('user_id', ''),
+        'business_name': data.get('business_name', 'Our Business'),
+        'industry': data.get('industry', 'other'),
+        'description': data.get('description', ''),
+        'contact': data.get('contact', {}),
+        'location': {
+            'address': location.get('address', ''),
+            'city': location.get('city', ''),
+            'state': location.get('state', ''),
+            'pincode': location.get('pincode', ''),
+            'google_maps_link': location.get('googleMapsLink', location.get('google_maps_link', '')),
+        },
+        'timings': converted_timings,
+        'products_services': converted_products,
+        'policies': data.get('policies', {}),
+        'faqs': data.get('faqs', []),
+        'social_media': {
+            'instagram': social_media.get('instagram', ''),
+            'facebook': social_media.get('facebook', ''),
+            'twitter': social_media.get('twitter', ''),
+            'youtube': social_media.get('youtube', ''),
+        },
+        'categories': data.get('product_categories', []),
+    }

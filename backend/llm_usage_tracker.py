@@ -5,12 +5,26 @@ Manages per-business token budgets with O(1) lookups.
 
 import time
 import logging
+import re
 from typing import Dict, Any, Optional, List
 from datetime import datetime, timedelta
 from dataclasses import dataclass, field
 from threading import Lock
 
 logger = logging.getLogger('reviseit.usage')
+
+# UUID validation regex
+UUID_REGEX = re.compile(
+    r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$',
+    re.IGNORECASE
+)
+
+
+def is_valid_uuid(value: str) -> bool:
+    """Check if a string is a valid UUID format."""
+    if not value:
+        return False
+    return bool(UUID_REGEX.match(value))
 
 
 @dataclass
@@ -291,6 +305,12 @@ class LLMUsageTracker:
         if not self.client:
             return None
         
+        # Skip DB operations if business_id is not a valid UUID
+        # (e.g., Firebase UIDs are not valid PostgreSQL UUIDs)
+        if not is_valid_uuid(business_id):
+            logger.debug(f"Skipping DB load for non-UUID business_id: {business_id[:15]}...")
+            return None
+        
         try:
             # Use limit(1) instead of maybe_single() for safer handling
             result = self.client.table('business_llm_usage').select('*').eq(
@@ -317,6 +337,13 @@ class LLMUsageTracker:
     def _sync_to_db(self, business_id: str, model_name: str = None):
         """Sync usage to Supabase (background, non-blocking)."""
         if not self.client or business_id not in self._cache:
+            return
+        
+        # Skip DB operations if business_id is not a valid UUID
+        # (e.g., Firebase UIDs are not valid PostgreSQL UUIDs)
+        if not is_valid_uuid(business_id):
+            logger.debug(f"Skipping DB sync for non-UUID business_id: {business_id[:15]}...")
+            self._dirty.discard(business_id)
             return
         
         usage = self._cache[business_id]

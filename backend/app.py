@@ -86,6 +86,9 @@ try:
         get_business_data_for_user,
         get_firebase_uid_from_user_id,
         get_business_id_for_user,
+        get_business_data_from_supabase,
+        get_ai_capabilities_from_supabase,
+        get_business_from_supabase,  # New consolidated business data
         store_message,
         update_message_status,
         get_or_create_conversation
@@ -97,6 +100,9 @@ except ImportError as e:
     get_credentials_by_phone_number_id = None
     get_business_data_for_user = None
     get_firebase_uid_from_user_id = None
+    get_business_data_from_supabase = None
+    get_ai_capabilities_from_supabase = None
+    get_business_from_supabase = None
     store_message = None
     update_message_status = None
     get_or_create_conversation = None
@@ -535,8 +541,16 @@ def webhook():
                         firebase_uid = get_firebase_uid_from_user_id(user_id)
                         logger.info(f"🔍 Retrieved Firebase UID: {firebase_uid[:15] if firebase_uid else 'None'}... for user {user_id[:8]}...")
                     
-                    if firebase_uid and FIREBASE_AVAILABLE and get_business_data_from_firestore:
-                        logger.info(f"🔍 Attempting to load business data from Firestore for UID: {firebase_uid[:15]}...")
+                    # PRIORITY 1: Try new Supabase businesses table first (most cost-effective)
+                    if firebase_uid and SUPABASE_AVAILABLE and get_business_from_supabase:
+                        logger.info(f"🔍 Attempting to load business data from Supabase businesses table...")
+                        business_data = get_business_from_supabase(firebase_uid)
+                        if business_data:
+                            logger.info(f"✅ Loaded business data from Supabase businesses table: {business_data.get('business_name', 'Unknown')}")
+                    
+                    # PRIORITY 2: Fall back to Firestore (legacy)
+                    if not business_data and firebase_uid and FIREBASE_AVAILABLE and get_business_data_from_firestore:
+                        logger.info(f"🔍 Falling back to Firestore for UID: {firebase_uid[:15]}...")
                         business_data = get_business_data_from_firestore(firebase_uid)
                         
                         if business_data:
@@ -544,20 +558,26 @@ def webhook():
                         else:
                             logger.warning(f"⚠️ No business data found in Firestore for Firebase UID: {firebase_uid[:15]}...")
                     
-                    # Fallback logic: Use credentials business name if Firestore failed
+                    # PRIORITY 3: Use Supabase AI capabilities + credentials if both above failed
                     if not business_data:
-                        logger.warning(f"⚠️ No AI Settings found for Firebase UID: {firebase_uid[:15] if firebase_uid else 'None'}...")
-                        logger.info(f"🔄 Using fallback: Supabase credentials business name")
+                        logger.info(f"🔄 Attempting to load from Supabase ai_capabilities table...")
                         
-                        # Create minimal business data from credentials
-                        business_data = {
-                            'business_id': firebase_uid or user_id,
-                            'business_name': credentials.get('business_name', 'Our Business'),
-                            'industry': 'other',
-                            'products_services': [],
-                            'contact': {'phone': credentials.get('display_phone_number', '')},
-                        }
-                        logger.info(f"📝 Created fallback business data with name: {business_data['business_name']}")
+                        # Try to load from Supabase (ai_capabilities + business info)
+                        if SUPABASE_AVAILABLE and get_business_data_from_supabase and firebase_uid:
+                            business_data = get_business_data_from_supabase(firebase_uid, credentials)
+                            if business_data:
+                                logger.info(f"✅ Loaded business data from Supabase ai_capabilities: {business_data.get('business_name', 'Unknown')}")
+                        
+                        # Final fallback: minimal data from credentials
+                        if not business_data:
+                            business_data = {
+                                'business_id': firebase_uid or user_id,
+                                'business_name': credentials.get('business_name', 'Our Business'),
+                                'industry': 'other',
+                                'products_services': [],
+                                'contact': {'phone': credentials.get('display_phone_number', '')},
+                            }
+                            logger.info(f"📝 Created minimal fallback business data with name: {business_data['business_name']}")
                     
                     # Ensure business_name is always set from credentials if missing
                     if 'business_name' not in business_data or not business_data['business_name'] or business_data['business_name'] == 'Our Business':
@@ -1089,4 +1109,10 @@ if __name__ == '__main__':
     print(f'📊 Metrics: {"Enabled ✅" if METRICS_AVAILABLE else "Disabled ⚠️"}')
     print(f'🛡️ Resilience: {"Enabled ✅" if RESILIENCE_AVAILABLE else "Disabled ⚠️"}\n')
     
-    app.run(host='0.0.0.0', port=port, debug=debug)
+    # On Windows, use_reloader=False to prevent threading/socket issues
+    # The reloader spawns a child process that can cause socket conflicts
+    import platform
+    use_reloader = (platform.system() != 'Windows') and debug
+    
+    app.run(host='0.0.0.0', port=port, debug=debug, use_reloader=use_reloader)
+
