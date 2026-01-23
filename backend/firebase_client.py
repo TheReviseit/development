@@ -104,18 +104,22 @@ def get_business_data_from_firestore(user_id: str) -> Optional[Dict[str, Any]]:
     print(f"🔍 Looking up Firestore: businesses/{user_id}")
     db = get_firestore_client()
     if not db:
+        print("❌ Firestore client not available")
         return None
     
     try:
         doc_ref = db.collection('businesses').document(user_id)
+        print(f"📍 Document path: businesses/{user_id}")
         doc = doc_ref.get()
         
         if doc.exists:
             data = doc.to_dict()
             products = data.get('products', [])
+            business_name = data.get('businessName', 'Unknown')
             print(f"📊 Loaded business data from Firestore for user: {user_id}")
-            print(f"   Business: {data.get('businessName', 'Unknown')}")
+            print(f"   Business: {business_name}")
             print(f"   Products: {len(products)} items")
+            print(f"   Fields present: {', '.join(data.keys())}")
             
             # Debug: Log image URLs from raw Firestore data
             for i, p in enumerate(products):
@@ -125,13 +129,25 @@ def get_business_data_from_firestore(user_id: str) -> Optional[Dict[str, Any]]:
                     print(f"   📷 Product {i+1} ({p.get('name', 'Unknown')}): imageUrl = {img_preview}")
             
             # Pass the Firebase UID explicitly to ensure correct business_id
-            return convert_firestore_to_ai_format(data, firebase_uid=user_id)
+            converted_data = convert_firestore_to_ai_format(data, firebase_uid=user_id)
+            print(f"✅ Successfully converted business data (business_name: {converted_data.get('business_name', 'N/A')})")
+            return converted_data
         else:
             print(f"⚠️ No business data found in Firestore for user: {user_id}")
+            print(f"   Document path: businesses/{user_id} does NOT exist")
+            print(f"   Possible reasons:")
+            print(f"   1. User hasn't configured AI settings in dashboard yet")
+            print(f"   2. Firebase UID mismatch - run the SQL migration script")
+            print(f"   3. Firestore permissions issue")
+            print(f"")
+            print(f"   💡 Solution: If you see this, run the migration SQL script:")
+            print(f"   backend/migrations/fix_firebase_uid_mismatch.sql")
             return None
             
     except Exception as e:
         print(f"❌ Error fetching business data from Firestore: {e}")
+        import traceback
+        traceback.print_exc()
         return None
 
 

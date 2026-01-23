@@ -1531,8 +1531,8 @@ export default function BotSettingsView() {
         );
       case "ecommerce":
         return !!(
-          data.ecommercePolicies.shippingPolicy.trim() ||
-          data.ecommercePolicies.returnPolicy.trim()
+          (data.ecommercePolicies?.shippingPolicy || "").trim() ||
+          (data.ecommercePolicies?.returnPolicy || "").trim()
         );
       case "faqs":
         return (

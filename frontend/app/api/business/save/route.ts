@@ -15,7 +15,7 @@ export async function POST(request: NextRequest) {
     try {
       const decodedClaims = await adminAuth.verifySessionCookie(
         sessionCookie,
-        true
+        true,
       );
       userId = decodedClaims.uid;
     } catch (authError) {
@@ -34,7 +34,7 @@ export async function POST(request: NextRequest) {
         userId,
         updatedAt: new Date().toISOString(),
       },
-      { merge: true }
+      { merge: true },
     );
 
     return NextResponse.json({ success: true });
@@ -42,7 +42,7 @@ export async function POST(request: NextRequest) {
     console.error("Error saving business data:", error);
     return NextResponse.json(
       { error: error.message || "Failed to save", details: error.code },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

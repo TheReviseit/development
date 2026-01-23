@@ -166,8 +166,8 @@ try:
     )
     AI_BRAIN_AVAILABLE = True
     logger.info("🧠 AI Brain initialized with usage tracking")
-except ImportError as e:
-    logger.warning(f"AI Brain not available: {e}")
+except Exception as e:
+    logger.warning(f"AI Brain not available (initialization failed): {e}")
     ai_brain = None
     AI_BRAIN_AVAILABLE = False
 
@@ -402,7 +402,8 @@ def verify_webhook():
     token = request.args.get('hub.verify_token')
     challenge = request.args.get('hub.challenge')
     
-    verify_token = os.getenv('WHATSAPP_VERIFY_TOKEN', 'flowauxi_webhook_token')
+    # Check both potential env vars (WhatsApp or Facebook naming convention)
+    verify_token = os.getenv('WHATSAPP_VERIFY_TOKEN') or os.getenv('FACEBOOK_WEBHOOK_VERIFY_TOKEN') or 'flowauxi_webhook_token'
     
     if mode == 'subscribe' and token == verify_token:
         logger.info("✅ Webhook verified successfully!")
@@ -449,8 +450,22 @@ def webhook():
                             pass
                     update_message_status(status_msg_id, status, iso_timestamp)
         
+        # Return early if no messages (status update only)
         if not messages:
             return jsonify({'status': 'ok'}), 200
+        
+        message = messages[0]
+        msg_id = message.get('id')
+        
+        # DEDUPLICATION: Skip if we've already processed this message
+        # Use cache manager to track processed messages (expires after 1 hour)
+        if cache_manager and msg_id:
+            cache_key = f"processed_msg:{msg_id}"
+            if cache_manager.get(cache_key):
+                logger.info(f"⏭️ Skipping duplicate message: {msg_id[:20]}...")
+                return jsonify({'status': 'ok', 'message': 'duplicate'}), 200
+            # Mark as processed (expires in 3600 seconds = 1 hour)
+            cache_manager.set(cache_key, True, ttl=3600)
         
         message = messages[0]
         from_number = message.get('from')
@@ -518,23 +533,65 @@ def webhook():
                     firebase_uid = None
                     if get_firebase_uid_from_user_id:
                         firebase_uid = get_firebase_uid_from_user_id(user_id)
+                        logger.info(f"🔍 Retrieved Firebase UID: {firebase_uid[:15] if firebase_uid else 'None'}... for user {user_id[:8]}...")
                     
                     if firebase_uid and FIREBASE_AVAILABLE and get_business_data_from_firestore:
+                        logger.info(f"🔍 Attempting to load business data from Firestore for UID: {firebase_uid[:15]}...")
                         business_data = get_business_data_from_firestore(firebase_uid)
+                        
+                        if business_data:
+                            logger.info(f"✅ Loaded business data from Firestore: {business_data.get('business_name', 'Unknown')}")
+                        else:
+                            logger.warning(f"⚠️ No business data found in Firestore for Firebase UID: {firebase_uid[:15]}...")
                     
+                    # Fallback logic: Use credentials business name if Firestore failed
                     if not business_data:
-                        logger.warning(f"⚠️ No AI Settings found for Firebase UID: {firebase_uid}")
-                        business_data = BUSINESS_DATA_CACHE.get('current', DEFAULT_BUSINESS_DATA)
+                        logger.warning(f"⚠️ No AI Settings found for Firebase UID: {firebase_uid[:15] if firebase_uid else 'None'}...")
+                        logger.info(f"🔄 Using fallback: Supabase credentials business name")
+                        
+                        # Create minimal business data from credentials
+                        business_data = {
+                            'business_id': firebase_uid or user_id,
+                            'business_name': credentials.get('business_name', 'Our Business'),
+                            'industry': 'other',
+                            'products_services': [],
+                            'contact': {'phone': credentials.get('display_phone_number', '')},
+                        }
+                        logger.info(f"📝 Created fallback business data with name: {business_data['business_name']}")
                     
-                    if 'business_name' not in business_data or not business_data['business_name']:
+                    # Ensure business_name is always set from credentials if missing
+                    if 'business_name' not in business_data or not business_data['business_name'] or business_data['business_name'] == 'Our Business':
+                        logger.info(f"🔄 Business name missing or default, using from credentials: {credentials.get('business_name', 'Our Business')}")
                         business_data['business_name'] = credentials.get('business_name', 'Our Business')
                         
                 except Exception as e:
                     logger.error(f"⚠️ Error fetching business data: {e}")
-                    business_data = BUSINESS_DATA_CACHE.get('current', DEFAULT_BUSINESS_DATA)
+                    import traceback
+                    traceback.print_exc()
+                    # Even on error, try to use credentials
+                    business_data = {
+                        'business_id': user_id,
+                        'business_name': credentials.get('business_name', 'Our Business'),
+                        'industry': 'other',
+                        'products_services': [],
+                        'contact': {'phone': credentials.get('display_phone_number', '')},
+                    }
         
+        # Final fallback - should rarely reach here after improvements above
         if not business_data:
-            business_data = BUSINESS_DATA_CACHE.get('current', DEFAULT_BUSINESS_DATA)
+            logger.warning(f"⚠️ No business data available, using absolute fallback")
+            if credentials:
+                business_data = {
+                    'business_id': user_id,
+                    'business_name': credentials.get('business_name', 'Our Business'),
+                    'industry': 'other',
+                    'products_services': [],
+                    'contact': {'phone': credentials.get('display_phone_number', '')},
+                }
+                logger.info(f"📝 Final fallback using credentials: {business_data['business_name']}")
+            else:
+                business_data = DEFAULT_BUSINESS_DATA
+                logger.warning(f"⚠️ Using hardcoded DEFAULT_BUSINESS_DATA as last resort")
 
         # IMPORTANT: Keep Firebase UID as business_id for appointment booking consistency
         # The business_data['business_id'] is set to Firebase UID in firebase_client.py

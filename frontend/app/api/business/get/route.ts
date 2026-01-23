@@ -15,7 +15,7 @@ export async function GET(request: NextRequest) {
     try {
       const decodedClaims = await adminAuth.verifySessionCookie(
         sessionCookie,
-        true
+        true,
       );
       userId = decodedClaims.uid;
     } catch (authError) {
@@ -43,7 +43,7 @@ export async function GET(request: NextRequest) {
     console.error("Error fetching business data:", error);
     return NextResponse.json(
       { error: error.message || "Failed to fetch", details: error.code },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }
