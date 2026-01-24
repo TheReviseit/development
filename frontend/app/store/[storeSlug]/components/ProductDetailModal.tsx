@@ -251,42 +251,68 @@ export default function ProductDetailModal({
 
   // Get price for selected size/variant
   const getPriceForVariant = (): number => {
-    // Priority 1: Check sizePrices (size-based pricing without variants)
-    if (product.hasSizePricing && product.sizePrices && selectedSize) {
-      const sizePrice = product.sizePrices[selectedSize];
-      if (sizePrice !== undefined && sizePrice > 0) {
-        console.log(
-          `[SizePricing] Price for size "${selectedSize}":`,
-          sizePrice,
-        );
-        return sizePrice;
-      }
-    }
-
-    // Priority 2: Check variants array (variant-based pricing with color+size)
+    // Priority 1: Check variant-level size pricing (variant with hasSizePricing + sizePrices)
     if (selectedColor && product.variants && product.variants.length > 0) {
-      // Find variant matching selected color (and optionally size)
+      // Find variant matching selected color
       const matchingVariant = product.variants.find((v) => {
         const colorMatches = v.color === selectedColor;
         // If size is selected and variant has size, check if it matches
         if (selectedSize && v.size) {
-          const variantSizes = Array.isArray(v.size) ? v.size : [v.size];
+          const variantSizes = Array.isArray(v.size)
+            ? v.size
+            : typeof v.size === "string"
+              ? v.size.split(",").map((s) => s.trim())
+              : [];
           return colorMatches && variantSizes.includes(selectedSize);
         }
         // Otherwise just match by color
         return colorMatches;
       });
 
-      if (matchingVariant?.price) {
-        console.log(
-          `[VariantPricing] Price for ${selectedColor}${selectedSize ? ` / ${selectedSize}` : ""}:`,
-          matchingVariant.price,
-        );
-        return matchingVariant.price;
+      if (matchingVariant) {
+        // Check if this variant has size-based pricing
+        if (
+          matchingVariant.hasSizePricing &&
+          matchingVariant.sizePrices &&
+          selectedSize
+        ) {
+          const sizePrice = matchingVariant.sizePrices[selectedSize];
+          if (sizePrice !== undefined && sizePrice > 0) {
+            console.log(
+              `[VariantSizePricing] Price for ${selectedColor} / ${selectedSize}:`,
+              sizePrice,
+            );
+            return sizePrice;
+          }
+        }
+
+        // Otherwise use variant's base price
+        if (matchingVariant.price && matchingVariant.price > 0) {
+          console.log(
+            `[VariantPricing] Price for ${selectedColor}${selectedSize ? ` / ${selectedSize}` : ""}:`,
+            matchingVariant.price,
+          );
+          return matchingVariant.price;
+        }
       }
     }
 
-    // Fallback: base product price
+    // Priority 2: Check product-level sizePrices (size-based pricing without variants)
+    if (product.hasSizePricing && product.sizePrices && selectedSize) {
+      const sizePrice = product.sizePrices[selectedSize];
+      if (sizePrice !== undefined && sizePrice > 0) {
+        console.log(
+          `[ProductSizePricing] Price for size "${selectedSize}":`,
+          sizePrice,
+        );
+        return sizePrice;
+      }
+    }
+
+    // Fallback: Use compareAtPrice as selling price if available (Offer Price), otherwise base price
+    if (product.compareAtPrice && product.compareAtPrice > 0) {
+      return product.compareAtPrice;
+    }
     return product.price;
   };
 

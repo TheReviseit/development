@@ -70,6 +70,8 @@ export interface StoreProduct {
     imageUrl?: string;
     imagePublicId?: string;
     sizeStocks?: Record<string, number>;
+    hasSizePricing?: boolean;
+    sizePrices?: Record<string, number>;
   }>;
   variantImages?: Record<string, { imageUrl: string; imagePublicId: string }>;
   hasSizePricing?: boolean;
@@ -274,12 +276,14 @@ export async function getStoreBySlug(
           stock: v.stock_quantity || 0,
           imageUrl: v.image_url || "",
           imagePublicId: v.image_public_id || "",
+          hasSizePricing: v.has_size_pricing || false,
+          sizePrices: v.size_prices || {},
         };
       }),
       variantImages: {},
-      hasSizePricing: false,
-      sizePrices: {},
-      sizeStocks: {},
+      hasSizePricing: p.has_size_pricing || false,
+      sizePrices: p.size_prices || {},
+      sizeStocks: p.size_stocks || {},
     }));
 
     // Fetch categories from normalized table

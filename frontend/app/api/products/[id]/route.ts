@@ -142,6 +142,10 @@ export async function PUT(request: NextRequest, context: RouteContext) {
     if ("colors" in body) updateData.colors = body.colors;
     if ("tags" in body) updateData.tags = body.tags;
     if ("available" in body) updateData.is_available = body.available;
+    if ("hasSizePricing" in body)
+      updateData.has_size_pricing = body.hasSizePricing;
+    if ("sizePrices" in body) updateData.size_prices = body.sizePrices || {};
+    if ("sizeStocks" in body) updateData.size_stocks = body.sizeStocks || {};
 
     // Handle category update - lookup ID from name if necessary
     if ("category" in body || "categoryId" in body) {
@@ -211,6 +215,8 @@ export async function PUT(request: NextRequest, context: RouteContext) {
               : 0,
             image_url: v.imageUrl || "",
             image_public_id: v.imagePublicId || "",
+            has_size_pricing: v.hasSizePricing || false,
+            size_prices: v.sizePrices || {},
           }),
         );
 

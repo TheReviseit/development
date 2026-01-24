@@ -16,6 +16,8 @@ interface ProductVariant {
   stock: number;
   imageUrl: string;
   imagePublicId: string;
+  hasSizePricing?: boolean;
+  sizePrices?: Record<string, number>;
 }
 
 interface ProductService {

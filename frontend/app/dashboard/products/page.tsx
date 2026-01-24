@@ -33,12 +33,17 @@ interface Product {
     stock: number;
     imageUrl: string;
     imagePublicId: string;
+    hasSizePricing?: boolean;
+    sizePrices?: Record<string, number>;
   }>;
   sizes: string[];
   colors: string[];
   brand: string;
   materials: string[];
   variantImages?: Record<string, { imageUrl: string; imagePublicId: string }>;
+  hasSizePricing?: boolean;
+  sizePrices?: Record<string, number>;
+  sizeStocks?: Record<string, number>;
 }
 
 export default function ProductsPage() {
@@ -150,12 +155,17 @@ export default function ProductsPage() {
                     (v.stock_quantity as number) || (v.stock as number) || 0,
                   imageUrl: (v.image_url as string) || "",
                   imagePublicId: (v.image_public_id as string) || "",
+                  hasSizePricing: (v.has_size_pricing as boolean) || false,
+                  sizePrices: (v.size_prices as Record<string, number>) || {},
                 };
               }),
               sizes: p.sizes || [],
               colors: p.colors || [],
               brand: p.brand || "",
               materials: p.materials || [],
+              hasSizePricing: (p.has_size_pricing as boolean) || false,
+              sizePrices: (p.size_prices as Record<string, number>) || {},
+              sizeStocks: (p.size_stocks as Record<string, number>) || {},
             }),
           );
           setProducts(mappedProducts);
@@ -200,6 +210,9 @@ export default function ProductsPage() {
           materials: product.materials,
           available: product.available,
           category: product.category,
+          hasSizePricing: product.hasSizePricing,
+          sizePrices: product.sizePrices,
+          sizeStocks: product.sizeStocks,
           // Map variants with correct field names for API (stock → stockQuantity)
           variants: (product.variants || []).map((v) => ({
             id: v.id,
@@ -209,6 +222,8 @@ export default function ProductsPage() {
             stockQuantity: v.stock || 0,
             imageUrl: v.imageUrl || "",
             imagePublicId: v.imagePublicId || "",
+            hasSizePricing: v.hasSizePricing || false,
+            sizePrices: v.sizePrices || {},
           })),
         };
 

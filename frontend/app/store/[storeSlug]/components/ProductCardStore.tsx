@@ -29,6 +29,8 @@ export interface Product {
     imageUrl?: string;
     imagePublicId?: string;
     sizeStocks?: Record<string, number>;
+    hasSizePricing?: boolean;
+    sizePrices?: Record<string, number>;
   }>;
   variantImages?: Record<string, { imageUrl: string; imagePublicId: string }>;
   badge?: "new" | "premium" | "bestseller" | "hot" | null;
@@ -96,12 +98,75 @@ export default function ProductCardStore({
   const description = product.description || "";
   const colors = product.colors || [];
 
+  // Calculate display price based on size pricing and variants
+  const getDisplayPriceInfo = (): {
+    price: number;
+    hasRange: boolean;
+    minPrice?: number;
+    maxPrice?: number;
+  } => {
+    const allPrices: number[] = [];
+
+    // 1. Check Product-level Size Pricing
+    if (product.hasSizePricing && product.sizePrices) {
+      const sp = Object.values(product.sizePrices).filter(
+        (p) => typeof p === "number" && p > 0,
+      ) as number[];
+      allPrices.push(...sp);
+    }
+
+    // 2. Check Variants
+    if (product.variants && product.variants.length > 0) {
+      product.variants.forEach((v) => {
+        // Variant-level size pricing
+        if (v.hasSizePricing && v.sizePrices) {
+          const vp = Object.values(v.sizePrices).filter(
+            (p) => typeof p === "number" && p > 0,
+          ) as number[];
+          allPrices.push(...vp);
+        }
+        // Variant base price
+        else if (v.price > 0) {
+          allPrices.push(v.price);
+        }
+      });
+    }
+
+    // 3. Always include base product price if no specific prices found yet,
+    // or as a fallback/comparison point. Use offer price if available.
+    const baseSellingPrice =
+      product.compareAtPrice && product.compareAtPrice > 0
+        ? product.compareAtPrice
+        : product.price;
+
+    if (baseSellingPrice > 0) {
+      allPrices.push(baseSellingPrice);
+    }
+
+    // 4. Calculate Min/Max
+    if (allPrices.length > 0) {
+      const minPrice = Math.min(...allPrices);
+      const maxPrice = Math.max(...allPrices);
+      return {
+        price: minPrice, // Show lowest price by default
+        hasRange: minPrice !== maxPrice || allPrices.length > 1, // Show "From" if range or multiple prices
+        minPrice,
+        maxPrice,
+      };
+    }
+
+    // Fallback
+    return { price: product.price, hasRange: false };
+  };
+
+  const displayPriceInfo = getDisplayPriceInfo();
+
   const handleAddToCart = (e: React.MouseEvent) => {
     e.stopPropagation();
     addToCart({
       id: product.id,
       name: product.name,
-      price: product.price,
+      price: displayPriceInfo.price,
       imageUrl: product.imageUrl,
     });
   };
@@ -128,7 +193,7 @@ export default function ProductCardStore({
       addToCart({
         id: product.id,
         name: product.name,
-        price: product.price,
+        price: displayPriceInfo.price,
         imageUrl: product.imageUrl,
       });
     }
@@ -277,7 +342,13 @@ export default function ProductCardStore({
         {/* Price Row with Rating on right */}
         <div className={styles.novaPriceRow}>
           <div className={styles.novaPriceContainer}>
-            {product.compareAtPrice && product.compareAtPrice > 0 ? (
+            {displayPriceInfo.hasRange ? (
+              // Show price range for size-based pricing
+              <span className={styles.novaPrice}>
+                From {formatPrice(displayPriceInfo.minPrice!)}
+              </span>
+            ) : product.compareAtPrice && product.compareAtPrice > 0 ? (
+              // Show offer price with strikethrough original
               <>
                 <span className={styles.novaPrice}>
                   {formatPrice(product.compareAtPrice)}
@@ -287,8 +358,9 @@ export default function ProductCardStore({
                 </span>
               </>
             ) : (
+              // Show regular price
               <span className={styles.novaPrice}>
-                {formatPrice(product.price)}
+                {formatPrice(displayPriceInfo.price)}
               </span>
             )}
           </div>

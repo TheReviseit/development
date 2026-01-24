@@ -185,6 +185,9 @@ export async function POST(request: NextRequest) {
       tags: body.tags || [],
       is_available: body.available !== false,
       category_id: categoryId,
+      has_size_pricing: body.hasSizePricing || false,
+      size_prices: body.sizePrices || {},
+      size_stocks: body.sizeStocks || {},
     };
 
     // Insert product
@@ -214,6 +217,8 @@ export async function POST(request: NextRequest) {
         stock_quantity: v.stockQuantity ? parseInt(String(v.stockQuantity)) : 0,
         image_url: v.imageUrl || "",
         image_public_id: v.imagePublicId || "",
+        has_size_pricing: v.hasSizePricing || false,
+        size_prices: v.sizePrices || {},
       }));
 
       await supabase.from("product_variants").insert(variantsData);
