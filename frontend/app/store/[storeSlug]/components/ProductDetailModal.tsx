@@ -25,8 +25,20 @@ export default function ProductDetailModal({
   // Reset state when product changes
   useEffect(() => {
     if (product) {
-      setSelectedSize(product.sizes?.[0] || null);
-      setSelectedColor(product.colors?.[0] || null);
+      // Handle colors as both string and array
+      const firstColor = Array.isArray(product.colors)
+        ? product.colors[0]
+        : product.colors;
+      setSelectedColor(firstColor || null);
+
+      // Set first available size based on first color
+      if (firstColor && product.variants && product.variants.length > 0) {
+        const availableSizes = getAvailableSizesForColor(firstColor);
+        setSelectedSize(availableSizes[0] || null);
+      } else {
+        setSelectedSize(product.sizes?.[0] || null);
+      }
+
       setQuantity(1);
     }
   }, [product]);
@@ -53,6 +65,101 @@ export default function ProductDetailModal({
     window.addEventListener("keydown", handleEscape);
     return () => window.removeEventListener("keydown", handleEscape);
   }, [isOpen, onClose]);
+
+  // Get available sizes for selected color from variants
+  const getAvailableSizesForColor = (color: string): string[] => {
+    // If no variants, use product.sizes
+    if (!product?.variants || product.variants.length === 0) {
+      console.log("No variants, using product.sizes:", product?.sizes);
+      return product?.sizes || [];
+    }
+
+    const sizesSet = new Set<string>();
+    product.variants.forEach((variant) => {
+      if (variant.color === color) {
+        if (Array.isArray(variant.size)) {
+          variant.size.forEach((s) => sizesSet.add(s));
+        } else if (typeof variant.size === "string" && variant.size) {
+          // Handle comma-separated size strings (e.g., "XXL, XL")
+          const sizes = variant.size
+            .split(",")
+            .map((s) => s.trim())
+            .filter(Boolean);
+          sizes.forEach((s) => sizesSet.add(s));
+        }
+      }
+    });
+
+    const variantSizes = Array.from(sizesSet);
+
+    // If no sizes found for this color in variants, fall back to product.sizes
+    if (variantSizes.length === 0) {
+      console.log(
+        `No variant found for color "${color}", using product.sizes:`,
+        product?.sizes,
+      );
+      return product?.sizes || [];
+    }
+
+    console.log(`Sizes for color "${color}":`, variantSizes);
+    return variantSizes;
+  };
+
+  // Get available sizes based on selected color
+  const availableSizes = selectedColor
+    ? getAvailableSizesForColor(selectedColor)
+    : product?.sizes || [];
+
+  // Update selected size when color changes
+  useEffect(() => {
+    if (selectedColor && product?.variants && product.variants.length > 0) {
+      const sizes = getAvailableSizesForColor(selectedColor);
+      // If current selected size is not available for this color, select first available
+      if (!sizes.includes(selectedSize || "")) {
+        setSelectedSize(sizes[0] || null);
+      }
+    }
+  }, [selectedColor]);
+
+  // Get all available colors from variants AND product.colors combined
+  const getAvailableColors = (): string[] => {
+    console.log("Getting available colors...");
+    console.log("Product:", product);
+    console.log("Product variants:", product?.variants);
+    console.log("Product colors:", product?.colors);
+
+    const colorsSet = new Set<string>();
+
+    // Add colors from product.colors field
+    if (product?.colors) {
+      const productColors = Array.isArray(product.colors)
+        ? product.colors
+        : [product.colors];
+      productColors.forEach((color) => {
+        if (color) colorsSet.add(color);
+      });
+      console.log("Added colors from product.colors:", productColors);
+    }
+
+    // Add colors from variants
+    if (product?.variants && product.variants.length > 0) {
+      product.variants.forEach((variant) => {
+        console.log("Processing variant:", variant);
+        if (variant.color) {
+          colorsSet.add(variant.color);
+        }
+      });
+      console.log("Added colors from variants");
+    }
+
+    const colors = Array.from(colorsSet);
+    console.log("Final combined colors:", colors);
+    return colors;
+  };
+
+  // Get all available colors
+  const availableColors = getAvailableColors();
+  console.log("Available colors to display:", availableColors);
 
   const formatPrice = (price: number) => {
     return new Intl.NumberFormat("en-IN", {
@@ -97,7 +204,7 @@ export default function ProductDetailModal({
       {
         id: product.id,
         name: product.name,
-        price: product.price,
+        price: displayPrice,
         imageUrl: product.imageUrl,
       },
       quantity,
@@ -113,9 +220,78 @@ export default function ProductDetailModal({
 
   if (!product) return null;
 
-  const selectedVariantImage =
-    selectedColor && product.variantImages?.[selectedColor]?.imageUrl;
-  const displayImageUrl = selectedVariantImage || product.imageUrl;
+  // Get image for selected color - check multiple sources
+  const getImageForColor = (color: string | null): string | undefined => {
+    if (!color) return product.imageUrl;
+
+    console.log(`Getting image for color: ${color}`);
+
+    // 1. Check variantImages object (legacy format)
+    if (product.variantImages?.[color]?.imageUrl) {
+      console.log(
+        "Found image in variantImages:",
+        product.variantImages[color].imageUrl,
+      );
+      return product.variantImages[color].imageUrl;
+    }
+
+    // 2. Check variants array for matching color
+    if (product.variants && product.variants.length > 0) {
+      const matchingVariant = product.variants.find((v) => v.color === color);
+      if (matchingVariant?.imageUrl) {
+        console.log("Found image in variant:", matchingVariant.imageUrl);
+        return matchingVariant.imageUrl;
+      }
+    }
+
+    // 3. Fall back to main product image
+    console.log("No variant image found, using main product image");
+    return product.imageUrl;
+  };
+
+  // Get price for selected size/variant
+  const getPriceForVariant = (): number => {
+    // Priority 1: Check sizePrices (size-based pricing without variants)
+    if (product.hasSizePricing && product.sizePrices && selectedSize) {
+      const sizePrice = product.sizePrices[selectedSize];
+      if (sizePrice !== undefined && sizePrice > 0) {
+        console.log(
+          `[SizePricing] Price for size "${selectedSize}":`,
+          sizePrice,
+        );
+        return sizePrice;
+      }
+    }
+
+    // Priority 2: Check variants array (variant-based pricing with color+size)
+    if (selectedColor && product.variants && product.variants.length > 0) {
+      // Find variant matching selected color (and optionally size)
+      const matchingVariant = product.variants.find((v) => {
+        const colorMatches = v.color === selectedColor;
+        // If size is selected and variant has size, check if it matches
+        if (selectedSize && v.size) {
+          const variantSizes = Array.isArray(v.size) ? v.size : [v.size];
+          return colorMatches && variantSizes.includes(selectedSize);
+        }
+        // Otherwise just match by color
+        return colorMatches;
+      });
+
+      if (matchingVariant?.price) {
+        console.log(
+          `[VariantPricing] Price for ${selectedColor}${selectedSize ? ` / ${selectedSize}` : ""}:`,
+          matchingVariant.price,
+        );
+        return matchingVariant.price;
+      }
+    }
+
+    // Fallback: base product price
+    return product.price;
+  };
+
+  const displayImageUrl = getImageForColor(selectedColor);
+  const displayPrice = getPriceForVariant();
 
   return (
     <AnimatePresence>
@@ -197,7 +373,31 @@ export default function ProductDetailModal({
               {/* Title at top of right column */}
               <h2 className={styles.modalName}>{product.name}</h2>
               {/* Price */}
-              <p className={styles.modalPrice}>{formatPrice(product.price)}</p>
+              <div
+                className={styles.novaPriceContainer}
+                style={{ marginBottom: "16px" }}
+              >
+                {product.compareAtPrice && product.compareAtPrice > 0 ? (
+                  <>
+                    <span
+                      className={styles.modalPrice}
+                      style={{ margin: 0, fontSize: "24px" }}
+                    >
+                      {formatPrice(displayPrice)}
+                    </span>
+                    <span
+                      className={styles.novaOriginalPrice}
+                      style={{ fontSize: "16px" }}
+                    >
+                      {formatPrice(product.price)}
+                    </span>
+                  </>
+                ) : (
+                  <p className={styles.modalPrice}>
+                    {formatPrice(displayPrice)}
+                  </p>
+                )}
+              </div>
 
               {/* Description - visible on mobile (hidden on desktop via CSS) */}
               {product.description && (
@@ -206,34 +406,12 @@ export default function ProductDetailModal({
                 </p>
               )}
 
-              {/* Size Selection */}
-              {product.sizes && product.sizes.length > 0 && (
-                <div className={styles.modalOptions}>
-                  <p className={styles.modalOptionLabel}>Size</p>
-                  <div className={styles.modalOptionList}>
-                    {product.sizes.map((size) => (
-                      <button
-                        key={size}
-                        className={`${styles.modalOptionBtn} ${
-                          selectedSize === size
-                            ? styles.modalOptionBtnActive
-                            : ""
-                        }`}
-                        onClick={() => setSelectedSize(size)}
-                      >
-                        {size}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {/* Color Selection - Visual Swatches */}
-              {product.colors && product.colors.length > 0 && (
+              {/* Color Selection - Visual Swatches - MOVED UP */}
+              {availableColors && availableColors.length > 0 && (
                 <div className={styles.modalOptions}>
                   <p className={styles.modalOptionLabel}>Color</p>
                   <div className={styles.modalColorSwatches}>
-                    {product.colors.map((color) => {
+                    {availableColors.map((color) => {
                       const colorHex = getColorHex(color);
                       const isSelected = selectedColor === color;
                       const isLightColor = [
@@ -287,6 +465,28 @@ export default function ProductDetailModal({
                 </div>
               )}
 
+              {/* Size Selection - MOVED DOWN */}
+              {availableSizes && availableSizes.length > 0 && (
+                <div className={styles.modalOptions}>
+                  <p className={styles.modalOptionLabel}>Size</p>
+                  <div className={styles.modalOptionList}>
+                    {availableSizes.map((size) => (
+                      <button
+                        key={size}
+                        className={`${styles.modalOptionBtn} ${
+                          selectedSize === size
+                            ? styles.modalOptionBtnActive
+                            : ""
+                        }`}
+                        onClick={() => setSelectedSize(size)}
+                      >
+                        {size}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               {/* Quantity */}
               <div className={styles.modalQuantity}>
                 <span className={styles.modalQuantityLabel}>Quantity</span>
@@ -310,7 +510,7 @@ export default function ProductDetailModal({
               </div>
 
               <button className={styles.modalAddBtn} onClick={handleAddToCart}>
-                Add to Cart — {formatPrice(product.price * quantity)}
+                Add to Cart — {formatPrice(displayPrice * quantity)}
               </button>
             </div>
           </motion.div>

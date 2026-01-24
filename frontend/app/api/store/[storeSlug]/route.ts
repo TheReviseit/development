@@ -9,8 +9,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getStoreBySlug, PublicStore } from "@/lib/store";
 
-// Revalidate cache every 60 seconds for better performance
-export const revalidate = 60;
+// Disable caching for real-time updates
+// Products can change at any time from Dashboard, so we need fresh data
+export const revalidate = 0;
+export const dynamic = "force-dynamic";
 
 interface RouteParams {
   params: Promise<{ storeSlug: string }>;
@@ -56,8 +58,11 @@ export async function GET(
       {
         status: 200,
         headers: {
-          // Cache control for CDN/browser caching
-          "Cache-Control": "public, s-maxage=60, stale-while-revalidate=300",
+          // Disable CDN/browser caching for real-time updates
+          // Store data can change at any time from Dashboard
+          "Cache-Control": "private, no-cache, no-store, must-revalidate",
+          Pragma: "no-cache",
+          Expires: "0",
         },
       },
     );

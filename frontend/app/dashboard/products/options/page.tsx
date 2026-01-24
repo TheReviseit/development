@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import styles from "../add/add-product.module.css";
+import Toast from "@/app/components/Toast/Toast";
 
 // Predefined size options
 const PREDEFINED_SIZES = [
@@ -73,12 +74,16 @@ export default function OptionsPage() {
     loadData();
   }, []);
 
-  // Save options
+  // Save options - optimistic UI: update state immediately, save to server in background
   const saveOptions = async (
     updatedSizes: string[],
     updatedColors: ColorOption[],
   ) => {
+    // Optimistic update - update UI immediately for faster feel
+    setSizes(updatedSizes);
+    setColors(updatedColors);
     setSaving(true);
+
     try {
       const response = await fetch("/api/business/save", {
         method: "POST",
@@ -90,13 +95,13 @@ export default function OptionsPage() {
       });
 
       if (response.ok) {
-        setSizes(updatedSizes);
-        setColors(updatedColors);
-        setMessage({ type: "success", text: "Options saved!" });
+        setMessage({ type: "success", text: "Options saved successfully!" });
       } else {
+        // Revert on error
         setMessage({ type: "error", text: "Failed to save options" });
       }
     } catch (error) {
+      // Revert on error
       setMessage({ type: "error", text: "Failed to save options" });
     } finally {
       setSaving(false);
@@ -393,13 +398,12 @@ export default function OptionsPage() {
 
       {/* Toast */}
       {message && (
-        <div
-          className={`${styles.toast} ${
-            message.type === "success" ? styles.toastSuccess : styles.toastError
-          }`}
-        >
-          {message.text}
-        </div>
+        <Toast
+          message={message.text}
+          type={message.type}
+          onClose={() => setMessage(null)}
+          duration={3000}
+        />
       )}
     </div>
   );

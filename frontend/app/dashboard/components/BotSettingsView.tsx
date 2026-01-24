@@ -14,6 +14,18 @@ import ProductForm from "./ProductCard/ProductForm";
 import SlidePanel from "@/app/utils/ui/SlidePanel";
 
 // Types for business data
+interface ProductVariant {
+  id: string;
+  color: string;
+  size: string | string[];
+  price: number;
+  stock: number;
+  imageUrl: string;
+  imagePublicId: string;
+  hasSizePricing?: boolean;
+  sizePrices?: Record<string, number>;
+}
+
 interface ProductService {
   id: string;
   name: string;
@@ -29,7 +41,7 @@ interface ProductService {
   imagePublicId: string; // Cloudinary public ID for deletions
   originalSize: number; // Original file size in bytes
   optimizedSize: number; // Optimized file size in bytes
-  variants: string[];
+  variants: ProductVariant[];
   sizes: string[];
   colors: string[];
   brand: string;

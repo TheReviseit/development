@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useMemo, useEffect } from "react";
+import React, { useState, useMemo, useEffect, useCallback } from "react";
 import { notFound } from "next/navigation";
 import styles from "./store.module.css";
 import {
@@ -13,6 +13,11 @@ import {
   CarouselBanner,
   Product,
 } from "./components";
+import {
+  subscribeToStoreUpdates,
+  onConnectionStatusChange,
+  ConnectionStatus,
+} from "@/app/utils/storeSync";
 
 // ============================================================
 // Demo/Mock Data - Shown only if store has no real products
@@ -159,20 +164,29 @@ export default function StorePage({ params }: StorePageProps) {
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [isProductModalOpen, setIsProductModalOpen] = useState(false);
   const [isSearchOpen, setIsSearchOpen] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [realtimeStatus, setRealtimeStatus] =
+    useState<ConnectionStatus>("disconnected");
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
 
-  // Fetch store data on mount
-  useEffect(() => {
-    async function fetchStoreData() {
+  // Fetch store data function - can be called for initial load and refreshes
+  const fetchStoreData = useCallback(
+    async (isRefresh = false) => {
       try {
-        setLoading(true);
+        if (!isRefresh) {
+          setLoading(true);
+        } else {
+          setIsRefreshing(true);
+        }
         setError(null);
 
-        const response = await fetch(`/api/store/${storeSlug}`);
+        const response = await fetch(`/api/store/${storeSlug}`, {
+          cache: "no-store", // Always get fresh data
+        });
         const result = await response.json();
 
         if (!response.ok || !result.success) {
           if (response.status === 404) {
-            // Store not found - will trigger notFound()
             setError("not_found");
           } else {
             setError(result.error || "Failed to load store");
@@ -182,36 +196,100 @@ export default function StorePage({ params }: StorePageProps) {
 
         // Map API response to our types
         const data = result.data;
-        setStoreData({
+        const newStoreData: StoreData = {
           id: data.id,
           businessName: data.businessName,
           logoUrl: data.logoUrl,
           bannerUrl: data.bannerUrl,
           products: data.products.map((p: Product) => ({
+            ...p,
             id: p.id,
             name: p.name,
             category: p.category || "",
             price: p.price,
+            compareAtPrice: p.compareAtPrice,
             description: p.description,
             imageUrl: p.imageUrl,
             sizes: p.sizes || [],
             colors: p.colors || [],
+            variants: p.variants || [],
             available: true,
+            hasSizePricing: p.hasSizePricing,
+            sizePrices: p.sizePrices,
+            sizeStocks: p.sizeStocks,
             variantImages: p.variantImages || {},
           })),
           categories: data.categories || [],
           banners: data.banners || [],
-        });
+        };
+
+        setStoreData(newStoreData);
+
+        // Also update selectedProduct if it was open
+        if (selectedProduct && isRefresh) {
+          const updatedProduct = newStoreData.products.find(
+            (p) => p.id === selectedProduct.id,
+          );
+          if (updatedProduct) {
+            setSelectedProduct(updatedProduct);
+          }
+        }
+
+        if (isRefresh) {
+          console.log("[StorePage] 🔄 Store data refreshed in real-time!");
+        }
       } catch (err) {
         console.error("[StorePage] Error fetching store:", err);
-        setError("Failed to load store");
+        if (!isRefresh) {
+          setError("Failed to load store");
+        }
       } finally {
         setLoading(false);
+        setIsRefreshing(false);
       }
-    }
+    },
+    [storeSlug, selectedProduct],
+  );
 
-    fetchStoreData();
-  }, [storeSlug]);
+  // Initial fetch on mount
+  useEffect(() => {
+    fetchStoreData(false);
+  }, [storeSlug]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Real-time sync: Subscribe to updates from Dashboard
+  // Uses Supabase Realtime (cross-device) + BroadcastChannel (same-browser)
+  useEffect(() => {
+    // Subscribe to store updates via Supabase Realtime + BroadcastChannel/localStorage
+    const unsubscribe = subscribeToStoreUpdates(storeSlug, (event) => {
+      console.log("[StorePage] 📡 Received real-time update event:", event);
+      // Refetch store data when update is received
+      fetchStoreData(true);
+      setLastUpdated(new Date());
+    });
+
+    // Subscribe to connection status changes
+    const unsubscribeStatus = onConnectionStatusChange((status) => {
+      setRealtimeStatus(status);
+    });
+
+    return () => {
+      unsubscribe();
+      unsubscribeStatus();
+    };
+  }, [storeSlug, fetchStoreData]);
+
+  // Fallback polling: Check for updates every 30 seconds
+  // This serves as insurance when Supabase Realtime WebSocket might be blocked/disconnected
+  useEffect(() => {
+    const pollInterval = setInterval(() => {
+      // Only poll if page is visible
+      if (document.visibilityState === "visible") {
+        fetchStoreData(true);
+      }
+    }, 30000); // 30 seconds
+
+    return () => clearInterval(pollInterval);
+  }, [fetchStoreData]);
 
   // Handle 404 - store not found
   if (error === "not_found") {

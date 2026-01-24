@@ -1,9 +1,47 @@
 /**
  * Store Library - Server-side utilities for public store data
- * These functions fetch public-safe store data without authentication
+ *
+ * Production-grade store data fetching from Supabase.
+ * This module provides public-safe store data for the shop page.
+ *
+ * Data Flow:
+ * - Dashboard saves products via /api/business/save → Supabase
+ * - Shop reads products via this module → Supabase
+ * - Consistent data source ensures products appear immediately
  */
 
-import { adminDb } from "@/lib/firebase-admin";
+import { createClient, SupabaseClient } from "@supabase/supabase-js";
+
+// ============================================================
+// Supabase Client Configuration
+// ============================================================
+
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
+
+// Singleton Supabase client for server-side operations
+let supabaseInstance: SupabaseClient | null = null;
+
+/**
+ * Get or create Supabase client with service role key
+ * Service role bypasses RLS - safe for server-side only
+ */
+function getSupabase(): SupabaseClient {
+  if (!supabaseInstance) {
+    if (!supabaseUrl || !supabaseServiceKey) {
+      throw new Error(
+        "[store.ts] Missing Supabase credentials. Check NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY.",
+      );
+    }
+    supabaseInstance = createClient(supabaseUrl, supabaseServiceKey, {
+      auth: {
+        autoRefreshToken: false,
+        persistSession: false,
+      },
+    });
+  }
+  return supabaseInstance;
+}
 
 // ============================================================
 // Types - Public-safe product and store types
@@ -21,9 +59,23 @@ export interface StoreProduct {
   description?: string;
   imageUrl?: string;
   sizes?: string[];
-  colors?: string[];
+  colors?: string | string[];
   available: boolean;
+  variants?: Array<{
+    id: string;
+    color: string;
+    size: string | string[];
+    price: number;
+    stock: number;
+    imageUrl?: string;
+    imagePublicId?: string;
+    sizeStocks?: Record<string, number>;
+  }>;
   variantImages?: Record<string, { imageUrl: string; imagePublicId: string }>;
+  hasSizePricing?: boolean;
+  sizePrices?: Record<string, number>;
+  sizeStocks?: Record<string, number>;
+  compareAtPrice?: number;
 }
 
 /**
@@ -57,39 +109,50 @@ export interface PublicStore {
 }
 
 /**
- * Raw business document from Firestore
- * Internal type - not exposed publicly
+ * Raw business data from Supabase (snake_case)
  */
-interface BusinessDocument {
-  userId?: string;
-  businessName?: string;
-  storeName?: string;
-  logoUrl?: string;
-  bannerUrl?: string;
-  storeActive?: boolean;
+interface SupabaseBusinessData {
+  user_id: string;
+  business_name?: string;
+  logo_url?: string;
+  banner_url?: string;
+  store_active?: boolean;
   products?: RawProduct[];
-  productCategories?: string[];
+  product_categories?: string[];
   banners?: StoreBanner[];
-  // ... other private fields we don't expose
 }
 
 /**
- * Raw product from Firestore business document
+ * Raw product from database
  */
 interface RawProduct {
   id: string;
   name: string;
   category: string;
   price: number;
+  compareAtPrice?: number;
   description?: string;
   imageUrl?: string;
   sizes?: string[];
-  colors?: string[];
+  colors?: string | string[];
   available?: boolean;
   stockStatus?: string;
   createdAt?: string;
   updatedAt?: string;
+  variants?: Array<{
+    id: string;
+    color: string;
+    size: string | string[];
+    price: number;
+    stock: number;
+    imageUrl?: string;
+    imagePublicId?: string;
+    sizeStocks?: Record<string, number>;
+  }>;
   variantImages?: Record<string, { imageUrl: string; imagePublicId: string }>;
+  hasSizePricing?: boolean;
+  sizePrices?: Record<string, number>;
+  sizeStocks?: Record<string, number>;
 }
 
 // ============================================================
@@ -100,46 +163,154 @@ interface RawProduct {
  * Fetch store by slug (which is the user's Firebase UID)
  * Returns null if store doesn't exist or is inactive
  *
- * @param storeSlug - The store identifier (Firebase UID)
+ * Production-grade implementation:
+ * - Reads from Supabase (primary data source)
+ * - Uses service role key to bypass RLS
+ * - Proper error handling and logging
+ * - Graceful degradation on errors
+ *
+ * @param storeSlug - The store identifier (Firebase UID / user_id)
  * @returns Public store data or null
  */
 export async function getStoreBySlug(
   storeSlug: string,
 ): Promise<PublicStore | null> {
   try {
-    const docRef = adminDb.collection("businesses").doc(storeSlug);
-    const doc = await docRef.get();
+    const supabase = getSupabase();
 
-    if (!doc.exists) {
+    // Query Supabase businesses table by user_id
+    const { data: businessData, error: businessError } = await supabase
+      .from("businesses")
+      .select("*")
+      .eq("user_id", storeSlug)
+      .maybeSingle();
+
+    if (businessError) {
+      console.error("[store.ts] Supabase business query error:", businessError);
+      throw businessError;
+    }
+
+    if (!businessData) {
+      console.log(`[store.ts] No store found for slug: ${storeSlug}`);
       return null;
     }
 
-    const data = doc.data() as BusinessDocument;
-
     // Check if store is active (default to true if field doesn't exist)
-    const storeActive = data.storeActive !== false;
+    const storeActive = businessData.store_active !== false;
     if (!storeActive) {
-      return null; // Treat inactive stores as not found
+      console.log(`[store.ts] Store is inactive: ${storeSlug}`);
+      return null;
     }
 
-    // Get products, filter available only, and sort
-    const rawProducts = data.products || [];
-    const products = filterAndSortProducts(rawProducts);
+    // Fetch products from NORMALIZED products table
+    const { data: productsData, error: productsError } = await supabase
+      .from("products")
+      .select(
+        `
+        *,
+        category:product_categories(id, name),
+        variants:product_variants(*)
+      `,
+      )
+      .eq("user_id", storeSlug)
+      .eq("is_deleted", false)
+      .eq("is_available", true)
+      .order("created_at", { ascending: false });
+
+    if (productsError) {
+      console.error("[store.ts] Products query error:", productsError);
+      // Fall back to JSONB if normalized table query fails
+      console.log("[store.ts] Falling back to JSONB products");
+      const rawProducts = businessData.products || [];
+      const products = filterAndSortProducts(rawProducts);
+      return {
+        id: storeSlug,
+        businessName: businessData.business_name || "Store",
+        logoUrl: businessData.logo_url,
+        bannerUrl: businessData.banner_url,
+        storeActive: true,
+        categories: businessData.product_categories || [],
+        products,
+        banners: businessData.banners || [],
+      };
+    }
+
+    // Map normalized products to StoreProduct format
+    const products: StoreProduct[] = (productsData || []).map((p) => ({
+      id: p.id,
+      name: p.name,
+      category: p.category?.name || "",
+      price: parseFloat(p.price) || 0,
+      compareAtPrice: p.compare_at_price
+        ? parseFloat(p.compare_at_price)
+        : undefined,
+      description: p.description,
+      imageUrl: p.image_url,
+      sizes: p.sizes || [],
+      colors: p.colors || [],
+      available: true,
+      variants: (p.variants || []).map((v: Record<string, unknown>) => {
+        // Handle size that might be stored as array or string
+        let sizeValue = v.size || "";
+        if (Array.isArray(sizeValue)) {
+          // If it's an array like ["4XL"], join them or take first
+          sizeValue = sizeValue.join(", ");
+        } else if (typeof sizeValue === "string" && sizeValue.startsWith("[")) {
+          // If it's a stringified array like '["4XL"]', parse and join
+          try {
+            const parsed = JSON.parse(sizeValue);
+            if (Array.isArray(parsed)) {
+              sizeValue = parsed.join(", ");
+            }
+          } catch {
+            // Keep original if parsing fails
+          }
+        }
+        return {
+          id: v.id,
+          color: v.color || "",
+          size: sizeValue,
+          price: v.price ? parseFloat(String(v.price)) : 0,
+          stock: v.stock_quantity || 0,
+          imageUrl: v.image_url || "",
+          imagePublicId: v.image_public_id || "",
+        };
+      }),
+      variantImages: {},
+      hasSizePricing: false,
+      sizePrices: {},
+      sizeStocks: {},
+    }));
+
+    // Fetch categories from normalized table
+    const { data: categoriesData } = await supabase
+      .from("product_categories")
+      .select("name")
+      .eq("user_id", storeSlug)
+      .eq("is_active", true);
+
+    const categories = (categoriesData || []).map((c) => c.name);
+
+    console.log(
+      `[store.ts] ✅ Loaded ${products.length} products from normalized tables for store: ${storeSlug}`,
+    );
 
     // Return only public-safe fields
     return {
       id: storeSlug,
-      businessName: data.businessName || data.storeName || "Store",
-      logoUrl: data.logoUrl,
-      bannerUrl: data.bannerUrl,
+      businessName: businessData.business_name || "Store",
+      logoUrl: businessData.logo_url,
+      bannerUrl: businessData.banner_url,
       storeActive: true,
-      categories: data.productCategories || [],
+      categories,
       products,
-      banners: data.banners || [],
+      banners: businessData.banners || [],
     };
   } catch (error) {
     console.error("[store.ts] Error fetching store:", error);
-    throw error; // Re-throw to let caller handle
+    // In production, we don't throw - return null to show "store not found"
+    // This prevents 500 errors from breaking the user experience
+    return null;
   }
 }
 
@@ -152,16 +323,20 @@ export async function getStoreBySlug(
  */
 export async function storeExists(storeSlug: string): Promise<boolean> {
   try {
-    const docRef = adminDb.collection("businesses").doc(storeSlug);
-    const doc = await docRef.get();
+    const supabase = getSupabase();
 
-    if (!doc.exists) {
+    const { data, error } = await supabase
+      .from("businesses")
+      .select("user_id, store_active")
+      .eq("user_id", storeSlug)
+      .maybeSingle();
+
+    if (error || !data) {
       return false;
     }
 
-    const data = doc.data() as BusinessDocument;
     // Check if store is active
-    return data.storeActive !== false;
+    return data.store_active !== false;
   } catch (error) {
     console.error("[store.ts] Error checking store existence:", error);
     return false;
@@ -201,12 +376,17 @@ function filterAndSortProducts(products: RawProduct[]): StoreProduct[] {
         name: p.name,
         category: p.category || "",
         price: p.price || 0,
+        compareAtPrice: p.compareAtPrice,
         description: p.description,
         imageUrl: p.imageUrl,
         sizes: p.sizes || [],
         colors: p.colors || [],
         available: true, // Already filtered, so always true
+        variants: p.variants || [],
         variantImages: p.variantImages || {},
+        hasSizePricing: p.hasSizePricing,
+        sizePrices: p.sizePrices,
+        sizeStocks: p.sizeStocks,
       }))
   );
 }

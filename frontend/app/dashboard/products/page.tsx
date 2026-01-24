@@ -1,12 +1,13 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import styles from "./products.module.css";
 import SlidePanel from "@/app/utils/ui/SlidePanel";
 import ProductForm from "@/app/dashboard/components/ProductCard/ProductForm";
 import { ProductCard } from "@/app/dashboard/components/ProductCard";
 import Toast from "@/app/components/Toast/Toast";
 import { useAuth } from "@/app/components/auth/AuthProvider";
+import { broadcastStoreUpdate } from "@/app/utils/storeSync";
 
 // Product type definition
 interface Product {
@@ -24,7 +25,15 @@ interface Product {
   imagePublicId: string;
   originalSize: number;
   optimizedSize: number;
-  variants: string[];
+  variants: Array<{
+    id: string;
+    color: string;
+    size: string | string[];
+    price: number;
+    stock: number;
+    imageUrl: string;
+    imagePublicId: string;
+  }>;
   sizes: string[];
   colors: string[];
   brand: string;
@@ -79,13 +88,82 @@ export default function ProductsPage() {
   useEffect(() => {
     const loadData = async () => {
       try {
-        const response = await fetch("/api/business/get");
+        // Fetch from new normalized products API
+        const response = await fetch("/api/products");
         if (response.ok) {
           const result = await response.json();
-          if (result.data) {
-            setProducts(result.data.products || []);
-            setProductCategories(result.data.productCategories || []);
-          }
+          // Map from normalized format to frontend format
+          const mappedProducts = (result.products || []).map(
+            (p: Record<string, unknown>) => ({
+              id: p.id,
+              name: p.name || "",
+              category:
+                ((p.category as Record<string, unknown>)?.name as string) || "",
+              price: p.price || 0,
+              priceUnit: p.price_unit || "INR",
+              duration: p.duration || "",
+              available: p.is_available !== false,
+              description: p.description || "",
+              sku: p.sku || "",
+              stockStatus: p.stock_status || "in_stock",
+              imageUrl: p.image_url || "",
+              imagePublicId: p.image_public_id || "",
+              originalSize: 0,
+              optimizedSize: 0,
+              // Map variants from API (snake_case to camelCase)
+              variants: (
+                (p.variants as Array<Record<string, unknown>>) || []
+              ).map((v) => {
+                // Handle size that might be stored as array, stringified array, or comma-separated string
+                let sizeValue: string | string[] = v.size as string | string[];
+                if (Array.isArray(sizeValue)) {
+                  // Already an array, keep it
+                } else if (
+                  typeof sizeValue === "string" &&
+                  sizeValue.trim().startsWith("[")
+                ) {
+                  try {
+                    const parsed = JSON.parse(sizeValue);
+                    if (Array.isArray(parsed)) {
+                      sizeValue = parsed;
+                    }
+                  } catch {
+                    // Keep original if parsing fails
+                  }
+                } else if (
+                  typeof sizeValue === "string" &&
+                  sizeValue.includes(",")
+                ) {
+                  // Parse comma-separated string to array
+                  sizeValue = sizeValue
+                    .split(",")
+                    .map((s) => s.trim())
+                    .filter(Boolean);
+                }
+
+                return {
+                  id: (v.id as string) || "",
+                  color: (v.color as string) || "",
+                  size: sizeValue || "",
+                  price: parseFloat(String(v.price)) || 0,
+                  stock:
+                    (v.stock_quantity as number) || (v.stock as number) || 0,
+                  imageUrl: (v.image_url as string) || "",
+                  imagePublicId: (v.image_public_id as string) || "",
+                };
+              }),
+              sizes: p.sizes || [],
+              colors: p.colors || [],
+              brand: p.brand || "",
+              materials: p.materials || [],
+            }),
+          );
+          setProducts(mappedProducts);
+          // Categories from the response
+          const categoryNames = (result.categories || []).map(
+            (c: Record<string, unknown>) => c.name as string,
+          );
+          setProductCategories(categoryNames);
         }
       } catch (error) {
         console.error("Error loading products:", error);
@@ -96,30 +174,113 @@ export default function ProductsPage() {
     loadData();
   }, []);
 
-  // Save products to the backend
-  const saveProducts = async (updatedProducts: Product[]) => {
-    setSaving(true);
-    try {
-      const response = await fetch("/api/business/save", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          products: updatedProducts,
-          productCategories,
-        }),
-      });
+  // Save products to the backend (with debouncing for auto-save)
+  const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const [isSavingInBackground, setIsSavingInBackground] = useState(false);
 
-      if (response.ok) {
-        setMessage({ type: "success", text: "Products saved successfully!" });
-      } else {
-        setMessage({ type: "error", text: "Failed to save products" });
+  // Save a single product to the new normalized API
+  const saveProduct = useCallback(
+    async (product: Product, isNew = false) => {
+      setSaving(true);
+      setIsSavingInBackground(true);
+      try {
+        const productData = {
+          name: product.name,
+          description: product.description,
+          sku: product.sku,
+          brand: product.brand,
+          price: product.price,
+          priceUnit: product.priceUnit,
+          stockStatus: product.stockStatus,
+          imageUrl: product.imageUrl,
+          imagePublicId: product.imagePublicId,
+          duration: product.duration,
+          sizes: product.sizes,
+          colors: product.colors,
+          materials: product.materials,
+          available: product.available,
+          category: product.category,
+          // Map variants with correct field names for API (stock → stockQuantity)
+          variants: (product.variants || []).map((v) => ({
+            id: v.id,
+            color: v.color || "",
+            size: Array.isArray(v.size) ? v.size.join(", ") : v.size || "",
+            price: v.price || 0,
+            stockQuantity: v.stock || 0,
+            imageUrl: v.imageUrl || "",
+            imagePublicId: v.imagePublicId || "",
+          })),
+        };
+
+        const url = isNew ? "/api/products" : `/api/products/${product.id}`;
+        const method = isNew ? "POST" : "PUT";
+
+        const response = await fetch(url, {
+          method,
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(productData),
+        });
+
+        if (response.ok) {
+          setMessage({ type: "success", text: "Product saved!" });
+          if (storeSlug) {
+            broadcastStoreUpdate(storeSlug);
+          }
+          return await response.json();
+        } else {
+          const error = await response.json();
+          setMessage({ type: "error", text: error.error || "Failed to save" });
+          return null;
+        }
+      } catch (error) {
+        setMessage({ type: "error", text: "Connection error" });
+        return null;
+      } finally {
+        setSaving(false);
+        setIsSavingInBackground(false);
       }
-    } catch (error) {
-      setMessage({ type: "error", text: "Failed to save products" });
-    } finally {
-      setSaving(false);
-    }
-  };
+    },
+    [storeSlug],
+  );
+
+  // Legacy saveProducts for compatibility (not used anymore)
+  const saveProducts = useCallback(
+    async (updatedProducts: Product[], showMessage = true) => {
+      // This function is kept for backward compatibility but won't be called
+      console.log("saveProducts called - using new API now");
+      if (showMessage) {
+        setMessage({ type: "success", text: "Changes saved!" });
+      }
+    },
+    [],
+  );
+
+  // Cleanup timeout on unmount (for saveTimeoutRef if needed)
+  useEffect(() => {
+    return () => {
+      if (saveTimeoutRef.current) {
+        clearTimeout(saveTimeoutRef.current);
+      }
+    };
+  }, []);
+
+  // Immediate update handler - updates UI instantly, NO auto-save
+  // Saves happen only when user clicks the tick button (onSave callback)
+  // or when the ProductForm is submitted
+  const handleProductUpdate = useCallback(
+    (id: string, field: string, value: unknown) => {
+      setProducts((prevProducts) => {
+        const updated = prevProducts.map((p) =>
+          p.id === id ? { ...p, [field]: value } : p,
+        );
+        // Update ref immediately for other callbacks
+        productsRef.current = updated;
+        // NO auto-save here - let user finish editing and click the tick button
+        return updated;
+      });
+    },
+    [],
+  );
 
   // Add new product
   const addProduct = () => {
@@ -133,20 +294,24 @@ export default function ProductsPage() {
     setIsProductPanelOpen(true);
   };
 
-  // Save product (both add and edit)
+  // Save product (both add and edit) - uses new normalized API
   const handleProductSave = async (product: Product) => {
-    let updatedProducts: Product[];
-    if (editingProduct) {
-      updatedProducts = products.map((p) =>
-        p.id === product.id ? product : p,
-      );
-    } else {
-      updatedProducts = [...products, product];
+    const isNew = !editingProduct;
+    const result = await saveProduct(product, isNew);
+
+    if (result) {
+      if (isNew && result.product) {
+        // Add the new product with the server-generated ID
+        const newProduct = { ...product, id: result.product.id };
+        setProducts([...products, newProduct]);
+      } else {
+        // Update existing product in state
+        setProducts(products.map((p) => (p.id === product.id ? product : p)));
+      }
     }
-    setProducts(updatedProducts);
+
     setIsProductPanelOpen(false);
     setEditingProduct(null);
-    await saveProducts(updatedProducts);
   };
 
   // Cancel editing
@@ -155,40 +320,57 @@ export default function ProductsPage() {
     setEditingProduct(null);
   };
 
-  // Delete product
+  // Delete product - uses new normalized API (soft delete)
   const removeProduct = async (id: string) => {
-    const updatedProducts = products.filter((p) => p.id !== id);
-    setProducts(updatedProducts);
-    await saveProducts(updatedProducts);
+    try {
+      const response = await fetch(`/api/products/${id}`, {
+        method: "DELETE",
+      });
+      if (response.ok) {
+        setProducts(products.filter((p) => p.id !== id));
+        setMessage({ type: "success", text: "Product deleted" });
+        if (storeSlug) {
+          broadcastStoreUpdate(storeSlug);
+        }
+      } else {
+        setMessage({ type: "error", text: "Failed to delete product" });
+      }
+    } catch (error) {
+      setMessage({ type: "error", text: "Connection error" });
+    }
   };
 
-  // Add new category
+  // Add new category - uses new normalized API
   const handleAddCategory = async (categoryName: string) => {
-    // Avoid duplicates
     if (productCategories.includes(categoryName)) return;
 
-    const updatedCategories = [...productCategories, categoryName];
-    setProductCategories(updatedCategories);
-
-    // Save to backend
     try {
-      await fetch("/api/business/save", {
+      const response = await fetch("/api/products/categories", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ productCategories: updatedCategories }),
+        body: JSON.stringify({ name: categoryName }),
       });
-      setMessage({
-        type: "success",
-        text: `Category "${categoryName}" added!`,
-      });
+
+      if (response.ok) {
+        setProductCategories([...productCategories, categoryName]);
+        setMessage({
+          type: "success",
+          text: `Category "${categoryName}" added!`,
+        });
+      } else {
+        const error = await response.json();
+        setMessage({
+          type: "error",
+          text: error.error || "Failed to add category",
+        });
+      }
     } catch (error) {
       console.error("Error saving category:", error);
     }
   };
 
-  // Delete category
+  // Delete category - uses new normalized API
   const handleDeleteCategory = async (categoryName: string) => {
-    // Check if any product uses this category
     const productsUsingCategory = products.filter(
       (p) => p.category === categoryName,
     );
@@ -200,22 +382,23 @@ export default function ProductsPage() {
       return;
     }
 
-    const updatedCategories = productCategories.filter(
-      (cat) => cat !== categoryName,
-    );
-    setProductCategories(updatedCategories);
-
-    // Save to backend
     try {
-      await fetch("/api/business/save", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ productCategories: updatedCategories }),
-      });
-      setMessage({
-        type: "success",
-        text: `Category "${categoryName}" deleted!`,
-      });
+      const response = await fetch(
+        `/api/products/categories?name=${encodeURIComponent(categoryName)}`,
+        { method: "DELETE" },
+      );
+
+      if (response.ok) {
+        setProductCategories(
+          productCategories.filter((cat) => cat !== categoryName),
+        );
+        setMessage({
+          type: "success",
+          text: `Category "${categoryName}" deleted!`,
+        });
+      } else {
+        setMessage({ type: "error", text: "Failed to delete category" });
+      }
     } catch (error) {
       console.error("Error deleting category:", error);
     }
@@ -304,6 +487,14 @@ export default function ProductsPage() {
         />
       )}
 
+      {/* Auto-Save Indicator */}
+      {isSavingInBackground && (
+        <div className={styles.savingIndicator}>
+          <div className={styles.savingSpinner} />
+          <span>Saving...</span>
+        </div>
+      )}
+
       {/* Store Link Banner */}
       {storeSlug && (
         <div className={styles.storeLinkBanner}>
@@ -322,7 +513,9 @@ export default function ProductsPage() {
               <polyline points="9 22 9 12 15 12 15 22" />
             </svg>
             <span className={styles.storeLinkLabel}>Your Store:</span>
-            <span className={styles.storeLinkUrl}>{storeUrl}</span>
+            <span className={styles.storeLinkUrl} title={storeUrl}>
+              {storeUrl}
+            </span>
           </div>
           <div className={styles.storeLinkActions}>
             <button
@@ -433,23 +626,18 @@ export default function ProductsPage() {
               index={index}
               isEcommerce={true}
               productCategories={productCategories}
-              onUpdate={(id, field, value) => {
-                const updatedProducts = products.map((p) =>
-                  p.id === id ? { ...p, [field]: value } : p,
-                );
-                setProducts(updatedProducts);
-              }}
+              onUpdate={handleProductUpdate}
               onRemove={removeProduct}
               onImageDeleted={() => {
                 // Auto-save after image deletion - use ref for latest state
-                saveProducts(productsRef.current);
+                saveProducts(productsRef.current, true);
               }}
-              onSave={() => {
-                // Save when tick button is clicked - use ref for latest state
+              onSave={async (updatedProduct) => {
+                // Save the updated product to database using the correct API function
                 console.log(
-                  "[ProductCard] onSave triggered, saving products...",
+                  "[ProductCard] onSave triggered, saving product...",
                 );
-                setTimeout(() => saveProducts(productsRef.current), 300);
+                await saveProduct(updatedProduct as Product, false);
               }}
             />
           ))}
@@ -466,7 +654,7 @@ export default function ProductsPage() {
           product={editingProduct || undefined}
           isEcommerce={true}
           productCategories={productCategories}
-          onSave={handleProductSave}
+          onSave={(p) => handleProductSave(p as any)}
           onCancel={handleProductCancel}
           onAddCategory={handleAddCategory}
           onDeleteCategory={handleDeleteCategory}

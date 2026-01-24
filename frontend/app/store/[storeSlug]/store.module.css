@@ -637,11 +637,26 @@
   margin-top: 4px;
 }
 
+.novaPriceContainer {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
 .novaPrice {
   font-size: 18px;
   font-weight: 800;
   color: #1a1a1a;
   letter-spacing: -0.02em;
+}
+
+.novaOriginalPrice {
+  font-size: 13px;
+  font-weight: 500;
+  color: #999;
+  text-decoration: line-through;
+  margin-left: 2px;
 }
 
 /* Color Swatches */

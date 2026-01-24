@@ -1,65 +1,57 @@
 "use client";
 
-"use client";
-
 import { useState, useEffect, useRef, useMemo } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import styles from "./add-product.module.css";
 import ProductImageUpload from "../../components/ProductImageUpload";
+import SearchableDropdown from "../../components/SearchableDropdown";
+import type { SearchableOption } from "../../components/SearchableDropdown";
 
 // Variant type definition
 interface ProductVariant {
   id: string;
   color: string;
-  size: string;
+  size: string[];
   price: number;
   stock: number;
   imageUrl: string;
   imagePublicId: string;
+  sizeStocks?: Record<string, number>;
+  hasSizePricing?: boolean;
+  sizePrices?: Record<string, number>;
 }
 
-const COLOR_OPTIONS = [
-  "Black",
-  "White",
-  "Red",
-  "Blue",
-  "Green",
-  "Yellow",
-  "Gray",
-  "Pink",
-  "Purple",
-  "Orange",
-  "Brown",
-  "Beige",
-  "Navy",
-  "Maroon",
-  "Olive",
-  "Silver",
-  "Gold",
-  "Multi",
+// Default fallback options (used if DB options not available)
+const DEFAULT_COLOR_OPTIONS = [
+  { name: "Black", hex: "#000000" },
+  { name: "White", hex: "#FFFFFF" },
+  { name: "Red", hex: "#EF4444" },
+  { name: "Blue", hex: "#3B82F6" },
+  { name: "Green", hex: "#22C55A" },
+  { name: "Yellow", hex: "#EAB308" },
+  { name: "Gray", hex: "#6B7280" },
+  { name: "Pink", hex: "#EC4899" },
+  { name: "Purple", hex: "#A855F7" },
+  { name: "Orange", hex: "#F97316" },
 ];
 
-const SIZE_OPTIONS = [
-  "Free Size",
+const DEFAULT_SIZE_OPTIONS = [
   "XS",
   "S",
   "M",
   "L",
   "XL",
   "XXL",
-  "3XL",
-  "4XL",
-  "5XL",
-  "6",
-  "7",
-  "8",
-  "9",
-  "10",
-  "11",
-  "12",
-  "One Size",
+  "XXXL",
+  "Free Size",
 ];
+
+// Color option interface
+interface ColorOption {
+  name: string;
+  hex: string;
+}
 
 // Product type definition
 interface Product {
@@ -81,7 +73,7 @@ interface Product {
   optimizedSize: number;
   variants: ProductVariant[];
   sizes: string[];
-  colors: string[];
+  colors: string;
   brand: string;
   materials: string[];
   sellingType: string;
@@ -91,6 +83,9 @@ interface Product {
   packageBreadth: number;
   packageWidth: number;
   images: string[];
+  hasSizePricing?: boolean;
+  sizePrices?: Record<string, number>;
+  sizeStocks?: Record<string, number>;
 }
 
 // Selling type options (Hidden as per user request, but keeping type for compatibility)
@@ -120,7 +115,7 @@ const createEmptyProduct = (): Product => ({
   optimizedSize: 0,
   variants: [],
   sizes: [],
-  colors: [],
+  colors: "",
   brand: "",
   materials: [],
   sellingType: "in-store",
@@ -130,10 +125,13 @@ const createEmptyProduct = (): Product => ({
   packageBreadth: 0,
   packageWidth: 0,
   images: [],
+  hasSizePricing: false,
+  sizePrices: {},
+  sizeStocks: {},
 });
 
-// Searchable Dropdown Component
-function SearchableDropdown({
+// Multi-Select Dropdown Component (for colors and sizes)
+function MultiSelectDropdown({
   options,
   value,
   onChange,
@@ -285,6 +283,9 @@ function SearchableDropdown({
   );
 }
 
+// LocalStorage key for draft product
+const DRAFT_PRODUCT_KEY = "draft_product_add";
+
 export default function AddProductPage() {
   const router = useRouter();
   const [formData, setFormData] = useState<Product>(createEmptyProduct());
@@ -297,33 +298,26 @@ export default function AddProductPage() {
   } | null>(null);
   const [showOfferPrice, setShowOfferPrice] = useState(false);
   const [productVariants, setProductVariants] = useState<ProductVariant[]>([]);
-  const [categoryDropdownOpen, setCategoryDropdownOpen] = useState(false);
-  const categoryDropdownRef = useRef<HTMLDivElement>(null);
-
-  // Close dropdown when clicking outside
-  useEffect(() => {
-    function handleClickOutside(event: MouseEvent) {
-      if (
-        categoryDropdownRef.current &&
-        !categoryDropdownRef.current.contains(event.target as Node)
-      ) {
-        setCategoryDropdownOpen(false);
-      }
-    }
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, []);
+  const [customCategory, setCustomCategory] = useState("");
+  const [isDataLoaded, setIsDataLoaded] = useState(false);
+  // Dynamic color and size options from database
+  const [colorOptions, setColorOptions] = useState<ColorOption[]>(
+    DEFAULT_COLOR_OPTIONS,
+  );
+  const [sizeOptions, setSizeOptions] =
+    useState<string[]>(DEFAULT_SIZE_OPTIONS);
 
   // Add a new variant
   const addVariant = () => {
     const newVariant: ProductVariant = {
       id: Date.now().toString(),
       color: "",
-      size: "",
+      size: [],
       price: formData.price || 0,
       stock: 0,
       imageUrl: "",
       imagePublicId: "",
+      sizeStocks: {},
     };
     setProductVariants([...productVariants, newVariant]);
   };
@@ -332,10 +326,29 @@ export default function AddProductPage() {
   const updateVariant = (
     id: string,
     field: keyof ProductVariant,
-    value: string | number,
+    value: string | string[] | number | boolean | Record<string, number>,
   ) => {
     setProductVariants((prevVariants) =>
-      prevVariants.map((v) => (v.id === id ? { ...v, [field]: value } : v)),
+      prevVariants.map((v) => {
+        if (v.id === id) {
+          const updated = { ...v, [field]: value };
+
+          // Cleanup sizeStocks if size changed
+          if (field === "size" && updated.sizeStocks) {
+            const newSizeStocks = { ...updated.sizeStocks };
+            const sizes = value as string[];
+            Object.keys(newSizeStocks).forEach((s) => {
+              if (!sizes.includes(s)) {
+                delete newSizeStocks[s];
+              }
+            });
+            updated.sizeStocks = newSizeStocks;
+          }
+
+          return updated;
+        }
+        return v;
+      }),
     );
   };
 
@@ -344,32 +357,84 @@ export default function AddProductPage() {
     setProductVariants(productVariants.filter((v) => v.id !== id));
   };
 
-  // Load categories on mount
+  // Load categories, color/size options, and restore draft from localStorage on mount
   useEffect(() => {
     const loadData = async () => {
       try {
-        const response = await fetch("/api/business/get");
+        // Load categories from API
+        const response = await fetch("/api/products/categories");
         if (response.ok) {
           const result = await response.json();
-          if (result.data) {
-            setProductCategories(result.data.productCategories || []);
+          if (result.categories) {
+            setProductCategories(
+              result.categories.map((c: { name: string }) => c.name),
+            );
+          }
+        }
+
+        // Load color and size options from business settings
+        const businessResponse = await fetch("/api/business/get");
+        if (businessResponse.ok) {
+          const businessResult = await businessResponse.json();
+          if (businessResult.data) {
+            if (
+              businessResult.data.colorOptions &&
+              businessResult.data.colorOptions.length > 0
+            ) {
+              setColorOptions(businessResult.data.colorOptions);
+            }
+            if (
+              businessResult.data.sizeOptions &&
+              businessResult.data.sizeOptions.length > 0
+            ) {
+              setSizeOptions(businessResult.data.sizeOptions);
+            }
+          }
+        }
+
+        // Restore draft from localStorage
+        const savedDraft = localStorage.getItem(DRAFT_PRODUCT_KEY);
+        if (savedDraft) {
+          try {
+            const draft = JSON.parse(savedDraft);
+            setFormData(draft.formData || createEmptyProduct());
+            setProductVariants(draft.productVariants || []);
+            setCustomCategory(draft.customCategory || "");
+            setShowOfferPrice(draft.showOfferPrice || false);
+          } catch (e) {
+            console.error("Error parsing saved draft:", e);
           }
         }
       } catch (error) {
-        console.error("Error loading categories:", error);
+        console.error("Error loading data:", error);
       } finally {
         setLoading(false);
+        setIsDataLoaded(true);
       }
     };
     loadData();
   }, []);
+
+  // Auto-save draft to localStorage whenever form data changes
+  useEffect(() => {
+    if (!isDataLoaded) return; // Don't save until initial data is loaded
+
+    const draft = {
+      formData,
+      productVariants,
+      customCategory,
+      showOfferPrice,
+      timestamp: Date.now(),
+    };
+    localStorage.setItem(DRAFT_PRODUCT_KEY, JSON.stringify(draft));
+  }, [formData, productVariants, customCategory, showOfferPrice, isDataLoaded]);
 
   // Update field helper
   const updateField = (field: keyof Product, value: unknown) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
   };
 
-  // Handle save
+  // Handle save - uses new normalized /api/products endpoint
   const handleSave = async () => {
     if (!formData.name.trim()) {
       setMessage({ type: "error", text: "Product name is required" });
@@ -378,34 +443,57 @@ export default function AddProductPage() {
 
     setSaving(true);
     try {
-      // First get existing products
-      const getResponse = await fetch("/api/business/get");
-      const getData = await getResponse.json();
-      const existingProducts = getData.data?.products || [];
+      // If a new custom category was created, add it first
+      if (customCategory && !productCategories.includes(customCategory)) {
+        await fetch("/api/products/categories", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ name: customCategory }),
+        });
+      }
 
-      // Add new product with variants
-      const productToSave = {
-        ...formData,
+      // Build product data for the new API
+      const productData = {
+        name: formData.name,
+        description: formData.description,
+        sku: formData.sku,
+        brand: formData.brand,
+        price: formData.price,
+        compareAtPrice: formData.compareAtPrice,
+        priceUnit: formData.priceUnit,
+        stockStatus: formData.stockStatus,
+        stockQuantity: formData.quantity,
+        imageUrl: formData.imageUrl,
+        imagePublicId: formData.imagePublicId,
+        duration: formData.duration,
+        sizes: formData.sizes,
+        colors: formData.colors ? [formData.colors] : [],
+        materials: formData.materials,
+        available: formData.available,
+        category: formData.category || customCategory,
         variants: productVariants,
       };
-      const updatedProducts = [...existingProducts, productToSave];
 
-      // Save products
-      const response = await fetch("/api/business/save", {
+      // Create product via new API
+      const response = await fetch("/api/products", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          products: updatedProducts,
-        }),
+        body: JSON.stringify(productData),
       });
 
       if (response.ok) {
+        // Clear the draft from localStorage on successful save
+        localStorage.removeItem(DRAFT_PRODUCT_KEY);
         setMessage({ type: "success", text: "Product added successfully!" });
         setTimeout(() => {
           router.push("/dashboard/products");
         }, 1000);
       } else {
-        setMessage({ type: "error", text: "Failed to save product" });
+        const error = await response.json();
+        setMessage({
+          type: "error",
+          text: error.error || "Failed to save product",
+        });
       }
     } catch (error) {
       setMessage({ type: "error", text: "Failed to save product" });
@@ -416,6 +504,8 @@ export default function AddProductPage() {
 
   // Handle discard
   const handleDiscard = () => {
+    // Clear the draft from localStorage when discarding
+    localStorage.removeItem(DRAFT_PRODUCT_KEY);
     router.push("/dashboard/products");
   };
 
@@ -458,6 +548,32 @@ export default function AddProductPage() {
             Back to product list
           </Link>
           <h1 className={styles.pageTitle}>Add New Product</h1>
+          {isDataLoaded && (
+            <p
+              style={{
+                fontSize: "13px",
+                color: "rgba(255,255,255,0.5)",
+                marginTop: "4px",
+                display: "flex",
+                alignItems: "center",
+                gap: "6px",
+              }}
+            >
+              <svg
+                width="14"
+                height="14"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+              >
+                <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" />
+                <polyline points="17 21 17 13 7 13 7 21" />
+                <polyline points="7 3 7 8 15 8" />
+              </svg>
+              Draft auto-saved
+            </p>
+          )}
         </div>
       </div>
 
@@ -507,9 +623,23 @@ export default function AddProductPage() {
                   type="number"
                   className={`${styles.input} ${styles.inputWithPrefixField}`}
                   value={formData.price || ""}
-                  onChange={(e) =>
-                    updateField("price", parseFloat(e.target.value) || 0)
-                  }
+                  onChange={(e) => {
+                    const newPrice = parseFloat(e.target.value) || 0;
+                    updateField("price", newPrice);
+                    // If offer price is OFF and size pricing is ON, propagate change to sizes
+                    if (
+                      !showOfferPrice &&
+                      formData.hasSizePricing &&
+                      formData.sizes &&
+                      formData.sizes.length > 0
+                    ) {
+                      const updatedPrices: Record<string, number> = {};
+                      formData.sizes.forEach((size) => {
+                        updatedPrices[size] = newPrice;
+                      });
+                      updateField("sizePrices", updatedPrices);
+                    }
+                  }}
                   placeholder="180.00"
                 />
               </div>
@@ -525,7 +655,32 @@ export default function AddProductPage() {
                 <button
                   type="button"
                   className={styles.toggleBtn}
-                  onClick={() => setShowOfferPrice(!showOfferPrice)}
+                  onClick={() => {
+                    const newShowOfferPrice = !showOfferPrice;
+                    setShowOfferPrice(newShowOfferPrice);
+                    // If size pricing is enabled, update size prices based on offer price toggle state
+                    if (
+                      formData.hasSizePricing &&
+                      formData.sizes &&
+                      formData.sizes.length > 0
+                    ) {
+                      const updatedPrices: Record<string, number> = {};
+                      if (newShowOfferPrice) {
+                        // Turning ON offer price - use offer price (or current price if compareAtPrice not set yet)
+                        const offerPrice =
+                          formData.compareAtPrice || formData.price || 0;
+                        formData.sizes.forEach((size) => {
+                          updatedPrices[size] = offerPrice;
+                        });
+                      } else {
+                        // Turning OFF offer price - use regular price
+                        formData.sizes.forEach((size) => {
+                          updatedPrices[size] = formData.price ?? 0;
+                        });
+                      }
+                      updateField("sizePrices", updatedPrices);
+                    }
+                  }}
                   style={{
                     width: "40px",
                     height: "22px",
@@ -561,12 +716,23 @@ export default function AddProductPage() {
                       type="number"
                       className={`${styles.input} ${styles.inputWithPrefixField}`}
                       value={formData.compareAtPrice || ""}
-                      onChange={(e) =>
-                        updateField(
-                          "compareAtPrice",
-                          parseFloat(e.target.value) || 0,
-                        )
-                      }
+                      onChange={(e) => {
+                        const newOfferPrice = parseFloat(e.target.value) || 0;
+                        updateField("compareAtPrice", newOfferPrice);
+                        // If offer price is ON and size pricing is ON, propagate change to sizes
+                        if (
+                          showOfferPrice &&
+                          formData.hasSizePricing &&
+                          formData.sizes &&
+                          formData.sizes.length > 0
+                        ) {
+                          const updatedPrices: Record<string, number> = {};
+                          formData.sizes.forEach((size) => {
+                            updatedPrices[size] = newOfferPrice;
+                          });
+                          updateField("sizePrices", updatedPrices);
+                        }
+                      }}
                       placeholder="320.00"
                       style={{ paddingRight: "40px" }}
                     />
@@ -576,6 +742,18 @@ export default function AddProductPage() {
                     onClick={() => {
                       setShowOfferPrice(false);
                       updateField("compareAtPrice", 0);
+                      // Update size prices to use regular price when offer price is removed
+                      if (
+                        formData.hasSizePricing &&
+                        formData.sizes &&
+                        formData.sizes.length > 0
+                      ) {
+                        const updatedPrices: Record<string, number> = {};
+                        formData.sizes.forEach((size) => {
+                          updatedPrices[size] = formData.price ?? 0;
+                        });
+                        updateField("sizePrices", updatedPrices);
+                      }
                     }}
                     style={{
                       position: "absolute",
@@ -601,26 +779,127 @@ export default function AddProductPage() {
           {/* Color and Size Fields */}
           <div className={styles.fieldsRow}>
             <div className={styles.field}>
-              <label className={styles.label}>Colors</label>
-              <SearchableDropdown
-                options={COLOR_OPTIONS}
-                value={formData.colors || []}
+              <label className={styles.label}>Color</label>
+              <MultiSelectDropdown
+                options={colorOptions.map((c) => c.name)}
+                value={formData.colors || ""}
                 onChange={(val) => updateField("colors", val)}
-                placeholder="Select colors..."
-                multi={true}
+                placeholder="Select color..."
+                multi={false}
               />
             </div>
             <div className={styles.field}>
               <label className={styles.label}>Sizes</label>
-              <SearchableDropdown
-                options={SIZE_OPTIONS}
+              <MultiSelectDropdown
+                options={sizeOptions}
                 value={formData.sizes || []}
-                onChange={(val) => updateField("sizes", val)}
+                onChange={(val) => {
+                  const sizes = val as string[];
+                  updateField("sizes", sizes);
+                  // Clean up sizePrices for removed sizes
+                  if (formData.sizePrices) {
+                    const newSizePrices = { ...formData.sizePrices };
+                    Object.keys(newSizePrices).forEach((size) => {
+                      if (!sizes.includes(size)) {
+                        delete newSizePrices[size];
+                      }
+                    });
+                    updateField("sizePrices", newSizePrices);
+                  }
+                  // Clean up sizeStocks for removed sizes
+                  if (formData.sizeStocks) {
+                    const newSizeStocks = { ...formData.sizeStocks };
+                    Object.keys(newSizeStocks).forEach((size) => {
+                      if (!sizes.includes(size)) {
+                        delete newSizeStocks[size];
+                      }
+                    });
+                    updateField("sizeStocks", newSizeStocks);
+                  }
+                }}
                 placeholder="Select sizes..."
                 multi={true}
               />
             </div>
           </div>
+
+          {/* Size-Based Pricing Toggle - Only show when 2 or more sizes are selected */}
+          {formData.sizes && formData.sizes.length > 1 && (
+            <div className={styles.sizePricingSection}>
+              <div className={styles.sizePricingToggle}>
+                <div className={styles.toggleInfo}>
+                  <span className={styles.toggleLabel}>
+                    Different price for each size
+                  </span>
+                  <span className={styles.toggleHint}>
+                    Enable to set individual prices per size
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  className={`${styles.toggleSwitch} ${formData.hasSizePricing ? styles.toggleActive : ""}`}
+                  onClick={() => {
+                    const newValue = !formData.hasSizePricing;
+                    updateField("hasSizePricing", newValue);
+                    // Initialize sizePrices with current base price when enabling
+                    if (newValue && formData.sizes) {
+                      const initialPrices: Record<string, number> = {};
+                      // Use offer price if enabled, otherwise use regular price
+                      const basePrice =
+                        showOfferPrice && formData.compareAtPrice
+                          ? formData.compareAtPrice
+                          : formData.price;
+                      formData.sizes.forEach((size) => {
+                        // Always reset to current base price when toggling ON to ensure it gets the latest global price
+                        initialPrices[size] = basePrice ?? 0;
+                      });
+                      updateField("sizePrices", initialPrices);
+                    }
+                  }}
+                  aria-pressed={formData.hasSizePricing}
+                >
+                  <span className={styles.toggleKnob} />
+                </button>
+              </div>
+
+              {/* Size-Specific Price Inputs */}
+              {formData.hasSizePricing && (
+                <div className={styles.sizePricesContainer}>
+                  <div className={styles.sizePricesGrid}>
+                    {formData.sizes.map((size) => (
+                      <div key={size} className={styles.sizePriceItem}>
+                        <label className={styles.sizePriceLabel}>{size}</label>
+                        <div className={styles.sizePriceInputWrapper}>
+                          <span className={styles.currencySymbol}>$</span>
+                          <input
+                            type="number"
+                            className={styles.sizePriceInput}
+                            value={
+                              formData.sizePrices?.[size] ??
+                              (showOfferPrice && formData.compareAtPrice
+                                ? formData.compareAtPrice
+                                : formData.price) ??
+                              ""
+                            }
+                            onChange={(e) => {
+                              const newPrice = parseFloat(e.target.value) || 0;
+                              updateField("sizePrices", {
+                                ...(formData.sizePrices || {}),
+                                [size]: newPrice,
+                              });
+                            }}
+                            placeholder="0"
+                            min="0"
+                            step="1"
+                          />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
 
           <div className={styles.field}>
             <div className={styles.fieldHeader}>
@@ -694,78 +973,19 @@ The CBD USED
 
           <div className={styles.field}>
             <label className={styles.label}>Product Category</label>
-            <div className={styles.customDropdown} ref={categoryDropdownRef}>
-              <button
-                type="button"
-                className={`${styles.dropdownTrigger} ${categoryDropdownOpen ? styles.open : ""}`}
-                onClick={() => setCategoryDropdownOpen(!categoryDropdownOpen)}
-              >
-                {formData.category ? (
-                  <span className={styles.dropdownValue}>
-                    <span className={styles.categoryIcon}>📦</span>
-                    {formData.category}
-                  </span>
-                ) : (
-                  <span className={styles.dropdownPlaceholder}>
-                    Select a category
-                  </span>
-                )}
-                <svg
-                  className={styles.dropdownArrow}
-                  width="18"
-                  height="18"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                >
-                  <polyline
-                    points="6 9 12 15 18 9"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  />
-                </svg>
-              </button>
-
-              {categoryDropdownOpen && (
-                <div className={styles.dropdownMenu}>
-                  {productCategories.length > 0 ? (
-                    productCategories.map((cat) => (
-                      <div
-                        key={cat}
-                        className={`${styles.dropdownItem} ${formData.category === cat ? styles.selected : ""}`}
-                        onClick={() => {
-                          updateField("category", cat);
-                          setCategoryDropdownOpen(false);
-                        }}
-                      >
-                        <span className={styles.dropdownItemIcon}>📦</span>
-                        <span className={styles.dropdownItemText}>{cat}</span>
-                        <svg
-                          className={styles.dropdownItemCheck}
-                          width="18"
-                          height="18"
-                          viewBox="0 0 24 24"
-                          fill="none"
-                          stroke="currentColor"
-                          strokeWidth="2"
-                        >
-                          <polyline
-                            points="20 6 9 17 4 12"
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                          />
-                        </svg>
-                      </div>
-                    ))
-                  ) : (
-                    <div className={styles.noCategories}>
-                      No categories available. Add one first.
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
+            <SearchableDropdown
+              options={productCategories.map((cat) => ({
+                id: cat,
+                label: cat,
+              }))}
+              value={formData.category}
+              customValue={customCategory}
+              onChange={(value, customValue) => {
+                updateField("category", value);
+                setCustomCategory(customValue || "");
+              }}
+              placeholder="Type to search or add a category..."
+            />
           </div>
         </div>
 
@@ -773,7 +993,29 @@ The CBD USED
         <div className={styles.section}>
           <h2 className={styles.sectionTitle}>Inventory</h2>
 
-          <div className={styles.fieldsRow}>
+          {formData.sizes && formData.sizes.length > 0 ? (
+            <div className={styles.sizeInventoryGrid}>
+              {formData.sizes.map((size) => (
+                <div key={size} className={styles.field}>
+                  <label className={styles.label}>Quantity for {size}</label>
+                  <input
+                    type="number"
+                    className={styles.input}
+                    value={formData.sizeStocks?.[size] ?? ""}
+                    onChange={(e) => {
+                      const newQuantity = parseInt(e.target.value) || 0;
+                      updateField("sizeStocks", {
+                        ...(formData.sizeStocks || {}),
+                        [size]: newQuantity,
+                      });
+                    }}
+                    placeholder="0"
+                    min="0"
+                  />
+                </div>
+              ))}
+            </div>
+          ) : (
             <div className={styles.field}>
               <label className={styles.label}>Quantity</label>
               <input
@@ -784,19 +1026,10 @@ The CBD USED
                   updateField("quantity", parseInt(e.target.value) || 0)
                 }
                 placeholder="1020"
+                min="0"
               />
             </div>
-            <div className={styles.field}>
-              <label className={styles.label}>SKU(Optional)</label>
-              <input
-                type="text"
-                className={styles.input}
-                value={formData.sku}
-                onChange={(e) => updateField("sku", e.target.value)}
-                placeholder="UGG-BB-PUR-06"
-              />
-            </div>
-          </div>
+          )}
         </div>
 
         {/* Variant Section */}
@@ -873,8 +1106,8 @@ The CBD USED
                     }}
                   >
                     <div style={{ flex: "1 1 200px", minWidth: "150px" }}>
-                      <SearchableDropdown
-                        options={COLOR_OPTIONS}
+                      <MultiSelectDropdown
+                        options={colorOptions.map((c) => c.name)}
                         value={variant.color}
                         onChange={(val) =>
                           updateVariant(variant.id, "color", val as string)
@@ -885,14 +1118,14 @@ The CBD USED
                     </div>
 
                     <div style={{ flex: "1 1 200px", minWidth: "150px" }}>
-                      <SearchableDropdown
-                        options={SIZE_OPTIONS}
-                        value={variant.size}
+                      <MultiSelectDropdown
+                        options={sizeOptions}
+                        value={variant.size || []}
                         onChange={(val) =>
-                          updateVariant(variant.id, "size", val as string)
+                          updateVariant(variant.id, "size", val as string[])
                         }
-                        placeholder="Size"
-                        multi={false}
+                        placeholder="Sizes"
+                        multi={true}
                       />
                     </div>
 
@@ -931,21 +1164,246 @@ The CBD USED
                       />
                     </div>
 
-                    <div style={{ flex: "1 1 80px", minWidth: "80px" }}>
-                      <input
-                        type="number"
-                        className={styles.input}
-                        value={variant.stock || ""}
-                        onChange={(e) =>
-                          updateVariant(
-                            variant.id,
-                            "stock",
-                            parseInt(e.target.value) || 0,
-                          )
-                        }
-                        placeholder="Stock"
-                        style={{ margin: 0 }}
-                      />
+                    {/* Size-Based Pricing Toggle - Only show when multiple sizes are selected */}
+                    {variant.size && variant.size.length > 1 && (
+                      <div style={{ width: "100%", marginTop: "16px" }}>
+                        <div
+                          style={{
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "space-between",
+                            padding: "14px 16px",
+                            background:
+                              "linear-gradient(135deg, rgba(34, 193, 90, 0.08) 0%, rgba(34, 193, 90, 0.02) 100%)",
+                            border: "1px solid rgba(34, 193, 90, 0.2)",
+                            borderRadius: "10px",
+                            marginBottom: variant.hasSizePricing ? "12px" : 0,
+                          }}
+                        >
+                          <div
+                            style={{
+                              display: "flex",
+                              flexDirection: "column",
+                              gap: "2px",
+                            }}
+                          >
+                            <span
+                              style={{
+                                fontSize: "13px",
+                                fontWeight: 600,
+                                color: "#fff",
+                              }}
+                            >
+                              Different price for each size
+                            </span>
+                            <span
+                              style={{
+                                fontSize: "11px",
+                                color: "rgba(255,255,255,0.5)",
+                              }}
+                            >
+                              Set individual prices per size
+                            </span>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const newValue = !variant.hasSizePricing;
+                              updateVariant(
+                                variant.id,
+                                "hasSizePricing",
+                                newValue,
+                              );
+                              if (newValue && variant.size) {
+                                const initialPrices: Record<string, number> =
+                                  {};
+                                variant.size.forEach((sz) => {
+                                  initialPrices[sz] =
+                                    variant.sizePrices?.[sz] ??
+                                    variant.price ??
+                                    0;
+                                });
+                                updateVariant(
+                                  variant.id,
+                                  "sizePrices",
+                                  initialPrices,
+                                );
+                              }
+                            }}
+                            style={{
+                              position: "relative",
+                              width: "48px",
+                              height: "26px",
+                              background: variant.hasSizePricing
+                                ? "linear-gradient(135deg, #22c15a 0%, #1fa850 100%)"
+                                : "rgba(255, 255, 255, 0.12)",
+                              border: variant.hasSizePricing
+                                ? "1px solid #22c15a"
+                                : "1px solid rgba(255, 255, 255, 0.15)",
+                              borderRadius: "13px",
+                              cursor: "pointer",
+                              transition: "all 0.3s ease",
+                              flexShrink: 0,
+                            }}
+                          >
+                            <span
+                              style={{
+                                position: "absolute",
+                                top: "3px",
+                                left: variant.hasSizePricing ? "24px" : "3px",
+                                width: "18px",
+                                height: "18px",
+                                background: "#fff",
+                                borderRadius: "50%",
+                                transition: "all 0.3s ease",
+                                boxShadow: "0 2px 6px rgba(0, 0, 0, 0.2)",
+                              }}
+                            />
+                          </button>
+                        </div>
+
+                        {/* Size-Specific Price Inputs */}
+                        {variant.hasSizePricing && (
+                          <div
+                            style={{
+                              display: "grid",
+                              gridTemplateColumns:
+                                "repeat(auto-fill, minmax(100px, 1fr))",
+                              gap: "12px",
+                              padding: "14px",
+                              background: "rgba(255, 255, 255, 0.02)",
+                              border: "1px solid rgba(255, 255, 255, 0.08)",
+                              borderRadius: "10px",
+                            }}
+                          >
+                            {variant.size.map((sz) => (
+                              <div
+                                key={sz}
+                                style={{
+                                  display: "flex",
+                                  flexDirection: "column",
+                                  gap: "6px",
+                                }}
+                              >
+                                <label
+                                  style={{
+                                    fontSize: "12px",
+                                    fontWeight: 600,
+                                    color: "rgba(255, 255, 255, 0.85)",
+                                    textTransform: "uppercase",
+                                    padding: "3px 8px",
+                                    background: "rgba(34, 193, 90, 0.15)",
+                                    borderRadius: "5px",
+                                    textAlign: "center",
+                                    border: "1px solid rgba(34, 193, 90, 0.25)",
+                                  }}
+                                >
+                                  {sz}
+                                </label>
+                                <div style={{ position: "relative" }}>
+                                  <span
+                                    style={{
+                                      position: "absolute",
+                                      left: "10px",
+                                      top: "50%",
+                                      transform: "translateY(-50%)",
+                                      color: "rgba(255,255,255,0.5)",
+                                      fontSize: "13px",
+                                    }}
+                                  >
+                                    $
+                                  </span>
+                                  <input
+                                    type="number"
+                                    value={
+                                      variant.sizePrices?.[sz] ??
+                                      variant.price ??
+                                      ""
+                                    }
+                                    onChange={(e) => {
+                                      const newPrice =
+                                        parseFloat(e.target.value) || 0;
+                                      updateVariant(variant.id, "sizePrices", {
+                                        ...(variant.sizePrices || {}),
+                                        [sz]: newPrice,
+                                      });
+                                    }}
+                                    placeholder="0"
+                                    min="0"
+                                    style={{
+                                      width: "100%",
+                                      padding: "8px 10px 8px 24px",
+                                      background: "rgba(0, 0, 0, 0.25)",
+                                      border:
+                                        "1px solid rgba(255, 255, 255, 0.12)",
+                                      borderRadius: "6px",
+                                      fontSize: "13px",
+                                      color: "#fff",
+                                      textAlign: "right",
+                                    }}
+                                  />
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Variant Stock Section */}
+                    <div style={{ width: "100%", marginTop: "12px" }}>
+                      {variant.size && variant.size.length > 0 ? (
+                        <div className={styles.sizeInventoryGrid}>
+                          {variant.size.map((sz) => (
+                            <div
+                              key={sz}
+                              className={styles.field}
+                              style={{ marginBottom: 0 }}
+                            >
+                              <label
+                                className={styles.label}
+                                style={{ fontSize: "11px" }}
+                              >
+                                Stock for {sz}
+                              </label>
+                              <input
+                                type="number"
+                                className={styles.input}
+                                value={variant.sizeStocks?.[sz] ?? ""}
+                                onChange={(e) => {
+                                  const newQty = parseInt(e.target.value) || 0;
+                                  updateVariant(variant.id, "sizeStocks", {
+                                    ...(variant.sizeStocks || {}),
+                                    [sz]: newQty,
+                                  });
+                                }}
+                                placeholder="0"
+                                min="0"
+                              />
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <div
+                          className={styles.field}
+                          style={{ maxWidth: "200px" }}
+                        >
+                          <label className={styles.label}>Stock</label>
+                          <input
+                            type="number"
+                            className={styles.input}
+                            value={variant.stock || ""}
+                            onChange={(e) =>
+                              updateVariant(
+                                variant.id,
+                                "stock",
+                                parseInt(e.target.value) || 0,
+                              )
+                            }
+                            placeholder="Stock"
+                          />
+                        </div>
+                      )}
                     </div>
 
                     <button

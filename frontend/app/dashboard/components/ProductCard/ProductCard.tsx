@@ -6,16 +6,19 @@ import ProductImageUpload from "../ProductImageUpload";
 import ImageModal from "../ImageModal";
 import Dropdown, { DropdownOption } from "@/app/utils/ui/Dropdown";
 import SearchableDropdown from "../SearchableDropdown";
+import SlidePanel from "@/app/utils/ui/SlidePanel";
 
 // Types
 interface ProductVariant {
   id: string;
   color: string;
-  size: string;
+  size: string | string[];
   price: number;
   stock: number;
   imageUrl: string;
   imagePublicId: string;
+  hasSizePricing?: boolean;
+  sizePrices?: Record<string, number>;
 }
 
 interface ProductService {
@@ -33,9 +36,9 @@ interface ProductService {
   imagePublicId: string;
   originalSize: number;
   optimizedSize: number;
-  variants: ProductVariant[] | string[];
+  variants: ProductVariant[];
   sizes: string[];
-  colors: string[];
+  colors: string | string[];
   brand: string;
   materials: string[];
   variantImages?: Record<string, { imageUrl: string; imagePublicId: string }>;
@@ -56,7 +59,7 @@ interface ProductCardProps {
   onUpdate: (id: string, field: keyof ProductService, value: unknown) => void;
   onRemove: (id: string) => void;
   onImageDeleted?: () => void; // Optional callback to trigger save after image deletion
-  onSave?: () => void; // Optional callback to trigger save when editing is done
+  onSave?: (product: ProductService) => void; // Callback to trigger save when editing is done
 }
 
 // Predefined size options
@@ -95,6 +98,7 @@ function SizeMultiSelect({
   onChange: (sizes: string[]) => void;
 }) {
   const [isOpen, setIsOpen] = React.useState(false);
+  const [searchTerm, setSearchTerm] = React.useState("");
   const dropdownRef = React.useRef<HTMLDivElement>(null);
 
   React.useEffect(() => {
@@ -104,6 +108,7 @@ function SizeMultiSelect({
         !dropdownRef.current.contains(event.target as Node)
       ) {
         setIsOpen(false);
+        setSearchTerm("");
       }
     }
     document.addEventListener("mousedown", handleClickOutside);
@@ -132,6 +137,10 @@ function SizeMultiSelect({
       setIsOpen(false);
     }
   };
+
+  const filteredOptions = SIZE_OPTIONS.filter((size) =>
+    size.toLowerCase().includes(searchTerm.toLowerCase()),
+  );
 
   return (
     <div
@@ -197,44 +206,477 @@ function SizeMultiSelect({
 
       {isOpen && (
         <div className={styles.sizeDropdown} role="listbox">
-          {SIZE_OPTIONS.map((size) => (
-            <div
-              key={size}
-              className={`${styles.sizeOption} ${
-                selectedSizes.includes(size) ? styles.selected : ""
-              }`}
-              onClick={() => toggleSize(size)}
-              role="option"
-              aria-selected={selectedSizes.includes(size)}
-            >
-              <span>{size}</span>
-              {selectedSizes.includes(size) && (
-                <svg
-                  className={styles.checkIcon}
-                  width="14"
-                  height="14"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
+          <div className={styles.dropdownSearch}>
+            <input
+              type="text"
+              placeholder="Search sizes..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              onClick={(e) => e.stopPropagation()}
+              autoFocus
+            />
+          </div>
+          <div className={styles.optionsList}>
+            {filteredOptions.length > 0 ? (
+              filteredOptions.map((size) => (
+                <div
+                  key={size}
+                  className={`${styles.sizeOption} ${
+                    selectedSizes.includes(size) ? styles.selected : ""
+                  }`}
+                  onClick={() => toggleSize(size)}
+                  role="option"
+                  aria-selected={selectedSizes.includes(size)}
                 >
-                  <polyline
-                    points="20 6 9 17 4 12"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  />
-                </svg>
-              )}
-            </div>
-          ))}
+                  <span>{size}</span>
+                  {selectedSizes.includes(size) && (
+                    <svg
+                      className={styles.checkIcon}
+                      width="14"
+                      height="14"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                    >
+                      <polyline
+                        points="20 6 9 17 4 12"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      />
+                    </svg>
+                  )}
+                </div>
+              ))
+            ) : (
+              <div className={styles.noOptions}>No sizes found</div>
+            )}
+          </div>
         </div>
       )}
     </div>
   );
 }
 
+// Color Select Component (Single Select for Variants)
+function ColorSelect({
+  selectedColor,
+  onChange,
+}: {
+  selectedColor: string;
+  onChange: (color: string) => void;
+}) {
+  const [isOpen, setIsOpen] = React.useState(false);
+  const [searchTerm, setSearchTerm] = React.useState("");
+  const dropdownRef = React.useRef<HTMLDivElement>(null);
+
+  React.useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (
+        dropdownRef.current &&
+        !dropdownRef.current.contains(event.target as Node)
+      ) {
+        setIsOpen(false);
+        setSearchTerm("");
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  const selectColor = (color: string) => {
+    onChange(color);
+    setIsOpen(false);
+    setSearchTerm("");
+  };
+
+  const filteredOptions = COLOR_OPTIONS.filter((color) =>
+    color.toLowerCase().includes(searchTerm.toLowerCase()),
+  );
+
+  return (
+    <div ref={dropdownRef} className={styles.sizeMultiSelect}>
+      <button
+        type="button"
+        className={`${styles.sizeSelectTrigger} ${isOpen ? styles.open : ""}`}
+        onClick={() => setIsOpen(!isOpen)}
+      >
+        {selectedColor ? (
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: "10px",
+            }}
+          >
+            <div
+              style={{
+                width: "14px",
+                height: "14px",
+                borderRadius: "50%",
+                backgroundColor: selectedColor.toLowerCase().replace(" ", ""),
+                border: "1px solid rgba(255, 255, 255, 0.2)",
+              }}
+            />
+            <span>{selectedColor}</span>
+          </div>
+        ) : (
+          <span className={styles.sizePlaceholder}>Select color...</span>
+        )}
+        <svg
+          className={`${styles.sizeDropdownIcon} ${
+            isOpen ? styles.iconRotated : ""
+          }`}
+          width="14"
+          height="14"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+        >
+          <polyline
+            points="6 9 12 15 18 9"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        </svg>
+      </button>
+
+      {isOpen && (
+        <div className={styles.sizeDropdown}>
+          <div className={styles.dropdownSearch}>
+            <input
+              type="text"
+              placeholder="Search colors..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              onClick={(e) => e.stopPropagation()}
+              autoFocus
+            />
+          </div>
+          <div className={styles.optionsList}>
+            {filteredOptions.length > 0 ? (
+              filteredOptions.map((color) => (
+                <div
+                  key={color}
+                  className={`${styles.sizeOption} ${
+                    selectedColor === color ? styles.selected : ""
+                  }`}
+                  onClick={() => selectColor(color)}
+                >
+                  <div
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "10px",
+                    }}
+                  >
+                    <div
+                      style={{
+                        width: "14px",
+                        height: "14px",
+                        borderRadius: "50%",
+                        backgroundColor: color.toLowerCase().replace(" ", ""),
+                        border: "1px solid rgba(255, 255, 255, 0.2)",
+                      }}
+                    />
+                    <span>{color}</span>
+                  </div>
+                  {selectedColor === color && (
+                    <svg
+                      className={styles.checkIcon}
+                      width="14"
+                      height="14"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                    >
+                      <polyline
+                        points="20 6 9 17 4 12"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      />
+                    </svg>
+                  )}
+                </div>
+              ))
+            ) : (
+              <div className={styles.noOptions}>No colors found</div>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Variant Edit Panel Component - Premium side panel for editing a single variant
+function VariantEditPanel({
+  variant,
+  isOpen,
+  onClose,
+  onSave,
+}: {
+  variant: ProductVariant | null;
+  isOpen: boolean;
+  onClose: () => void;
+  onSave: (updatedVariant: ProductVariant) => void;
+}) {
+  const [editedVariant, setEditedVariant] =
+    React.useState<ProductVariant | null>(null);
+
+  // Update local state when variant prop changes
+  React.useEffect(() => {
+    if (variant) {
+      setEditedVariant({ ...variant });
+    }
+  }, [variant]);
+
+  if (!editedVariant) return null;
+
+  const handleFieldChange = (field: keyof ProductVariant, value: unknown) => {
+    setEditedVariant((prev) => (prev ? { ...prev, [field]: value } : prev));
+  };
+
+  const handleImageUpload = (result: UploadResult) => {
+    setEditedVariant((prev) =>
+      prev
+        ? {
+            ...prev,
+            imageUrl: result.secure_url,
+            imagePublicId: result.public_id,
+          }
+        : prev,
+    );
+  };
+
+  const handleImageDelete = () => {
+    setEditedVariant((prev) =>
+      prev
+        ? {
+            ...prev,
+            imageUrl: "",
+            imagePublicId: "",
+          }
+        : prev,
+    );
+  };
+
+  const handleSave = () => {
+    if (editedVariant) {
+      onSave(editedVariant);
+      onClose();
+    }
+  };
+
+  return (
+    <SlidePanel
+      isOpen={isOpen}
+      onClose={onClose}
+      title="Edit Variant"
+      width="420px"
+    >
+      <div className={styles.variantEditPanelContent}>
+        {/* Image Section */}
+        <div className={styles.variantEditImageSection}>
+          <span className={styles.variantEditImageLabel}>Variant Image</span>
+          <div className={styles.variantEditImageWrapper}>
+            <ProductImageUpload
+              productId={editedVariant.id}
+              imageUrl={editedVariant.imageUrl || ""}
+              imagePublicId={editedVariant.imagePublicId || ""}
+              onUpload={handleImageUpload}
+              onDelete={handleImageDelete}
+            />
+          </div>
+        </div>
+
+        {/* Form Fields */}
+        <div className={styles.variantEditForm}>
+          {/* Color */}
+          <div className={styles.variantEditField}>
+            <label className={styles.variantEditFieldLabel}>Color</label>
+            <ColorSelect
+              selectedColor={editedVariant.color || ""}
+              onChange={(color) => handleFieldChange("color", color)}
+            />
+          </div>
+
+          {/* Size */}
+          <div className={styles.variantEditField}>
+            <label className={styles.variantEditFieldLabel}>Size</label>
+            <SizeMultiSelect
+              selectedSizes={
+                Array.isArray(editedVariant.size)
+                  ? editedVariant.size
+                  : typeof editedVariant.size === "string" && editedVariant.size
+                    ? editedVariant.size
+                        .split(",")
+                        .map((s) => s.trim())
+                        .filter(Boolean)
+                    : []
+              }
+              onChange={(sizes) => handleFieldChange("size", sizes)}
+            />
+          </div>
+
+          {/* Price */}
+          <div className={styles.variantEditField}>
+            <label className={styles.variantEditFieldLabel}>Price (₹)</label>
+            <input
+              type="number"
+              className={styles.variantEditInput}
+              value={editedVariant.price || ""}
+              onChange={(e) =>
+                handleFieldChange("price", parseFloat(e.target.value) || 0)
+              }
+              placeholder="e.g., 1999"
+            />
+          </div>
+
+          {/* Size-Based Pricing Toggle - Only show when multiple sizes are selected */}
+          {(() => {
+            const sizes = Array.isArray(editedVariant.size)
+              ? editedVariant.size
+              : typeof editedVariant.size === "string" && editedVariant.size
+                ? editedVariant.size
+                    .split(",")
+                    .map((s) => s.trim())
+                    .filter(Boolean)
+                : [];
+            if (sizes.length > 1) {
+              return (
+                <>
+                  <div
+                    className={styles.sizePricingToggle}
+                    style={{ marginTop: "16px" }}
+                  >
+                    <div className={styles.toggleInfo}>
+                      <span className={styles.toggleLabel}>
+                        Different price for each size
+                      </span>
+                      <span
+                        className={styles.toggleHint}
+                        style={{ fontSize: "11px", opacity: 0.6 }}
+                      >
+                        Set individual prices per size
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      className={`${styles.toggleSwitch} ${editedVariant.hasSizePricing ? styles.toggleActive : ""}`}
+                      onClick={() => {
+                        const newValue = !editedVariant.hasSizePricing;
+                        handleFieldChange("hasSizePricing", newValue);
+                        if (newValue) {
+                          const initialPrices: Record<string, number> = {};
+                          sizes.forEach((size) => {
+                            initialPrices[size] =
+                              editedVariant.sizePrices?.[size] ??
+                              editedVariant.price ??
+                              0;
+                          });
+                          handleFieldChange("sizePrices", initialPrices);
+                        }
+                      }}
+                      aria-pressed={editedVariant.hasSizePricing}
+                    >
+                      <span className={styles.toggleKnob} />
+                    </button>
+                  </div>
+
+                  {/* Size-Specific Price Inputs */}
+                  {editedVariant.hasSizePricing && (
+                    <div
+                      className={styles.sizePricesContainer}
+                      style={{ marginTop: "12px" }}
+                    >
+                      <div className={styles.sizePricesGrid}>
+                        {sizes.map((size) => (
+                          <div key={size} className={styles.sizePriceItem}>
+                            <label className={styles.sizePriceLabel}>
+                              {size}
+                            </label>
+                            <div className={styles.sizePriceInputWrapper}>
+                              <span className={styles.currencySymbol}>₹</span>
+                              <input
+                                type="number"
+                                className={styles.sizePriceInput}
+                                value={
+                                  editedVariant.sizePrices?.[size] ??
+                                  editedVariant.price ??
+                                  ""
+                                }
+                                onChange={(e) => {
+                                  const newPrice =
+                                    parseFloat(e.target.value) || 0;
+                                  handleFieldChange("sizePrices", {
+                                    ...(editedVariant.sizePrices || {}),
+                                    [size]: newPrice,
+                                  });
+                                }}
+                                placeholder="0"
+                                min="0"
+                                step="1"
+                              />
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </>
+              );
+            }
+            return null;
+          })()}
+
+          {/* Stock */}
+          <div className={styles.variantEditField}>
+            <label className={styles.variantEditFieldLabel}>Stock</label>
+            <input
+              type="number"
+              className={styles.variantEditInput}
+              value={editedVariant.stock || ""}
+              onChange={(e) =>
+                handleFieldChange("stock", parseInt(e.target.value) || 0)
+              }
+              placeholder="e.g., 50"
+            />
+          </div>
+        </div>
+
+        {/* Action Buttons */}
+        <div className={styles.variantEditActions}>
+          <button
+            type="button"
+            className={styles.variantEditCancelBtn}
+            onClick={onClose}
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            className={styles.variantEditSaveBtn}
+            onClick={handleSave}
+          >
+            Save Changes
+          </button>
+        </div>
+      </div>
+    </SlidePanel>
+  );
+}
+
 // Variants Display Component - Collapsible section to view saved variants
-function VariantsDisplay({ variants }: { variants: ProductVariant[] }) {
+function VariantsDisplay({
+  variants,
+  onEditVariant,
+}: {
+  variants: ProductVariant[];
+  onEditVariant: (variant: ProductVariant, index: number) => void;
+}) {
   const [isExpanded, setIsExpanded] = React.useState(false);
   const [selectedImageUrl, setSelectedImageUrl] = React.useState<string | null>(
     null,
@@ -272,47 +714,79 @@ function VariantsDisplay({ variants }: { variants: ProductVariant[] }) {
       {isExpanded && (
         <div className={styles.variantsList}>
           {variants.map((variant, idx) => (
-            <div key={variant.id || idx} className={styles.variantItem}>
-              {variant.imageUrl ? (
-                <img
-                  src={variant.imageUrl}
-                  alt={`${variant.color} ${variant.size}`}
-                  className={styles.variantImage}
-                  onClick={() => setSelectedImageUrl(variant.imageUrl)}
-                  style={{ cursor: "zoom-in" }}
-                  title="Click to enlarge"
-                />
-              ) : (
-                <div className={styles.variantImagePlaceholder}>
+            <div key={variant.id || idx} className={styles.variantItemWrapper}>
+              <div className={styles.variantItemContent}>
+                {variant.imageUrl ? (
+                  <img
+                    src={variant.imageUrl}
+                    alt={`${variant.color} ${variant.size}`}
+                    className={styles.variantImage}
+                    onClick={() => setSelectedImageUrl(variant.imageUrl)}
+                    style={{ cursor: "zoom-in" }}
+                    title="Click to enlarge"
+                  />
+                ) : (
+                  <div className={styles.variantImagePlaceholder}>
+                    <svg
+                      width="24"
+                      height="24"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="1.5"
+                    >
+                      <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
+                      <circle cx="8.5" cy="8.5" r="1.5" />
+                      <polyline points="21 15 16 10 5 21" />
+                    </svg>
+                  </div>
+                )}
+                <div className={styles.variantDetails}>
+                  {variant.color && (
+                    <span className={styles.variantColor}>{variant.color}</span>
+                  )}
+                  {variant.size && (
+                    <span className={styles.variantSize}>
+                      {Array.isArray(variant.size)
+                        ? variant.size.join(", ")
+                        : variant.size}
+                    </span>
+                  )}
+                  {variant.price > 0 && (
+                    <span className={styles.variantPrice}>
+                      ₹{variant.price}
+                    </span>
+                  )}
+                  {variant.stock > 0 && (
+                    <span className={styles.variantStock}>
+                      Stock: {variant.stock}
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              {/* Edit Button */}
+              <div className={styles.variantActions}>
+                <button
+                  type="button"
+                  className={styles.variantEditButton}
+                  onClick={() => onEditVariant(variant, idx)}
+                  title="Edit variant"
+                >
                   <svg
-                    width="24"
-                    height="24"
+                    width="16"
+                    height="16"
                     viewBox="0 0 24 24"
                     fill="none"
                     stroke="currentColor"
-                    strokeWidth="1.5"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
                   >
-                    <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
-                    <circle cx="8.5" cy="8.5" r="1.5" />
-                    <polyline points="21 15 16 10 5 21" />
+                    <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+                    <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
                   </svg>
-                </div>
-              )}
-              <div className={styles.variantDetails}>
-                {variant.color && (
-                  <span className={styles.variantColor}>{variant.color}</span>
-                )}
-                {variant.size && (
-                  <span className={styles.variantSize}>{variant.size}</span>
-                )}
-                {variant.price > 0 && (
-                  <span className={styles.variantPrice}>₹{variant.price}</span>
-                )}
-                {variant.stock > 0 && (
-                  <span className={styles.variantStock}>
-                    Stock: {variant.stock}
-                  </span>
-                )}
+                </button>
               </div>
             </div>
           ))}
@@ -345,11 +819,47 @@ export default function ProductCard({
     null,
   );
 
+  // State for variant editing
+  const [editingVariant, setEditingVariant] =
+    React.useState<ProductVariant | null>(null);
+  const [editingVariantIndex, setEditingVariantIndex] = React.useState<
+    number | null
+  >(null);
+  const [isVariantPanelOpen, setIsVariantPanelOpen] = React.useState(false);
+
+  // Handle variant edit
+  const handleEditVariant = (variant: ProductVariant, index: number) => {
+    setEditingVariant(variant);
+    setEditingVariantIndex(index);
+    setIsVariantPanelOpen(true);
+  };
+
+  // Handle variant save
+  const handleSaveVariant = (updatedVariant: ProductVariant) => {
+    if (
+      editingVariantIndex !== null &&
+      product.variants &&
+      Array.isArray(product.variants)
+    ) {
+      const newVariants = [...product.variants] as ProductVariant[];
+      newVariants[editingVariantIndex] = updatedVariant;
+      onUpdate(product.id, "variants", newVariants);
+      // Trigger save if callback exists - pass product with updated variants
+      if (onSave) {
+        const updatedProduct = { ...product, variants: newVariants };
+        setTimeout(() => onSave(updatedProduct), 100);
+      }
+    }
+    setIsVariantPanelOpen(false);
+    setEditingVariant(null);
+    setEditingVariantIndex(null);
+  };
+
   // Handle edit toggle - save when done editing
   const handleEditToggle = () => {
     if (isEditing && onSave) {
-      // If we're currently editing and about to close, trigger save
-      onSave();
+      // If we're currently editing and about to close, trigger save with current product
+      onSave(product);
     }
     setIsEditing(!isEditing);
   };
@@ -568,7 +1078,6 @@ export default function ProductCard({
               </div>
             )}
 
-            {/* Colors - Only for e-commerce - Searchable dropdown */}
             {isEcommerce && (
               <div className={styles.detailItem}>
                 <label className={styles.detailLabel}>Color</label>
@@ -576,20 +1085,28 @@ export default function ProductCard({
                   <input
                     type="text"
                     className={styles.detailInput}
-                    value={(product.colors || []).join(", ")}
+                    value={
+                      Array.isArray(product.colors)
+                        ? product.colors.join(", ")
+                        : product.colors || ""
+                    }
                     onChange={(e) => {
-                      const colors = e.target.value
-                        .split(",")
-                        .map((s) => s.trim());
+                      const value = e.target.value.trim();
+                      // If it contains commas, treat as array, otherwise as string
+                      const colors = value.includes(",")
+                        ? value.split(",").map((s) => s.trim())
+                        : value;
                       onUpdate(product.id, "colors", colors);
                     }}
-                    placeholder="e.g., Red, Blue"
+                    placeholder="e.g., Red"
                   />
                 ) : (
                   <div
                     className={`${styles.detailInput} ${styles.inputDisabled}`}
                   >
-                    {(product.colors || []).join(", ") || "None"}
+                    {Array.isArray(product.colors)
+                      ? product.colors.join(", ") || "None"
+                      : product.colors || "None"}
                   </div>
                 )}
               </div>
@@ -639,8 +1156,23 @@ export default function ProductCard({
         Array.isArray(product.variants) &&
         product.variants.length > 0 &&
         typeof product.variants[0] === "object" && (
-          <VariantsDisplay variants={product.variants as ProductVariant[]} />
+          <VariantsDisplay
+            variants={product.variants as ProductVariant[]}
+            onEditVariant={handleEditVariant}
+          />
         )}
+
+      {/* Variant Edit Panel */}
+      <VariantEditPanel
+        variant={editingVariant}
+        isOpen={isVariantPanelOpen}
+        onClose={() => {
+          setIsVariantPanelOpen(false);
+          setEditingVariant(null);
+          setEditingVariantIndex(null);
+        }}
+        onSave={handleSaveVariant}
+      />
 
       {/* Image Modal for product image zoom */}
       {selectedImageUrl && (

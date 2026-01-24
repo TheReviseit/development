@@ -56,6 +56,8 @@ export async function GET(request: NextRequest) {
         ecommercePolicies: supabaseData.ecommerce_policies,
         faqs: supabaseData.faqs,
         brandVoice: supabaseData.brand_voice,
+        sizeOptions: supabaseData.size_options,
+        colorOptions: supabaseData.color_options,
       };
       return NextResponse.json({ data: frontendData, source: "supabase" });
     }

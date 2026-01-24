@@ -11,17 +11,32 @@ export interface Product {
   category: string;
   price: number;
   originalPrice?: number;
+  compareAtPrice?: number;
   discount?: number;
   rating?: number;
   reviewCount?: number;
   description?: string;
   imageUrl?: string;
   sizes?: string[];
-  colors?: string[];
+  colors?: string | string[];
   available?: boolean;
+  variants?: Array<{
+    id: string;
+    color: string;
+    size: string | string[];
+    price: number;
+    stock: number;
+    imageUrl?: string;
+    imagePublicId?: string;
+    sizeStocks?: Record<string, number>;
+  }>;
   variantImages?: Record<string, { imageUrl: string; imagePublicId: string }>;
   badge?: "new" | "premium" | "bestseller" | "hot" | null;
   isWishlisted?: boolean;
+  // Size-based pricing fields
+  hasSizePricing?: boolean;
+  sizePrices?: Record<string, number>;
+  sizeStocks?: Record<string, number>;
 }
 
 interface ProductCardStoreProps {
@@ -261,7 +276,22 @@ export default function ProductCardStore({
 
         {/* Price Row with Rating on right */}
         <div className={styles.novaPriceRow}>
-          <span className={styles.novaPrice}>{formatPrice(product.price)}</span>
+          <div className={styles.novaPriceContainer}>
+            {product.compareAtPrice && product.compareAtPrice > 0 ? (
+              <>
+                <span className={styles.novaPrice}>
+                  {formatPrice(product.compareAtPrice)}
+                </span>
+                <span className={styles.novaOriginalPrice}>
+                  {formatPrice(product.price)}
+                </span>
+              </>
+            ) : (
+              <span className={styles.novaPrice}>
+                {formatPrice(product.price)}
+              </span>
+            )}
+          </div>
 
           {/* Rating on right side */}
           <div className={styles.novaRating}>

@@ -18,11 +18,13 @@ export default function CategoriesPage() {
   useEffect(() => {
     const loadData = async () => {
       try {
-        const response = await fetch("/api/business/get");
+        const response = await fetch("/api/products/categories");
         if (response.ok) {
           const result = await response.json();
-          if (result.data) {
-            setCategories(result.data.productCategories || []);
+          if (result.categories) {
+            setCategories(
+              result.categories.map((c: { name: string }) => c.name),
+            );
           }
         }
       } catch (error) {
@@ -34,43 +36,60 @@ export default function CategoriesPage() {
     loadData();
   }, []);
 
-  // Save categories
-  const saveCategories = async (updatedCategories: string[]) => {
-    setSaving(true);
-    try {
-      const response = await fetch("/api/business/save", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ productCategories: updatedCategories }),
-      });
-
-      if (response.ok) {
-        setCategories(updatedCategories);
-        setMessage({ type: "success", text: "Categories saved!" });
-      } else {
-        setMessage({ type: "error", text: "Failed to save categories" });
-      }
-    } catch (error) {
-      setMessage({ type: "error", text: "Failed to save categories" });
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  // Add category
-  const handleAddCategory = () => {
+  // Add category - uses new normalized API
+  const handleAddCategory = async () => {
     if (!newCategory.trim()) return;
     if (categories.includes(newCategory.trim())) {
       setMessage({ type: "error", text: "Category already exists" });
       return;
     }
-    saveCategories([...categories, newCategory.trim()]);
-    setNewCategory("");
+
+    setSaving(true);
+    try {
+      const response = await fetch("/api/products/categories", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: newCategory.trim() }),
+      });
+
+      if (response.ok) {
+        setCategories([...categories, newCategory.trim()]);
+        setNewCategory("");
+        setMessage({ type: "success", text: "Category added!" });
+      } else {
+        const error = await response.json();
+        setMessage({
+          type: "error",
+          text: error.error || "Failed to add category",
+        });
+      }
+    } catch (error) {
+      setMessage({ type: "error", text: "Failed to add category" });
+    } finally {
+      setSaving(false);
+    }
   };
 
-  // Delete category
-  const handleDeleteCategory = (categoryToDelete: string) => {
-    saveCategories(categories.filter((cat) => cat !== categoryToDelete));
+  // Delete category - uses new normalized API
+  const handleDeleteCategory = async (categoryToDelete: string) => {
+    setSaving(true);
+    try {
+      const response = await fetch(
+        `/api/products/categories?name=${encodeURIComponent(categoryToDelete)}`,
+        { method: "DELETE" },
+      );
+
+      if (response.ok) {
+        setCategories(categories.filter((cat) => cat !== categoryToDelete));
+        setMessage({ type: "success", text: "Category deleted!" });
+      } else {
+        setMessage({ type: "error", text: "Failed to delete category" });
+      }
+    } catch (error) {
+      setMessage({ type: "error", text: "Failed to delete category" });
+    } finally {
+      setSaving(false);
+    }
   };
 
   // Auto-dismiss message
