@@ -693,7 +693,7 @@ export default function ProductsPage() {
           onAddCategory={handleAddCategory}
           onDeleteCategory={handleDeleteCategory}
           onImageDeleted={(updatedProduct) => {
-            handleProductSave(updatedProduct);
+            handleProductSave(updatedProduct as any);
           }}
         />
       </SlidePanel>

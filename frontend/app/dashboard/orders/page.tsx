@@ -14,6 +14,10 @@ interface OrderItem {
   size?: string;
   color?: string;
   variant_display?: string;
+  image?: string;
+  imageUrl?: string;
+  product_id?: string;
+  variant_id?: string;
 }
 
 interface Order {
@@ -63,6 +67,8 @@ export default function OrdersPage() {
   });
   const [userId, setUserId] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [isViewMode, setIsViewMode] = useState(false); // Add view mode state
+  const [productImages, setProductImages] = useState<Record<string, string>>({}); // Cache for product images
 
   // Google Sheets integration state
   const [showSheetModal, setShowSheetModal] = useState(false);
@@ -124,7 +130,9 @@ export default function OrdersPage() {
 
   const handleRealtimeUpdate = useCallback((updatedOrder: Order) => {
     setOrders((prev) =>
-      prev.map((order) => (order.id === updatedOrder.id ? updatedOrder : order))
+      prev.map((order) =>
+        order.id === updatedOrder.id ? updatedOrder : order,
+      ),
     );
   }, []);
 
@@ -141,6 +149,28 @@ export default function OrdersPage() {
     enabled: !!userId,
   });
 
+  // Fetch product image by product_id
+  const fetchProductImage = useCallback(async (productId: string): Promise<string | null> => {
+    if (!productId || productImages[productId]) {
+      return productImages[productId] || null;
+    }
+
+    try {
+      const response = await fetch(`/api/products/${productId}`);
+      const data = await response.json();
+      
+      if (data.product?.image_url) {
+        const imageUrl = data.product.image_url;
+        setProductImages(prev => ({ ...prev, [productId]: imageUrl }));
+        return imageUrl;
+      }
+    } catch (error) {
+      console.error(`Error fetching product image for ${productId}:`, error);
+    }
+    
+    return null;
+  }, [productImages]);
+
   // Fetch orders
   const fetchOrders = useCallback(async () => {
     try {
@@ -154,14 +184,31 @@ export default function OrdersPage() {
       const data = await response.json();
 
       if (data.success) {
-        setOrders(data.data);
+        const ordersData = data.data;
+        setOrders(ordersData);
+        
+        // Fetch product images for items that have product_id but no image
+        const productIdsToFetch = new Set<string>();
+        ordersData.forEach((order: Order) => {
+          order.items.forEach((item: OrderItem) => {
+            if (item.product_id && !item.image && !item.imageUrl) {
+              productIdsToFetch.add(item.product_id);
+            }
+          });
+        });
+
+        // Fetch images in parallel
+        const imagePromises = Array.from(productIdsToFetch).map(productId =>
+          fetchProductImage(productId)
+        );
+        await Promise.all(imagePromises);
       }
     } catch (error) {
       console.error("Error fetching orders:", error);
     } finally {
       setLoading(false);
     }
-  }, [filter]);
+  }, [filter, fetchProductImage]);
 
   useEffect(() => {
     fetchOrders();
@@ -215,7 +262,7 @@ export default function OrdersPage() {
               if (initData.success) {
                 console.log(
                   "✅ Sheet initialized with headers:",
-                  initData.data?.headers
+                  initData.data?.headers,
                 );
               } else {
                 console.warn("⚠️ Sheet init warning:", initData.error?.message);
@@ -224,8 +271,8 @@ export default function OrdersPage() {
             .catch((err) =>
               console.warn(
                 "⚠️ Sheet init error (will retry on first order):",
-                err
-              )
+                err,
+              ),
             );
         }
       } else {
@@ -265,19 +312,90 @@ export default function OrdersPage() {
   };
 
   // Form handlers
-  const handleOpenModal = (order?: Order) => {
+  const handleOpenModal = async (order?: Order) => {
     if (order) {
       setEditingOrder(order);
+      setIsViewMode(true); // Default to view mode for existing orders
+
+      // Extract address from notes if not present in customer_address
+      let address = order.customer_address || "";
+      let notes = order.notes || "";
+
+      if (!address && notes) {
+        const addressMatch = notes.match(/Address:\s*([^\n]+)/i);
+        if (addressMatch) {
+          address = addressMatch[1].trim();
+          // Remove address from notes to avoid duplication
+          notes = notes.replace(/Address:\s*[^\n]+/i, "").trim();
+        }
+      }
+
+      const parsedItems = (
+        order.items.length > 0
+          ? order.items
+          : [{ name: "", quantity: 1 } as OrderItem]
+      ).map((item) => {
+        let name = item.name;
+        let size = item.size || "";
+        let color = item.color || "";
+        let notes = item.notes || "";
+
+        // Attempt to extract from name if size/color are missing
+        if (!size || !color) {
+          // Check for pattern: Name (Size: X, Color: Y) or Name - Size: X, Color: Y
+          const sizeMatch =
+            name.match(/Size:\s*([^,)]+)/i) || notes.match(/Size:\s*([^,)]+)/i);
+          const colorMatch =
+            name.match(/Color:\s*([^,)]+)/i) ||
+            notes.match(/Color:\s*([^,)]+)/i);
+
+          if (sizeMatch && !size) {
+            size = sizeMatch[1].trim();
+            name = name
+              .replace(/Size:\s*[^,)]+[, ]*/i, "")
+              .replace(/[()]/g, "")
+              .trim();
+            notes = notes.replace(/Size:\s*[^,)]+[, ]*/i, "").trim();
+          }
+
+          if (colorMatch && !color) {
+            color = colorMatch[1].trim();
+            name = name
+              .replace(/Color:\s*[^,)]+[, ]*/i, "")
+              .replace(/[()]/g, "")
+              .trim();
+            notes = notes.replace(/Color:\s*[^,)]+[, ]*/i, "").trim();
+          }
+
+          // Clean up trailing commas or dashes in name
+          name = name.replace(/,\s*$/, "").replace(/-\s*$/, "").trim();
+        }
+
+        return {
+          ...item,
+          name,
+          size,
+          color,
+          notes,
+        };
+      });
+
       setFormData({
         customer_name: order.customer_name,
         customer_phone: order.customer_phone,
-        customer_address: order.customer_address || "",
-        items:
-          order.items.length > 0 ? order.items : [{ name: "", quantity: 1 }],
-        notes: order.notes || "",
+        customer_address: address,
+        items: parsedItems,
+        notes: notes,
       });
+
+      // Fetch product images for items that have product_id but no image
+      const imagePromises = parsedItems
+        .filter(item => item.product_id && !item.image && !item.imageUrl)
+        .map(item => fetchProductImage(item.product_id!));
+      await Promise.all(imagePromises);
     } else {
       setEditingOrder(null);
+      setIsViewMode(false); // Edit mode for new orders
       setFormData({
         customer_name: "",
         customer_phone: "",
@@ -312,12 +430,12 @@ export default function OrdersPage() {
   const handleItemChange = (
     index: number,
     field: keyof OrderItem,
-    value: string | number
+    value: string | number,
   ) => {
     setFormData((prev) => ({
       ...prev,
       items: prev.items.map((item, i) =>
-        i === index ? { ...item, [field]: value } : item
+        i === index ? { ...item, [field]: value } : item,
       ),
     }));
   };
@@ -329,7 +447,7 @@ export default function OrdersPage() {
     try {
       // Filter out empty items
       const validItems = formData.items.filter(
-        (item) => item.name.trim() !== "" && item.quantity > 0
+        (item) => item.name.trim() !== "" && item.quantity > 0,
       );
 
       if (validItems.length === 0) {
@@ -871,8 +989,21 @@ export default function OrdersPage() {
           >
             <div className={styles.modalHeader}>
               <h3 id="order-modal-title" className={styles.modalTitle}>
-                {editingOrder ? "Edit Order" : "Create New Order"}
+                {isViewMode
+                  ? "Order Details"
+                  : editingOrder
+                    ? "Edit Order"
+                    : "Create New Order"}
               </h3>
+              {isViewMode && (
+                <button
+                  className={styles.secondaryBtn}
+                  onClick={() => setIsViewMode(false)}
+                  style={{ marginLeft: "auto", marginRight: "12px" }}
+                >
+                  Edit
+                </button>
+              )}
               <button
                 className={styles.modalClose}
                 onClick={handleCloseModal}
@@ -891,46 +1022,177 @@ export default function OrdersPage() {
                 </svg>
               </button>
             </div>
-            <form onSubmit={handleSubmit}>
+
+            {isViewMode ? (
               <div className={styles.modalBody}>
                 <div className={styles.formRow}>
                   <div className={styles.formGroup}>
-                    <label>Customer Name *</label>
-                    <input
-                      type="text"
-                      value={formData.customer_name}
-                      onChange={(e) =>
-                        setFormData({
-                          ...formData,
-                          customer_name: e.target.value,
-                        })
-                      }
-                      placeholder="Enter name"
-                      required
-                    />
+                    <label>Customer Name</label>
+                    <div className={styles.viewField}>
+                      {formData.customer_name}
+                    </div>
                   </div>
                   <div className={styles.formGroup}>
-                    <label>Phone Number *</label>
-                    <input
-                      type="tel"
-                      value={formData.customer_phone}
-                      onChange={(e) =>
-                        setFormData({
-                          ...formData,
-                          customer_phone: e.target.value,
-                        })
-                      }
-                      placeholder="Enter phone"
-                      required
-                    />
+                    <label>Phone Number</label>
+                    <div className={styles.viewField}>
+                      {formData.customer_phone}
+                    </div>
                   </div>
                 </div>
 
-                <div className={styles.formRow}>
+                <div className={styles.formGroup} style={{ width: "100%" }}>
+                  <label>Delivery Address</label>
+                  <div className={styles.viewField}>
+                    {formData.customer_address || "No address provided"}
+                  </div>
+                </div>
+
+                <div className={styles.itemsSection}>
+                  <div className={styles.itemsSectionHeader}>
+                    <span className={styles.itemsSectionTitle}>
+                      Order Items
+                    </span>
+                  </div>
+                  <div className={styles.viewItemsList}>
+                    {formData.items.map((item, index) => {
+                      // Get image URL from multiple sources
+                      const imageUrl = item.image || item.imageUrl || (item.product_id ? productImages[item.product_id] : null);
+                      
+                      return (
+                      <div key={index} className={styles.viewItemRow}>
+                        {/* Left: Image */}
+                        <div className={styles.viewItemImageWrapper}>
+                          {imageUrl ? (
+                            <img
+                              src={imageUrl}
+                              alt={item.name}
+                              className={styles.viewItemImage}
+                              onError={(e) => {
+                                // Fallback to placeholder if image fails to load
+                                e.currentTarget.style.display = 'none';
+                                const placeholder = e.currentTarget.nextElementSibling as HTMLElement;
+                                if (placeholder) placeholder.style.display = 'flex';
+                              }}
+                            />
+                          ) : null}
+                          {!imageUrl && (
+                            <div className={styles.viewItemImagePlaceholder}>
+                              <svg
+                                xmlns="http://www.w3.org/2000/svg"
+                                width="20"
+                                height="20"
+                                viewBox="0 0 24 24"
+                                fill="none"
+                                stroke="currentColor"
+                                strokeWidth="2"
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                              >
+                                <rect
+                                  x="3"
+                                  y="3"
+                                  width="18"
+                                  height="18"
+                                  rx="2"
+                                  ry="2"
+                                ></rect>
+                                <circle cx="8.5" cy="8.5" r="1.5"></circle>
+                                <polyline points="21 15 16 10 5 21"></polyline>
+                              </svg>
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Middle: Name + Details */}
+                        <div className={styles.viewItemContent}>
+                          <div className={styles.viewItemName}>{item.name}</div>
+                          <div className={styles.viewItemDetails}>
+                            {item.size && (
+                              <span className={styles.viewItemTag}>
+                                Size: {item.size}
+                              </span>
+                            )}
+                            {item.color && (
+                              <span className={styles.viewItemTag}>
+                                Color: {item.color}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Right: Price/Qty */}
+                        <div className={styles.viewItemPriceInfo}>
+                          <span className={styles.viewItemQtyBadge}>
+                            {item.quantity} Qty
+                          </span>
+                          {item.price && (
+                            <span className={styles.viewItemPrice}>
+                              ₹{(item.price * item.quantity).toLocaleString()}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {formData.notes && (
+                  <div className={styles.formGroup}>
+                    <label>Notes</label>
+                    <div className={styles.viewField}>{formData.notes}</div>
+                  </div>
+                )}
+
+                <div className={styles.modalFooter}>
+                  <button
+                    type="button"
+                    className={styles.cancelBtn}
+                    onClick={handleCloseModal}
+                  >
+                    Close
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <form onSubmit={handleSubmit}>
+                <div className={styles.modalBody}>
+                  <div className={styles.formRow}>
+                    <div className={styles.formGroup}>
+                      <label>Customer Name *</label>
+                      <input
+                        type="text"
+                        value={formData.customer_name}
+                        onChange={(e) =>
+                          setFormData({
+                            ...formData,
+                            customer_name: e.target.value,
+                          })
+                        }
+                        placeholder="Enter name"
+                        required
+                      />
+                    </div>
+                    <div className={styles.formGroup}>
+                      <label>Phone Number *</label>
+                      <input
+                        type="tel"
+                        value={formData.customer_phone}
+                        onChange={(e) =>
+                          setFormData({
+                            ...formData,
+                            customer_phone: e.target.value,
+                          })
+                        }
+                        placeholder="Enter phone"
+                        required
+                      />
+                    </div>
+                  </div>
+
                   <div className={styles.formGroup} style={{ width: "100%" }}>
                     <label>Delivery Address</label>
-                    <input
-                      type="text"
+                    <textarea
                       value={formData.customer_address}
                       onChange={(e) =>
                         setFormData({
@@ -939,114 +1201,115 @@ export default function OrdersPage() {
                         })
                       }
                       placeholder="Enter full address"
+                      rows={3}
+                    />
+                  </div>
+
+                  <div className={styles.itemsSection}>
+                    <div className={styles.itemsSectionHeader}>
+                      <span className={styles.itemsSectionTitle}>
+                        Order Items *
+                      </span>
+                      <button
+                        type="button"
+                        className={styles.addItemBtn}
+                        onClick={handleAddItem}
+                      >
+                        + Add Item
+                      </button>
+                    </div>
+                    {formData.items.map((item, index) => (
+                      <div key={index} className={styles.itemEntryRow}>
+                        <div className={styles.itemEntryMain}>
+                          <input
+                            type="text"
+                            placeholder="Item name"
+                            value={item.name}
+                            onChange={(e) =>
+                              handleItemChange(index, "name", e.target.value)
+                            }
+                            className={styles.itemNameInput}
+                          />
+                          <input
+                            type="number"
+                            min="1"
+                            placeholder="Qty"
+                            value={item.quantity}
+                            onChange={(e) =>
+                              handleItemChange(
+                                index,
+                                "quantity",
+                                parseInt(e.target.value) || 1,
+                              )
+                            }
+                            className={styles.itemQtyInput}
+                          />
+                          <input
+                            type="text"
+                            placeholder="Size"
+                            value={item.size || ""}
+                            onChange={(e) =>
+                              handleItemChange(index, "size", e.target.value)
+                            }
+                            className={styles.itemSizeInput}
+                          />
+                        </div>
+                        <div className={styles.itemEntrySecondary}>
+                          <input
+                            type="text"
+                            placeholder="Color"
+                            value={item.color || ""}
+                            onChange={(e) =>
+                              handleItemChange(index, "color", e.target.value)
+                            }
+                            className={styles.itemColorInput}
+                          />
+                          <button
+                            type="button"
+                            className={styles.removeItemBtn}
+                            onClick={() => handleRemoveItem(index)}
+                            disabled={formData.items.length === 1}
+                          >
+                            ×
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+
+                  <div className={styles.formGroup}>
+                    <label>Notes</label>
+                    <textarea
+                      value={formData.notes}
+                      onChange={(e) =>
+                        setFormData({ ...formData, notes: e.target.value })
+                      }
+                      placeholder="Additional notes..."
                     />
                   </div>
                 </div>
-
-                <div className={styles.itemsSection}>
-                  <div className={styles.itemsSectionHeader}>
-                    <span className={styles.itemsSectionTitle}>
-                      Order Items *
-                    </span>
-                    <button
-                      type="button"
-                      className={styles.addItemBtn}
-                      onClick={handleAddItem}
-                    >
-                      + Add Item
-                    </button>
-                  </div>
-                  {formData.items.map((item, index) => (
-                    <div key={index} className={styles.itemEntryRow}>
-                      <div className={styles.itemEntryMain}>
-                        <input
-                          type="text"
-                          placeholder="Item name"
-                          value={item.name}
-                          onChange={(e) =>
-                            handleItemChange(index, "name", e.target.value)
-                          }
-                          className={styles.itemNameInput}
-                        />
-                        <input
-                          type="number"
-                          min="1"
-                          placeholder="Qty"
-                          value={item.quantity}
-                          onChange={(e) =>
-                            handleItemChange(
-                              index,
-                              "quantity",
-                              parseInt(e.target.value) || 1
-                            )
-                          }
-                          className={styles.itemQtyInput}
-                        />
-                        <input
-                          type="text"
-                          placeholder="Size"
-                          value={item.size || ""}
-                          onChange={(e) =>
-                            handleItemChange(index, "size", e.target.value)
-                          }
-                          className={styles.itemSizeInput}
-                        />
-                      </div>
-                      <div className={styles.itemEntrySecondary}>
-                        <input
-                          type="text"
-                          placeholder="Color"
-                          value={item.color || ""}
-                          onChange={(e) =>
-                            handleItemChange(index, "color", e.target.value)
-                          }
-                          className={styles.itemColorInput}
-                        />
-                        <button
-                          type="button"
-                          className={styles.removeItemBtn}
-                          onClick={() => handleRemoveItem(index)}
-                          disabled={formData.items.length === 1}
-                        >
-                          ×
-                        </button>
-                      </div>
-                    </div>
-                  ))}
+                <div className={styles.modalFooter}>
+                  <button
+                    type="button"
+                    className={styles.cancelBtn}
+                    onClick={handleCloseModal}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    className={styles.submitBtn}
+                    disabled={submitting}
+                  >
+                    {submitting
+                      ? "Saving..."
+                      : editingOrder
+                        ? "Update Order"
+                        : "Create Order"}
+                  </button>
                 </div>
-
-                <div className={styles.formGroup}>
-                  <label>Notes</label>
-                  <textarea
-                    value={formData.notes}
-                    onChange={(e) =>
-                      setFormData({ ...formData, notes: e.target.value })
-                    }
-                    placeholder="Additional notes..."
-                  />
-                </div>
-              </div>
-              <div className={styles.modalFooter}>
-                <button
-                  type="button"
-                  className={styles.cancelBtn}
-                  onClick={handleCloseModal}
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className={styles.submitBtn}
-                  disabled={submitting}
-                >
-                  {submitting
-                    ? "Saving..."
-                    : editingOrder
-                    ? "Update Order"
-                    : "Create Order"}
-                </button>
-              </div>
-            </form>
+              </form>
+            )}
           </div>
         </div>
       )}
@@ -1130,7 +1393,7 @@ export default function OrdersPage() {
                     className={styles.copyBtn}
                     onClick={() => {
                       navigator.clipboard.writeText(
-                        "reviseit-sheets-sync@reviseit-def4c.iam.gserviceaccount.com"
+                        "reviseit-sheets-sync@reviseit-def4c.iam.gserviceaccount.com",
                       );
                       alert("Email copied to clipboard!");
                     }}

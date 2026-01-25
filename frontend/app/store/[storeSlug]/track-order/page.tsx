@@ -311,9 +311,7 @@ export default function TrackOrderPage() {
                       <div className={styles.orderInfo}>
                         <div className={styles.orderId}>
                           <Package size={18} />
-                          <span>
-                            Order #{order.id.slice(0, 8).toUpperCase()}
-                          </span>
+                          <span>ID: #{order.id.slice(0, 8).toUpperCase()}</span>
                         </div>
                         <div className={styles.orderDate}>
                           <Calendar size={14} />
