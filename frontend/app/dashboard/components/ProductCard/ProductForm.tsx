@@ -13,11 +13,13 @@ interface ProductVariant {
   color: string;
   size: string | string[];
   price: number;
+  compareAtPrice?: number;
   stock: number;
   imageUrl: string;
   imagePublicId: string;
   hasSizePricing?: boolean;
   sizePrices?: Record<string, number>;
+  sizeStocks?: Record<string, number>;
 }
 
 interface ProductService {
@@ -38,7 +40,7 @@ interface ProductService {
   optimizedSize: number;
   variants: ProductVariant[];
   sizes: string[];
-  colors: string[];
+  colors: string | string[];
   brand: string;
   materials: string[];
   variantImages?: Record<string, { imageUrl: string; imagePublicId: string }>;
@@ -704,7 +706,13 @@ export default function ProductForm({
         <div className={styles.field}>
           <label className={styles.label}>Product Colors</label>
           <ColorMultiSelect
-            selectedColors={formData.colors || []}
+            selectedColors={
+              Array.isArray(formData.colors)
+                ? formData.colors
+                : formData.colors
+                  ? [formData.colors]
+                  : []
+            }
             onChange={(colors) => updateField("colors", colors)}
           />
           <p className={styles.fieldHint}>
@@ -714,27 +722,36 @@ export default function ProductForm({
       )}
 
       {/* Variant Images - For each color */}
-      {isEcommerce && formData.colors && formData.colors.length > 0 && (
-        <div className={styles.field}>
-          <label className={styles.label}>Color Variant Images</label>
-          <div className={styles.variantImagesGrid}>
-            {formData.colors.map((color) => (
-              <div key={color} className={styles.variantImageItem}>
-                <span className={styles.variantColorLabel}>{color}</span>
-                <ProductImageUpload
-                  productId={`${formData.id}-${color}`}
-                  imageUrl={formData.variantImages?.[color]?.imageUrl || ""}
-                  imagePublicId={
-                    formData.variantImages?.[color]?.imagePublicId || ""
-                  }
-                  onUpload={(result) => handleVariantImageUpload(color, result)}
-                  onDelete={() => handleVariantImageDelete(color)}
-                />
-              </div>
-            ))}
+      {isEcommerce &&
+        formData.colors &&
+        (Array.isArray(formData.colors)
+          ? formData.colors.length > 0
+          : !!formData.colors) && (
+          <div className={styles.field}>
+            <label className={styles.label}>Color Variant Images</label>
+            <div className={styles.variantImagesGrid}>
+              {(Array.isArray(formData.colors)
+                ? formData.colors
+                : [formData.colors]
+              ).map((color: string) => (
+                <div key={color} className={styles.variantImageItem}>
+                  <span className={styles.variantColorLabel}>{color}</span>
+                  <ProductImageUpload
+                    productId={`${formData.id}-${color}`}
+                    imageUrl={formData.variantImages?.[color]?.imageUrl || ""}
+                    imagePublicId={
+                      formData.variantImages?.[color]?.imagePublicId || ""
+                    }
+                    onUpload={(result) =>
+                      handleVariantImageUpload(color, result)
+                    }
+                    onDelete={() => handleVariantImageDelete(color)}
+                  />
+                </div>
+              ))}
+            </div>
           </div>
-        </div>
-      )}
+        )}
 
       {/* Sizes - For e-commerce only */}
       {isEcommerce && (

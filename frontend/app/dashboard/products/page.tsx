@@ -104,7 +104,10 @@ export default function ProductsPage() {
               name: p.name || "",
               category:
                 ((p.category as Record<string, unknown>)?.name as string) || "",
-              price: p.price || 0,
+              price: parseFloat(String(p.price)) || 0,
+              compareAtPrice: p.compare_at_price
+                ? parseFloat(String(p.compare_at_price))
+                : undefined,
               priceUnit: p.price_unit || "INR",
               duration: p.duration || "",
               available: p.is_available !== false,
@@ -151,12 +154,22 @@ export default function ProductsPage() {
                   color: (v.color as string) || "",
                   size: sizeValue || "",
                   price: parseFloat(String(v.price)) || 0,
+                  compareAtPrice: v.compare_at_price
+                    ? parseFloat(String(v.compare_at_price))
+                    : undefined,
                   stock:
                     (v.stock_quantity as number) || (v.stock as number) || 0,
                   imageUrl: (v.image_url as string) || "",
                   imagePublicId: (v.image_public_id as string) || "",
                   hasSizePricing: (v.has_size_pricing as boolean) || false,
-                  sizePrices: (v.size_prices as Record<string, number>) || {},
+                  sizePrices:
+                    (typeof v.size_prices === "string"
+                      ? JSON.parse(v.size_prices)
+                      : v.size_prices) || {},
+                  sizeStocks:
+                    (typeof v.size_stocks === "string"
+                      ? JSON.parse(v.size_stocks)
+                      : v.size_stocks) || {},
                 };
               }),
               sizes: p.sizes || [],
@@ -164,8 +177,14 @@ export default function ProductsPage() {
               brand: p.brand || "",
               materials: p.materials || [],
               hasSizePricing: (p.has_size_pricing as boolean) || false,
-              sizePrices: (p.size_prices as Record<string, number>) || {},
-              sizeStocks: (p.size_stocks as Record<string, number>) || {},
+              sizePrices:
+                (typeof p.size_prices === "string"
+                  ? JSON.parse(p.size_prices)
+                  : p.size_prices) || {},
+              sizeStocks:
+                (typeof p.size_stocks === "string"
+                  ? JSON.parse(p.size_stocks)
+                  : p.size_stocks) || {},
             }),
           );
           setProducts(mappedProducts);
@@ -200,8 +219,8 @@ export default function ProductsPage() {
           sku: product.sku,
           brand: product.brand,
           price: product.price,
-          priceUnit: product.priceUnit,
-          stockStatus: product.stockStatus,
+          // imagePublicId: product.imagePublicId,
+          // duration: product.duration,
           imageUrl: product.imageUrl,
           imagePublicId: product.imagePublicId,
           duration: product.duration,

@@ -11,6 +11,7 @@ import {
   CartDrawer,
   SearchOverlay,
   CarouselBanner,
+  StoreFooter, // Added
   Product,
 } from "./components";
 import {
@@ -146,6 +147,27 @@ interface StoreData {
     gradientFrom?: string;
     gradientTo?: string;
   }>;
+  contact?: {
+    phone?: string;
+    email?: string;
+    whatsapp?: string;
+    website?: string;
+  };
+  location?: {
+    address?: string;
+    city?: string;
+    state?: string;
+    pincode?: string;
+    googleMapsLink?: string;
+    landmarks?: string[];
+  };
+  socialMedia?: {
+    instagram?: string;
+    facebook?: string;
+    twitter?: string;
+    linkedin?: string;
+    youtube?: string;
+  };
 }
 
 // ============================================================
@@ -221,6 +243,9 @@ export default function StorePage({ params }: StorePageProps) {
           })),
           categories: data.categories || [],
           banners: data.banners || [],
+          contact: data.contact || {},
+          location: data.location || {},
+          socialMedia: data.socialMedia || {},
         };
 
         setStoreData(newStoreData);
@@ -388,6 +413,27 @@ export default function StorePage({ params }: StorePageProps) {
           onProductClick={handleProductClick}
         />
       </main>
+
+      <StoreFooter
+        storeName={storeName}
+        logoUrl={storeData?.logoUrl}
+        address={
+          storeData?.location &&
+          (storeData.location.address || storeData.location.city)
+            ? [
+                storeData.location.address,
+                storeData.location.city,
+                storeData.location.state,
+                storeData.location.pincode,
+              ]
+                .filter(Boolean)
+                .join(", ")
+            : undefined
+        }
+        phone={storeData?.contact?.phone}
+        email={storeData?.contact?.email}
+        socialMedia={storeData?.socialMedia}
+      />
 
       <CartDrawer />
 

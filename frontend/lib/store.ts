@@ -66,6 +66,7 @@ export interface StoreProduct {
     color: string;
     size: string | string[];
     price: number;
+    compareAtPrice?: number;
     stock: number;
     imageUrl?: string;
     imagePublicId?: string;
@@ -108,6 +109,27 @@ export interface PublicStore {
   categories: string[];
   products: StoreProduct[];
   banners: StoreBanner[];
+  contact?: {
+    phone?: string;
+    email?: string;
+    whatsapp?: string;
+    website?: string;
+  };
+  location?: {
+    address?: string;
+    city?: string;
+    state?: string;
+    pincode?: string;
+    googleMapsLink?: string;
+    landmarks?: string[];
+  };
+  socialMedia?: {
+    instagram?: string;
+    facebook?: string;
+    twitter?: string;
+    linkedin?: string;
+    youtube?: string;
+  };
 }
 
 /**
@@ -273,6 +295,9 @@ export async function getStoreBySlug(
           color: v.color || "",
           size: sizeValue,
           price: v.price ? parseFloat(String(v.price)) : 0,
+          compareAtPrice: v.compare_at_price
+            ? parseFloat(String(v.compare_at_price))
+            : undefined,
           stock: v.stock_quantity || 0,
           imageUrl: v.image_url || "",
           imagePublicId: v.image_public_id || "",
@@ -309,6 +334,9 @@ export async function getStoreBySlug(
       categories,
       products,
       banners: businessData.banners || [],
+      contact: businessData.contact || {},
+      location: businessData.location || {},
+      socialMedia: businessData.social_media || {},
     };
   } catch (error) {
     console.error("[store.ts] Error fetching store:", error);

@@ -214,11 +214,15 @@ export async function POST(request: NextRequest) {
         color: v.color || "",
         size: v.size || "",
         price: v.price ? parseFloat(String(v.price)) : null,
+        compare_at_price: v.compareAtPrice
+          ? parseFloat(String(v.compareAtPrice))
+          : null,
         stock_quantity: v.stockQuantity ? parseInt(String(v.stockQuantity)) : 0,
         image_url: v.imageUrl || "",
         image_public_id: v.imagePublicId || "",
         has_size_pricing: v.hasSizePricing || false,
         size_prices: v.sizePrices || {},
+        size_stocks: v.sizeStocks || {},
       }));
 
       await supabase.from("product_variants").insert(variantsData);

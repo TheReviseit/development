@@ -19,11 +19,13 @@ interface ProductVariant {
   color: string;
   size: string | string[];
   price: number;
+  compareAtPrice?: number;
   stock: number;
   imageUrl: string;
   imagePublicId: string;
   hasSizePricing?: boolean;
   sizePrices?: Record<string, number>;
+  sizeStocks?: Record<string, number>;
 }
 
 interface ProductService {
@@ -31,6 +33,7 @@ interface ProductService {
   name: string;
   category: string;
   price: number;
+  compareAtPrice?: number;
   priceUnit: string;
   duration: string;
   available: boolean;
@@ -43,10 +46,14 @@ interface ProductService {
   optimizedSize: number; // Optimized file size in bytes
   variants: ProductVariant[];
   sizes: string[];
-  colors: string[];
+  colors: string | string[];
   brand: string;
   materials: string[];
   variantImages?: Record<string, { imageUrl: string; imagePublicId: string }>;
+  quantity?: number;
+  hasSizePricing?: boolean;
+  sizePrices?: Record<string, number>;
+  sizeStocks?: Record<string, number>;
 }
 
 interface DayTiming {

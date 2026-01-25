@@ -4,6 +4,7 @@ import React, { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import styles from "../store.module.css";
 import { useCart } from "../context/CartContext";
+import { useRouter, useParams } from "next/navigation";
 
 export interface Product {
   id: string;
@@ -25,6 +26,7 @@ export interface Product {
     color: string;
     size: string | string[];
     price: number;
+    compareAtPrice?: number;
     stock: number;
     imageUrl?: string;
     imagePublicId?: string;
@@ -59,6 +61,8 @@ export default function ProductCardStore({
   onWishlistToggle,
 }: ProductCardStoreProps) {
   const { cartItems, addToCart, updateQuantity, removeFromCart } = useCart();
+  const router = useRouter();
+  const params = useParams();
   const [isImageLoaded, setIsImageLoaded] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [isWishlisted, setIsWishlisted] = useState(
@@ -161,14 +165,331 @@ export default function ProductCardStore({
 
   const displayPriceInfo = getDisplayPriceInfo();
 
+  // Calculate discount percentage
+  const calculateDiscount = (
+    originalPrice: number,
+    offerPrice: number,
+  ): number => {
+    if (originalPrice <= 0 || offerPrice >= originalPrice) return 0;
+    return Math.round(((originalPrice - offerPrice) / originalPrice) * 100);
+  };
+
+  // Calculate discount percentage for the product
+  const getDiscountInfo = () => {
+    // If product has compareAtPrice, always show both prices
+    if (product.compareAtPrice && product.compareAtPrice > 0) {
+      const originalPrice = product.price;
+      const offerPrice = product.compareAtPrice;
+      const discountPercent =
+        offerPrice < originalPrice
+          ? calculateDiscount(originalPrice, offerPrice)
+          : 0;
+      return {
+        originalPrice,
+        offerPrice,
+        discountPercent,
+        hasDiscount: true, // Always show both prices when compareAtPrice exists
+      };
+    }
+    return {
+      originalPrice: product.price,
+      offerPrice: product.price,
+      discountPercent: 0,
+      hasDiscount: false,
+    };
+  };
+
+  const discountInfo = getDiscountInfo();
+
+  // Get first available color
+  const getFirstColor = (): string | undefined => {
+    if (product.variants && product.variants.length > 0) {
+      return product.variants[0].color;
+    }
+    if (product.colors) {
+      if (Array.isArray(product.colors) && product.colors.length > 0) {
+        return product.colors[0];
+      }
+      if (typeof product.colors === "string") {
+        return product.colors;
+      }
+    }
+    return undefined;
+  };
+
+  // Get first available size
+  const getFirstSize = (): string | undefined => {
+    if (product.variants && product.variants.length > 0) {
+      const firstVariant = product.variants[0];
+      if (Array.isArray(firstVariant.size) && firstVariant.size.length > 0) {
+        return firstVariant.size[0];
+      }
+      if (typeof firstVariant.size === "string" && firstVariant.size) {
+        // Handle comma-separated size strings - return first size only
+        const sizes = firstVariant.size
+          .split(",")
+          .map((s) => s.trim())
+          .filter(Boolean);
+        if (sizes.length > 0) {
+          return sizes[0];
+        }
+      }
+    }
+    if (product.sizes && product.sizes.length > 0) {
+      return product.sizes[0];
+    }
+    return undefined;
+  };
+
+  // Get all available colors for the product
+  const getAllColors = (): string[] => {
+    const colorSet = new Set<string>();
+    if (product.variants && product.variants.length > 0) {
+      product.variants.forEach((v) => colorSet.add(v.color));
+    }
+    if (product.colors) {
+      if (Array.isArray(product.colors)) {
+        product.colors.forEach((c) => colorSet.add(c));
+      } else if (typeof product.colors === "string") {
+        colorSet.add(product.colors);
+      }
+    }
+    return Array.from(colorSet);
+  };
+
+  // Get all available sizes for the product
+  const getAllSizes = (): string[] => {
+    const sizeSet = new Set<string>();
+    if (product.variants && product.variants.length > 0) {
+      product.variants.forEach((v) => {
+        if (Array.isArray(v.size)) {
+          v.size.forEach((s) => sizeSet.add(s));
+        } else if (typeof v.size === "string" && v.size) {
+          // Handle comma-separated size strings - split into individual sizes
+          const sizes = v.size
+            .split(",")
+            .map((s) => s.trim())
+            .filter(Boolean);
+          sizes.forEach((s) => sizeSet.add(s));
+        }
+      });
+    }
+    if (product.sizes && product.sizes.length > 0) {
+      product.sizes.forEach((s) => sizeSet.add(s));
+    }
+    return Array.from(sizeSet);
+  };
+
+  // Build pricing info for cart price updates
+  // This mirrors the getPriceForVariant logic from ProductDetailModal
+  const buildPricingInfo = () => {
+    const pricingInfo: {
+      basePrice: number;
+      colorPrices?: Record<string, number>;
+      sizePrices?: Record<string, number>;
+      variantSizePrices?: Record<string, number>;
+      hasSizePricing?: boolean;
+    } = {
+      basePrice:
+        product.compareAtPrice && product.compareAtPrice > 0
+          ? product.compareAtPrice // Use offer price as base
+          : product.price,
+      hasSizePricing: product.hasSizePricing,
+    };
+
+    // Build pricing from variants
+    if (product.variants && product.variants.length > 0) {
+      const colorPrices: Record<string, number> = {};
+      const variantSizePrices: Record<string, number> = {};
+
+      product.variants.forEach((variant) => {
+        // Get all sizes for this variant
+        const variantSizes: string[] = [];
+        if (Array.isArray(variant.size)) {
+          variantSizes.push(...variant.size);
+        } else if (typeof variant.size === "string" && variant.size) {
+          // Handle comma-separated size strings
+          const sizes = variant.size
+            .split(",")
+            .map((s) => s.trim())
+            .filter(Boolean);
+          variantSizes.push(...sizes);
+        }
+
+        // For each size in this variant, calculate and store the price
+        variantSizes.forEach((size) => {
+          let priceForSize: number;
+
+          // Priority 1: Variant-level size pricing
+          if (
+            variant.hasSizePricing &&
+            variant.sizePrices &&
+            variant.sizePrices[size] !== undefined &&
+            variant.sizePrices[size] > 0
+          ) {
+            priceForSize = variant.sizePrices[size];
+          }
+          // Priority 2: Variant offer price (compareAtPrice)
+          else if (variant.compareAtPrice && variant.compareAtPrice > 0) {
+            priceForSize = variant.compareAtPrice;
+          }
+          // Priority 3: Variant base price
+          else if (variant.price && variant.price > 0) {
+            priceForSize = variant.price;
+          }
+          // Fallback to product base/offer price
+          else {
+            priceForSize = pricingInfo.basePrice;
+          }
+
+          variantSizePrices[`${variant.color}_${size}`] = priceForSize;
+        });
+
+        // Store variant's default price for just selecting the color (no size)
+        // Use offer price if available, otherwise base price
+        if (!colorPrices[variant.color]) {
+          if (variant.compareAtPrice && variant.compareAtPrice > 0) {
+            colorPrices[variant.color] = variant.compareAtPrice;
+          } else if (variant.price && variant.price > 0) {
+            colorPrices[variant.color] = variant.price;
+          }
+        }
+      });
+
+      if (Object.keys(colorPrices).length > 0) {
+        pricingInfo.colorPrices = colorPrices;
+      }
+      if (Object.keys(variantSizePrices).length > 0) {
+        pricingInfo.variantSizePrices = variantSizePrices;
+      }
+    }
+
+    // Build size prices from product-level size pricing
+    if (product.hasSizePricing && product.sizePrices) {
+      const sizePrices: Record<string, number> = {};
+      Object.entries(product.sizePrices).forEach(([size, price]) => {
+        if (typeof price === "number" && price > 0) {
+          sizePrices[size] = price;
+        }
+      });
+      if (Object.keys(sizePrices).length > 0) {
+        pricingInfo.sizePrices = sizePrices;
+      }
+    }
+
+    return pricingInfo;
+  };
+
+  // Get price for a specific color/size selection
+  // This mirrors the getPriceForVariant logic from ProductDetailModal
+  const getPriceForSelection = (
+    selectedColor?: string,
+    selectedSize?: string,
+  ): number => {
+    // Priority 1: Check variant-level size pricing
+    if (selectedColor && product.variants && product.variants.length > 0) {
+      // Find variant matching selected color
+      const matchingVariant = product.variants.find((v) => {
+        const colorMatches = v.color === selectedColor;
+        if (selectedSize && v.size) {
+          const variantSizes = Array.isArray(v.size)
+            ? v.size
+            : typeof v.size === "string"
+              ? v.size.split(",").map((s) => s.trim())
+              : [];
+          return colorMatches && variantSizes.includes(selectedSize);
+        }
+        return colorMatches;
+      });
+
+      if (matchingVariant) {
+        // Check if this variant has size-based pricing
+        if (
+          matchingVariant.hasSizePricing &&
+          matchingVariant.sizePrices &&
+          selectedSize
+        ) {
+          const sizePrice = matchingVariant.sizePrices[selectedSize];
+          if (sizePrice !== undefined && sizePrice > 0) {
+            return sizePrice;
+          }
+        }
+
+        // Use variant's offer price if available
+        if (
+          matchingVariant.compareAtPrice &&
+          matchingVariant.compareAtPrice > 0
+        ) {
+          return matchingVariant.compareAtPrice;
+        }
+        // Otherwise use variant base price
+        if (matchingVariant.price && matchingVariant.price > 0) {
+          return matchingVariant.price;
+        }
+      }
+    }
+
+    // Priority 2: Check product-level sizePrices
+    if (product.hasSizePricing && product.sizePrices && selectedSize) {
+      let sizePrice = product.sizePrices[selectedSize];
+      // Try case-insensitive match
+      if (sizePrice === undefined) {
+        const sizeKey = Object.keys(product.sizePrices).find(
+          (key) => key.toLowerCase() === selectedSize.toLowerCase(),
+        );
+        if (sizeKey) {
+          sizePrice = product.sizePrices[sizeKey];
+        }
+      }
+      if (sizePrice !== undefined && sizePrice > 0) {
+        return sizePrice;
+      }
+    }
+
+    // Fallback: Use offer price if available, otherwise base price
+    if (
+      !product.hasSizePricing &&
+      product.compareAtPrice &&
+      product.compareAtPrice > 0
+    ) {
+      return product.compareAtPrice;
+    }
+    return product.price;
+  };
+
   const handleAddToCart = (e: React.MouseEvent) => {
     e.stopPropagation();
-    addToCart({
-      id: product.id,
-      name: product.name,
-      price: displayPriceInfo.price,
-      imageUrl: product.imageUrl,
-    });
+
+    // Auto-select first color and size when adding from dashboard
+    const firstColor = getFirstColor();
+    const firstSize = getFirstSize();
+    const allColors = getAllColors();
+    const allSizes = getAllSizes();
+
+    const options: { size?: string; color?: string } = {};
+    if (firstColor) options.color = firstColor;
+    if (firstSize) options.size = firstSize;
+
+    // Build pricing info for price updates when changing options
+    const pricingInfo = buildPricingInfo();
+
+    // Calculate the correct price for the selected first color and size
+    const initialPrice = getPriceForSelection(firstColor, firstSize);
+
+    addToCart(
+      {
+        id: product.id,
+        name: product.name,
+        price: initialPrice,
+        imageUrl: product.imageUrl,
+      },
+      1,
+      Object.keys(options).length > 0 ? options : undefined,
+      true, // addedFromDashboard flag
+      allColors.length > 0 ? allColors : undefined,
+      allSizes.length > 0 ? allSizes : undefined,
+      pricingInfo,
+    );
   };
 
   const handleIncrement = (e: React.MouseEvent) => {
@@ -190,14 +511,39 @@ export default function ProductCardStore({
   const handleBuyNow = (e: React.MouseEvent) => {
     e.stopPropagation();
     if (quantityInCart === 0) {
-      addToCart({
-        id: product.id,
-        name: product.name,
-        price: displayPriceInfo.price,
-        imageUrl: product.imageUrl,
-      });
+      // Auto-select first color and size when adding from dashboard
+      const firstColor = getFirstColor();
+      const firstSize = getFirstSize();
+      const allColors = getAllColors();
+      const allSizes = getAllSizes();
+
+      const options: { size?: string; color?: string } = {};
+      if (firstColor) options.color = firstColor;
+      if (firstSize) options.size = firstSize;
+
+      // Build pricing info for price updates when changing options
+      const pricingInfo = buildPricingInfo();
+
+      // Calculate the correct price for the selected first color and size
+      const initialPrice = getPriceForSelection(firstColor, firstSize);
+
+      addToCart(
+        {
+          id: product.id,
+          name: product.name,
+          price: initialPrice,
+          imageUrl: product.imageUrl,
+        },
+        1,
+        Object.keys(options).length > 0 ? options : undefined,
+        true, // addedFromDashboard flag
+        allColors.length > 0 ? allColors : undefined,
+        allSizes.length > 0 ? allSizes : undefined,
+        pricingInfo,
+      );
     }
-    // Could open cart or redirect to checkout here
+    // Redirect to checkout
+    router.push(`/store/${params.storeSlug}/checkout`);
   };
 
   const handleWishlistToggle = (e: React.MouseEvent) => {
@@ -342,21 +688,34 @@ export default function ProductCardStore({
         {/* Price Row with Rating on right */}
         <div className={styles.novaPriceRow}>
           <div className={styles.novaPriceContainer}>
-            {displayPriceInfo.hasRange ? (
-              // Show price range for size-based pricing
+            {discountInfo.hasDiscount ? (
+              // Always show original price (striked) on left, offer price with discount % on right (NO "From" text)
+              // Always show original price (striked) on left, offer price with discount % on right (NO "From" text)
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "baseline",
+                  gap: "6px",
+                  flexWrap: "wrap",
+                }}
+              >
+                <span className={styles.novaOriginalPrice}>
+                  {formatPrice(discountInfo.originalPrice)}
+                </span>
+                <span className={styles.novaPrice}>
+                  {formatPrice(discountInfo.offerPrice)}
+                </span>
+                {discountInfo.discountPercent > 0 && (
+                  <span className={styles.novaDiscountBadge}>
+                    {discountInfo.discountPercent}% OFF
+                  </span>
+                )}
+              </div>
+            ) : displayPriceInfo.hasRange ? (
+              // Show price range for size-based pricing (no offer price)
               <span className={styles.novaPrice}>
                 From {formatPrice(displayPriceInfo.minPrice!)}
               </span>
-            ) : product.compareAtPrice && product.compareAtPrice > 0 ? (
-              // Show offer price with strikethrough original
-              <>
-                <span className={styles.novaPrice}>
-                  {formatPrice(product.compareAtPrice)}
-                </span>
-                <span className={styles.novaOriginalPrice}>
-                  {formatPrice(product.price)}
-                </span>
-              </>
             ) : (
               // Show regular price
               <span className={styles.novaPrice}>

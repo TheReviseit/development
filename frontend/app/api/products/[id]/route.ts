@@ -210,6 +210,9 @@ export async function PUT(request: NextRequest, context: RouteContext) {
             color: v.color || "",
             size: v.size || "",
             price: v.price ? parseFloat(String(v.price)) : null,
+            compare_at_price: v.compareAtPrice
+              ? parseFloat(String(v.compareAtPrice))
+              : null,
             stock_quantity: v.stockQuantity
               ? parseInt(String(v.stockQuantity))
               : 0,
@@ -217,6 +220,7 @@ export async function PUT(request: NextRequest, context: RouteContext) {
             image_public_id: v.imagePublicId || "",
             has_size_pricing: v.hasSizePricing || false,
             size_prices: v.sizePrices || {},
+            size_stocks: v.sizeStocks || {},
           }),
         );
 

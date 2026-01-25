@@ -14,6 +14,7 @@ interface ProductVariant {
   color: string;
   size: string[];
   price: number;
+  compareAtPrice?: number;
   stock: number;
   imageUrl: string;
   imagePublicId: string;
@@ -59,7 +60,7 @@ interface Product {
   name: string;
   category: string;
   price: number;
-  compareAtPrice: number;
+  compareAtPrice?: number;
   priceUnit: string;
   duration: string;
   available: boolean;
@@ -101,7 +102,7 @@ const createEmptyProduct = (): Product => ({
   name: "",
   category: "",
   price: 0,
-  compareAtPrice: 0,
+  compareAtPrice: undefined,
   priceUnit: "INR",
   duration: "",
   available: true,
@@ -314,6 +315,7 @@ export default function AddProductPage() {
       color: "",
       size: [],
       price: formData.price || 0,
+      compareAtPrice: formData.compareAtPrice,
       stock: 0,
       imageUrl: "",
       imagePublicId: "",
@@ -326,7 +328,7 @@ export default function AddProductPage() {
   const updateVariant = (
     id: string,
     field: keyof ProductVariant,
-    value: string | string[] | number | boolean | Record<string, number>,
+    value: string | string[] | number | boolean | undefined | Record<string, number>,
   ) => {
     setProductVariants((prevVariants) =>
       prevVariants.map((v) => {
@@ -471,7 +473,22 @@ export default function AddProductPage() {
         materials: formData.materials,
         available: formData.available,
         category: formData.category || customCategory,
-        variants: productVariants,
+        hasSizePricing: formData.hasSizePricing || false,
+        sizePrices: formData.sizePrices || {},
+        sizeStocks: formData.sizeStocks || {},
+        variants: productVariants.map((v) => ({
+          id: v.id,
+          color: v.color || "",
+          size: Array.isArray(v.size) ? v.size.join(", ") : (v.size || ""),
+          price: v.price || 0,
+          compareAtPrice: v.compareAtPrice !== undefined ? v.compareAtPrice : undefined,
+          stockQuantity: v.stock || 0,
+          imageUrl: v.imageUrl || "",
+          imagePublicId: v.imagePublicId || "",
+          hasSizePricing: v.hasSizePricing || false,
+          sizePrices: v.sizePrices || {},
+          sizeStocks: v.sizeStocks || {},
+        })),
       };
 
       // Create product via new API
@@ -741,7 +758,7 @@ export default function AddProductPage() {
                     type="button"
                     onClick={() => {
                       setShowOfferPrice(false);
-                      updateField("compareAtPrice", 0);
+                      updateField("compareAtPrice", undefined);
                       // Update size prices to use regular price when offer price is removed
                       if (
                         formData.hasSizePricing &&
@@ -1163,6 +1180,128 @@ The CBD USED
                         style={{ margin: 0, paddingLeft: "24px" }}
                       />
                     </div>
+                    <div
+                      style={{
+                        position: "relative",
+                        flex: "1 1 100px",
+                        minWidth: "100px",
+                      }}
+                    >
+                      <div
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          gap: "8px",
+                          marginBottom: "4px",
+                        }}
+                      >
+                        <span
+                          style={{
+                            fontSize: "11px",
+                            color: "rgba(255,255,255,0.6)",
+                          }}
+                        >
+                          Offer Price
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const hasOfferPrice = !!variant.compareAtPrice;
+                            updateVariant(
+                              variant.id,
+                              "compareAtPrice",
+                              hasOfferPrice ? undefined : variant.price || 0,
+                            );
+                          }}
+                          style={{
+                            width: "32px",
+                            height: "18px",
+                            borderRadius: "9px",
+                            border: "none",
+                            background: variant.compareAtPrice
+                              ? "#22c55a"
+                              : "rgba(255,255,255,0.2)",
+                            cursor: "pointer",
+                            position: "relative",
+                            transition: "background 0.2s ease",
+                            flexShrink: 0,
+                          }}
+                        >
+                          <span
+                            style={{
+                              position: "absolute",
+                              top: "2px",
+                              left: variant.compareAtPrice ? "16px" : "2px",
+                              width: "14px",
+                              height: "14px",
+                              borderRadius: "50%",
+                              background: "#fff",
+                              transition: "left 0.2s ease",
+                            }}
+                          />
+                        </button>
+                      </div>
+                      {variant.compareAtPrice !== undefined && (
+                        <div style={{ position: "relative" }}>
+                          <span
+                            style={{
+                              position: "absolute",
+                              left: "10px",
+                              top: "50%",
+                              transform: "translateY(-50%)",
+                              color: "rgba(255,255,255,0.5)",
+                              fontSize: "14px",
+                            }}
+                          >
+                            $
+                          </span>
+                          <input
+                            type="number"
+                            className={styles.input}
+                            value={variant.compareAtPrice ?? ""}
+                            onChange={(e) => {
+                              const value = e.target.value;
+                              updateVariant(
+                                variant.id,
+                                "compareAtPrice",
+                                value === "" ? undefined : parseFloat(value) || undefined,
+                              );
+                            }}
+                            placeholder="Offer Price"
+                            style={{
+                              margin: 0,
+                              paddingLeft: "24px",
+                              paddingRight: "30px",
+                            }}
+                          />
+                          <button
+                            type="button"
+                            onClick={() => {
+                              updateVariant(
+                                variant.id,
+                                "compareAtPrice",
+                                undefined,
+                              );
+                            }}
+                            style={{
+                              position: "absolute",
+                              right: "8px",
+                              top: "50%",
+                              transform: "translateY(-50%)",
+                              background: "transparent",
+                              border: "none",
+                              color: "rgba(255,255,255,0.5)",
+                              cursor: "pointer",
+                              fontSize: "16px",
+                              padding: "2px",
+                            }}
+                            title="Remove offer price"
+                          >
+                            ✕
+                          </button>
+                        </div>
+                      )}
+                    </div>
 
                     {/* Size-Based Pricing Toggle - Only show when multiple sizes are selected */}
                     {variant.size && variant.size.length > 1 && (
@@ -1217,11 +1356,15 @@ The CBD USED
                               if (newValue && variant.size) {
                                 const initialPrices: Record<string, number> =
                                   {};
+                                // Use offer price if available, otherwise use base price
+                                const basePrice =
+                                  variant.compareAtPrice !== undefined &&
+                                  variant.compareAtPrice > 0
+                                    ? variant.compareAtPrice
+                                    : variant.price || 0;
                                 variant.size.forEach((sz) => {
                                   initialPrices[sz] =
-                                    variant.sizePrices?.[sz] ??
-                                    variant.price ??
-                                    0;
+                                    variant.sizePrices?.[sz] ?? basePrice;
                                 });
                                 updateVariant(
                                   variant.id,
@@ -1317,7 +1460,10 @@ The CBD USED
                                     type="number"
                                     value={
                                       variant.sizePrices?.[sz] ??
-                                      variant.price ??
+                                      (variant.compareAtPrice !== undefined &&
+                                      variant.compareAtPrice > 0
+                                        ? variant.compareAtPrice
+                                        : variant.price) ??
                                       ""
                                     }
                                     onChange={(e) => {

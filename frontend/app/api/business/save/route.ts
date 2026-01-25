@@ -110,6 +110,27 @@ export async function POST(request: NextRequest) {
       dbData.color_options =
         businessData.colorOptions || businessData.color_options || [];
     }
+    // Razorpay payment gateway settings
+    if ("razorpayKeyId" in businessData || "razorpay_key_id" in businessData) {
+      dbData.razorpay_key_id =
+        businessData.razorpayKeyId || businessData.razorpay_key_id || null;
+    }
+    if (
+      "razorpayKeySecret" in businessData ||
+      "razorpay_key_secret" in businessData
+    ) {
+      dbData.razorpay_key_secret =
+        businessData.razorpayKeySecret ||
+        businessData.razorpay_key_secret ||
+        null;
+    }
+    if (
+      "paymentsEnabled" in businessData ||
+      "payments_enabled" in businessData
+    ) {
+      dbData.payments_enabled =
+        businessData.paymentsEnabled ?? businessData.payments_enabled ?? false;
+    }
 
     // Check if we have any fields to update besides user_id
     const fieldCount = Object.keys(dbData).length - 1;

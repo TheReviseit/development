@@ -14,11 +14,13 @@ interface ProductVariant {
   color: string;
   size: string | string[];
   price: number;
+  compareAtPrice?: number;
   stock: number;
   imageUrl: string;
   imagePublicId: string;
   hasSizePricing?: boolean;
   sizePrices?: Record<string, number>;
+  sizeStocks?: Record<string, number>;
 }
 
 interface ProductService {
@@ -26,6 +28,7 @@ interface ProductService {
   name: string;
   category: string;
   price: number;
+  compareAtPrice?: number;
   priceUnit: string;
   duration: string;
   available: boolean;
@@ -42,6 +45,10 @@ interface ProductService {
   brand: string;
   materials: string[];
   variantImages?: Record<string, { imageUrl: string; imagePublicId: string }>;
+  quantity?: number;
+  hasSizePricing?: boolean;
+  sizePrices?: Record<string, number>;
+  sizeStocks?: Record<string, number>;
 }
 
 interface UploadResult {
@@ -475,7 +482,7 @@ function VariantEditPanel({
       isOpen={isOpen}
       onClose={onClose}
       title="Edit Variant"
-      width="420px"
+      width="50%"
     >
       <div className={styles.variantEditPanelContent}>
         {/* Image Section */}
@@ -535,6 +542,110 @@ function VariantEditPanel({
             />
           </div>
 
+          {/* Offer Price Toggle and Input */}
+          <div className={styles.variantEditField}>
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                marginBottom: "8px",
+              }}
+            >
+              <label
+                className={styles.variantEditFieldLabel}
+                style={{ margin: 0 }}
+              >
+                Offer Price
+              </label>
+              <button
+                type="button"
+                onClick={() => {
+                  const hasOfferPrice = !!editedVariant.compareAtPrice;
+                  handleFieldChange(
+                    "compareAtPrice",
+                    hasOfferPrice ? undefined : editedVariant.price || 0,
+                  );
+                }}
+                style={{
+                  width: "40px",
+                  height: "22px",
+                  borderRadius: "11px",
+                  border: "none",
+                  background: editedVariant.compareAtPrice
+                    ? "#22c55a"
+                    : "rgba(255,255,255,0.2)",
+                  cursor: "pointer",
+                  position: "relative",
+                  transition: "background 0.2s ease",
+                }}
+              >
+                <span
+                  style={{
+                    position: "absolute",
+                    top: "2px",
+                    left: editedVariant.compareAtPrice ? "20px" : "2px",
+                    width: "18px",
+                    height: "18px",
+                    borderRadius: "50%",
+                    background: "#fff",
+                    transition: "left 0.2s ease",
+                  }}
+                />
+              </button>
+            </div>
+            {editedVariant.compareAtPrice !== undefined ? (
+              <div style={{ position: "relative" }}>
+                <input
+                  type="number"
+                  className={styles.variantEditInput}
+                  value={editedVariant.compareAtPrice || ""}
+                  onChange={(e) => {
+                    const value = e.target.value;
+                    handleFieldChange(
+                      "compareAtPrice",
+                      value === "" ? undefined : parseFloat(value) || 0,
+                    );
+                  }}
+                  placeholder="Sale price"
+                  style={{ paddingRight: "40px" }}
+                />
+                <button
+                  type="button"
+                  onClick={() => handleFieldChange("compareAtPrice", undefined)}
+                  style={{
+                    position: "absolute",
+                    right: "12px",
+                    top: "50%",
+                    transform: "translateY(-50%)",
+                    background: "transparent",
+                    border: "none",
+                    color: "rgba(255,255,255,0.5)",
+                    cursor: "pointer",
+                    fontSize: "16px",
+                    padding: "4px",
+                  }}
+                  title="Remove offer price"
+                >
+                  ✕
+                </button>
+              </div>
+            ) : (
+              <div
+                style={{
+                  padding: "12px 16px",
+                  background: "rgba(255,255,255,0.03)",
+                  border: "1px solid rgba(255,255,255,0.1)",
+                  borderRadius: "10px",
+                  color: "rgba(255,255,255,0.4)",
+                  fontSize: "13px",
+                }}
+              >
+                Toggle to enable offer price
+              </div>
+            )}
+          </div>
+
           {/* Size-Based Pricing Toggle - Only show when multiple sizes are selected */}
           {(() => {
             const sizes = Array.isArray(editedVariant.size)
@@ -571,11 +682,14 @@ function VariantEditPanel({
                         handleFieldChange("hasSizePricing", newValue);
                         if (newValue) {
                           const initialPrices: Record<string, number> = {};
+                          const basePrice =
+                            editedVariant.compareAtPrice !== undefined &&
+                            editedVariant.compareAtPrice > 0
+                              ? editedVariant.compareAtPrice
+                              : editedVariant.price || 0;
                           sizes.forEach((size) => {
                             initialPrices[size] =
-                              editedVariant.sizePrices?.[size] ??
-                              editedVariant.price ??
-                              0;
+                              editedVariant.sizePrices?.[size] ?? basePrice;
                           });
                           handleFieldChange("sizePrices", initialPrices);
                         }
@@ -605,7 +719,10 @@ function VariantEditPanel({
                                 className={styles.sizePriceInput}
                                 value={
                                   editedVariant.sizePrices?.[size] ??
-                                  editedVariant.price ??
+                                  (editedVariant.compareAtPrice !== undefined &&
+                                  editedVariant.compareAtPrice > 0
+                                    ? editedVariant.compareAtPrice
+                                    : editedVariant.price) ??
                                   ""
                                 }
                                 onChange={(e) => {
@@ -632,18 +749,89 @@ function VariantEditPanel({
             return null;
           })()}
 
-          {/* Stock */}
+          {/* Stock / Inventory */}
           <div className={styles.variantEditField}>
-            <label className={styles.variantEditFieldLabel}>Stock</label>
-            <input
-              type="number"
-              className={styles.variantEditInput}
-              value={editedVariant.stock || ""}
-              onChange={(e) =>
-                handleFieldChange("stock", parseInt(e.target.value) || 0)
+            <label className={styles.variantEditFieldLabel}>
+              {(() => {
+                const sizes = Array.isArray(editedVariant.size)
+                  ? editedVariant.size
+                  : typeof editedVariant.size === "string" && editedVariant.size
+                    ? editedVariant.size
+                        .split(",")
+                        .map((s) => s.trim())
+                        .filter(Boolean)
+                    : [];
+                return sizes.length > 0 ? "Inventory" : "Stock";
+              })()}
+            </label>
+            {(() => {
+              const sizes = Array.isArray(editedVariant.size)
+                ? editedVariant.size
+                : typeof editedVariant.size === "string" && editedVariant.size
+                  ? editedVariant.size
+                      .split(",")
+                      .map((s) => s.trim())
+                      .filter(Boolean)
+                  : [];
+
+              if (sizes.length > 0) {
+                return (
+                  <div
+                    style={{ display: "flex", flexWrap: "wrap", gap: "10px" }}
+                  >
+                    {sizes.map((size) => (
+                      <div
+                        key={size}
+                        style={{
+                          display: "flex",
+                          flexDirection: "column",
+                          gap: "4px",
+                          minWidth: "70px",
+                        }}
+                      >
+                        <span
+                          style={{
+                            fontSize: "10px",
+                            color: "rgba(255,255,255,0.5)",
+                            textTransform: "uppercase",
+                            fontWeight: 600,
+                          }}
+                        >
+                          Stock for {size}
+                        </span>
+                        <input
+                          type="number"
+                          className={styles.variantEditInput}
+                          value={editedVariant.sizeStocks?.[size] ?? ""}
+                          onChange={(e) => {
+                            const newQty = parseInt(e.target.value) || 0;
+                            handleFieldChange("sizeStocks", {
+                              ...(editedVariant.sizeStocks || {}),
+                              [size]: newQty,
+                            });
+                          }}
+                          placeholder="0"
+                          min="0"
+                          style={{ padding: "8px 12px" }}
+                        />
+                      </div>
+                    ))}
+                  </div>
+                );
               }
-              placeholder="e.g., 50"
-            />
+
+              return (
+                <input
+                  type="number"
+                  className={styles.variantEditInput}
+                  value={editedVariant.stock || ""}
+                  onChange={(e) =>
+                    handleFieldChange("stock", parseInt(e.target.value) || 0)
+                  }
+                  placeholder="e.g., 50"
+                />
+              );
+            })()}
           </div>
         </div>
 
@@ -752,11 +940,12 @@ function VariantsDisplay({
                         : variant.size}
                     </span>
                   )}
-                  {variant.price > 0 && (
-                    <span className={styles.variantPrice}>
-                      ₹{variant.price}
-                    </span>
-                  )}
+                  <span className={styles.variantPrice}>
+                    ₹
+                    {variant.compareAtPrice && variant.compareAtPrice > 0
+                      ? variant.compareAtPrice
+                      : variant.price}
+                  </span>
                   {variant.stock > 0 && (
                     <span className={styles.variantStock}>
                       Stock: {variant.stock}
@@ -817,6 +1006,10 @@ export default function ProductCard({
   const [isEditing, setIsEditing] = React.useState(false);
   const [selectedImageUrl, setSelectedImageUrl] = React.useState<string | null>(
     null,
+  );
+  // State for offer price toggle
+  const [showOfferPrice, setShowOfferPrice] = React.useState(
+    !!(product.compareAtPrice && product.compareAtPrice > 0),
   );
 
   // State for variant editing
@@ -1027,13 +1220,173 @@ export default function ProductCard({
                 type="number"
                 className={`${styles.detailInput} ${!isEditing ? styles.inputDisabled : ""}`}
                 value={product.price || ""}
-                onChange={(e) =>
-                  onUpdate(product.id, "price", parseFloat(e.target.value) || 0)
-                }
+                onChange={(e) => {
+                  const newPrice = parseFloat(e.target.value) || 0;
+                  onUpdate(product.id, "price", newPrice);
+                  // If offer price is OFF and size pricing is ON, propagate change to sizes
+                  if (
+                    !showOfferPrice &&
+                    product.hasSizePricing &&
+                    product.sizes &&
+                    product.sizes.length > 0
+                  ) {
+                    const updatedPrices: Record<string, number> = {};
+                    product.sizes.forEach((size) => {
+                      updatedPrices[size] = newPrice;
+                    });
+                    onUpdate(product.id, "sizePrices", updatedPrices);
+                  }
+                }}
                 placeholder={isEcommerce ? "e.g., 1999" : "e.g., 300"}
                 disabled={!isEditing}
               />
             </div>
+
+            {/* Offer Price Toggle and Input */}
+            {isEcommerce && (
+              <div className={styles.detailItem}>
+                <div
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    marginBottom: "8px",
+                  }}
+                >
+                  <label className={styles.detailLabel} style={{ margin: 0 }}>
+                    Offer Price
+                  </label>
+                  {isEditing && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const newShowOfferPrice = !showOfferPrice;
+                        setShowOfferPrice(newShowOfferPrice);
+                        if (!newShowOfferPrice) {
+                          onUpdate(product.id, "compareAtPrice", undefined);
+                        }
+                        // If size pricing is enabled, update size prices
+                        if (
+                          product.hasSizePricing &&
+                          product.sizes &&
+                          product.sizes.length > 0
+                        ) {
+                          const updatedPrices: Record<string, number> = {};
+                          if (newShowOfferPrice) {
+                            const offerPrice =
+                              product.compareAtPrice || product.price || 0;
+                            product.sizes.forEach((size) => {
+                              updatedPrices[size] = offerPrice;
+                            });
+                          } else {
+                            product.sizes.forEach((size) => {
+                              updatedPrices[size] = product.price ?? 0;
+                            });
+                          }
+                          onUpdate(product.id, "sizePrices", updatedPrices);
+                        }
+                      }}
+                      style={{
+                        width: "40px",
+                        height: "22px",
+                        borderRadius: "11px",
+                        border: "none",
+                        background: showOfferPrice
+                          ? "#22c55a"
+                          : "rgba(255,255,255,0.2)",
+                        cursor: "pointer",
+                        position: "relative",
+                        transition: "background 0.2s ease",
+                      }}
+                    >
+                      <span
+                        style={{
+                          position: "absolute",
+                          top: "2px",
+                          left: showOfferPrice ? "20px" : "2px",
+                          width: "18px",
+                          height: "18px",
+                          borderRadius: "50%",
+                          background: "#fff",
+                          transition: "left 0.2s ease",
+                        }}
+                      />
+                    </button>
+                  )}
+                </div>
+                {showOfferPrice ? (
+                  <div style={{ position: "relative" }}>
+                    <input
+                      type="number"
+                      className={`${styles.detailInput} ${!isEditing ? styles.inputDisabled : ""}`}
+                      value={product.compareAtPrice || ""}
+                      onChange={(e) => {
+                        const newOfferPrice = parseFloat(e.target.value) || 0;
+                        onUpdate(product.id, "compareAtPrice", newOfferPrice);
+                        // If size pricing is ON, propagate change to sizes
+                        if (
+                          product.hasSizePricing &&
+                          product.sizes &&
+                          product.sizes.length > 0
+                        ) {
+                          const updatedPrices: Record<string, number> = {};
+                          product.sizes.forEach((size) => {
+                            updatedPrices[size] = newOfferPrice;
+                          });
+                          onUpdate(product.id, "sizePrices", updatedPrices);
+                        }
+                      }}
+                      placeholder="Sale price"
+                      disabled={!isEditing}
+                      style={{ paddingRight: isEditing ? "40px" : undefined }}
+                    />
+                    {isEditing && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setShowOfferPrice(false);
+                          onUpdate(product.id, "compareAtPrice", undefined);
+                          // Update size prices to use regular price
+                          if (
+                            product.hasSizePricing &&
+                            product.sizes &&
+                            product.sizes.length > 0
+                          ) {
+                            const updatedPrices: Record<string, number> = {};
+                            product.sizes.forEach((size) => {
+                              updatedPrices[size] = product.price ?? 0;
+                            });
+                            onUpdate(product.id, "sizePrices", updatedPrices);
+                          }
+                        }}
+                        style={{
+                          position: "absolute",
+                          right: "12px",
+                          top: "50%",
+                          transform: "translateY(-50%)",
+                          background: "transparent",
+                          border: "none",
+                          color: "rgba(255,255,255,0.5)",
+                          cursor: "pointer",
+                          fontSize: "16px",
+                          padding: "4px",
+                        }}
+                        title="Remove offer price"
+                      >
+                        ✕
+                      </button>
+                    )}
+                  </div>
+                ) : (
+                  <div
+                    className={`${styles.detailInput} ${styles.inputDisabled}`}
+                    style={{ color: "rgba(255,255,255,0.4)" }}
+                  >
+                    {isEditing ? "Toggle to enable offer price" : "Not set"}
+                  </div>
+                )}
+              </div>
+            )}
 
             {/* Category */}
             <div className={styles.detailItem}>
@@ -1111,24 +1464,279 @@ export default function ProductCard({
                 )}
               </div>
             )}
+          </div>
+        </div>
+      </div>
 
-            {/* Sizes - Only for e-commerce */}
-            {isEcommerce && (
-              <div className={styles.detailItem}>
-                <label className={styles.detailLabel}>Sizes</label>
-                <div className={!isEditing ? styles.disabledWrapper : ""}>
-                  <SizeMultiSelect
-                    selectedSizes={product.sizes || []}
-                    onChange={(sizes: string[]) =>
-                      isEditing && onUpdate(product.id, "sizes", sizes)
+      {/* Advanced Details - Full Width Section for Sizes, Inventory, and Pricing */}
+      {isEcommerce && (
+        <div
+          className={styles.descriptionSection}
+          style={{ paddingBottom: "12px", paddingTop: "0" }}
+        >
+          <div
+            style={{
+              background: "rgba(255,255,255,0.02)",
+              border: "1px solid rgba(255,255,255,0.08)",
+              borderRadius: "16px",
+              padding: "20px",
+              display: "flex",
+              flexDirection: "column",
+              gap: "24px",
+            }}
+          >
+            {/* Sizes Selection */}
+            <div className={styles.detailItem}>
+              <label className={styles.detailLabel}>Sizes</label>
+              <div className={!isEditing ? styles.disabledWrapper : ""}>
+                <SizeMultiSelect
+                  selectedSizes={product.sizes || []}
+                  onChange={(sizes: string[]) => {
+                    if (!isEditing) return;
+                    onUpdate(product.id, "sizes", sizes);
+                    // Clean up sizePrices for removed sizes
+                    if (product.sizePrices) {
+                      const newSizePrices = { ...product.sizePrices };
+                      Object.keys(newSizePrices).forEach((size) => {
+                        if (!sizes.includes(size)) {
+                          delete newSizePrices[size];
+                        }
+                      });
+                      onUpdate(product.id, "sizePrices", newSizePrices);
                     }
-                  />
+                    // Clean up sizeStocks for removed sizes
+                    if (product.sizeStocks) {
+                      const newSizeStocks = { ...product.sizeStocks };
+                      Object.keys(newSizeStocks).forEach((size) => {
+                        if (!sizes.includes(size)) {
+                          delete newSizeStocks[size];
+                        }
+                      });
+                      onUpdate(product.id, "sizeStocks", newSizeStocks);
+                    }
+                  }}
+                />
+              </div>
+            </div>
+
+            {/* Quantity / Inventory */}
+            <div className={styles.detailItem}>
+              <label className={styles.detailLabel}>
+                {product.sizes && product.sizes.length > 0
+                  ? "Inventory"
+                  : "Quantity"}
+              </label>
+              {product.sizes && product.sizes.length > 0 ? (
+                <div style={{ display: "flex", flexWrap: "wrap", gap: "10px" }}>
+                  {product.sizes.map((size) => (
+                    <div
+                      key={size}
+                      style={{
+                        display: "flex",
+                        flexDirection: "column",
+                        gap: "4px",
+                        minWidth: "70px",
+                      }}
+                    >
+                      <span
+                        style={{
+                          fontSize: "10px",
+                          color: "rgba(255,255,255,0.5)",
+                          textTransform: "uppercase",
+                          fontWeight: 600,
+                        }}
+                      >
+                        {size}
+                      </span>
+                      <input
+                        type="number"
+                        className={`${styles.detailInput} ${!isEditing ? styles.inputDisabled : ""}`}
+                        value={product.sizeStocks?.[size] ?? ""}
+                        onChange={(e) => {
+                          const newQuantity = parseInt(e.target.value) || 0;
+                          onUpdate(product.id, "sizeStocks", {
+                            ...(product.sizeStocks || {}),
+                            [size]: newQuantity,
+                          });
+                        }}
+                        placeholder="0"
+                        min="0"
+                        disabled={!isEditing}
+                        style={{ padding: "8px 10px", minHeight: "36px" }}
+                      />
+                    </div>
+                  ))}
                 </div>
+              ) : (
+                <input
+                  type="number"
+                  className={`${styles.detailInput} ${!isEditing ? styles.inputDisabled : ""}`}
+                  value={product.quantity || ""}
+                  onChange={(e) =>
+                    onUpdate(
+                      product.id,
+                      "quantity",
+                      parseInt(e.target.value) || 0,
+                    )
+                  }
+                  placeholder="0"
+                  min="0"
+                  disabled={!isEditing}
+                />
+              )}
+            </div>
+
+            {/* Different Price for Each Size */}
+            {product.sizes && product.sizes.length > 1 && (
+              <div className={styles.detailItem}>
+                <div
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    marginBottom: "12px",
+                  }}
+                >
+                  <div>
+                    <label className={styles.detailLabel} style={{ margin: 0 }}>
+                      Different price for each size
+                    </label>
+                    <p
+                      style={{
+                        fontSize: "11px",
+                        color: "rgba(255,255,255,0.4)",
+                        margin: "4px 0 0",
+                      }}
+                    >
+                      Enable to set individual prices per size
+                    </p>
+                  </div>
+                  {isEditing && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const newValue = !product.hasSizePricing;
+                        onUpdate(product.id, "hasSizePricing", newValue);
+                        // Initialize sizePrices with current base price
+                        if (newValue && product.sizes) {
+                          const initialPrices: Record<string, number> = {};
+                          const basePrice =
+                            showOfferPrice && product.compareAtPrice
+                              ? product.compareAtPrice
+                              : product.price;
+                          product.sizes.forEach((size) => {
+                            initialPrices[size] = basePrice ?? 0;
+                          });
+                          onUpdate(product.id, "sizePrices", initialPrices);
+                        }
+                      }}
+                      style={{
+                        width: "44px",
+                        height: "24px",
+                        borderRadius: "12px",
+                        border: "none",
+                        background: product.hasSizePricing
+                          ? "#22c55a"
+                          : "rgba(255,255,255,0.2)",
+                        cursor: "pointer",
+                        position: "relative",
+                        transition: "background 0.2s ease",
+                      }}
+                    >
+                      <span
+                        style={{
+                          position: "absolute",
+                          top: "2px",
+                          left: product.hasSizePricing ? "22px" : "2px",
+                          width: "20px",
+                          height: "20px",
+                          borderRadius: "50%",
+                          background: "#fff",
+                          transition: "left 0.2s ease",
+                        }}
+                      />
+                    </button>
+                  )}
+                </div>
+
+                {/* Size-Specific Price Inputs */}
+                {product.hasSizePricing && (
+                  <div
+                    style={{
+                      display: "flex",
+                      flexWrap: "wrap",
+                      gap: "12px",
+                      padding: "12px",
+                      background: "rgba(255,255,255,0.03)",
+                      borderRadius: "10px",
+                      border: "1px solid rgba(255,255,255,0.08)",
+                    }}
+                  >
+                    {product.sizes.map((size) => (
+                      <div
+                        key={size}
+                        style={{
+                          display: "flex",
+                          flexDirection: "column",
+                          gap: "4px",
+                          minWidth: "80px",
+                        }}
+                      >
+                        <label
+                          style={{
+                            fontSize: "11px",
+                            color: "rgba(255,255,255,0.6)",
+                            fontWeight: 600,
+                          }}
+                        >
+                          {size}
+                        </label>
+                        <div style={{ position: "relative" }}>
+                          <span
+                            style={{
+                              position: "absolute",
+                              left: "10px",
+                              top: "50%",
+                              transform: "translateY(-50%)",
+                              color: "rgba(255,255,255,0.5)",
+                              fontSize: "13px",
+                            }}
+                          >
+                            ₹
+                          </span>
+                          <input
+                            type="number"
+                            className={`${styles.detailInput} ${!isEditing ? styles.inputDisabled : ""}`}
+                            value={
+                              product.sizePrices?.[size] ??
+                              (showOfferPrice && product.compareAtPrice
+                                ? product.compareAtPrice
+                                : product.price) ??
+                              ""
+                            }
+                            onChange={(e) => {
+                              const newPrice = parseFloat(e.target.value) || 0;
+                              onUpdate(product.id, "sizePrices", {
+                                ...(product.sizePrices || {}),
+                                [size]: newPrice,
+                              });
+                            }}
+                            placeholder="0"
+                            min="0"
+                            step="1"
+                            disabled={!isEditing}
+                            style={{ paddingLeft: "24px", minHeight: "40px" }}
+                          />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             )}
           </div>
         </div>
-      </div>
+      )}
 
       {/* Description Section - Full Width at Bottom */}
       <div className={styles.descriptionSection}>

@@ -58,6 +58,12 @@ export async function GET(request: NextRequest) {
         brandVoice: supabaseData.brand_voice,
         sizeOptions: supabaseData.size_options,
         colorOptions: supabaseData.color_options,
+        logoUrl: supabaseData.logo_url,
+        logoPublicId: supabaseData.logo_public_id,
+        // Razorpay payment settings
+        razorpayKeyId: supabaseData.razorpay_key_id,
+        razorpayKeySecret: supabaseData.razorpay_key_secret,
+        paymentsEnabled: supabaseData.payments_enabled,
       };
       return NextResponse.json({ data: frontendData, source: "supabase" });
     }

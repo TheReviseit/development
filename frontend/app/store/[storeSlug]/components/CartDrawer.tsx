@@ -2,14 +2,20 @@
 
 import React, { useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
+import { useParams, useRouter } from "next/navigation";
 import styles from "../store.module.css";
 import { useCart } from "../context/CartContext";
 
 export default function CartDrawer() {
+  const params = useParams();
+  const router = useRouter();
+  const storeSlug = params?.storeSlug as string;
+
   const {
     cartItems,
     removeFromCart,
     updateQuantity,
+    updateItemOptions,
     cartTotal,
     isCartOpen,
     setIsCartOpen,
@@ -46,23 +52,9 @@ export default function CartDrawer() {
     }).format(price);
   };
 
-  const handleWhatsAppOrder = () => {
-    if (cartItems.length === 0) return;
-
-    const orderLines = cartItems.map(
-      (item) =>
-        `• ${item.name}${item.options?.size ? ` (${item.options.size})` : ""}${
-          item.options?.color ? ` - ${item.options.color}` : ""
-        } x${item.quantity} = ${formatPrice(item.price * item.quantity)}`
-    );
-
-    const message = `🛒 *New Order Request*\n\n${orderLines.join(
-      "\n"
-    )}\n\n*Total: ${formatPrice(cartTotal)}*\n\nPlease confirm my order!`;
-
-    // This would use the store's WhatsApp number - for now open blank
-    const encodedMessage = encodeURIComponent(message);
-    window.open(`https://wa.me/?text=${encodedMessage}`, "_blank");
+  const handleCheckout = () => {
+    setIsCartOpen(false);
+    router.push(`/store/${storeSlug}/checkout`);
   };
 
   return (
@@ -144,15 +136,66 @@ export default function CartDrawer() {
 
                   <div className={styles.cartItemDetails}>
                     <h4 className={styles.cartItemName}>{item.name}</h4>
-                    {(item.options?.size || item.options?.color) && (
-                      <div className={styles.cartItemOptions}>
-                        {item.options.size && (
-                          <span>Size: {item.options.size}</span>
-                        )}
-                        {item.options.color && (
-                          <span>Color: {item.options.color}</span>
-                        )}
+                    {/* Show dropdowns for items added from dashboard */}
+                    {item.addedFromDashboard &&
+                    (item.availableSizes?.length ||
+                      item.availableColors?.length) ? (
+                      <div className={styles.cartItemOptionsDropdowns}>
+                        {item.availableSizes &&
+                          item.availableSizes.length > 0 && (
+                            <div className={styles.cartOptionSelector}>
+                              <label>Size:</label>
+                              <select
+                                value={item.options?.size || ""}
+                                onChange={(e) =>
+                                  updateItemOptions(item.id, {
+                                    size: e.target.value,
+                                  })
+                                }
+                                className={styles.cartOptionSelect}
+                              >
+                                {item.availableSizes.map((size) => (
+                                  <option key={size} value={size}>
+                                    {size}
+                                  </option>
+                                ))}
+                              </select>
+                            </div>
+                          )}
+                        {item.availableColors &&
+                          item.availableColors.length > 0 && (
+                            <div className={styles.cartOptionSelector}>
+                              <label>Color:</label>
+                              <select
+                                value={item.options?.color || ""}
+                                onChange={(e) =>
+                                  updateItemOptions(item.id, {
+                                    color: e.target.value,
+                                  })
+                                }
+                                className={styles.cartOptionSelect}
+                              >
+                                {item.availableColors.map((color) => (
+                                  <option key={color} value={color}>
+                                    {color}
+                                  </option>
+                                ))}
+                              </select>
+                            </div>
+                          )}
                       </div>
+                    ) : (
+                      /* Show static options for items added from product detail */
+                      (item.options?.size || item.options?.color) && (
+                        <div className={styles.cartItemOptions}>
+                          {item.options.size && (
+                            <span>Size: {item.options.size}</span>
+                          )}
+                          {item.options.color && (
+                            <span>Color: {item.options.color}</span>
+                          )}
+                        </div>
+                      )
                     )}
                     <p className={styles.cartItemPrice}>
                       {formatPrice(item.price * item.quantity)}
@@ -216,11 +259,8 @@ export default function CartDrawer() {
                 {formatPrice(cartTotal)}
               </span>
             </div>
-            <button
-              className={styles.checkoutBtn}
-              onClick={handleWhatsAppOrder}
-            >
-              Order via WhatsApp
+            <button className={styles.checkoutBtn} onClick={handleCheckout}>
+              Buy Now — {formatPrice(cartTotal)}
             </button>
           </div>
         )}

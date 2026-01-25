@@ -4,6 +4,7 @@ import React, { useState, useEffect, useRef, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import styles from "../store.module.css";
 import ProductCardStore, { Product } from "./ProductCardStore";
+import RecommendedProducts from "./RecommendedProducts";
 
 interface SearchOverlayProps {
   isOpen: boolean;
@@ -67,7 +68,7 @@ export default function SearchOverlay({
       (product) =>
         product.name.toLowerCase().includes(lowerQuery) ||
         product.category?.toLowerCase().includes(lowerQuery) ||
-        product.description?.toLowerCase().includes(lowerQuery)
+        product.description?.toLowerCase().includes(lowerQuery),
     );
   }, [products, query]);
 
@@ -89,16 +90,25 @@ export default function SearchOverlay({
         >
           <div className={styles.searchHeader}>
             <div className={styles.searchInputWrapper}>
-              <svg
-                className={styles.searchIcon}
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
+              <button
+                className={styles.searchBackBtn}
+                onClick={onClose}
+                aria-label="Go back"
               >
-                <circle cx="11" cy="11" r="8" />
-                <path d="m21 21-4.35-4.35" strokeLinecap="round" />
-              </svg>
+                <svg
+                  width="24"
+                  height="24"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <path d="M19 12H5" />
+                  <path d="M12 19l-7-7 7-7" />
+                </svg>
+              </button>
               <input
                 ref={inputRef}
                 type="text"
@@ -108,17 +118,34 @@ export default function SearchOverlay({
                 onChange={(e) => setQuery(e.target.value)}
                 autoComplete="off"
               />
+              <button
+                className={styles.inputCloseBtn}
+                onClick={onClose}
+                aria-label="Close search"
+              >
+                <svg
+                  width="20"
+                  height="20"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <line x1="18" y1="6" x2="6" y2="18" />
+                  <line x1="6" y1="6" x2="18" y2="18" />
+                </svg>
+              </button>
             </div>
-            <button className={styles.searchCloseBtn} onClick={onClose}>
-              Cancel
-            </button>
           </div>
 
           <div className={styles.searchResults}>
             {query.trim() === "" ? (
-              <div className={styles.searchEmpty}>
-                Start typing to search products
-              </div>
+              <RecommendedProducts
+                products={products}
+                onProductClick={handleProductClick}
+              />
             ) : filteredProducts.length === 0 ? (
               <div className={styles.searchEmpty}>
                 No products found for "{query}"

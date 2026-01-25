@@ -169,6 +169,12 @@ export default function ProductDetailModal({
     }).format(price);
   };
 
+  // Calculate discount percentage
+  const calculateDiscount = (originalPrice: number, offerPrice: number): number => {
+    if (originalPrice <= 0 || offerPrice >= originalPrice) return 0;
+    return Math.round(((originalPrice - offerPrice) / originalPrice) * 100);
+  };
+
   // Color mapping for visual swatches
   const getColorHex = (colorName: string) => {
     const colorMap: { [key: string]: string } = {
@@ -286,7 +292,14 @@ export default function ProductDetailModal({
           }
         }
 
-        // Otherwise use variant's base price
+        // Otherwise use variant's offer price if available, then base price
+        if (matchingVariant.compareAtPrice && matchingVariant.compareAtPrice > 0) {
+          console.log(
+            `[VariantOfferPrice] Offer price for ${selectedColor}${selectedSize ? ` / ${selectedSize}` : ""}:`,
+            matchingVariant.compareAtPrice,
+          );
+          return matchingVariant.compareAtPrice;
+        }
         if (matchingVariant.price && matchingVariant.price > 0) {
           console.log(
             `[VariantPricing] Price for ${selectedColor}${selectedSize ? ` / ${selectedSize}` : ""}:`,
@@ -299,7 +312,19 @@ export default function ProductDetailModal({
 
     // Priority 2: Check product-level sizePrices (size-based pricing without variants)
     if (product.hasSizePricing && product.sizePrices && selectedSize) {
-      const sizePrice = product.sizePrices[selectedSize];
+      // Try exact match first
+      let sizePrice = product.sizePrices[selectedSize];
+      
+      // If not found, try case-insensitive match
+      if (sizePrice === undefined) {
+        const sizeKey = Object.keys(product.sizePrices).find(
+          (key) => key.toLowerCase() === selectedSize.toLowerCase()
+        );
+        if (sizeKey) {
+          sizePrice = product.sizePrices[sizeKey];
+        }
+      }
+      
       if (sizePrice !== undefined && sizePrice > 0) {
         console.log(
           `[ProductSizePricing] Price for size "${selectedSize}":`,
@@ -307,10 +332,17 @@ export default function ProductDetailModal({
         );
         return sizePrice;
       }
+      // If size pricing is enabled but no size-specific price found for this size, use base price
+      console.log(
+        `[ProductSizePricing] No price found for size "${selectedSize}", using base price:`,
+        product.price,
+      );
+      return product.price;
     }
 
     // Fallback: Use compareAtPrice as selling price if available (Offer Price), otherwise base price
-    if (product.compareAtPrice && product.compareAtPrice > 0) {
+    // Only use compareAtPrice if size pricing is NOT enabled
+    if (!product.hasSizePricing && product.compareAtPrice && product.compareAtPrice > 0) {
       return product.compareAtPrice;
     }
     return product.price;
@@ -404,20 +436,39 @@ export default function ProductDetailModal({
                 style={{ marginBottom: "16px" }}
               >
                 {product.compareAtPrice && product.compareAtPrice > 0 ? (
-                  <>
-                    <span
-                      className={styles.modalPrice}
-                      style={{ margin: 0, fontSize: "24px" }}
-                    >
-                      {formatPrice(displayPrice)}
-                    </span>
+                  <div style={{ display: "flex", alignItems: "center", gap: "12px", flexWrap: "wrap" }}>
                     <span
                       className={styles.novaOriginalPrice}
-                      style={{ fontSize: "16px" }}
+                      style={{ fontSize: "18px", order: 1 }}
                     >
                       {formatPrice(product.price)}
                     </span>
-                  </>
+                    <div style={{ display: "flex", alignItems: "center", gap: "8px", order: 2 }}>
+                      <span
+                        className={styles.modalPrice}
+                        style={{ margin: 0, fontSize: "24px" }}
+                      >
+                        {formatPrice(displayPrice)}
+                      </span>
+                      {(() => {
+                        const discount = calculateDiscount(product.price, displayPrice);
+                        return discount > 0 ? (
+                          <span
+                            style={{
+                              fontSize: "14px",
+                              fontWeight: 600,
+                              color: "#22c55e",
+                              backgroundColor: "rgba(34, 197, 94, 0.1)",
+                              padding: "4px 8px",
+                              borderRadius: "6px",
+                            }}
+                          >
+                            {discount}% OFF
+                          </span>
+                        ) : null;
+                      })()}
+                    </div>
+                  </div>
                 ) : (
                   <p className={styles.modalPrice}>
                     {formatPrice(displayPrice)}

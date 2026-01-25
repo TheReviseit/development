@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useAuth } from "@/app/components/auth/AuthProvider";
 import Toast from "@/app/components/Toast/Toast";
+import PaymentSettings from "./PaymentSettings";
 import styles from "./profile.module.css";
 
 interface BusinessProfile {
@@ -17,6 +18,12 @@ export default function ProfilePage() {
     businessName: "",
     logoUrl: "",
     logoPublicId: "",
+  });
+  const [activeTab, setActiveTab] = useState<"profile" | "payment">("profile");
+  const [paymentData, setPaymentData] = useState({
+    razorpayKeyId: "",
+    razorpayKeySecret: "",
+    paymentsEnabled: false,
   });
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -40,6 +47,11 @@ export default function ProfilePage() {
               businessName: result.data.businessName || "",
               logoUrl: result.data.logoUrl || "",
               logoPublicId: result.data.logoPublicId || "",
+            });
+            setPaymentData({
+              razorpayKeyId: result.data.razorpayKeyId || "",
+              razorpayKeySecret: result.data.razorpayKeySecret || "",
+              paymentsEnabled: result.data.paymentsEnabled || false,
             });
           }
         }
@@ -275,8 +287,26 @@ export default function ProfilePage() {
   return (
     <div className={styles.container}>
       <div className={styles.header}>
-        <h1 className={styles.title}>Store Profile</h1>
-        <p className={styles.subtitle}>Customize your store appearance</p>
+        <h1 className={styles.title}>Store Settings</h1>
+        <p className={styles.subtitle}>
+          Manage your store profile and payment settings
+        </p>
+      </div>
+
+      {/* Tabs */}
+      <div className={styles.tabsContainer}>
+        <button
+          className={`${styles.tab} ${activeTab === "profile" ? styles.activeTab : ""}`}
+          onClick={() => setActiveTab("profile")}
+        >
+          Store Profile
+        </button>
+        <button
+          className={`${styles.tab} ${activeTab === "payment" ? styles.activeTab : ""}`}
+          onClick={() => setActiveTab("payment")}
+        >
+          Payment Gateway
+        </button>
       </div>
 
       {/* Toast Notification */}
@@ -289,96 +319,106 @@ export default function ProfilePage() {
         />
       )}
 
-      {/* Logo & Name Card */}
-      <div className={styles.card}>
-        <div className={styles.cardHeader}>
-          <h2 className={styles.cardTitle}>Shop Logo & Name</h2>
-          <p className={styles.cardDescription}>
-            Your store logo will appear on your public store page
-          </p>
-        </div>
-
-        <div className={styles.profileSection}>
-          {/* Logo Upload with Drag & Drop */}
-          <div
-            className={`${styles.logoUpload} ${isDragging ? styles.dragging : ""}`}
-            onClick={() => fileInputRef.current?.click()}
-            onDragOver={handleDragOver}
-            onDragLeave={handleDragLeave}
-            onDrop={handleDrop}
-          >
-            {uploading ? (
-              <div className={styles.uploadingState}>
-                <div className={styles.spinner} />
-                <span>Uploading...</span>
-              </div>
-            ) : profile.logoUrl ? (
-              <img
-                src={profile.logoUrl}
-                alt="Store Logo"
-                className={styles.logoPreview}
-              />
-            ) : (
-              <div className={styles.logoPlaceholder}>
-                <svg
-                  width="48"
-                  height="48"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="1.5"
-                >
-                  <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
-                  <circle cx="8.5" cy="8.5" r="1.5" />
-                  <polyline points="21 15 16 10 5 21" />
-                </svg>
-                <span>Drop image here or click</span>
-              </div>
-            )}
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept="image/*"
-              onChange={handleFileChange}
-              className={styles.hiddenInput}
-            />
+      {/* Profile Tab Content */}
+      {activeTab === "profile" && (
+        <div className={styles.card}>
+          <div className={styles.cardHeader}>
+            <h2 className={styles.cardTitle}>Shop Logo & Name</h2>
+            <p className={styles.cardDescription}>
+              Your store logo will appear on your public store page
+            </p>
           </div>
 
-          {profile.logoUrl && (
-            <button
-              className={styles.removeLogoBtn}
-              onClick={handleLogoDelete}
-              type="button"
+          <div className={styles.profileSection}>
+            {/* Logo Upload with Drag & Drop */}
+            <div
+              className={`${styles.logoUpload} ${isDragging ? styles.dragging : ""}`}
+              onClick={() => fileInputRef.current?.click()}
+              onDragOver={handleDragOver}
+              onDragLeave={handleDragLeave}
+              onDrop={handleDrop}
             >
-              Remove Logo
-            </button>
-          )}
+              {uploading ? (
+                <div className={styles.uploadingState}>
+                  <div className={styles.spinner} />
+                  <span>Uploading...</span>
+                </div>
+              ) : profile.logoUrl ? (
+                <img
+                  src={profile.logoUrl}
+                  alt="Store Logo"
+                  className={styles.logoPreview}
+                />
+              ) : (
+                <div className={styles.logoPlaceholder}>
+                  <svg
+                    width="48"
+                    height="48"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="1.5"
+                  >
+                    <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
+                    <circle cx="8.5" cy="8.5" r="1.5" />
+                    <polyline points="21 15 16 10 5 21" />
+                  </svg>
+                  <span>Drop image here or click</span>
+                </div>
+              )}
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*"
+                onChange={handleFileChange}
+                className={styles.hiddenInput}
+              />
+            </div>
 
-          {/* Business Name */}
-          <div className={styles.nameSection}>
-            <label className={styles.label}>Business Name</label>
-            <input
-              type="text"
-              className={styles.input}
-              value={profile.businessName}
-              onChange={(e) =>
-                setProfile({ ...profile, businessName: e.target.value })
-              }
-              placeholder="Your store name"
-            />
+            {profile.logoUrl && (
+              <button
+                className={styles.removeLogoBtn}
+                onClick={handleLogoDelete}
+                type="button"
+              >
+                Remove Logo
+              </button>
+            )}
+
+            {/* Business Name */}
+            <div className={styles.nameSection}>
+              <label className={styles.label}>Business Name</label>
+              <input
+                type="text"
+                className={styles.input}
+                value={profile.businessName}
+                onChange={(e) =>
+                  setProfile({ ...profile, businessName: e.target.value })
+                }
+                placeholder="Your store name"
+              />
+            </div>
+          </div>
+
+          <div className={styles.cardFooter}>
+            <button
+              className={styles.saveBtn}
+              onClick={handleSave}
+              disabled={saving}
+            >
+              {saving ? "Saving..." : "Save Changes"}
+            </button>
           </div>
         </div>
+      )}
 
-        <div className={styles.cardFooter}>
-          <button
-            className={styles.saveBtn}
-            onClick={handleSave}
-            disabled={saving}
-          >
-            {saving ? "Saving..." : "Save Changes"}
-          </button>
-        </div>
-      </div>
+      {/* Payment Gateway Tab Content */}
+      {activeTab === "payment" && (
+        <PaymentSettings
+          initialData={paymentData}
+          showToast={(text, type) => setMessage({ text, type })}
+        />
+      )}
     </div>
   );
 }
