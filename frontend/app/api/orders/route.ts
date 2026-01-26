@@ -3,6 +3,12 @@ import { createClient } from "@supabase/supabase-js";
 import { cookies } from "next/headers";
 import { adminAuth } from "@/lib/firebase-admin";
 
+// Backend Flask API base URL (used for Google Sheets sync)
+const BACKEND_URL =
+  process.env.NODE_ENV === "development"
+    ? "http://localhost:5000"
+    : process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
+
 // Initialize Supabase client
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
@@ -23,28 +29,13 @@ async function getUserId(request: NextRequest): Promise<string | null> {
 
     const decodedToken = await adminAuth.verifySessionCookie(
       sessionCookie,
-      true
+      true,
     );
     return decodedToken.uid;
   } catch (error) {
     console.error("Error verifying session:", error);
     return null;
   }
-}
-
-// Order interface matching database schema
-interface Order {
-  id?: string;
-  user_id: string;
-  customer_name: string;
-  customer_phone: string;
-  items: OrderItem[];
-  total_quantity: number;
-  status: "pending" | "confirmed" | "processing" | "completed" | "cancelled";
-  source: "ai" | "manual";
-  notes?: string;
-  created_at?: string;
-  updated_at?: string;
 }
 
 interface OrderItem {
@@ -101,12 +92,12 @@ export async function GET(request: NextRequest) {
       console.error("Error fetching orders:", error);
       return NextResponse.json(
         { error: "Failed to fetch orders" },
-        { status: 500 }
+        { status: 500 },
       );
     }
 
     console.log(
-      `📦 Orders API: Found ${data?.length || 0} orders for user ${userId}`
+      `📦 Orders API: Found ${data?.length || 0} orders for user ${userId}`,
     );
 
     return NextResponse.json({
@@ -117,7 +108,7 @@ export async function GET(request: NextRequest) {
     console.error("Error in GET /api/orders:", error);
     return NextResponse.json(
       { error: "Internal server error" },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }
@@ -135,6 +126,8 @@ export async function POST(request: NextRequest) {
     const {
       customer_name,
       customer_phone,
+    customer_address,
+    customer_email,
       items,
       status = "pending",
       source = "manual",
@@ -154,7 +147,7 @@ export async function POST(request: NextRequest) {
           error:
             "Missing required fields: customer_name, customer_phone, items (non-empty array)",
         },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
@@ -167,7 +160,7 @@ export async function POST(request: NextRequest) {
       ) {
         return NextResponse.json(
           { error: "Each item must have name and quantity (>= 1)" },
-          { status: 400 }
+          { status: 400 },
         );
       }
     }
@@ -175,7 +168,7 @@ export async function POST(request: NextRequest) {
     // Calculate total quantity
     const total_quantity = items.reduce(
       (sum: number, item: OrderItem) => sum + item.quantity,
-      0
+      0,
     );
 
     const supabase = getSupabase();
@@ -187,6 +180,8 @@ export async function POST(request: NextRequest) {
         user_id: userId,
         customer_name,
         customer_phone,
+        customer_address,
+        customer_email,
         items,
         total_quantity,
         status,
@@ -200,24 +195,48 @@ export async function POST(request: NextRequest) {
       console.error("Error creating order:", error);
       return NextResponse.json(
         { error: "Failed to create order" },
-        { status: 500 }
+        { status: 500 },
       );
     }
 
     console.log(`📦 Orders API: Created order ${data.id} for user ${userId}`);
+
+    // Fire-and-forget: trigger Google Sheets sync via Flask backend.
+    // Any failures here should NOT impact order creation for the customer.
+    try {
+      // Only attempt sync if we have an order id and user id.
+      if (data?.id && userId) {
+        // Do not await this fetch; log errors but keep response fast.
+        fetch(`${BACKEND_URL}/api/orders/sheets/sync`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "X-User-Id": userId,
+          },
+          body: JSON.stringify({
+            order_id: data.id,
+            user_id: userId,
+          }),
+        }).catch((err) => {
+          console.error("Error triggering Google Sheets sync:", err);
+        });
+      }
+    } catch (err) {
+      console.error("Error preparing Google Sheets sync:", err);
+    }
 
     return NextResponse.json(
       {
         success: true,
         data,
       },
-      { status: 201 }
+      { status: 201 },
     );
   } catch (error) {
     console.error("Error in POST /api/orders:", error);
     return NextResponse.json(
       { error: "Internal server error" },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

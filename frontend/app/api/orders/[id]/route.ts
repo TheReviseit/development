@@ -3,6 +3,12 @@ import { createClient } from "@supabase/supabase-js";
 import { cookies } from "next/headers";
 import { adminAuth } from "@/lib/firebase-admin";
 
+// Backend Flask API base URL (used for Google Sheets sync)
+const BACKEND_URL =
+  process.env.NODE_ENV === "development"
+    ? "http://localhost:5000"
+    : process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
+
 // Initialize Supabase client
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
@@ -152,6 +158,27 @@ export async function PUT(
       );
     }
 
+    // Best-effort: keep Google Sheet in sync when orders are updated.
+    try {
+      if (data?.id && userId) {
+        fetch(`${BACKEND_URL}/api/orders/sheets/sync`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "X-User-Id": userId,
+          },
+          body: JSON.stringify({
+            order_id: data.id,
+            user_id: userId,
+          }),
+        }).catch((err) => {
+          console.error("Error triggering Google Sheets sync on update:", err);
+        });
+      }
+    } catch (err) {
+      console.error("Error preparing Google Sheets sync on update:", err);
+    }
+
     return NextResponse.json({
       success: true,
       data,
@@ -201,6 +228,30 @@ export async function DELETE(
         { error: "Failed to cancel order" },
         { status: 500 }
       );
+    }
+
+    // Best-effort: reflect cancellations in Google Sheets as well.
+    try {
+      if (data?.id && userId) {
+        fetch(`${BACKEND_URL}/api/orders/sheets/sync`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "X-User-Id": userId,
+          },
+          body: JSON.stringify({
+            order_id: data.id,
+            user_id: userId,
+          }),
+        }).catch((err) => {
+          console.error(
+            "Error triggering Google Sheets sync on cancel:",
+            err,
+          );
+        });
+      }
+    } catch (err) {
+      console.error("Error preparing Google Sheets sync on cancel:", err);
     }
 
     return NextResponse.json({

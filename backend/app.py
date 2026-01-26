@@ -515,9 +515,14 @@ def webhook():
                 message_type = 'text'
             elif interactive_type == 'list_reply':
                 # User selected from a list
+                # FIX: Extract only the title, not description, to avoid sending labels with values
                 list_reply = interactive.get('list_reply', {})
                 message_text = list_reply.get('title', list_reply.get('id', ''))
+                # If title contains newline (shouldn't happen, but handle it), take only first line
+                if '\n' in message_text:
+                    message_text = message_text.split('\n')[0].strip()
                 message_type = 'text'
+                logger.info(f"📋 List item selected: '{message_text}' (id: {list_reply.get('id', 'N/A')})")
         elif message_type in ['image', 'video', 'audio', 'document']:
             media_data = message.get(message_type, {})
             media_id = media_data.get('id')
@@ -784,20 +789,39 @@ def webhook():
                 if cards_with_images:
                     logger.info(f"🖼️🔘 Sending {len(cards_with_images)} unified product card(s) (image + button)...")
                     
-                    for card in cards_with_images[:5]:  # Limit to 5 products
+                    # Send all product cards (pagination is handled by AI brain)
+                    for card in cards_with_images:
                         image_url = card.get('image_url')
                         name = card.get('name', 'Product')
-                        price = card.get('price', '')
+                        current_price = card.get('price', 0)
+                        original_price = card.get('compare_at_price')  # Original price (if on sale)
                         product_id = card.get('product_id', name)
+                        
+                        # Size-based pricing support
+                        price_range = card.get('price_range')  # e.g., "₹700-₹800"
+                        has_size_pricing = card.get('has_size_pricing', False)
                         
                         # Sanitize product_id for button ID: replace spaces with underscores
                         # This ensures valid button IDs and proper matching in ai_brain
-                        safe_product_id = str(product_id).replace(' ', '_').replace('-', '_')
+                        safe_product_id = str(product_id).replace(' ', '_').replace('-', '_').lower()
                         
-                        # Build rich product details for body text
+                        # Build rich product details for body text with comprehensive pricing
                         body_parts = [f"*{name}*"]
-                        if price:
-                            body_parts.append(f"💰 ₹{price}")
+                        
+                        # Format price based on available pricing info
+                        if has_size_pricing and price_range:
+                            # Has size-based pricing with a range
+                            if original_price and float(original_price) > float(current_price):
+                                # Show original price struck through, then size range
+                                body_parts.append(f"~~₹{int(float(original_price))}~~ {price_range}")
+                            else:
+                                body_parts.append(f"💰 {price_range}")
+                        elif original_price and float(original_price) > float(current_price):
+                            # Has offer (original > current)
+                            body_parts.append(f"~~₹{int(float(original_price))}~~ → ₹{int(float(current_price))}")
+                        else:
+                            # Regular price display
+                            body_parts.append(f"💰 ₹{int(float(current_price))}")
                         
                         # Add sizes/colors if available for complete product info
                         if card.get('sizes'):
@@ -807,8 +831,8 @@ def webhook():
                         
                         body_text = "\n".join(body_parts)
                         
-                        # Single "Order This" button (no Cancel - user can simply ignore)
-                        # Use sanitized product_id (underscores instead of spaces)
+                        # Single "Order This" button with product ID for direct selection
+                        # Use sanitized product_id (lowercase, underscores instead of spaces)
                         order_buttons = [
                             {"id": f"order_{safe_product_id[:20]}", "title": "🛒 Order This"}
                         ]
@@ -839,6 +863,7 @@ def webhook():
                         logger.info(f"✅ Product catalog sent to {from_number}")
                         return jsonify({'status': 'ok'}), 200
             
+            
             if use_buttons and buttons:
                 # Send interactive message with buttons
                 logger.info(f"🔘 Sending interactive buttons: {[b.get('title') for b in buttons]}")
@@ -854,6 +879,25 @@ def webhook():
                     header_text=header,
                     footer_text=footer
                 )
+                
+                # If there's also a list, send it as a second message
+                if ai_metadata.get('use_list') and ai_metadata.get('list_sections'):
+                    time.sleep(0.5)  # Small delay between messages
+                    list_sections = ai_metadata.get('list_sections', [])
+                    list_button = ai_metadata.get('list_button', 'View Options')
+                    list_body = "Or tap below to edit your details:"
+                    logger.info(f"📋 Sending interactive list: {list_button}")
+                    whatsapp_service.send_interactive_list(
+                        phone_number_id=credentials['phone_number_id'],
+                        access_token=credentials['access_token'],
+                        to=from_number,
+                        body_text=list_body,
+                        button_text=list_button,
+                        sections=list_sections,
+                        header_text="✏️ Edit Order Details",
+                        footer_text="Tap to edit"
+                    )
+                    
             elif ai_metadata.get('use_list') and ai_metadata.get('list_sections'):
                 # Send interactive list message (menu with up to 10 items)
                 list_sections = ai_metadata.get('list_sections', [])

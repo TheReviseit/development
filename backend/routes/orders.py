@@ -741,12 +741,20 @@ def initialize_order_sheet():
             except gspread.exceptions.WorksheetNotFound:
                 logger.info(f"📊 Creating new worksheet '{sheet_name}' with headers...")
                 
-                # Create new worksheet
-                sheet = spreadsheet.add_worksheet(
-                    title=sheet_name,
-                    rows=1000,
-                    cols=10
-                )
+                try:
+                    # Create new worksheet
+                    sheet = spreadsheet.add_worksheet(
+                        title=sheet_name,
+                        rows=1000,
+                        cols=10
+                    )
+                except gspread.exceptions.APIError as e:
+                    # Handle race condition where sheet might have been created concurrently
+                    if "already exists" in str(e):
+                        logger.info(f"📊 Sheet '{sheet_name}' already exists (race condition), fetching it...")
+                        sheet = spreadsheet.worksheet(sheet_name)
+                    else:
+                        raise e
                 
                 # Add headers
                 sheet.update('A1:J1', [headers])
@@ -802,6 +810,118 @@ def initialize_order_sheet():
             error={"code": "INITIALIZATION_ERROR", "message": str(e)},
             status_code=500,
         )
+
+
+@orders_bp.route('/api/orders/sheets/sync', methods=['POST'])
+@handle_domain_errors
+def sync_order_to_sheet():
+    """
+    Trigger a Google Sheets sync for an existing order in Supabase.
+
+    This is used by the Next.js APIs (checkout page, dashboard orders) which
+    write directly to the Supabase `orders` table, bypassing the Python
+    order service. To keep Google Sheets in sync, we:
+
+    1. Fetch the order row from Supabase by id and user_id
+    2. Call the same Sheets sync helper used by the main order service
+
+    Body:
+        {
+            "user_id": "string",   # Business user ID (optional if in header)
+            "order_id": "string"   # Supabase order ID (required)
+        }
+
+    Returns:
+        200: Sync attempted (success flag and reason in payload)
+        400: Missing parameters or order not found
+        500: Unexpected failure while syncing
+    """
+    correlation_id = get_correlation_id()
+
+    data = request.get_json() or {}
+    user_id = get_user_id_from_request() or data.get('user_id')
+    order_id = data.get('order_id')
+
+    if not user_id:
+        return api_response(
+            success=False,
+            error={"code": "MISSING_FIELD", "message": "user_id is required"},
+            status_code=400,
+        )
+
+    if not order_id:
+        return api_response(
+            success=False,
+            error={"code": "MISSING_FIELD", "message": "order_id is required"},
+            status_code=400,
+        )
+
+    try:
+        from supabase_client import get_supabase_client
+        from tasks.orders import sync_order_to_sheets
+    except ImportError as e:
+        logger.error(f"Failed to import dependencies for sheets sync: {e}")
+        return api_response(
+            success=False,
+            error={
+                "code": "MODULE_NOT_FOUND",
+                "message": "Sheets sync modules not available",
+            },
+            status_code=500,
+        )
+
+    client = get_supabase_client()
+    if not client:
+        return api_response(
+            success=False,
+            error={
+                "code": "SUPABASE_CLIENT_ERROR",
+                "message": "Failed to get Supabase client",
+            },
+            status_code=500,
+        )
+
+    # Fetch the order row from Supabase to build the payload expected by
+    # the Sheets integration helpers.
+    result = client.table('orders').select('*').eq('id', order_id).eq(
+        'user_id', user_id
+    ).single().execute()
+
+    if not result.data:
+        return api_response(
+            success=False,
+            error={
+                "code": "ORDER_NOT_FOUND",
+                "message": "Order not found for this user",
+            },
+            status_code=400,
+        )
+
+    order_row = result.data
+
+    logger.info(
+        f"📊 Syncing order {order_id} to Google Sheets via /api/orders/sheets/sync",
+        extra={
+            "order_id": order_id,
+            "user_id": user_id,
+            "correlation_id": correlation_id,
+        },
+    )
+
+    # Call the same helper that the main order service uses so all
+    # configuration and idempotency logic is shared.
+    sync_result = sync_order_to_sheets(
+        order_id=order_id,
+        user_id=user_id,
+        data=order_row,
+        correlation_id=correlation_id,
+    )
+
+    return api_response(
+        success=True,
+        data=sync_result,
+        meta={"message": "Sheets sync triggered"},
+    )
 
 
 # =============================================================================

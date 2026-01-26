@@ -1,4 +1,7 @@
+"use client";
+
 import React from "react";
+import { useParams } from "next/navigation";
 import styles from "../store.module.css";
 import {
   MapPin,
@@ -33,6 +36,8 @@ export function StoreFooter({
   socialMedia,
 }: StoreFooterProps) {
   const currentYear = new Date().getFullYear();
+  const params = useParams();
+  const storeSlug = params.storeSlug as string;
 
   return (
     <footer className={styles.footer}>
@@ -114,7 +119,7 @@ export function StoreFooter({
             <h4>Customer Service</h4>
             <ul>
               <li>
-                <a href="#">Track Order</a>
+                <a href={`/store/${storeSlug}/track-order`}>Track Order</a>
               </li>
               <li>
                 <a href="#">Shipping Policy</a>

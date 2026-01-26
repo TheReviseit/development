@@ -686,6 +686,22 @@ class AIBrain:
         categories = [c for c in product_categories if c]  # Remove empty
         logger.info(f"📂 Categories found: {len(categories)} - {categories[:5]}... (from products + AI Settings)")
         
+        # Get store link using business_id (Firebase UID) as the slug
+        business_id = business_data.get("business_id")
+        store_link = None
+        if business_id and business_id != "default" and len(business_id) > 10:
+            store_link = f"https://flowauxi.com/store/{business_id}"
+            logger.info(f"🔗 Store link: {store_link}")
+        
+        # Try to extract category mention from initial message
+        # Handles: "i want to order saree", "order saree", etc.
+        mentioned_category = None
+        for cat in categories:
+            if cat.lower() in msg_lower:
+                mentioned_category = cat
+                logger.info(f"📂 Category mentioned in message: {mentioned_category}")
+                break
+        
         # Try to extract product mention from initial message
         # Handles: "order bubble tshirt", "order_bubble_tshirt", direct product names
         mentioned_product = None
@@ -760,42 +776,65 @@ class AIBrain:
                 )
                 suggested_actions = ["1", "2", "3", "Cancel"]
         
-        elif len(categories) > 1:
-            # Multiple categories - show category selection first
+        elif mentioned_category:
+            # User mentioned a category in their message - show products from that category
+            state.collect_field("awaiting_selection", True)
+            filtered_products = [
+                p for p in products 
+                if isinstance(p, dict) and p.get("category", "").strip().lower() == mentioned_category.lower()
+            ]
+            
+            if filtered_products:
+                response_text, suggested_actions, product_meta = self._format_product_list(filtered_products[:8], state)
+                response_text = f"📁 *{mentioned_category}*\n\n" + response_text.split("\n\n", 1)[1] if "\n\n" in response_text else response_text
+                # Add store link if available
+                if store_link:
+                    response_text += f"\n\n🛍️ Or browse our full catalog: {store_link}"
+            else:
+                # Category mentioned but no products found
+                response_text = f"I couldn't find any products in the {mentioned_category} category. Let me show you all our categories."
+                mentioned_category = None  # Fall through to category selection
+        
+        if not mentioned_product and not mentioned_category and categories:
+            # Show category selection - ALWAYS use menu buttons (even for 1 category)
             state.collect_field("awaiting_category", True)
             state.collect_field("_available_categories", categories)
             header_text = "🛒 Place an Order"
-            use_list = False
+            use_list = True
             list_sections = None
             
-            if len(categories) > 3:
-                # More than 3 categories - use WhatsApp List Message (menu picker)
-                use_list = True
-                response_text = "What would you like to order today?\n\nTap the button below to see all categories."
-                suggested_actions = ["View Categories"]
-                
-                # Build list sections for WhatsApp List Message
-                list_sections = [{
-                    "title": "Categories",
-                    "rows": [
-                        {"id": f"cat_{i}_{cat.replace(' ', '_').lower()[:20]}", "title": cat[:24]}
-                        for i, cat in enumerate(categories[:10])  # WhatsApp max 10 items
-                    ]
-                }]
-            else:
-                # 3 or fewer categories - show all as reply buttons
-                suggested_actions = categories[:3]
-                response_text = "What would you like to order today?\n\nSelect a category to browse our products."
+            # ALWAYS use WhatsApp List Message for categories (menu picker)
+            response_text = "What would you like to order today?\n\nTap the button below to see all categories."
+            suggested_actions = ["View Categories"]
+            
+            # Build list sections for WhatsApp List Message
+            list_sections = [{
+                "title": "Categories",
+                "rows": [
+                    {"id": f"cat_{i}_{cat.replace(' ', '_').lower()[:20]}", "title": cat[:24]}
+                    for i, cat in enumerate(categories[:10])  # WhatsApp max 10 items
+                ]
+            }]
+            
+            # Add store link if available
+            if store_link:
+                response_text += f"\n\n🛍️ Or visit our store: {store_link}"
         
-        elif products:
-            # Single or no category - show products directly
+        elif not mentioned_product and not mentioned_category and products:
+            # No categories - show products directly
             response_text, suggested_actions, product_meta = self._format_product_list(products[:8], state)
+            # Add store link if available
+            if store_link:
+                response_text += f"\n\n🛍️ Browse more: {store_link}"
         
-        else:
+        elif not mentioned_product and not mentioned_category:
+            # No products or categories
             response_text = (
                 f"📦 I'd be happy to help you place an order!\n\n"
                 f"What would you like to order today?"
             )
+            if store_link:
+                response_text += f"\n\n🛍️ Visit our store: {store_link}"
             suggested_actions = ["Cancel order"]
         
         # Add to conversation history
@@ -838,40 +877,217 @@ class AIBrain:
             "metadata": metadata
         }
     
-    def _format_product_list(self, products: List[Dict], state) -> tuple:
-        """Format product list with detailed info and image metadata for WhatsApp rendering.
+    def _format_product_list(self, products: List[Dict], state, page: int = 0, page_size: int = 5) -> tuple:
+        """Format product list with detailed info, image metadata, and pagination support.
+        
+        Args:
+            products: Full list of products
+            state: Conversation state
+            page: Current page number (0-indexed)
+            page_size: Number of products per page
         
         Returns:
             tuple: (response_text, suggested_actions, metadata_with_product_cards)
         """
+        total_products = len(products)
+        total_pages = (total_products + page_size - 1) // page_size  # Ceiling division
+        
+        # Ensure page is within bounds
+        page = max(0, min(page, total_pages - 1))
+        
+        # Get products for current page
+        start_idx = page * page_size
+        end_idx = min(start_idx + page_size, total_products)
+        page_products = products[start_idx:end_idx]
+        
+        # Store pagination state
+        state.collect_field("_pagination_page", page)
+        state.collect_field("_pagination_total_pages", total_pages)
+        state.collect_field("_pagination_total_products", total_products)
+        state.collect_field("_pagination_page_size", page_size)
+        state.collect_field("_all_products", products)  # Store full product list for pagination
+        
         product_lines = []
         product_map = {}
         product_cards = []  # For WhatsApp image rendering
         
-        for i, p in enumerate(products):
+        for i, p in enumerate(page_products):
             if not isinstance(p, dict):
                 continue
+            
+            # Use global index for numbering
+            global_index = start_idx + i + 1
+            
             name = p.get('name', 'Item')
-            price = p.get('price', 'N/A')
+            base_price = p.get('price', 0)
+            original_price = p.get('compare_at_price')  # Original price (if on sale)
             product_id = p.get('id') or p.get('sku') or name
             # Handle both camelCase (imageUrl) and snake_case (image_url) for compatibility
-            # with different data sources (Firestore uses camelCase, some API calls use snake_case)
             image_url = p.get('imageUrl') or p.get('image_url') or p.get('image', '')
             
-            # Build product card for WhatsApp image messages
+            # Size-based pricing support
+            has_size_pricing = p.get('has_size_pricing', False)
+            size_prices = p.get('size_prices', {}) or {}
+            
+            # Calculate price display based on size pricing
+            display_price = base_price  # Default to base price
+            min_size_price = None
+            max_size_price = None
+            price_range_str = None
+            
+            if has_size_pricing and size_prices:
+                try:
+                    # Get all size prices as floats
+                    price_values = [float(v) for v in size_prices.values() if v is not None]
+                    if price_values:
+                        min_size_price = min(price_values)
+                        max_size_price = max(price_values)
+                        # If there's a range, show it
+                        if min_size_price != max_size_price:
+                            price_range_str = f"₹{int(min_size_price)}-₹{int(max_size_price)}"
+                        else:
+                            display_price = min_size_price
+                except (ValueError, TypeError):
+                    pass
+            
+            # Calculate discount percentage if offer price exists
+            discount_percent = 0
+            has_offer = False
+            
+            # Check for offer: compare_at_price > price means there's an offer
+            if original_price:
+                try:
+                    # Ensure both are numbers
+                    current_num = float(display_price) if display_price else 0
+                    original_num = float(original_price) if original_price else 0
+                    
+                    if original_num > current_num and current_num > 0:
+                        discount_percent = int(((original_num - current_num) / original_num) * 100)
+                        has_offer = True
+                except (ValueError, TypeError, ZeroDivisionError):
+                    discount_percent = 0
+                    has_offer = False
+            
+            # Build product card for WhatsApp image messages (BASE PRODUCT)
             product_cards.append({
-                'index': i + 1,
+                'index': global_index,
                 'name': name,
-                'price': price,
+                'price': display_price,
+                'compare_at_price': original_price,
+                'discount_percent': discount_percent,
                 'product_id': product_id,
                 'image_url': image_url if image_url and not image_url.startswith('data:') else '',
                 'colors': p.get('colors', [])[:5],
                 'sizes': p.get('sizes', [])[:6],
+                # Size-based pricing info for product card
+                'has_size_pricing': has_size_pricing,
+                'size_prices': size_prices,
+                'price_range': price_range_str,
+                'is_variant': False,  # Mark as base product
             })
             
-            # Build text entry (WITHOUT raw URL - images sent separately)
+            # Now create separate product cards for each variant
+            variants = p.get('variants', []) or []
+            variant_counter = 0
+            for variant in variants:
+                if not isinstance(variant, dict):
+                    continue
+                
+                # Skip unavailable variants
+                if not variant.get('is_available', True):
+                    continue
+                
+                variant_counter += 1
+                # Use base product name for variants (color/size shown separately in card body)
+                variant_name = name
+                variant_color = variant.get('color', '')
+                variant_size = variant.get('size', '')
+                
+                # Get variant pricing
+                variant_price = variant.get('price')
+                if variant_price is None:
+                    variant_price = display_price  # Fallback to base product price
+                else:
+                    try:
+                        variant_price = float(variant_price)
+                    except (ValueError, TypeError):
+                        variant_price = display_price
+                
+                variant_compare_at_price = variant.get('compare_at_price')
+                variant_discount_percent = 0
+                variant_has_offer = False
+                
+                if variant_compare_at_price:
+                    try:
+                        variant_compare_num = float(variant_compare_at_price)
+                        variant_price_num = float(variant_price) if variant_price else 0
+                        if variant_compare_num > variant_price_num and variant_price_num > 0:
+                            variant_discount_percent = int(((variant_compare_num - variant_price_num) / variant_compare_num) * 100)
+                            variant_has_offer = True
+                    except (ValueError, TypeError, ZeroDivisionError):
+                        pass
+                
+                # Variant size-based pricing
+                variant_has_size_pricing = variant.get('has_size_pricing', False)
+                variant_size_prices = variant.get('size_prices', {}) or {}
+                variant_price_range_str = None
+                
+                if variant_has_size_pricing and variant_size_prices:
+                    try:
+                        variant_price_values = [float(v) for v in variant_size_prices.values() if v is not None]
+                        if variant_price_values:
+                            variant_min_price = min(variant_price_values)
+                            variant_max_price = max(variant_price_values)
+                            if variant_min_price != variant_max_price:
+                                variant_price_range_str = f"₹{int(variant_min_price)}-₹{int(variant_max_price)}"
+                            else:
+                                variant_price = variant_min_price
+                    except (ValueError, TypeError):
+                        pass
+                
+                # Use variant image if available, otherwise use base product image
+                variant_image_url = variant.get('imageUrl') or variant.get('image_url', '')
+                if not variant_image_url or variant_image_url.startswith('data:'):
+                    variant_image_url = image_url if image_url and not image_url.startswith('data:') else ''
+                
+                # Create variant product card
+                variant_product_id = f"{product_id}_variant_{variant.get('id', variant_counter)}"
+                product_cards.append({
+                    'index': f"{global_index}.{variant_counter}",  # e.g., "1.1", "1.2" for variants
+                    'name': variant_name,
+                    'price': variant_price_range_str if variant_price_range_str else variant_price,
+                    'compare_at_price': variant_compare_at_price if variant_has_offer else None,
+                    'discount_percent': variant_discount_percent,
+                    'product_id': variant_product_id,
+                    'image_url': variant_image_url,
+                    'colors': [variant_color] if variant_color else [],
+                    'sizes': [variant_size] if variant_size else [],
+                    'has_size_pricing': variant_has_size_pricing,
+                    'size_prices': variant_size_prices,
+                    'price_range': variant_price_range_str,
+                    'is_variant': True,  # Mark as variant
+                    'base_product_id': product_id,  # Reference to base product
+                })
+            
+            # Build text entry with comprehensive price formatting
             lines = []
-            lines.append(f"*{i+1}. {name}* - ₹{price}")
+            
+            # Format price display based on available pricing info
+            if has_size_pricing and price_range_str:
+                # Has size-based pricing with a range
+                lines.append(f"*{global_index}. {name}*")
+                if has_offer and original_price:
+                    # Show original price crossed out, then size range
+                    lines.append(f"~~₹{int(float(original_price))}~~ → {price_range_str}")
+                else:
+                    lines.append(f"Price: {price_range_str}")
+            elif has_offer and original_price:
+                # Has offer (original > current)
+                lines.append(f"*{global_index}. {name}*")
+                lines.append(f"~~₹{int(float(original_price))}~~ → ₹{int(float(display_price))}")
+            else:
+                # Regular price
+                lines.append(f"*{global_index}. {name}* - ₹{int(float(display_price))}")
             
             # Add colors if available
             colors = p.get('colors', [])
@@ -886,25 +1102,43 @@ class AIBrain:
                 lines.append(f"Sizes: {size_str}")
             
             product_lines.append('\n'.join(lines))
-            product_map[str(i+1)] = p
+            product_map[str(global_index)] = p
             product_map[name.lower()] = p
         
         state.collect_field("awaiting_selection", True)
         state.collect_field("_product_map", product_map)
-        state.collect_field("_available_products", [p.get('name') for p in products if isinstance(p, dict)])
+        state.collect_field("_available_products", [p.get('name') for p in page_products if isinstance(p, dict)])
         
         product_list = "\n".join(product_lines)
+        
+        # Build pagination footer
+        pagination_info = f"\n\n📄 Page {page + 1} of {total_pages} ({start_idx + 1}-{end_idx} of {total_products} products)"
+        
         response_text = (
             f"📦 I'd be happy to help you place an order!\n\n"
-            f"Here's what we have:\n{product_list}\n\n"
+            f"Here's what we have:\n{product_list}{pagination_info}\n\n"
             f"Reply with a number or product name.\n"
         )
-        suggested_actions = ["1", "2", "Cancel order"]
         
-        # Log product cards with image info for debugging
+        # Build suggested actions with pagination
+        suggested_actions = ["1", "2"]
+        if page < total_pages - 1:
+            suggested_actions.append("Next ▶")
+        if page > 0:
+            suggested_actions.insert(0, "◀ Previous")
+        suggested_actions.append("Cancel")
+        
+        # Log product cards with pricing info for debugging
+        base_product_count = len([c for c in product_cards if not c.get('is_variant', False)])
+        variant_count = len([c for c in product_cards if c.get('is_variant', False)])
+        logger.info(f"📄 Pagination: Page {page + 1}/{total_pages}, showing {len(page_products)} base products with {variant_count} variants (total {len(product_cards)} cards)")
         for card in product_cards:
+            card_type = "VARIANT" if card.get('is_variant') else "BASE"
             img_status = "✅ HAS IMAGE" if card.get('image_url') else "❌ NO IMAGE"
-            logger.info(f"🖼️ Product card: {card.get('name')} - {img_status} - URL: {card.get('image_url', 'None')[:50] if card.get('image_url') else 'None'}...")
+            price_info = card.get('price_range') or f"₹{card.get('price', 0)}"
+            if card.get('compare_at_price'):
+                price_info = f"Offer: {price_info} (was ₹{card.get('compare_at_price')})"
+            logger.info(f"🖼️ [{card_type}] Product: {card.get('name')} - {img_status} - Price: {price_info}")
         
         # Return with product_cards for image rendering
         return response_text, suggested_actions, {'product_cards': product_cards}
@@ -941,7 +1175,10 @@ class AIBrain:
             if msg_lower in ["yes", "confirm", "ok", "okay", "sure", "y", "haan", "ha", "ji"]:
                 # User confirmed - complete the order
                 return self._complete_order(user_id, state, business_data)
-            elif msg_lower in ["no", "cancel", "nahi", "nako", "na", "n"]:
+            elif msg_lower in ["edit", "edit details", "edit_details"]:
+                # User wants to edit details - show editable fields menu
+                return self._show_edit_details_menu(user_id, state, message)
+            elif msg_lower in ["no", "cancel", "cancel order", "nahi", "nako", "na", "n"]:
                 # User cancelled
                 self.conversation_manager.cancel_flow(user_id)
                 self.conversation_manager.add_message(user_id, "user", message)
@@ -955,6 +1192,75 @@ class AIBrain:
                     "suggested_actions": ["Browse products", "Place order", "Contact"],
                     "metadata": {"generation_method": "order_flow_cancelled"}
                 }
+            else:
+                # Check if user selected a field to edit directly from the list
+                # WhatsApp sends: "Field Label\nCurrent Value" (title + description on separate lines)
+                # FIX: Extract only the label (first line) for matching, ignore the value part
+                order_fields = state.flow_config.get("order_fields", [])
+                
+                # Get first line of message (the field label from list)
+                # Split by newline and take only the first line to get the label
+                message_lines = message.split('\n')
+                first_line = message_lines[0].strip()
+                first_line_lower = first_line.lower()
+                
+                for field in order_fields:
+                    field_id = field.get("id")
+                    label = field.get("label", field_id.title())
+                    label_lower = label.lower()
+                    
+                    # Match patterns:
+                    # 1. First line exactly matches label: "Delivery Address"
+                    # 2. First line contains "edit" + label: "Edit Delivery Address"
+                    # 3. Message contains "edit_address" (button ID format)
+                    
+                    if (first_line_lower == label_lower or
+                        f"edit {label_lower}" in first_line_lower or
+                        f"edit_{field_id}" in msg_lower or
+                        (label_lower in first_line_lower and len(first_line_lower) <= len(label_lower) + 10)):
+                        
+                        # Start editing this field directly
+                        current_value = state.collected_fields.get(field_id, "Not provided")
+                        
+                        # Set editing mode
+                        state.collect_field("_editing_field", field_id)
+                        state.collect_field("_editing_field_label", label)
+                        
+                        self.conversation_manager.persist_state(user_id)
+                        
+                        # FIX: Store only the label part for logging, not the full message with value
+                        # This prevents the label from being included when user sends new value
+                        self.conversation_manager.add_message(user_id, "user", first_line)
+                        
+                        response_text = (
+                            f"✏️ *Edit {label}*\n\n"
+                            f"Current value: *{current_value}*\n\n"
+                            f"Please enter the new value:"
+                        )
+                        
+                        self.conversation_manager.add_message(user_id, "assistant", response_text)
+                        
+                        return {
+                            "reply": response_text,
+                            "intent": "order_field_editing",
+                            "confidence": 1.0,
+                            "needs_human": False,
+                            "suggested_actions": ["Cancel"],
+                            "metadata": {
+                                "generation_method": "order_edit_flow",
+                                "editing_field": field_id
+                            }
+                        }
+        
+        # Handle field editing (when user is in edit mode)
+        if state.collected_fields.get("_editing_field"):
+            return self._handle_field_edit(user_id, state, message, business_data)
+        
+        # Handle field selection from edit menu
+        if state.collected_fields.get("_awaiting_field_selection"):
+            return self._handle_field_selection(user_id, state, message)
+        
+        
         
         # =====================================================
         # PRIORITY: Handle "Order This" button clicks FIRST
@@ -963,29 +1269,84 @@ class AIBrain:
         # =====================================================
         if msg_lower.startswith("order "):
             products = business_data.get("products_services", [])
-            search_term = msg_lower.replace("order ", "").replace("_", " ").strip()
-            logger.info(f"📦 'Order This' button detected, searching for product: '{search_term}'")
+            # Search term comes from button ID: sanitized (underscores) or spaces
+            raw_term = msg_lower.replace("order ", "").strip()
+            
+            # Create a "clean" search term for robust matching (no spaces, dashes, underscores)
+            clean_search_term = re.sub(r'[\s\-_]', '', raw_term)
+            
+            # Keep original search term variants for flexible matching
+            search_term_spaces = raw_term.replace("_", " ").replace("-", " ")
+            
+            logger.info(f"📦 'Order This' button detected. Raw: '{raw_term}', Clean: '{clean_search_term}'")
             
             mentioned_product = None
+            mentioned_variant = None
+            best_match_score = 0
+            
+            # First, check if this is a variant product ID (contains "_variant_")
+            is_variant_id = "_variant_" in raw_term or "_variant_" in clean_search_term
+            
             for product in products:
                 if isinstance(product, dict):
                     name = product.get("name", "").lower()
-                    product_id = str(product.get("id", "")).lower().replace("_", " ")
-                    sku = str(product.get("sku", "")).lower().replace("_", " ")
+                    product_id = str(product.get("id", "")).lower()
+                    sku = str(product.get("sku", "")).lower()
                     
-                    # Match by name, id, or sku (flexible matching)
-                    if name and (name == search_term or name in search_term or search_term in name):
+                    # Create clean versions of product fields
+                    clean_name = re.sub(r'[\s\-_]', '', name)
+                    clean_id = re.sub(r'[\s\-_]', '', product_id)
+                    clean_sku = re.sub(r'[\s\-_]', '', sku)
+                    
+                    # Check variants if this looks like a variant ID
+                    if is_variant_id:
+                        variants = product.get('variants', []) or []
+                        for variant in variants:
+                            if not isinstance(variant, dict):
+                                continue
+                            
+                            variant_id = str(variant.get('id', '')).lower()
+                            variant_product_id = f"{product_id}_variant_{variant_id}".lower()
+                            clean_variant_id = re.sub(r'[\s\-_]', '', variant_product_id)
+                            
+                            # Match variant ID
+                            if clean_variant_id == clean_search_term or clean_variant_id.startswith(clean_search_term):
+                                mentioned_product = product
+                                mentioned_variant = variant
+                                logger.info(f"📦 Variant match found: {name} - Variant ID: {variant_id}")
+                                break
+                        
+                        if mentioned_variant:
+                            break
+                    
+                    # 1. Exact Name/ID/SKU match (Highest Priority)
+                    if clean_name == clean_search_term or clean_id == clean_search_term or clean_sku == clean_search_term:
                         mentioned_product = product
-                        logger.info(f"📦 Product matched by name: '{name}'")
+                        logger.info(f"📦 Exact match found: {name}")
                         break
-                    if product_id and product_id != "none" and (product_id == search_term or product_id in search_term or search_term in product_id):
+                        
+                    # 2. Prefix match (for truncated IDs in buttons)
+                    # If the button ID was truncated, clean_search_term will be a prefix of clean_id/name
+                    if len(clean_search_term) >= 5:  # Only for reasonable length terms
+                        if clean_name.startswith(clean_search_term) or clean_id.startswith(clean_search_term) or clean_sku.startswith(clean_search_term):
+                            mentioned_product = product
+                            logger.info(f"📦 Prefix match found: {name}")
+                            break
+                            
+                    # 3. Flexible substring match (original logic fallback)
+                    if name and (name in search_term_spaces or search_term_spaces in name):
                         mentioned_product = product
-                        logger.info(f"📦 Product matched by id: '{product_id}'")
+                        logger.info(f"📦 Substring match found (name): {name}")
                         break
-                    if sku and sku != "none" and (sku == search_term or sku in search_term or search_term in sku):
-                        mentioned_product = product
-                        logger.info(f"📦 Product matched by sku: '{sku}'")
-                        break
+                    
+                    # 4. ID match with flexible separators
+                    if product_id and product_id != "none":
+                        # Compare normalizing separators
+                        norm_id = product_id.replace("-", " ").replace("_", " ")
+                        if norm_id == search_term_spaces or norm_id in search_term_spaces or search_term_spaces in norm_id:
+                            mentioned_product = product
+                            logger.info(f"📦 ID match found: {product_id}")
+                            break
             
             if mentioned_product:
                 # Clear any category selection state - we're directly ordering a product
@@ -993,35 +1354,127 @@ class AIBrain:
                     if key in state.collected_fields:
                         del state.collected_fields[key]
                 
-                product_name = mentioned_product.get("name", "item")
-                product_id = mentioned_product.get("id") or mentioned_product.get("sku") or product_name
-                product_price = mentioned_product.get("price", "")
-                sizes = mentioned_product.get("sizes", [])
-                colors = mentioned_product.get("colors", [])
+                # If a variant was selected, use variant details; otherwise use base product
+                if mentioned_variant:
+                    # Use base product name (color/size shown separately in card body)
+                    product_name = mentioned_product.get("name", "item")
+                    product_id = f"{mentioned_product.get('id')}_variant_{mentioned_variant.get('id')}"
+                    
+                    # Use variant pricing
+                    base_price = mentioned_variant.get("price")
+                    if base_price is None:
+                        base_price = mentioned_product.get("price", 0)
+                    else:
+                        base_price = float(base_price)
+                    
+                    original_price = mentioned_variant.get("compare_at_price")
+                    has_size_pricing = mentioned_variant.get("has_size_pricing", False)
+                    size_prices = mentioned_variant.get("size_prices", {}) or {}
+                    
+                    # Store variant info
+                    state.collect_field("selected_variant", mentioned_variant)
+                    state.collect_field("selected_variant_id", mentioned_variant.get('id'))
+                else:
+                    product_name = mentioned_product.get("name", "item")
+                    product_id = mentioned_product.get("id") or mentioned_product.get("sku") or product_name
+                    
+                    # Get pricing info with size-based pricing support
+                    base_price = mentioned_product.get("price", 0)
+                    original_price = mentioned_product.get("compare_at_price")
+                    has_size_pricing = mentioned_product.get("has_size_pricing", False)
+                    size_prices = mentioned_product.get("size_prices", {}) or {}
                 
-                price_str = f" (₹{product_price})" if product_price else ""
+                # Calculate price display
+                price_str = ""
+                if has_size_pricing and size_prices:
+                    try:
+                        price_values = [float(v) for v in size_prices.values() if v is not None]
+                        if price_values:
+                            min_price = min(price_values)
+                            max_price = max(price_values)
+                            if min_price != max_price:
+                                if original_price and float(original_price) > min_price:
+                                    price_str = f" (~~₹{int(float(original_price))}~~ ₹{int(min_price)}-₹{int(max_price)})"
+                                else:
+                                    price_str = f" (₹{int(min_price)}-₹{int(max_price)})"
+                            else:
+                                if original_price and float(original_price) > min_price:
+                                    price_str = f" (~~₹{int(float(original_price))}~~ ₹{int(min_price)})"
+                                else:
+                                    price_str = f" (₹{int(min_price)})"
+                    except (ValueError, TypeError):
+                        if original_price and float(original_price) > float(base_price):
+                            price_str = f" (~~₹{int(float(original_price))}~~ ₹{int(float(base_price))})"
+                        elif base_price:
+                            price_str = f" (₹{int(float(base_price))})"
+                elif original_price and float(original_price) > float(base_price):
+                    price_str = f" (~~₹{int(float(original_price))}~~ ₹{int(float(base_price))})"
+                elif base_price:
+                    price_str = f" (₹{int(float(base_price))})"
                 
-                # Store product info
+                # Store product info (including size pricing data)
                 state.collect_field("pending_item", product_name)
                 state.collect_field("pending_product_id", product_id)
                 state.collect_field("pending_product_data", mentioned_product)
                 
-                # Determine next step based on variants
-                if sizes:
-                    state.collect_field("_needs_size", True)
-                    state.collect_field("_available_sizes", sizes)
-                    size_list = ", ".join(sizes[:6])
-                    response_text = f"Great choice! 🎉 *{product_name}*{price_str}\n\nAvailable sizes: {size_list}\n\nWhich size would you like?"
-                    suggested_actions = sizes[:4] + ["Cancel"]
-                elif colors:
-                    state.collect_field("_needs_color", True)
-                    state.collect_field("_available_colors", colors)
-                    color_list = ", ".join(colors[:6])
-                    response_text = f"Great choice! 🎉 *{product_name}*{price_str}\n\nAvailable colors: {color_list}\n\nWhich color would you like?"
-                    suggested_actions = colors[:4] + ["Cancel"]
+                # If variant was selected, check if it needs additional size selection (for variant-level size pricing)
+                if mentioned_variant:
+                    # Variant already selected - check if it has size-based pricing that needs selection
+                    variant_size = mentioned_variant.get("size", "")
+                    variant_has_size_pricing = mentioned_variant.get("has_size_pricing", False)
+                    variant_size_prices = mentioned_variant.get("size_prices", {}) or {}
+                    
+                    # If variant has size-based pricing with multiple sizes, ask for size selection
+                    if variant_has_size_pricing and variant_size_prices and len(variant_size_prices) > 1:
+                        available_sizes = list(variant_size_prices.keys())
+                        state.collect_field("_needs_size", True)
+                        state.collect_field("_available_sizes", available_sizes)
+                        state.collect_field("_variant_size_prices", variant_size_prices)
+                        
+                        size_price_info = []
+                        for s in available_sizes[:6]:
+                            if s in variant_size_prices:
+                                size_price_info.append(f"{s}: ₹{int(float(variant_size_prices[s]))}")
+                            else:
+                                size_price_info.append(s)
+                        size_display = ", ".join(size_price_info)
+                        response_text = f"Great choice! 🎉 *{product_name}*{price_str}\n\nAvailable sizes:\n{size_display}\n\nWhich size would you like?"
+                        suggested_actions = available_sizes[:4] + ["Cancel"]
+                    else:
+                        # Variant fully specified - go straight to quantity
+                        response_text = f"Great choice! 🎉 You want to order *{product_name}*{price_str}.\n\nHow many would you like?"
+                        suggested_actions = ["1", "2", "3", "Cancel"]
                 else:
-                    response_text = f"Great choice! 🎉 You want to order *{product_name}*{price_str}.\n\nHow many would you like?"
-                    suggested_actions = ["1", "2", "3", "Cancel"]
+                    # Base product selected - determine next step based on product attributes
+                    sizes = mentioned_product.get("sizes", [])
+                    colors = mentioned_product.get("colors", [])
+                    
+                    if sizes:
+                        state.collect_field("_needs_size", True)
+                        state.collect_field("_available_sizes", sizes)
+                        size_list = ", ".join(sizes[:6])
+                        # Show size-specific prices if available
+                        if has_size_pricing and size_prices:
+                            size_price_info = []
+                            for s in sizes[:6]:
+                                if s in size_prices:
+                                    size_price_info.append(f"{s}: ₹{int(float(size_prices[s]))}")
+                                else:
+                                    size_price_info.append(s)
+                            size_display = ", ".join(size_price_info)
+                            response_text = f"Great choice! 🎉 *{product_name}*{price_str}\n\nAvailable sizes:\n{size_display}\n\nWhich size would you like?"
+                        else:
+                            response_text = f"Great choice! 🎉 *{product_name}*{price_str}\n\nAvailable sizes: {size_list}\n\nWhich size would you like?"
+                        suggested_actions = sizes[:4] + ["Cancel"]
+                    elif colors:
+                        state.collect_field("_needs_color", True)
+                        state.collect_field("_available_colors", colors)
+                        color_list = ", ".join(colors[:6])
+                        response_text = f"Great choice! 🎉 *{product_name}*{price_str}\n\nAvailable colors: {color_list}\n\nWhich color would you like?"
+                        suggested_actions = colors[:4] + ["Cancel"]
+                    else:
+                        response_text = f"Great choice! 🎉 You want to order *{product_name}*{price_str}.\n\nHow many would you like?"
+                        suggested_actions = ["1", "2", "3", "Cancel"]
                 
                 # Persist state after product selection
                 self.conversation_manager.persist_state(user_id)
@@ -1038,7 +1491,7 @@ class AIBrain:
                     "metadata": {"generation_method": "order_flow_button", "product": product_name}
                 }
             else:
-                logger.warning(f"📦 'Order This' button product not found: '{search_term}' in {len(products)} products")
+                logger.warning(f"📦 'Order This' button product not found: '{raw_term}' in {len(products)} products")
         
         # =====================================================
         # STEP 0: Handle category selection
@@ -1192,18 +1645,50 @@ class AIBrain:
                 del state.collected_fields["_available_sizes"]
                 state.collect_field("selected_size", matched_size)
                 
-                # Check if color selection needed
+                # Get product data for pricing
                 product_data = state.collected_fields.get("pending_product_data", {})
+                
+                # Calculate price for selected size
+                has_size_pricing = product_data.get("has_size_pricing", False)
+                size_prices = product_data.get("size_prices", {}) or {}
+                base_price = product_data.get("price", 0)
+                original_price = product_data.get("compare_at_price")  # Original price for comparison
+                
+                # Get the price for the selected size
+                if has_size_pricing and size_prices and matched_size in size_prices:
+                    selected_price = float(size_prices[matched_size])
+                else:
+                    selected_price = float(base_price) if base_price else 0
+                
+                # Store the selected size price in the state for order completion
+                state.collect_field("selected_size_price", selected_price)
+                
+                # Build price display string
+                price_display = ""
+                if original_price:
+                    try:
+                        original_num = float(original_price)
+                        if original_num > selected_price:
+                            # Has offer - show original crossed out
+                            price_display = f" (~~₹{int(original_num)}~~ → ₹{int(selected_price)})"
+                        else:
+                            price_display = f" (₹{int(selected_price)})"
+                    except (ValueError, TypeError):
+                        price_display = f" (₹{int(selected_price)})"
+                else:
+                    price_display = f" (₹{int(selected_price)})"
+                
+                # Check if color selection needed
                 colors = product_data.get("colors", [])
                 
                 if colors:
                     state.collect_field("_needs_color", True)
                     state.collect_field("_available_colors", colors)
                     color_list = ", ".join(colors[:6])
-                    response_text = f"Size *{matched_size}* selected. ✓\n\nAvailable colors: {color_list}\n\nWhich color would you like?"
+                    response_text = f"Size *{matched_size}*{price_display} selected. ✓\n\nAvailable colors: {color_list}\n\nWhich color would you like?"
                     suggested_actions = colors[:4] + ["Cancel"]
                 else:
-                    response_text = f"Size *{matched_size}* selected. ✓\n\nHow many would you like to order?"
+                    response_text = f"Size *{matched_size}*{price_display} selected. ✓\n\nHow many would you like to order?"
                     suggested_actions = ["1", "2", "3", "Cancel"]
                 
                 # Persist state after size selection
@@ -1217,7 +1702,7 @@ class AIBrain:
                     "confidence": 1.0,
                     "needs_human": False,
                     "suggested_actions": suggested_actions,
-                    "metadata": {"generation_method": "order_flow", "size": matched_size}
+                    "metadata": {"generation_method": "order_flow", "size": matched_size, "price": selected_price}
                 }
             else:
                 size_list = ", ".join(sizes[:6])
@@ -1300,6 +1785,85 @@ class AIBrain:
         # STEP 1: Handle product selection (when list was shown)
         # =====================================================
         if state.collected_fields.get("awaiting_selection") and not state.collected_fields.get("pending_item"):
+            # Check for pagination commands first
+            if msg_lower in ["next", "next ▶", "next page", "more"]:
+                current_page = state.collected_fields.get("_pagination_page", 0)
+                total_pages = state.collected_fields.get("_pagination_total_pages", 1)
+                all_products = state.collected_fields.get("_all_products", business_data.get("products_services", []))
+                
+                if current_page < total_pages - 1:
+                    # Show next page
+                    next_page = current_page + 1
+                    response_text, suggested_actions, product_meta = self._format_product_list(
+                        all_products, state, page=next_page
+                    )
+                    
+                    # Persist state after pagination
+                    self.conversation_manager.persist_state(user_id)
+                    
+                    self.conversation_manager.add_message(user_id, "user", message)
+                    self.conversation_manager.add_message(user_id, "assistant", response_text)
+                    
+                    return {
+                        "reply": response_text,
+                        "intent": "order_pagination_next",
+                        "confidence": 1.0,
+                        "needs_human": False,
+                        "suggested_actions": suggested_actions,
+                        "metadata": {"generation_method": "order_flow_pagination", "page": next_page + 1, **product_meta}
+                    }
+                else:
+                    response_text = "You're already on the last page. Please select a product by number or name."
+                    self.conversation_manager.add_message(user_id, "user", message)
+                    self.conversation_manager.add_message(user_id, "assistant", response_text)
+                    return {
+                        "reply": response_text,
+                        "intent": "order_pagination_end",
+                        "confidence": 1.0,
+                        "needs_human": False,
+                        "suggested_actions": ["1", "2", "Cancel"],
+                        "metadata": {"generation_method": "order_flow"}
+                    }
+            
+            elif msg_lower in ["previous", "◀ previous", "prev", "back"]:
+                current_page = state.collected_fields.get("_pagination_page", 0)
+                all_products = state.collected_fields.get("_all_products", business_data.get("products_services", []))
+                
+                if current_page > 0:
+                    # Show previous page
+                    prev_page = current_page - 1
+                    response_text, suggested_actions, product_meta = self._format_product_list(
+                        all_products, state, page=prev_page
+                    )
+                    
+                    # Persist state after pagination
+                    self.conversation_manager.persist_state(user_id)
+                    
+                    self.conversation_manager.add_message(user_id, "user", message)
+                    self.conversation_manager.add_message(user_id, "assistant", response_text)
+                    
+                    return {
+                        "reply": response_text,
+                        "intent": "order_pagination_previous",
+                        "confidence": 1.0,
+                        "needs_human": False,
+                        "suggested_actions": suggested_actions,
+                        "metadata": {"generation_method": "order_flow_pagination", "page": prev_page + 1, **product_meta}
+                    }
+                else:
+                    response_text = "You're already on the first page. Please select a product by number or name."
+                    self.conversation_manager.add_message(user_id, "user", message)
+                    self.conversation_manager.add_message(user_id, "assistant", response_text)
+                    return {
+                        "reply": response_text,
+                        "intent": "order_pagination_start",
+                        "confidence": 1.0,
+                        "needs_human": False,
+                        "suggested_actions": ["1", "2", "Cancel"],
+                        "metadata": {"generation_method": "order_flow"}
+                    }
+            
+            # Regular product selection logic
             products = business_data.get("products_services", [])
             product_map = state.collected_fields.get("_product_map", {})
             available_products = state.collected_fields.get("_available_products", [])
@@ -1447,13 +2011,26 @@ class AIBrain:
                     
                     # Build complete item with stable product references
                     product_data = state.collected_fields.get("pending_product_data", {})
+                    
+                    # Get the correct price: use size-specific price if available
+                    selected_size_price = state.collected_fields.get("selected_size_price")
+                    base_price = product_data.get("price", 0)
+                    original_price = product_data.get("compare_at_price")  # Original/compare price
+                    
+                    # Determine the final price to use
+                    if selected_size_price is not None:
+                        item_price = selected_size_price
+                    else:
+                        item_price = float(base_price) if base_price else 0
+                    
                     item = {
                         "name": pending_item,
                         "quantity": quantity,
                         "product_id": state.collected_fields.get("pending_product_id") or product_data.get("id") or product_data.get("sku"),
                         "variant_id": None,
                         "variant_display": state.collected_fields.get("variant_display"),
-                        "price": product_data.get("price"),
+                        "price": item_price,  # Use the size-specific or base price
+                        "original_price": float(original_price) if original_price else None,  # Store original for display
                         "sku": product_data.get("sku"),
                         # Store size and color explicitly for database persistence
                         "size": state.collected_fields.get("selected_size"),
@@ -1902,10 +2479,53 @@ class AIBrain:
     ) -> Dict[str, Any]:
         """Show order summary and ask for confirmation."""
         items = state.collected_fields.get("items", [])
-        items_text = "\n".join([f"• {item['quantity']}x {item['name']}" for item in items])
+        
+        # Build items text with price display (including offer prices)
+        items_lines = []
+        total_amount = 0
+        
+        for item in items:
+            item_name = item.get('name', 'Item')
+            quantity = item.get('quantity', 1)
+            price = item.get('price', 0)
+            original_price = item.get('original_price')
+            variant_display = item.get('variant_display', '')
+            
+            # Calculate line total
+            line_total = float(price) * quantity if price else 0
+            total_amount += line_total
+            
+            # Build the item line with pricing
+            item_line = f"• {quantity}x {item_name}"
+            
+            # Add variant info (size/color) if present
+            if variant_display:
+                item_line += f" ({variant_display})"
+            
+            # Add price with offer display
+            if price:
+                if original_price and float(original_price) > float(price):
+                    # Has offer - show original crossed out
+                    item_line += f" - ~~₹{int(float(original_price))}~~ ₹{int(float(price))}"
+                else:
+                    item_line += f" - ₹{int(float(price))}"
+                
+                # Add line total if quantity > 1
+                if quantity > 1:
+                    item_line += f" = ₹{int(line_total)}"
+            
+            items_lines.append(item_line)
+        
+        items_text = "\n".join(items_lines)
         
         # Build details from collected fields
-        order_fields = state.collected_fields.get("_order_fields", [])
+        # FIX: Use flow_config instead of collected_fields to prevent data loss after field edit
+        # _order_fields gets deleted after first confirmation, but flow_config persists
+        order_fields = state.flow_config.get("order_fields", [])
+        if not order_fields:
+            # Fallback to collected_fields if flow_config doesn't have it yet
+            order_fields = state.collected_fields.get("_order_fields", [])
+        
         details_lines = []
         
         for field in order_fields:
@@ -1921,8 +2541,8 @@ class AIBrain:
         # This fixes bug where "yes" was being processed as phone number input
         if "_current_field_index" in state.collected_fields:
             del state.collected_fields["_current_field_index"]
-        if "_order_fields" in state.collected_fields:
-            del state.collected_fields["_order_fields"]
+        # NOTE: Don't delete _order_fields here - it's needed for list display
+        # Only delete it if we're sure we won't need it again
         
         state.flow_status = FlowStatus.AWAITING_CONFIRMATION
         
@@ -1932,29 +2552,338 @@ class AIBrain:
         
         self.conversation_manager.add_message(user_id, "user", last_message)
         
+        # Build total line if we have amounts
+        total_line = ""
+        if total_amount > 0:
+            total_line = f"\n\n💰 *Total: ₹{int(total_amount)}*"
+        
         response_text = (
-            f"📋 *Order Summary*\n\n"
-            f"{items_text}\n\n"
+            f"*Items:*\n{items_text}{total_line}\n\n"
             f"{details_text}\n\n"
             f"Would you like to confirm this order?"
         )
         self.conversation_manager.add_message(user_id, "assistant", response_text)
+        
+        # Build list sections with ONLY edit fields (no confirm/cancel)
+        list_rows = []
+        
+        # Add editable fields to the list
+        for field in order_fields:
+            field_id = field.get("id")
+            label = field.get("label", field_id.title())
+            current_value = state.collected_fields.get(field_id, "Not provided")
+            
+            # Truncate long values for display
+            display_value = current_value if len(str(current_value)) <= 50 else str(current_value)[:47] + "..."
+            
+            list_rows.append({
+                "id": f"edit_{field_id}",
+                "title": f"{label[:20]}",  # No emoji, cleaner
+                "description": display_value[:72]  # WhatsApp limit
+            })
+        
+        list_sections = [{
+            "title": "Edit Details",
+            "rows": list_rows
+        }]
         
         return {
             "reply": response_text,
             "intent": "order_confirmation",
             "confidence": 1.0,
             "needs_human": False,
-            "suggested_actions": ["Yes, confirm", "No, cancel"],
+            "suggested_actions": ["Yes, Confirm", "Edit Details", "Cancel"],
             "metadata": {
                 "generation_method": "order_flow",
+                "header_text": "📋 Order Summary",
+                "footer_text": "Tap to continue",
+                # Use BOTH buttons and list
                 "use_buttons": True,
                 "buttons": [
                     {"id": "confirm_yes", "title": "✅ Yes, Confirm"},
-                    {"id": "confirm_no", "title": "❌ No, Cancel"}
-                ]
+                    {"id": "confirm_no", "title": "❌ Cancel"}
+                ],
+                "use_list": True,
+                "list_button": "Edit Details",
+                "list_sections": list_sections
             }
         }
+    
+    def _show_edit_details_menu(
+        self,
+        user_id: str,
+        state: ConversationState,
+        last_message: str
+    ) -> Dict[str, Any]:
+        """Show menu of editable fields (name, phone, address) using WhatsApp list message."""
+        logger.info(f"✏️ Showing edit details menu for user: {user_id}")
+        
+        # Get current field values
+        order_fields = state.flow_config.get("order_fields", [])
+        
+        # Build list of editable fields with current values
+        editable_fields = []
+        for field in order_fields:
+            field_id = field.get("id")
+            label = field.get("label", field_id.title())
+            current_value = state.collected_fields.get(field_id, "Not provided")
+            
+            editable_fields.append({
+                "id": field_id,
+                "label": label,
+                "current_value": current_value
+            })
+        
+        # Mark that we're awaiting field selection
+        state.collect_field("_awaiting_field_selection", True)
+        state.collect_field("_editable_fields", editable_fields)
+        
+        # Persist state
+        self.conversation_manager.persist_state(user_id)
+        
+        self.conversation_manager.add_message(user_id, "user", last_message)
+        
+        # Build list sections for WhatsApp List Message
+        list_rows = []
+        for field in editable_fields:
+            field_id = field["id"]
+            label = field["label"]
+            current_value = field["current_value"]
+            
+            # Truncate long values for display
+            display_value = current_value if len(str(current_value)) <= 30 else str(current_value)[:27] + "..."
+            
+            list_rows.append({
+                "id": f"edit_{field_id}",
+                "title": label[:24],  # WhatsApp limit
+                "description": display_value[:72]  # WhatsApp limit
+            })
+        
+        list_sections = [{
+            "title": "Customer Details",
+            "rows": list_rows
+        }]
+        
+        response_text = (
+            "✏️ *Edit Order Details*\n\n"
+            "Select which detail you'd like to edit:\n\n"
+            "Tap the button below to see all fields."
+        )
+        
+        self.conversation_manager.add_message(user_id, "assistant", response_text)
+        
+        return {
+            "reply": response_text,
+            "intent": "order_edit_menu",
+            "confidence": 1.0,
+            "needs_human": False,
+            "suggested_actions": ["View Fields", "Back to Summary"],
+            "metadata": {
+                "generation_method": "order_edit_flow",
+                "use_list": True,
+                "list_button": "View Fields",
+                "list_sections": list_sections,
+                "header_text": "✏️ Edit Details",
+                "footer_text": "Tap to edit"
+            }
+        }
+    
+    def _handle_field_selection(
+        self,
+        user_id: str,
+        state: ConversationState,
+        message: str
+    ) -> Dict[str, Any]:
+        """Handle user selecting a field to edit from the menu."""
+        logger.info(f"✏️ Handling field selection for user: {user_id}, message: '{message}'")
+        
+        # FIX: Extract only the label part if message contains "Label\nValue" format
+        # WhatsApp list might send both title and description
+        message_lines = message.split('\n')
+        label_part = message_lines[0].strip()  # Use only first line for matching
+        msg_lower = label_part.lower()
+        
+        # Check for "back to summary"
+        if msg_lower in ["back", "back to summary", "cancel"]:
+            # Clear edit mode flags
+            if "_awaiting_field_selection" in state.collected_fields:
+                del state.collected_fields["_awaiting_field_selection"]
+            if "_editable_fields" in state.collected_fields:
+                del state.collected_fields["_editable_fields"]
+            
+            self.conversation_manager.persist_state(user_id)
+            
+            # Show order confirmation again
+            return self._show_order_confirmation(user_id, state, label_part)
+        
+        # Get editable fields
+        editable_fields = state.collected_fields.get("_editable_fields", [])
+        
+        # Try to match the selected field
+        selected_field = None
+        for field in editable_fields:
+            field_id = field["id"]
+            label = field["label"]
+            
+            # Match by field ID or label (using only the label part of the message)
+            if field_id in msg_lower or label.lower() in msg_lower:
+                selected_field = field
+                break
+        
+        if not selected_field:
+            # Try matching by number (if user types "1", "2", etc.)
+            try:
+                field_index = int(label_part.strip()) - 1
+                if 0 <= field_index < len(editable_fields):
+                    selected_field = editable_fields[field_index]
+            except ValueError:
+                pass
+        
+        if selected_field:
+            # Clear awaiting selection flag
+            del state.collected_fields["_awaiting_field_selection"]
+            
+            # Set editing mode
+            state.collect_field("_editing_field", selected_field["id"])
+            state.collect_field("_editing_field_label", selected_field["label"])
+            
+            self.conversation_manager.persist_state(user_id)
+            
+            # FIX: Store only the label part for logging, not the full message with value
+            self.conversation_manager.add_message(user_id, "user", label_part)
+            
+            current_value = selected_field["current_value"]
+            response_text = (
+                f"✏️ *Edit {selected_field['label']}*\n\n"
+                f"Current value: *{current_value}*\n\n"
+                f"Please enter the new value:"
+            )
+            
+            self.conversation_manager.add_message(user_id, "assistant", response_text)
+            
+            return {
+                "reply": response_text,
+                "intent": "order_field_editing",
+                "confidence": 1.0,
+                "needs_human": False,
+                "suggested_actions": ["Cancel"],
+                "metadata": {
+                    "generation_method": "order_edit_flow",
+                    "editing_field": selected_field["id"]
+                }
+            }
+        else:
+            # Invalid selection
+            self.conversation_manager.add_message(user_id, "user", message)
+            response_text = "Please select a valid field to edit, or type 'Back to Summary'."
+            self.conversation_manager.add_message(user_id, "assistant", response_text)
+            
+            return {
+                "reply": response_text,
+                "intent": "order_edit_invalid_selection",
+                "confidence": 0.8,
+                "needs_human": False,
+                "suggested_actions": ["Back to Summary"],
+                "metadata": {"generation_method": "order_edit_flow"}
+            }
+    
+    def _handle_field_edit(
+        self,
+        user_id: str,
+        state: ConversationState,
+        message: str,
+        business_data: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """Handle the actual editing of a field value."""
+        logger.info(f"✏️ Handling field edit for user: {user_id}, message: '{message}'")
+        
+        msg_lower = message.lower().strip()
+        
+        # Check for cancel
+        if msg_lower in ["cancel", "back"]:
+            # Clear editing mode
+            if "_editing_field" in state.collected_fields:
+                del state.collected_fields["_editing_field"]
+            if "_editing_field_label" in state.collected_fields:
+                del state.collected_fields["_editing_field_label"]
+            
+            self.conversation_manager.persist_state(user_id)
+            
+            # Go back to edit menu
+            return self._show_edit_details_menu(user_id, state, message)
+        
+        # Get the field being edited
+        field_id = state.collected_fields.get("_editing_field")
+        field_label = state.collected_fields.get("_editing_field_label", field_id)
+        
+        # Find the field config for validation
+        order_fields = state.flow_config.get("order_fields", [])
+        field_config = None
+        for field in order_fields:
+            if field.get("id") == field_id:
+                field_config = field
+                break
+        
+        # Validate the new value
+        if field_config:
+            validation = self._validate_order_field(field_config, message.strip())
+            
+            if not validation.get("valid"):
+                # Invalid value
+                error_msg = validation.get("error", "That doesn't look right. Please try again.")
+                
+                self.conversation_manager.add_message(user_id, "user", message)
+                response_text = f"{error_msg}\n\nPlease enter a valid {field_label.lower()}:"
+                self.conversation_manager.add_message(user_id, "assistant", response_text)
+                
+                return {
+                    "reply": response_text,
+                    "intent": "order_field_edit_invalid",
+                    "confidence": 0.8,
+                    "needs_human": False,
+                    "suggested_actions": ["Cancel"],
+                    "metadata": {"generation_method": "order_edit_flow"}
+                }
+        
+        # Update the field value
+        # FIX: Extract only the value part if message contains label (from list selection)
+        # WhatsApp list sends "Label\nValue" format, we only want the value
+        new_value = message.strip()
+        
+        # If message contains newlines, it might be "Label\nValue" format
+        # Extract only the value part (everything after first line if first line matches the label)
+        message_lines = new_value.split('\n')
+        if len(message_lines) > 1:
+            field_label = state.collected_fields.get("_editing_field_label", "")
+            first_line = message_lines[0].strip()
+            # If first line matches the field label, use the rest as the value
+            if field_label and first_line.lower() == field_label.lower():
+                new_value = '\n'.join(message_lines[1:]).strip()
+            # If first line doesn't match label, user might have sent just the value
+            # or the value might be on the first line, so use the whole message
+        
+        state.collect_field(field_id, new_value)
+        
+        # Also update mapped fields (for compatibility)
+        if field_id == "name":
+            state.collect_field("customer_name", new_value)
+        elif field_id == "phone":
+            state.collect_field("customer_phone", new_value)
+        elif field_id == "address":
+            state.collect_field("customer_address", new_value)
+        
+        # Clear editing mode
+        del state.collected_fields["_editing_field"]
+        del state.collected_fields["_editing_field_label"]
+        if "_editable_fields" in state.collected_fields:
+            del state.collected_fields["_editable_fields"]
+        
+        self.conversation_manager.persist_state(user_id)
+        
+        self.conversation_manager.add_message(user_id, "user", message)
+        
+        # Show updated order confirmation
+        return self._show_order_confirmation(user_id, state, message)
     
     def _start_appointment_flow(
         self,

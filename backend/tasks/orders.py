@@ -316,22 +316,42 @@ def _get_sheets_config(user_id: str) -> Optional[Dict[str, Any]]:
             logger.warning(f"⚠️ [Sheets Config] No spreadsheet_id or URL in database for user {user_id}")
             return {"enabled": False, "reason": "no_spreadsheet_id"}
         
-        # Get credentials - priority order: ENV → Firebase fallback
+        # Get credentials - priority order: JSON file → ENV var → Firebase fallback
         credentials = None
         credential_source = None
         
-        # Option 1: Shared service account from environment variable
-        credentials_json = os.getenv("GOOGLE_SHEETS_CREDENTIALS")
-        if credentials_json:
+        # Option 1: Load from JSON file path specified in environment variable
+        credentials_path = os.getenv("GOOGLE_SHEETS_CREDENTIALS_PATH")
+        if credentials_path:
             try:
                 import json
-                credentials = json.loads(credentials_json)
-                credential_source = "env_var"
-                logger.info("📊 [Sheets Config] Using shared credentials from GOOGLE_SHEETS_CREDENTIALS env var")
+                # Resolve path relative to backend directory
+                backend_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+                full_path = os.path.join(backend_dir, credentials_path)
+                
+                if os.path.exists(full_path):
+                    with open(full_path, 'r') as f:
+                        credentials = json.load(f)
+                    credential_source = "json_file"
+                    logger.info(f"📊 [Sheets Config] Using credentials from JSON file: {credentials_path}")
+                else:
+                    logger.warning(f"⚠️ [Sheets Config] Credentials file not found: {full_path}")
             except Exception as e:
-                logger.error(f"❌ [Sheets Config] Failed to parse GOOGLE_SHEETS_CREDENTIALS env var: {e}")
+                logger.error(f"❌ [Sheets Config] Failed to load credentials from JSON file: {e}")
         
-        # Option 2: Try using Firebase service account (if it has Sheets API access)
+        # Option 2: Fallback to inline JSON in environment variable
+        if not credentials:
+            credentials_json = os.getenv("GOOGLE_SHEETS_CREDENTIALS")
+            if credentials_json:
+                try:
+                    import json
+                    credentials = json.loads(credentials_json)
+                    credential_source = "env_var"
+                    logger.info("📊 [Sheets Config] Using shared credentials from GOOGLE_SHEETS_CREDENTIALS env var")
+                except Exception as e:
+                    logger.error(f"❌ [Sheets Config] Failed to parse GOOGLE_SHEETS_CREDENTIALS env var: {e}")
+        
+        # Option 3: Try using Firebase service account (if it has Sheets API access)
         if not credentials:
             firebase_creds = os.getenv("FIREBASE_SERVICE_ACCOUNT_KEY")
             if firebase_creds:
@@ -348,7 +368,7 @@ def _get_sheets_config(user_id: str) -> Optional[Dict[str, Any]]:
         if not credentials:
             logger.error(
                 "❌ [Sheets Config] No Google Sheets credentials available. "
-                "Set GOOGLE_SHEETS_CREDENTIALS env var. "
+                "Set GOOGLE_SHEETS_CREDENTIALS_PATH or GOOGLE_SHEETS_CREDENTIALS env var. "
                 f"User: {user_id}"
             )
             return {"enabled": False, "reason": "no_credentials"}
@@ -363,43 +383,6 @@ def _get_sheets_config(user_id: str) -> Optional[Dict[str, Any]]:
             "sheet_name": sheet_name,
             "credentials": credentials,
             "credential_source": credential_source,
-        }
-        
-        # Get credentials - try shared service account from env first
-        credentials = None
-        
-        # Option 1: Shared service account from environment variable
-        credentials_json = os.getenv("GOOGLE_SHEETS_CREDENTIALS")
-        if credentials_json:
-            try:
-                import json
-                credentials = json.loads(credentials_json)
-                logger.debug("Using shared Google Sheets credentials from env")
-            except Exception as e:
-                logger.warning(f"Failed to parse GOOGLE_SHEETS_CREDENTIALS: {e}")
-        
-        # Option 2: Try using Firebase service account (if it has Sheets API access)
-        if not credentials:
-            firebase_creds = os.getenv("FIREBASE_SERVICE_ACCOUNT_KEY")
-            if firebase_creds:
-                try:
-                    import json
-                    import base64
-                    creds_json = base64.b64decode(firebase_creds).decode('utf-8')
-                    credentials = json.loads(creds_json)
-                    logger.debug("Using Firebase service account for Google Sheets")
-                except Exception as e:
-                    logger.warning(f"Failed to parse Firebase credentials for Sheets: {e}")
-        
-        if not credentials:
-            logger.warning("No Google Sheets credentials available. Set GOOGLE_SHEETS_CREDENTIALS env var.")
-            return {"enabled": False, "reason": "no_credentials"}
-        
-        return {
-            "enabled": True,
-            "spreadsheet_id": spreadsheet_id,
-            "sheet_name": "Orders",  # Default sheet name
-            "credentials": credentials,
         }
         
     except Exception as e:
@@ -476,9 +459,11 @@ def _format_order_for_sheets(data: Dict[str, Any]) -> List[Any]:
     # Build items string with size/color variants
     items_parts = []
     for i in items:
-        item_str = f"{i.get('quantity', 1)}x {i.get('name', 'Unknown')}"
+        qty = i.get('quantity', 1)
+        name = i.get('name', 'Unknown')
+        item_str = f"{qty}x {name}"
         
-        # Add variant details (size, color)
+        # Add variant details (size, color, price)
         variant_parts = []
         if i.get('size'):
             variant_parts.append(f"Size: {i.get('size')}")
@@ -486,6 +471,15 @@ def _format_order_for_sheets(data: Dict[str, Any]) -> List[Any]:
             variant_parts.append(f"Color: {i.get('color')}")
         elif i.get('variant_display'):
             variant_parts.append(i.get('variant_display'))
+        
+        price = i.get('price')
+        if price is not None:
+            try:
+                price_value = float(price)
+                variant_parts.append(f"Price: ₹{price_value:.0f}")
+            except (TypeError, ValueError):
+                # Fallback to raw value if it can't be parsed
+                variant_parts.append(f"Price: {price}")
         
         if variant_parts:
             item_str += f" ({', '.join(variant_parts)})"

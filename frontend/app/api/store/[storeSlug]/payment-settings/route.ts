@@ -28,7 +28,9 @@ export async function GET(
     // Get business by user_id (storeSlug is the user_id)
     const { data, error } = await supabase
       .from("businesses")
-      .select("razorpay_key_id, payments_enabled, business_name")
+      .select(
+        "razorpay_key_id, payments_enabled, business_name, ecommerce_policies",
+      )
       .eq("user_id", storeSlug)
       .single();
 
@@ -42,6 +44,14 @@ export async function GET(
       paymentsEnabled: data.payments_enabled || false,
       razorpayKeyId: data.razorpay_key_id || null, // Public key only
       storeName: data.business_name || "Store",
+      shippingCharges:
+        data.ecommerce_policies?.shipping_charges ||
+        data.ecommerce_policies?.shippingCharges ||
+        null,
+      codAvailable:
+        data.ecommerce_policies?.cod_available ??
+        data.ecommerce_policies?.codAvailable ??
+        false,
     });
   } catch (error) {
     console.error("Error fetching store payment settings:", error);

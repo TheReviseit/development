@@ -1,0 +1,13 @@
+
+/* Force footer alignment to right */
+.footer {
+  display: flex !important;
+  justify-content: flex-end !important;
+  align-items: center;
+}
+
+.saveButton {
+  margin-left: 0 !important;
+  width: auto;
+  min-width: 160px;
+}

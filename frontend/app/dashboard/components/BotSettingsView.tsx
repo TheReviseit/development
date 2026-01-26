@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import styles from "./BotSettingsView.module.css";
+import Toast from "@/app/components/Toast/Toast";
 import CustomDropdown, { DropdownOption } from "./CustomDropdown";
 import SearchableDropdown from "./SearchableDropdown";
 import { AlertToast } from "@/components/ui/alert-toast";
@@ -427,7 +428,9 @@ function SizeMultiSelect({
 export default function BotSettingsView() {
   const [activeTab, setActiveTab] = useState<TabType>("profile");
   const [data, setData] = useState<BusinessData>(INITIAL_DATA);
+  const [initialData, setInitialData] = useState<BusinessData>(INITIAL_DATA);
   const [saving, setSaving] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
   const [message, setMessage] = useState<{
     type: "success" | "error";
     text: string;
@@ -613,10 +616,29 @@ export default function BotSettingsView() {
                       [],
                   }
                 : INITIAL_DATA.policies,
-              ecommercePolicies:
-                apiData.ecommerce_policies ||
-                apiData.ecommercePolicies ||
-                INITIAL_DATA.ecommercePolicies,
+              ecommercePolicies: (() => {
+                const ep =
+                  apiData.ecommerce_policies ||
+                  apiData.ecommercePolicies ||
+                  INITIAL_DATA.ecommercePolicies ||
+                  {};
+                return {
+                  shippingPolicy: ep.shippingPolicy || ep.shipping_policy || "",
+                  shippingZones: ep.shippingZones || ep.shipping_zones || [],
+                  shippingCharges:
+                    ep.shippingCharges || ep.shipping_charges || "",
+                  estimatedDelivery:
+                    ep.estimatedDelivery || ep.estimated_delivery || "",
+                  returnPolicy: ep.returnPolicy || ep.return_policy || "",
+                  returnWindow: ep.returnWindow || ep.return_window || 7,
+                  warrantyPolicy: ep.warrantyPolicy || ep.warranty_policy || "",
+                  codAvailable: ep.codAvailable ?? ep.cod_available ?? false,
+                  internationalShipping:
+                    ep.internationalShipping ??
+                    ep.international_shipping ??
+                    false,
+                };
+              })(),
               faqs: (apiData.faqs || []).map((f: any) => ({
                 id: f.id || Date.now().toString(),
                 question: f.question || "",
@@ -628,10 +650,13 @@ export default function BotSettingsView() {
                 INITIAL_DATA.brandVoice,
             };
             setData({ ...INITIAL_DATA, ...convertedData });
+            setInitialData({ ...INITIAL_DATA, ...convertedData });
           }
         }
       } catch (error) {
         console.log("No existing data found");
+      } finally {
+        setIsLoading(false);
       }
     };
     loadData();
@@ -1085,15 +1110,7 @@ export default function BotSettingsView() {
     }
   };
 
-  // Auto-dismiss toast notification after 5 seconds
-  useEffect(() => {
-    if (message) {
-      const timer = setTimeout(() => {
-        setMessage(null);
-      }, 5000);
-      return () => clearTimeout(timer);
-    }
-  }, [message]);
+  // Auto-dismiss alert toast after 3 seconds
 
   // Auto-dismiss alert toast after 3 seconds
   useEffect(() => {
@@ -1155,6 +1172,7 @@ export default function BotSettingsView() {
 
       if (response.ok) {
         console.log("[handleSave] Save successful!");
+        setInitialData(dataRef.current);
         setMessage({
           type: "success",
           text: "Product saved successfully! 🎉",
@@ -1626,6 +1644,21 @@ export default function BotSettingsView() {
     </>
   );
 
+  if (isLoading) {
+    return (
+      <div className={styles.container}>
+        <div className={styles.header}>
+          <h1 className={styles.title}>🤖 AI Settings</h1>
+          <p className={styles.subtitle}>Loading your configuration...</p>
+        </div>
+        <div className={styles.loadingContainer}>
+          <div className={styles.spinner} />
+          <p>Please wait while we fetch your data</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className={styles.container}>
       <div className={styles.header}>
@@ -1637,30 +1670,11 @@ export default function BotSettingsView() {
 
       {/* Toast Notification */}
       {message && (
-        <div className={styles.toastContainer}>
-          <div
-            className={`${styles.toast} ${
-              message.type === "success" ? styles.success : styles.error
-            }`}
-          >
-            <div className={styles.toastIcon}>
-              {message.type === "success" ? "✓" : "✕"}
-            </div>
-            <div className={styles.toastContent}>
-              <div className={styles.toastTitle}>
-                {message.type === "success" ? "Success" : "Error"}
-              </div>
-              <div className={styles.toastMessage}>{message.text}</div>
-            </div>
-            <button
-              className={styles.toastClose}
-              onClick={() => setMessage(null)}
-              aria-label="Close notification"
-            >
-              ✕
-            </button>
-          </div>
-        </div>
+        <Toast
+          message={message.text}
+          type={message.type}
+          onClose={() => setMessage(null)}
+        />
       )}
 
       {/* Alert Toast for Appointment Toggle */}
@@ -3277,7 +3291,9 @@ export default function BotSettingsView() {
           <button
             className={styles.saveButton}
             onClick={handleSave}
-            disabled={saving}
+            disabled={
+              saving || JSON.stringify(data) === JSON.stringify(initialData)
+            }
           >
             {saving ? "Saving..." : "💾 Save Changes"}
           </button>

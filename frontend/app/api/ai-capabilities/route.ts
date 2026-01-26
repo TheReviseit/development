@@ -161,7 +161,7 @@ export async function GET(request: NextRequest) {
       console.error("Error fetching AI capabilities:", error);
       return NextResponse.json(
         { error: "Failed to fetch AI capabilities" },
-        { status: 500 }
+        { status: 500 },
       );
     }
 
@@ -219,7 +219,7 @@ export async function GET(request: NextRequest) {
     console.error("Error in GET /api/ai-capabilities:", error);
     return NextResponse.json(
       { error: "Internal server error" },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }
@@ -268,7 +268,7 @@ export async function POST(request: NextRequest) {
           field.label &&
           field.type &&
           typeof field.required === "boolean" &&
-          typeof field.order === "number"
+          typeof field.order === "number",
       );
       if (isValid) {
         updateData.appointment_fields = appointment_fields;
@@ -300,7 +300,7 @@ export async function POST(request: NextRequest) {
           service.name !== undefined &&
           typeof service.duration === "number" &&
           typeof service.capacity === "number" &&
-          service.capacity >= 1
+          service.capacity >= 1,
       );
       if (isValid) {
         updateData.appointment_services = appointment_services;
@@ -321,7 +321,7 @@ export async function POST(request: NextRequest) {
           field.label &&
           field.type &&
           typeof field.required === "boolean" &&
-          typeof field.order === "number"
+          typeof field.order === "number",
       );
       if (isValid) {
         updateData.order_fields = order_fields;
@@ -353,7 +353,7 @@ export async function POST(request: NextRequest) {
       // Only user_id and updated_at
       return NextResponse.json(
         { error: "No valid fields to update" },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
@@ -372,7 +372,7 @@ export async function POST(request: NextRequest) {
       console.error("Error updating AI capabilities:", error);
       return NextResponse.json(
         { error: "Failed to update AI capabilities" },
-        { status: 500 }
+        { status: 500 },
       );
     }
 
@@ -384,7 +384,7 @@ export async function POST(request: NextRequest) {
     console.error("Error in POST /api/ai-capabilities:", error);
     return NextResponse.json(
       { error: "Internal server error" },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

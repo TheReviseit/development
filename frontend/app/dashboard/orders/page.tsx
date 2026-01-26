@@ -68,7 +68,10 @@ export default function OrdersPage() {
   const [userId, setUserId] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [isViewMode, setIsViewMode] = useState(false); // Add view mode state
-  const [productImages, setProductImages] = useState<Record<string, string>>({}); // Cache for product images
+  const [productImages, setProductImages] = useState<Record<string, string>>(
+    {},
+  ); // Cache for product images
+  const [updatingStatus, setUpdatingStatus] = useState<Set<string>>(new Set()); // Track orders being updated
 
   // Google Sheets integration state
   const [showSheetModal, setShowSheetModal] = useState(false);
@@ -118,12 +121,14 @@ export default function OrdersPage() {
     checkCapabilities();
   }, [router]);
 
-  // Real-time order handlers
+  // Real-time order handlers with optimistic updates
   const handleRealtimeInsert = useCallback((newOrder: Order) => {
     setOrders((prev) => {
+      // Check if order already exists (prevent duplicates)
       if (prev.some((order) => order.id === newOrder.id)) {
         return prev;
       }
+      // Add new order at the top
       return [newOrder, ...prev];
     });
   }, []);
@@ -131,9 +136,15 @@ export default function OrdersPage() {
   const handleRealtimeUpdate = useCallback((updatedOrder: Order) => {
     setOrders((prev) =>
       prev.map((order) =>
-        order.id === updatedOrder.id ? updatedOrder : order,
+        order.id === updatedOrder.id ? { ...updatedOrder } : order,
       ),
     );
+    // Remove from updating set when realtime update arrives
+    setUpdatingStatus((prev) => {
+      const next = new Set(prev);
+      next.delete(updatedOrder.id);
+      return next;
+    });
   }, []);
 
   const handleRealtimeDelete = useCallback((deleted: { id: string }) => {
@@ -141,7 +152,7 @@ export default function OrdersPage() {
   }, []);
 
   // Subscribe to realtime updates
-  useRealtimeOrders({
+  const { isConnected: realtimeConnected } = useRealtimeOrders({
     userId,
     onInsert: handleRealtimeInsert,
     onUpdate: handleRealtimeUpdate,
@@ -150,68 +161,101 @@ export default function OrdersPage() {
   });
 
   // Fetch product image by product_id
-  const fetchProductImage = useCallback(async (productId: string): Promise<string | null> => {
-    if (!productId || productImages[productId]) {
-      return productImages[productId] || null;
-    }
-
-    try {
-      const response = await fetch(`/api/products/${productId}`);
-      const data = await response.json();
-      
-      if (data.product?.image_url) {
-        const imageUrl = data.product.image_url;
-        setProductImages(prev => ({ ...prev, [productId]: imageUrl }));
-        return imageUrl;
-      }
-    } catch (error) {
-      console.error(`Error fetching product image for ${productId}:`, error);
-    }
-    
-    return null;
-  }, [productImages]);
-
-  // Fetch orders
-  const fetchOrders = useCallback(async () => {
-    try {
-      setLoading(true);
-      const params = new URLSearchParams();
-      if (filter !== "all") {
-        params.set("status", filter);
+  const fetchProductImage = useCallback(
+    async (productId: string): Promise<string | null> => {
+      if (!productId || productImages[productId]) {
+        return productImages[productId] || null;
       }
 
-      const response = await fetch(`/api/orders?${params}`);
-      const data = await response.json();
+      try {
+        const response = await fetch(`/api/products/${productId}`);
+        const data = await response.json();
 
-      if (data.success) {
-        const ordersData = data.data;
-        setOrders(ordersData);
-        
-        // Fetch product images for items that have product_id but no image
-        const productIdsToFetch = new Set<string>();
-        ordersData.forEach((order: Order) => {
-          order.items.forEach((item: OrderItem) => {
-            if (item.product_id && !item.image && !item.imageUrl) {
-              productIdsToFetch.add(item.product_id);
-            }
-          });
+        if (data.product?.image_url) {
+          const imageUrl = data.product.image_url;
+          setProductImages((prev) => ({ ...prev, [productId]: imageUrl }));
+          return imageUrl;
+        }
+      } catch (error) {
+        console.error(`Error fetching product image for ${productId}:`, error);
+      }
+
+      return null;
+    },
+    [productImages],
+  );
+
+  // Fetch orders (only on mount or filter change, not on status updates)
+  const fetchOrders = useCallback(
+    async (showLoading = true) => {
+      try {
+        if (showLoading) {
+          setLoading(true);
+        }
+        const params = new URLSearchParams();
+        if (filter !== "all") {
+          params.set("status", filter);
+        }
+
+        const response = await fetch(`/api/orders?${params}`, {
+          cache: "no-store",
+          headers: {
+            Pragma: "no-cache",
+            "Cache-Control": "no-cache",
+          },
         });
+        const data = await response.json();
 
-        // Fetch images in parallel
-        const imagePromises = Array.from(productIdsToFetch).map(productId =>
-          fetchProductImage(productId)
-        );
-        await Promise.all(imagePromises);
+        if (data.success) {
+          const ordersData = data.data;
+          // setOrders(ordersData); // We need to be careful not to overwrite optimistic updates if we were editing?
+          // Actually for the list view, overwriting is fine, but we should perhaps check if we are editing?
+          // For simplicity, we just update the list.
+          setOrders(ordersData);
+
+          // Fetch product images for items that have product_id but no image
+          const productIdsToFetch = new Set<string>();
+          ordersData.forEach((order: Order) => {
+            order.items.forEach((item: OrderItem) => {
+              if (item.product_id && !item.image && !item.imageUrl) {
+                productIdsToFetch.add(item.product_id);
+              }
+            });
+          });
+
+          // Fetch images in parallel
+          if (productIdsToFetch.size > 0) {
+            const imagePromises = Array.from(productIdsToFetch).map(
+              (productId) => fetchProductImage(productId),
+            );
+            await Promise.all(imagePromises);
+          }
+        }
+      } catch (error) {
+        console.error("Error fetching orders:", error);
+      } finally {
+        if (showLoading) {
+          setLoading(false);
+        }
       }
-    } catch (error) {
-      console.error("Error fetching orders:", error);
-    } finally {
-      setLoading(false);
-    }
-  }, [filter, fetchProductImage]);
+    },
+    [filter, fetchProductImage],
+  );
 
+  // Only fetch on mount or when filter changes
   useEffect(() => {
-    fetchOrders();
+    fetchOrders(true);
+  }, [filter]); // fetchOrders is stable due to useCallback
+
+  // Polling fallback: Fetch every 5 seconds silently to ensure data is fresh
+  // This covers cases where Realtime (WebSockets) might fail due to RLS/Auth issues
+  useEffect(() => {
+    const intervalId = setInterval(() => {
+      // Only poll if window is visible/focused could be an optimization, but standard interval is fine
+      fetchOrders(false);
+    }, 5000);
+
+    return () => clearInterval(intervalId);
   }, [fetchOrders]);
 
   // Stats
@@ -246,37 +290,57 @@ export default function OrdersPage() {
 
       const data = await response.json();
       if (data.success) {
-        setSheetConnected(!!sheetUrl);
-        setShowSheetModal(false); // Close modal immediately
+        // 2. If sheet URL is provided and connected, initialize sheet with headers
+        let initSuccess = true;
+        let initMessage = "";
 
-        // 2. If sheet URL is provided and sync is enabled, initialize sheet with headers
-        // Fire-and-forget: don't block the UI, run in background
-        if (sheetUrl && sheetSyncEnabled && userId) {
-          fetch("/api/orders/sheets/initialize", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ user_id: userId }),
-          })
-            .then((res) => res.json())
-            .then((initData) => {
-              if (initData.success) {
-                console.log(
-                  "✅ Sheet initialized with headers:",
-                  initData.data?.headers,
-                );
-              } else {
-                console.warn("⚠️ Sheet init warning:", initData.error?.message);
-              }
-            })
-            .catch((err) =>
-              console.warn(
-                "⚠️ Sheet init error (will retry on first order):",
-                err,
-              ),
-            );
+        if (sheetUrl && userId) {
+          try {
+            const initResponse = await fetch("/api/orders/sheets/initialize", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ user_id: userId }),
+            });
+            const initData = await initResponse.json();
+
+            if (initData.success) {
+              console.log(
+                "✅ Sheet initialized with headers:",
+                initData.data?.headers,
+              );
+              initSuccess = true;
+            } else {
+              console.warn("⚠️ Sheet init warning:", initData.error?.message);
+              initSuccess = false;
+              initMessage =
+                initData.error?.message ||
+                "Failed to initialize sheet headers.";
+            }
+          } catch (err) {
+            console.warn("⚠️ Sheet init error:", err);
+            initSuccess = false;
+            initMessage = "Network error during sheet initialization.";
+          }
+        }
+
+        setSheetConnected(!!sheetUrl);
+        setShowSheetModal(false);
+
+        if (sheetUrl && !initSuccess) {
+          alert(
+            `Settings saved, but could not connect to Sheet:\n${initMessage}\n\nPlease check permissions and try again.`,
+          );
+        } else if (sheetUrl) {
+          alert("✅ Google Sheet connected and initialized successfully!");
+        } else {
+          // Disconnected case logic handled mostly by handleDisconnect, but if they cleared URL here
+          if (!sheetUrl) alert("Google Sheet disconnected.");
         }
       } else {
-        alert("Failed to save Google Sheet settings");
+        alert(
+          "Failed to save Google Sheet settings: " +
+            (data.error || "Unknown error"),
+        );
       }
     } catch (error) {
       console.error("Error saving sheet settings:", error);
@@ -390,8 +454,8 @@ export default function OrdersPage() {
 
       // Fetch product images for items that have product_id but no image
       const imagePromises = parsedItems
-        .filter(item => item.product_id && !item.image && !item.imageUrl)
-        .map(item => fetchProductImage(item.product_id!));
+        .filter((item) => item.product_id && !item.image && !item.imageUrl)
+        .map((item) => fetchProductImage(item.product_id!));
       await Promise.all(imagePromises);
     } else {
       setEditingOrder(null);
@@ -492,6 +556,22 @@ export default function OrdersPage() {
   };
 
   const handleStatusChange = async (order: Order, newStatus: string) => {
+    // Optimistic update - update UI immediately
+    const previousStatus = order.status;
+    setUpdatingStatus((prev) => new Set(prev).add(order.id));
+
+    setOrders((prev) =>
+      prev.map((o) =>
+        o.id === order.id
+          ? {
+              ...o,
+              status: newStatus as Order["status"],
+              updated_at: new Date().toISOString(),
+            }
+          : o,
+      ),
+    );
+
     try {
       const response = await fetch(`/api/orders/${order.id}`, {
         method: "PUT",
@@ -499,27 +579,90 @@ export default function OrdersPage() {
         body: JSON.stringify({ status: newStatus }),
       });
 
-      if (response.ok) {
-        fetchOrders();
+      if (!response.ok) {
+        // Revert on error
+        setOrders((prev) =>
+          prev.map((o) =>
+            o.id === order.id
+              ? { ...o, status: previousStatus, updated_at: order.updated_at }
+              : o,
+          ),
+        );
+        alert("Failed to update order status. Please try again.");
       }
+      // If successful, realtime subscription will confirm the update
+      // and remove from updatingStatus set via handleRealtimeUpdate
     } catch (error) {
       console.error("Error updating status:", error);
+      // Revert on error
+      setOrders((prev) =>
+        prev.map((o) =>
+          o.id === order.id
+            ? { ...o, status: previousStatus, updated_at: order.updated_at }
+            : o,
+        ),
+      );
+      alert("Failed to update order status. Please try again.");
+      setUpdatingStatus((prev) => {
+        const next = new Set(prev);
+        next.delete(order.id);
+        return next;
+      });
     }
   };
 
   const handleCancelOrder = async (order: Order) => {
     if (!confirm("Are you sure you want to cancel this order?")) return;
 
+    // Optimistic update
+    const previousStatus = order.status;
+    setUpdatingStatus((prev) => new Set(prev).add(order.id));
+
+    setOrders((prev) =>
+      prev.map((o) =>
+        o.id === order.id
+          ? {
+              ...o,
+              status: "cancelled" as const,
+              updated_at: new Date().toISOString(),
+            }
+          : o,
+      ),
+    );
+
     try {
       const response = await fetch(`/api/orders/${order.id}`, {
         method: "DELETE",
       });
 
-      if (response.ok) {
-        fetchOrders();
+      if (!response.ok) {
+        // Revert on error
+        setOrders((prev) =>
+          prev.map((o) =>
+            o.id === order.id
+              ? { ...o, status: previousStatus, updated_at: order.updated_at }
+              : o,
+          ),
+        );
+        alert("Failed to cancel order. Please try again.");
       }
+      // Realtime subscription will confirm the update
     } catch (error) {
       console.error("Error cancelling order:", error);
+      // Revert on error
+      setOrders((prev) =>
+        prev.map((o) =>
+          o.id === order.id
+            ? { ...o, status: previousStatus, updated_at: order.updated_at }
+            : o,
+        ),
+      );
+      alert("Failed to cancel order. Please try again.");
+      setUpdatingStatus((prev) => {
+        const next = new Set(prev);
+        next.delete(order.id);
+        return next;
+      });
     }
   };
 
@@ -583,7 +726,7 @@ export default function OrdersPage() {
             {sheetConnected ? "Sheet Connected" : "Connect Sheet"}
             {sheetConnected && <span className={styles.connectedDot}></span>}
           </button>
-          <button
+          {/* <button
             className={styles.secondaryBtn}
             onClick={() => fetchOrders()}
             title="Refresh orders"
@@ -608,7 +751,7 @@ export default function OrdersPage() {
               />
             </svg>
             Refresh
-          </button>
+          </button> */}
           <button
             className={styles.primaryBtn}
             onClick={() => handleOpenModal()}
@@ -822,7 +965,14 @@ export default function OrdersPage() {
                           onChange={(e) =>
                             handleStatusChange(order, e.target.value)
                           }
+                          disabled={updatingStatus.has(order.id)}
                           aria-label="Change order status"
+                          style={{
+                            opacity: updatingStatus.has(order.id) ? 0.6 : 1,
+                            cursor: updatingStatus.has(order.id)
+                              ? "wait"
+                              : "pointer",
+                          }}
                         >
                           {STATUS_OPTIONS.map((opt) => (
                             <option key={opt.value} value={opt.value}>
@@ -927,7 +1077,14 @@ export default function OrdersPage() {
                         onChange={(e) =>
                           handleStatusChange(order, e.target.value)
                         }
+                        disabled={updatingStatus.has(order.id)}
                         aria-label="Change order status"
+                        style={{
+                          opacity: updatingStatus.has(order.id) ? 0.6 : 1,
+                          cursor: updatingStatus.has(order.id)
+                            ? "wait"
+                            : "pointer",
+                        }}
                       >
                         {STATUS_OPTIONS.map((opt) => (
                           <option key={opt.value} value={opt.value}>
@@ -1056,82 +1213,91 @@ export default function OrdersPage() {
                   <div className={styles.viewItemsList}>
                     {formData.items.map((item, index) => {
                       // Get image URL from multiple sources
-                      const imageUrl = item.image || item.imageUrl || (item.product_id ? productImages[item.product_id] : null);
-                      
-                      return (
-                      <div key={index} className={styles.viewItemRow}>
-                        {/* Left: Image */}
-                        <div className={styles.viewItemImageWrapper}>
-                          {imageUrl ? (
-                            <img
-                              src={imageUrl}
-                              alt={item.name}
-                              className={styles.viewItemImage}
-                              onError={(e) => {
-                                // Fallback to placeholder if image fails to load
-                                e.currentTarget.style.display = 'none';
-                                const placeholder = e.currentTarget.nextElementSibling as HTMLElement;
-                                if (placeholder) placeholder.style.display = 'flex';
-                              }}
-                            />
-                          ) : null}
-                          {!imageUrl && (
-                            <div className={styles.viewItemImagePlaceholder}>
-                              <svg
-                                xmlns="http://www.w3.org/2000/svg"
-                                width="20"
-                                height="20"
-                                viewBox="0 0 24 24"
-                                fill="none"
-                                stroke="currentColor"
-                                strokeWidth="2"
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                              >
-                                <rect
-                                  x="3"
-                                  y="3"
-                                  width="18"
-                                  height="18"
-                                  rx="2"
-                                  ry="2"
-                                ></rect>
-                                <circle cx="8.5" cy="8.5" r="1.5"></circle>
-                                <polyline points="21 15 16 10 5 21"></polyline>
-                              </svg>
-                            </div>
-                          )}
-                        </div>
+                      const imageUrl =
+                        item.image ||
+                        item.imageUrl ||
+                        (item.product_id
+                          ? productImages[item.product_id]
+                          : null);
 
-                        {/* Middle: Name + Details */}
-                        <div className={styles.viewItemContent}>
-                          <div className={styles.viewItemName}>{item.name}</div>
-                          <div className={styles.viewItemDetails}>
-                            {item.size && (
-                              <span className={styles.viewItemTag}>
-                                Size: {item.size}
-                              </span>
+                      return (
+                        <div key={index} className={styles.viewItemRow}>
+                          {/* Left: Image */}
+                          <div className={styles.viewItemImageWrapper}>
+                            {imageUrl ? (
+                              <img
+                                src={imageUrl}
+                                alt={item.name}
+                                className={styles.viewItemImage}
+                                onError={(e) => {
+                                  // Fallback to placeholder if image fails to load
+                                  e.currentTarget.style.display = "none";
+                                  const placeholder = e.currentTarget
+                                    .nextElementSibling as HTMLElement;
+                                  if (placeholder)
+                                    placeholder.style.display = "flex";
+                                }}
+                              />
+                            ) : null}
+                            {!imageUrl && (
+                              <div className={styles.viewItemImagePlaceholder}>
+                                <svg
+                                  xmlns="http://www.w3.org/2000/svg"
+                                  width="20"
+                                  height="20"
+                                  viewBox="0 0 24 24"
+                                  fill="none"
+                                  stroke="currentColor"
+                                  strokeWidth="2"
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                >
+                                  <rect
+                                    x="3"
+                                    y="3"
+                                    width="18"
+                                    height="18"
+                                    rx="2"
+                                    ry="2"
+                                  ></rect>
+                                  <circle cx="8.5" cy="8.5" r="1.5"></circle>
+                                  <polyline points="21 15 16 10 5 21"></polyline>
+                                </svg>
+                              </div>
                             )}
-                            {item.color && (
-                              <span className={styles.viewItemTag}>
-                                Color: {item.color}
+                          </div>
+
+                          {/* Middle: Name + Details */}
+                          <div className={styles.viewItemContent}>
+                            <div className={styles.viewItemName}>
+                              {item.name}
+                            </div>
+                            <div className={styles.viewItemDetails}>
+                              {item.size && (
+                                <span className={styles.viewItemTag}>
+                                  Size: {item.size}
+                                </span>
+                              )}
+                              {item.color && (
+                                <span className={styles.viewItemTag}>
+                                  Color: {item.color}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+
+                          {/* Right: Price/Qty */}
+                          <div className={styles.viewItemPriceInfo}>
+                            <span className={styles.viewItemQtyBadge}>
+                              {item.quantity} Qty
+                            </span>
+                            {item.price && (
+                              <span className={styles.viewItemPrice}>
+                                ₹{(item.price * item.quantity).toLocaleString()}
                               </span>
                             )}
                           </div>
                         </div>
-
-                        {/* Right: Price/Qty */}
-                        <div className={styles.viewItemPriceInfo}>
-                          <span className={styles.viewItemQtyBadge}>
-                            {item.quantity} Qty
-                          </span>
-                          {item.price && (
-                            <span className={styles.viewItemPrice}>
-                              ₹{(item.price * item.quantity).toLocaleString()}
-                            </span>
-                          )}
-                        </div>
-                      </div>
                       );
                     })}
                   </div>
@@ -1386,14 +1552,14 @@ export default function OrdersPage() {
                 </label>
                 <div className={styles.emailCopyBox}>
                   <code className={styles.serviceEmail}>
-                    reviseit-sheets-sync@reviseit-def4c.iam.gserviceaccount.com
+                    flowauxi@flowauxi.iam.gserviceaccount.com{" "}
                   </code>
                   <button
                     type="button"
                     className={styles.copyBtn}
                     onClick={() => {
                       navigator.clipboard.writeText(
-                        "reviseit-sheets-sync@reviseit-def4c.iam.gserviceaccount.com",
+                        "flowauxi@flowauxi.iam.gserviceaccount.com",
                       );
                       alert("Email copied to clipboard!");
                     }}

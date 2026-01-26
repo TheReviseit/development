@@ -109,15 +109,30 @@ export function useRealtimeOrders({
           event: "INSERT",
           schema: "public",
           table: "orders",
-          filter: `user_id=eq.${userId}`,
+          // filter: `user_id=eq.${userId}`, // Removing filter to avoid potential RLS/Type mismatch issues, filtering client-side instead
         },
         (payload) => {
           console.log("📦 New order received:", payload.new);
+
+          // Client-side filtering
+          if (userId && (payload.new as any).user_id !== userId) {
+            return;
+          }
+
           // Use ref to get latest callback
           if (onInsertRef.current && payload.new) {
-            onInsertRef.current(payload.new as Order);
+            const order = payload.new as any;
+            // Parse items if it's a string (JSON)
+            if (typeof order.items === "string") {
+              try {
+                order.items = JSON.parse(order.items);
+              } catch (e) {
+                console.error("Failed to parse items:", e);
+              }
+            }
+            onInsertRef.current(order as Order);
           }
-        }
+        },
       )
       .on(
         "postgres_changes",
@@ -125,15 +140,30 @@ export function useRealtimeOrders({
           event: "UPDATE",
           schema: "public",
           table: "orders",
-          filter: `user_id=eq.${userId}`,
+          // filter: `user_id=eq.${userId}`,
         },
         (payload) => {
           console.log("📦 Order updated:", payload.new);
+
+          // Client-side filtering
+          if (userId && (payload.new as any).user_id !== userId) {
+            return;
+          }
+
           // Use ref to get latest callback
           if (onUpdateRef.current && payload.new) {
-            onUpdateRef.current(payload.new as Order);
+            const order = payload.new as any;
+            // Parse items if it's a string (JSON)
+            if (typeof order.items === "string") {
+              try {
+                order.items = JSON.parse(order.items);
+              } catch (e) {
+                console.error("Failed to parse items:", e);
+              }
+            }
+            onUpdateRef.current(order as Order);
           }
-        }
+        },
       )
       .on(
         "postgres_changes",
@@ -141,15 +171,20 @@ export function useRealtimeOrders({
           event: "DELETE",
           schema: "public",
           table: "orders",
-          filter: `user_id=eq.${userId}`,
+          // filter: `user_id=eq.${userId}`,
         },
         (payload) => {
           console.log("📦 Order deleted:", payload.old);
+
+          // Note: payload.old only contains the ID for DELETE events usually, unless REPLICA IDENTITY FULL is set
+          // We can't easily filter by user_id here if it's not present.
+          // However, we can trust the client handling to ignore IDs it doesn't know about.
+
           // Use ref to get latest callback
           if (onDeleteRef.current && payload.old) {
             onDeleteRef.current({ id: (payload.old as { id: string }).id });
           }
-        }
+        },
       )
       .subscribe((status) => {
         console.log(`🔌 Orders realtime subscription status: ${status}`);

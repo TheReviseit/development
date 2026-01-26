@@ -911,6 +911,7 @@ def delete_push_token(token: str) -> bool:
 def get_business_from_supabase(firebase_uid: str) -> Optional[Dict[str, Any]]:
     """
     Get business data from the new consolidated businesses table.
+    Also fetches categories and products from normalized tables.
     
     Args:
         firebase_uid: The Firebase UID
@@ -929,6 +930,64 @@ def get_business_from_supabase(firebase_uid: str) -> Optional[Dict[str, Any]]:
         
         if result.data:
             print(f"✅ Loaded business from Supabase businesses table: {result.data.get('business_name', 'Unknown')}")
+            
+            # Fetch categories from the separate product_categories table
+            try:
+                categories_result = client.table('product_categories').select('id, name').eq(
+                    'user_id', firebase_uid
+                ).eq('is_active', True).order('sort_order').execute()
+                
+                if categories_result.data:
+                    category_names = [cat.get('name') for cat in categories_result.data if cat.get('name')]
+                    print(f"📂 Loaded {len(category_names)} categories from product_categories table: {category_names}")
+                    # Add categories to product_categories field
+                    result.data['product_categories'] = category_names
+                else:
+                    print(f"⚠️ No categories found in product_categories table for user: {firebase_uid[:15]}...")
+                    result.data['product_categories'] = []
+            except Exception as cat_err:
+                print(f"⚠️ Error loading categories: {cat_err}")
+                result.data['product_categories'] = []
+            
+            # Fetch products from the normalized products table WITH variants
+            try:
+                products_result = client.table('products').select(
+                    'id, name, description, sku, brand, price, compare_at_price, price_unit, '
+                    'image_url, sizes, colors, materials, tags, duration, '
+                    'is_available, stock_quantity, stock_status, '
+                    'has_size_pricing, size_prices, size_stocks, '
+                    'category_id, product_categories(name), '
+                    'product_variants(id, color, size, price, compare_at_price, stock_quantity, '
+                    'image_url, image_public_id, has_size_pricing, size_prices, size_stocks, is_available)'
+                ).eq('user_id', firebase_uid).eq('is_deleted', False).order('name').execute()
+                
+                if products_result.data:
+                    print(f"📦 Loaded {len(products_result.data)} products from normalized products table")
+                    # Store the fetched products in the result data
+                    result.data['products'] = products_result.data
+                    
+                    # Log first few products for debugging
+                    for i, p in enumerate(products_result.data[:3]):
+                        cat_name = p.get('product_categories', {}).get('name', 'No category') if p.get('product_categories') else 'No category'
+                        img_status = "✅" if p.get('image_url') else "❌"
+                        current_price = p.get('price', 0)
+                        original_price = p.get('compare_at_price')
+                        
+                        if original_price and original_price > current_price:
+                            price_display = f"Original: ₹{original_price}, Offer: ₹{current_price}"
+                        else:
+                            price_display = f"₹{current_price}"
+                        
+                        print(f"   Product {i+1}: {p.get('name')} | Category: {cat_name} | Image: {img_status} | Price: {price_display}")
+                else:
+                    print(f"⚠️ No products found in products table for user: {firebase_uid[:15]}...")
+                    result.data['products'] = []
+            except Exception as prod_err:
+                print(f"⚠️ Error loading products: {prod_err}")
+                import traceback
+                traceback.print_exc()
+                result.data['products'] = []
+            
             return convert_supabase_business_to_ai_format(result.data)
     except Exception as e:
         # PGRST116 = no rows returned (user doesn't have data yet)
@@ -1006,23 +1065,168 @@ def convert_supabase_business_to_ai_format(data: Dict[str, Any]) -> Dict[str, An
     for p in products:
         if not isinstance(p, dict):
             continue
+        
+        # Extract category name from the joined product_categories table
+        # The join returns: product_categories: {name: "Category Name"}
+        category_name = ''
+        if p.get('product_categories') and isinstance(p.get('product_categories'), dict):
+            category_name = p.get('product_categories', {}).get('name', '')
+        elif p.get('category'):
+            # Fallback to legacy 'category' field if present
+            category_name = p.get('category', '')
+        
+        # Handle both is_available (normalized table) and available (legacy)
+        is_available = p.get('is_available', p.get('available', True))
+        
+        # Handle pricing: Frontend convention is:
+        # - price = current selling price (offer/discounted price)
+        # - compare_at_price = original price (before discount)
+        # Robust type conversion: handle string, Decimal, float, int, or None
+        current_price = float(p.get('price', 0)) if p.get('price') else 0.0
+        
+        original_price_raw = p.get('compare_at_price')
+        original_price = None
+        
+        if original_price_raw:
+            try:
+                # Convert to float regardless of input type (string, Decimal, etc.)
+                original_price = float(original_price_raw)
+                # Only use if it's actually higher than current price (valid discount)
+                if original_price <= current_price:
+                    original_price = None
+            except (ValueError, TypeError):
+                # If conversion fails, ignore the original price
+                original_price = None
+        
+        # Handle size-based pricing (JSONB fields may come as strings)
+        has_size_pricing = p.get('has_size_pricing', False)
+        size_prices_raw = p.get('size_prices', {})
+        size_stocks_raw = p.get('size_stocks', {})
+        
+        # Parse JSONB if it came as string
+        if isinstance(size_prices_raw, str):
+            try:
+                import json
+                size_prices = json.loads(size_prices_raw) if size_prices_raw else {}
+            except:
+                size_prices = {}
+        else:
+            size_prices = size_prices_raw or {}
+        
+        if isinstance(size_stocks_raw, str):
+            try:
+                import json
+                size_stocks = json.loads(size_stocks_raw) if size_stocks_raw else {}
+            except:
+                size_stocks = {}
+        else:
+            size_stocks = size_stocks_raw or {}
+        
+        # Process variants from product_variants join
+        variants_raw = p.get('product_variants', []) or []
+        converted_variants = []
+        
+        for v in variants_raw:
+            if not isinstance(v, dict):
+                continue
+            
+            # Skip deleted variants
+            if v.get('is_deleted', False):
+                continue
+            
+            # Handle variant size pricing
+            v_has_size_pricing = v.get('has_size_pricing', False)
+            v_size_prices_raw = v.get('size_prices', {})
+            v_size_stocks_raw = v.get('size_stocks', {})
+            
+            # Parse JSONB if it came as string
+            if isinstance(v_size_prices_raw, str):
+                try:
+                    import json
+                    v_size_prices = json.loads(v_size_prices_raw) if v_size_prices_raw else {}
+                except:
+                    v_size_prices = {}
+            else:
+                v_size_prices = v_size_prices_raw or {}
+            
+            if isinstance(v_size_stocks_raw, str):
+                try:
+                    import json
+                    v_size_stocks = json.loads(v_size_stocks_raw) if v_size_stocks_raw else {}
+                except:
+                    v_size_stocks = {}
+            else:
+                v_size_stocks = v_size_stocks_raw or {}
+            
+            # Handle variant pricing
+            v_price_raw = v.get('price')
+            v_price = float(v_price_raw) if v_price_raw else None
+            
+            v_compare_at_price_raw = v.get('compare_at_price')
+            v_compare_at_price = None
+            if v_compare_at_price_raw:
+                try:
+                    v_compare_at_price = float(v_compare_at_price_raw)
+                    # Only use if it's actually higher than variant price
+                    if v_price and v_compare_at_price <= v_price:
+                        v_compare_at_price = None
+                except (ValueError, TypeError):
+                    v_compare_at_price = None
+            
+            converted_variants.append({
+                'id': str(v.get('id', '')),
+                'color': v.get('color', ''),
+                'size': v.get('size', ''),
+                'price': v_price if v_price else current_price,  # Fallback to base product price
+                'compare_at_price': v_compare_at_price,
+                'stock': v.get('stock_quantity', 0),
+                'imageUrl': v.get('image_url', ''),
+                'imagePublicId': v.get('image_public_id', ''),
+                'has_size_pricing': v_has_size_pricing,
+                'size_prices': v_size_prices,
+                'size_stocks': v_size_stocks,
+                'is_available': v.get('is_available', True),
+            })
+        
         converted_products.append({
-            'id': p.get('id', ''),
+            'id': str(p.get('id', '')),
             'sku': p.get('sku', ''),
             'name': p.get('name', ''),
-            'category': p.get('category', ''),
+            'category': category_name,
             'description': p.get('description', ''),
-            'price': p.get('price', 0),
-            'price_unit': p.get('priceUnit', p.get('price_unit', 'INR')),
+            'price': current_price,  # Current selling price (base)
+            'compare_at_price': original_price,  # Original price (if on sale)
+            'price_unit': p.get('price_unit', p.get('priceUnit', 'INR')),
             'duration': p.get('duration', ''),
-            'available': p.get('available', True),
-            'sizes': p.get('sizes', []),
-            'colors': p.get('colors', []),
-            'variants': p.get('variants', []),
+            'available': is_available,
+            'sizes': p.get('sizes', []) or [],
+            'colors': p.get('colors', []) or [],
+            'variants': converted_variants,  # Now includes properly formatted variants
             'brand': p.get('brand', ''),
-            'materials': p.get('materials', []),
-            'imageUrl': p.get('imageUrl', p.get('image_url', '')),
+            'materials': p.get('materials', []) or [],
+            'imageUrl': p.get('image_url', p.get('imageUrl', '')),
+            'stock_quantity': p.get('stock_quantity', 0),
+            'stock_status': p.get('stock_status', 'in_stock'),
+            # Size-based pricing fields
+            'has_size_pricing': has_size_pricing,
+            'size_prices': size_prices,
+            'size_stocks': size_stocks,
         })
+    
+    # Log products for debugging
+    print(f"📦 Converted {len(converted_products)} products")
+    for p in converted_products[:3]:  # Show first 3
+        current_price = p.get('price')
+        original_price = p.get('compare_at_price')
+        has_offer = original_price and original_price > current_price
+        
+        if has_offer:
+            discount = ((original_price - current_price) / original_price) * 100
+            price_info = f"Original: ₹{original_price}, Offer: ₹{current_price} ({discount:.0f}% OFF)"
+        else:
+            price_info = f"₹{current_price}"
+        
+        print(f"   - {p.get('name')} (category: {p.get('category')}, price: {price_info}, image: {'✅' if p.get('imageUrl') else '❌'})")
     
     # Convert timings
     timings = data.get('timings', {})

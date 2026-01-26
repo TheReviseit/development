@@ -37,6 +37,8 @@ interface PaymentSettings {
   paymentsEnabled: boolean;
   razorpayKeyId: string | null;
   storeName: string;
+  shippingCharges?: string;
+  codAvailable?: boolean;
 }
 
 export default function CheckoutPage() {
@@ -62,14 +64,15 @@ export default function CheckoutPage() {
     notes: "",
   });
 
-  const [paymentMethod, setPaymentMethod] = useState<"online" | "whatsapp">(
-    "online",
-  );
+  const [paymentMethod, setPaymentMethod] = useState<
+    "online" | "whatsapp" | "cod"
+  >("online");
   const [paymentSettings, setPaymentSettings] =
     useState<PaymentSettings | null>(null);
   const [showSuccess, setShowSuccess] = useState(false);
   const [loading, setLoading] = useState(false);
   const [loadingSettings, setLoadingSettings] = useState(true);
+  const [shippingCost, setShippingCost] = useState(0);
 
   // Fetch payment settings
   useEffect(() => {
@@ -83,11 +86,25 @@ export default function CheckoutPage() {
             if (!data.paymentsEnabled) {
               setPaymentMethod("whatsapp");
             }
+
+            // Parse shipping charges
+            if (data.shippingCharges) {
+              const parsedShipping = parseFloat(data.shippingCharges);
+              if (!isNaN(parsedShipping)) {
+                setShippingCost(parsedShipping);
+              } else {
+                setShippingCost(0);
+              }
+            } else {
+              setShippingCost(0);
+            }
           }
         })
         .finally(() => setLoadingSettings(false));
     }
   }, [storeSlug]);
+
+  const finalTotal = cartTotal + shippingCost;
 
   // Redirect to store if cart is empty AND hydrated AND not showing success
   useEffect(() => {
@@ -124,18 +141,24 @@ export default function CheckoutPage() {
 
   const createBackendOrder = async (
     paymentId?: string,
-    source: "manual" | "api" = "manual",
+    source: "manual" | "api" | "cod" = "manual",
   ) => {
     try {
+      const fullAddress = `${formData.address}, ${formData.city} - ${formData.pincode}`;
+
       const orderData = {
         user_id: storeSlug, // storeSlug is the business/user ID
         customer_name: formData.name,
         customer_phone: formData.phone,
+        customer_address: fullAddress,
+        customer_email: formData.email || null,
         items: cartItems.map((item) => ({
           name: item.name,
           quantity: item.quantity,
           price: item.price,
           imageUrl: item.imageUrl,
+          size: item.options?.size || null,
+          color: item.options?.color || null,
           notes: `${item.options?.size ? `Size: ${item.options.size}` : ""}${
             item.options?.color ? `, Color: ${item.options.color}` : ""
           }`,
@@ -143,7 +166,7 @@ export default function CheckoutPage() {
         source: source,
         notes: `${formData.notes || ""}${
           paymentId ? `\n\nPayment ID: ${paymentId}` : ""
-        }\nAddress: ${formData.address}, ${formData.city} - ${formData.pincode}`,
+        }`,
       };
 
       const response = await fetch("/api/orders", {
@@ -200,12 +223,40 @@ ${formData.notes ? `Notes: ${formData.notes}` : ""}
 
     const message = `🛒 *New Order Request*${orderRef}\n${customerDetails}\n📦 *Order Items:*\n${orderLines.join(
       "\n",
-    )}\n\n*Total Order Value: ${formatPrice(cartTotal)}*\n\nPlease confirm my order!`;
+    )}\n\nSubtotal: ${formatPrice(cartTotal)}\nShipping: ${
+      shippingCost > 0 ? formatPrice(shippingCost) : "Free"
+    }\n*Total Order Value: ${formatPrice(finalTotal)}*\n\nPlease confirm my order!`;
 
     const encodedMessage = encodeURIComponent(message);
 
     // Open WhatsApp
     window.open(`https://wa.me/?text=${encodedMessage}`, "_blank");
+
+    // Show success animation
+    setShowSuccess(true);
+    setLoading(false);
+    clearCart();
+
+    // Redirect after delay
+    setTimeout(() => {
+      router.push(`/store/${storeSlug}`);
+    }, 3500);
+  };
+
+  const handleCODOrder = async () => {
+    // Validate form
+    if (!formData.name || !formData.phone || !formData.address) {
+      alert("Please fill in all required fields (Name, Phone, Address)");
+      return;
+    }
+
+    setLoading(true);
+
+    // 1. Create Order in Backend with source 'cod'
+    // We pass "COD" as paymentId just to mark it clearer in notes if needed, or rely on source
+    // But duplicate "COD" in notes might be redundant if source is 'cod'.
+    // Let's rely on source='cod' in backend.
+    await createBackendOrder("COD", "cod");
 
     // Show success animation
     setShowSuccess(true);
@@ -242,7 +293,7 @@ ${formData.notes ? `Notes: ${formData.notes}` : ""}
 
       const options = {
         key: paymentSettings.razorpayKeyId,
-        amount: cartTotal * 100,
+        amount: finalTotal * 100,
         currency: "INR",
         name: paymentSettings.storeName,
         description: "Order Payment",
@@ -301,6 +352,8 @@ ${formData.notes ? `Notes: ${formData.notes}` : ""}
     e.preventDefault();
     if (paymentMethod === "online") {
       handleOnlinePayment();
+    } else if (paymentMethod === "cod") {
+      handleCODOrder();
     } else {
       handleWhatsAppOrder();
     }
@@ -449,7 +502,11 @@ ${formData.notes ? `Notes: ${formData.notes}` : ""}
               </div>
               <div className={styles.totalRow}>
                 <span>Shipping</span>
-                <span style={{ color: "#22c15a" }}>Free</span>
+                <span
+                  style={{ color: shippingCost > 0 ? "inherit" : "#22c15a" }}
+                >
+                  {shippingCost > 0 ? formatPrice(shippingCost) : "Free"}
+                </span>
               </div>
               <div className={styles.grandTotal}>
                 <div
@@ -457,7 +514,7 @@ ${formData.notes ? `Notes: ${formData.notes}` : ""}
                   style={{ marginBottom: 0, color: "inherit" }}
                 >
                   <span>Total</span>
-                  <span>{formatPrice(cartTotal)}</span>
+                  <span>{formatPrice(finalTotal)}</span>
                 </div>
               </div>
             </div>
@@ -567,9 +624,24 @@ ${formData.notes ? `Notes: ${formData.notes}` : ""}
                 >
                   <div className={styles.radio} />
                   <div>
-                    <div style={{ fontWeight: 600 }}>Pay Online (Razorpay)</div>
+                    <div style={{ fontWeight: 600 }}>Pay Online</div>
                     <div style={{ fontSize: "13px", color: "gray" }}>
                       UPI, Cards, NetBanking
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {paymentSettings?.codAvailable && (
+                <div
+                  className={`${styles.paymentOption} ${paymentMethod === "cod" ? styles.selected : ""}`}
+                  onClick={() => setPaymentMethod("cod")}
+                >
+                  <div className={styles.radio} />
+                  <div>
+                    <div style={{ fontWeight: 600 }}>Cash on Delivery</div>
+                    <div style={{ fontSize: "13px", color: "gray" }}>
+                      Pay when you receive
                     </div>
                   </div>
                 </div>
@@ -597,8 +669,10 @@ ${formData.notes ? `Notes: ${formData.notes}` : ""}
               {loading
                 ? "Processing..."
                 : paymentMethod === "online"
-                  ? `Pay ${formatPrice(cartTotal)}`
-                  : `Place Order on WhatsApp`}
+                  ? `Pay ${formatPrice(finalTotal)}`
+                  : paymentMethod === "cod"
+                    ? `Place Order (COD)`
+                    : `Place Order on WhatsApp`}
             </button>
 
             <div
