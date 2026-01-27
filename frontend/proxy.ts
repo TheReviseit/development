@@ -42,6 +42,7 @@ export async function proxy(request: NextRequest) {
     "/verify-email",
     "/api/store", // Public API for mini store data
     "/store", // Public mini store pages
+    "/payment-success", // Payment success page (Razorpay redirect)
   ];
 
   const isPublicPath =

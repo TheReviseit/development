@@ -1,30 +1,85 @@
+/* ============================================
+   Payment Success Page - Premium Design
+   Matching Flowauxi Design System
+   ============================================ */
+
 .container {
+  position: relative;
   display: flex;
   justify-content: center;
   align-items: center;
   min-height: 100vh;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: linear-gradient(135deg, #f5f7fa 0%, #e8e8ed 100%);
   padding: 20px;
+  font-family: var(--font-primary);
+  overflow: hidden;
+}
+
+.backgroundPattern {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: radial-gradient(
+    ellipse at 50% 50%,
+    rgba(34, 193, 90, 0.08) 0%,
+    transparent 60%
+  );
+  pointer-events: none;
+  z-index: 0;
 }
 
 .content {
-  background: white;
-  border-radius: 16px;
-  padding: 48px 32px;
+  position: relative;
+  z-index: 1;
+  background: var(--card-bg, #ffffff);
+  border-radius: 24px;
+  padding: 56px 48px;
   text-align: center;
-  max-width: 500px;
+  max-width: 560px;
   width: 100%;
-  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.08), 0 0 0 1px rgba(0, 0, 0, 0.04);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  animation: fadeInUp 0.6s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(30px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.stateContainer {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 24px;
+}
+
+.iconWrapper {
+  position: relative;
+  margin-bottom: 8px;
+}
+
+/* ============================================
+   Loading State
+   ============================================ */
+
 .spinner {
-  width: 60px;
-  height: 60px;
-  border: 4px solid #f3f3f3;
-  border-top: 4px solid #667eea;
+  width: 72px;
+  height: 72px;
+  border: 4px solid rgba(34, 193, 90, 0.1);
+  border-top: 4px solid #22c15a;
   border-radius: 50%;
   animation: spin 1s linear infinite;
-  margin: 0 auto 24px;
+  margin: 0 auto;
 }
 
 @keyframes spin {
@@ -32,66 +87,539 @@
   100% { transform: rotate(360deg); }
 }
 
+.loadingDots {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.loadingDots span {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #22c15a;
+  animation: loadingDot 1.4s ease-in-out infinite;
+}
+
+.loadingDots span:nth-child(1) {
+  animation-delay: 0s;
+}
+
+.loadingDots span:nth-child(2) {
+  animation-delay: 0.2s;
+}
+
+.loadingDots span:nth-child(3) {
+  animation-delay: 0.4s;
+}
+
+@keyframes loadingDot {
+  0%, 80%, 100% {
+    transform: scale(0.8);
+    opacity: 0.5;
+  }
+  40% {
+    transform: scale(1.2);
+    opacity: 1;
+  }
+}
+
+/* ============================================
+   Success State
+   ============================================ */
+
 .successIcon {
-  font-size: 64px;
-  margin-bottom: 24px;
-  animation: scaleIn 0.5s ease-out;
+  position: relative;
+  width: 120px;
+  height: 120px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, rgba(34, 193, 90, 0.15) 0%, rgba(45, 212, 255, 0.15) 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #22c15a;
+  animation: successScaleIn 0.6s cubic-bezier(0.34, 1.56, 0.64, 1);
+  box-shadow: 0 0 0 0 rgba(34, 193, 90, 0.4);
+  animation: successScaleIn 0.6s cubic-bezier(0.34, 1.56, 0.64, 1),
+             successPulse 2s ease-in-out infinite 0.6s;
 }
 
-.errorIcon {
-  font-size: 64px;
-  margin-bottom: 24px;
-  animation: scaleIn 0.5s ease-out;
-}
-
-@keyframes scaleIn {
-  from {
+@keyframes successScaleIn {
+  0% {
     transform: scale(0);
     opacity: 0;
   }
-  to {
+  50% {
+    transform: scale(1.1);
+  }
+  100% {
     transform: scale(1);
     opacity: 1;
   }
 }
 
+@keyframes successPulse {
+  0%, 100% {
+    box-shadow: 0 0 0 0 rgba(34, 193, 90, 0.4);
+  }
+  50% {
+    box-shadow: 0 0 0 20px rgba(34, 193, 90, 0);
+  }
+}
+
+.successRipple {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 120px;
+  height: 120px;
+  border-radius: 50%;
+  border: 2px solid rgba(34, 193, 90, 0.3);
+  animation: ripple 2s ease-out infinite;
+}
+
+.successRipple:nth-child(2) {
+  animation-delay: 0.5s;
+}
+
+.successRipple:nth-child(3) {
+  animation-delay: 1s;
+}
+
+@keyframes ripple {
+  0% {
+    transform: translate(-50%, -50%) scale(0.8);
+    opacity: 1;
+  }
+  100% {
+    transform: translate(-50%, -50%) scale(1.5);
+    opacity: 0;
+  }
+}
+
+.successIcon svg {
+  position: relative;
+  z-index: 1;
+  filter: drop-shadow(0 2px 4px rgba(34, 193, 90, 0.2));
+}
+
+.successDetails {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  width: 100%;
+  margin-top: 8px;
+  padding: 20px;
+  background: rgba(34, 193, 90, 0.05);
+  border-radius: 12px;
+  border: 1px solid rgba(34, 193, 90, 0.1);
+}
+
+.detailItem {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  color: var(--text-secondary, #4b5563);
+  font-size: 14px;
+  text-align: left;
+}
+
+.detailItem svg {
+  color: #22c15a;
+  flex-shrink: 0;
+}
+
+/* ============================================
+   Pending State
+   ============================================ */
+
+.pendingIcon {
+  position: relative;
+  width: 120px;
+  height: 120px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, rgba(245, 158, 11, 0.15) 0%, rgba(251, 191, 36, 0.15) 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #f59e0b;
+  animation: pendingScaleIn 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+@keyframes pendingScaleIn {
+  0% {
+    transform: scale(0);
+    opacity: 0;
+  }
+  50% {
+    transform: scale(1.1);
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+.pendingPulse {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 120px;
+  height: 120px;
+  border-radius: 50%;
+  border: 2px solid rgba(245, 158, 11, 0.3);
+  animation: pendingPulseAnimation 2s ease-out infinite;
+}
+
+@keyframes pendingPulseAnimation {
+  0% {
+    transform: translate(-50%, -50%) scale(0.8);
+    opacity: 1;
+  }
+  100% {
+    transform: translate(-50%, -50%) scale(1.5);
+    opacity: 0;
+  }
+}
+
+.pendingIcon svg {
+  position: relative;
+  z-index: 1;
+  filter: drop-shadow(0 2px 4px rgba(245, 158, 11, 0.2));
+  animation: pendingRotate 2s linear infinite;
+}
+
+@keyframes pendingRotate {
+  0% {
+    transform: rotate(0deg);
+  }
+  100% {
+    transform: rotate(360deg);
+  }
+}
+
+.pendingInfo {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 20px;
+  width: 100%;
+  margin-top: 8px;
+}
+
+.pendingActions {
+  display: flex;
+  flex-direction: row;
+  gap: 12px;
+  width: 100%;
+  justify-content: center;
+  align-items: center;
+}
+
+.pendingActions .buttonSecondary {
+  max-width: 280px;
+}
+
+/* ============================================
+   Failed State
+   ============================================ */
+
+.failedIcon {
+  width: 120px;
+  height: 120px;
+  border-radius: 50%;
+  background: rgba(239, 68, 68, 0.1);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #ef4444;
+  animation: failedScaleIn 0.6s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+@keyframes failedScaleIn {
+  0% {
+    transform: scale(0);
+    opacity: 0;
+  }
+  50% {
+    transform: scale(1.1);
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+.failedIcon svg {
+  filter: drop-shadow(0 2px 4px rgba(239, 68, 68, 0.2));
+}
+
+.failedActions {
+  display: flex;
+  flex-direction: row;
+  gap: 12px;
+  width: 100%;
+  margin-top: 8px;
+  justify-content: center;
+  align-items: center;
+}
+
+.failedActions .button {
+  background: #000000;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
+  margin-top: 0;
+  max-width: 280px;
+}
+
+.failedActions .button:hover {
+  background: #1a1a1a;
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.35);
+}
+
+/* ============================================
+   Error State
+   ============================================ */
+
+.errorIcon {
+  width: 120px;
+  height: 120px;
+  border-radius: 50%;
+  background: rgba(239, 68, 68, 0.1);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #ef4444;
+  animation: errorScaleIn 0.6s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+@keyframes errorScaleIn {
+  0% {
+    transform: scale(0);
+    opacity: 0;
+  }
+  50% {
+    transform: scale(1.1);
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+.errorIcon svg {
+  filter: drop-shadow(0 2px 4px rgba(239, 68, 68, 0.2));
+}
+
+.errorActions {
+  display: flex;
+  flex-direction: row;
+  gap: 12px;
+  width: 100%;
+  margin-top: 8px;
+  justify-content: center;
+  align-items: center;
+}
+
+.errorActions .button {
+  background: #000000;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
+  margin-top: 0;
+  max-width: 280px;
+}
+
+.errorActions .button:hover {
+  background: #1a1a1a;
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.35);
+}
+
+/* ============================================
+   Typography
+   ============================================ */
+
 .title {
-  font-size: 28px;
+  font-size: 32px;
   font-weight: 700;
-  color: #1a202c;
-  margin-bottom: 16px;
+  color: var(--heading-color, #111111);
+  margin: 0;
+  font-family: var(--font-secondary);
+  letter-spacing: -0.02em;
+  line-height: 1.2;
 }
 
 .message {
   font-size: 16px;
-  color: #4a5568;
+  color: var(--text-color, #4b5563);
   line-height: 1.6;
-  margin-bottom: 8px;
+  margin: 0;
+  max-width: 100%;
 }
 
 .note {
   font-size: 14px;
-  color: #718096;
-  margin-top: 16px;
+  color: var(--text-muted, #666666);
+  margin: 0;
 }
 
+/* ============================================
+   Buttons
+   ============================================ */
+
 .button {
-  margin-top: 24px;
-  padding: 12px 32px;
-  background: #667eea;
+  margin-top: 8px;
+  padding: 14px 32px;
+  background: linear-gradient(135deg, #22c15a 0%, #2dd4ff 100%);
   color: white;
   border: none;
-  border-radius: 8px;
+  border-radius: 12px;
   font-size: 16px;
   font-weight: 600;
   cursor: pointer;
-  transition: background 0.2s;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 0 4px 12px rgba(34, 193, 90, 0.25);
+  font-family: var(--font-primary);
+  width: 100%;
+  max-width: 280px;
 }
 
 .button:hover {
-  background: #5568d3;
+  transform: translateY(-2px);
+  box-shadow: 0 8px 20px rgba(34, 193, 90, 0.35);
+  background: linear-gradient(135deg, #1a9e4a 0%, #2dd4ff 100%);
 }
 
 .button:active {
+  transform: translateY(0);
+}
+
+.buttonSecondary {
+  margin-top: 0;
+  padding: 14px 32px;
+  background: transparent;
+  color: var(--heading-color, #111111);
+  border: 2px solid var(--border-color, rgba(148, 163, 184, 0.6));
+  border-radius: 12px;
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  font-family: var(--font-primary);
+  width: 100%;
+  max-width: 280px;
+}
+
+.buttonSecondary:hover {
+  background: rgba(0, 0, 0, 0.04);
+  border-color: var(--heading-color, #111111);
+}
+
+.buttonSecondary:active {
   transform: scale(0.98);
+}
+
+.redirectInfo {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  width: 100%;
+  margin-top: 8px;
+}
+
+.redirectInfo .button {
+  background: #000000;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
+}
+
+.redirectInfo .button:hover {
+  background: #1a1a1a;
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.35);
+}
+
+/* ============================================
+   Responsive Design
+   ============================================ */
+
+@media (max-width: 768px) {
+  .container {
+    padding: 16px;
+  }
+
+  .content {
+    padding: 40px 24px;
+    border-radius: 20px;
+  }
+
+  .title {
+    font-size: 28px;
+  }
+
+  .message {
+    font-size: 15px;
+  }
+
+  .successIcon,
+  .errorIcon,
+  .pendingIcon,
+  .failedIcon {
+    width: 100px;
+    height: 100px;
+  }
+
+  .successIcon svg,
+  .errorIcon svg,
+  .pendingIcon svg,
+  .failedIcon svg {
+    width: 48px;
+    height: 48px;
+  }
+
+  .pendingActions,
+  .failedActions {
+    flex-direction: column;
+  }
+
+  .pendingActions .buttonSecondary,
+  .failedActions .button {
+    max-width: 100%;
+  }
+
+  .spinner {
+    width: 64px;
+    height: 64px;
+  }
+
+  .button,
+  .buttonSecondary {
+    max-width: 100%;
+  }
+
+  .errorActions {
+    flex-direction: column;
+  }
+
+  .errorActions .button,
+  .errorActions .buttonSecondary {
+    max-width: 100%;
+    flex: none;
+  }
+
+  .successDetails {
+    padding: 16px;
+  }
+}
+
+@media (max-width: 480px) {
+  .content {
+    padding: 32px 20px;
+  }
+
+  .title {
+    font-size: 24px;
+  }
+
+  .stateContainer {
+    gap: 20px;
+  }
 }
