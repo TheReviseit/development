@@ -397,20 +397,33 @@ def get_business_data_from_supabase(firebase_uid: str, credentials: Dict[str, An
     # Get business info from connected_business_managers
     client = get_supabase_client()
     business_info = None
+    razorpay_settings = None
     
     if client:
         try:
             # Get user_id from firebase_uid first
             user_id = get_user_id_from_firebase_uid(firebase_uid)
             if user_id:
+                # fetch business_info
                 result = client.table('connected_business_managers').select(
                     'id, business_name, business_email'
                 ).eq('user_id', user_id).eq('is_active', True).limit(1).execute()
                 
                 if result.data:
                     business_info = result.data[0]
+            
+            # Fetch Razorpay keys from businesses table using firebase_uid
+            # The businesses table uses firebase_uid directly as user_id column
+            biz_result = client.table('businesses').select(
+                'razorpay_key_id, razorpay_key_secret, payments_enabled'
+            ).eq('user_id', firebase_uid).single().execute()
+            
+            if biz_result.data:
+                razorpay_settings = biz_result.data
+                print(f"💰 Loaded Razorpay settings for user: {firebase_uid[:10]}...")
+                
         except Exception as e:
-            print(f"⚠️ Could not load business info from Supabase: {e}")
+            print(f"⚠️ Could not load business/payment info from Supabase: {e}")
     
     # Determine business name with priority:
     # 1. Business info from connected_business_managers
@@ -439,6 +452,11 @@ def get_business_data_from_supabase(firebase_uid: str, credentials: Dict[str, An
         'faqs': [],
         'social_media': {},
         'categories': [],
+        'payment_settings': {
+            'enabled': razorpay_settings.get('payments_enabled', False) if razorpay_settings else False,
+            'key_id': razorpay_settings.get('razorpay_key_id') if razorpay_settings else None,
+            'key_secret': razorpay_settings.get('razorpay_key_secret') if razorpay_settings else None,
+        }
     }
     
     # Merge AI capabilities if available
@@ -1266,4 +1284,9 @@ def convert_supabase_business_to_ai_format(data: Dict[str, Any]) -> Dict[str, An
             'youtube': social_media.get('youtube', ''),
         },
         'categories': data.get('product_categories', []),
+        'payment_settings': {
+            'enabled': data.get('payments_enabled', False),
+            'key_id': data.get('razorpay_key_id'),
+            'key_secret': data.get('razorpay_key_secret'),
+        }
     }

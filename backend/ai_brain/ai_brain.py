@@ -1170,6 +1170,10 @@ class AIBrain:
         
         msg_lower = message.lower().strip()
         
+        # Check for payment confirmation
+        if state.flow_status == FlowStatus.AWAITING_PAYMENT:
+            return self._handle_payment_verification(user_id, state, message, business_data)
+
         # Check for confirmation response
         if state.flow_status == FlowStatus.AWAITING_CONFIRMATION:
             if msg_lower in ["yes", "confirm", "ok", "okay", "sure", "y", "haan", "ha", "ji"]:
@@ -2171,12 +2175,179 @@ class AIBrain:
             "suggested_actions": ["Cancel order"],
             "metadata": {"generation_method": "order_flow_error"}
         }
-    
+
+    def _handle_payment_verification(self, user_id: str, state, message: str, business_data: Dict[str, Any]):
+        """Handle messages when waiting for payment."""
+        msg_lower = message.lower().strip()
+        
+        # Check if user wants to cancel
+        if msg_lower in ["no", "cancel", "cancel order", "nahi", "nako", "na", "n"]:
+            self.conversation_manager.cancel_flow(user_id)
+            self.conversation_manager.add_message(user_id, "user", message)
+            cancel_msg = "Order cancelled. No payment was processed. Is there anything else I can help you with? 😊"
+            self.conversation_manager.add_message(user_id, "assistant", cancel_msg)
+            return {
+                "reply": cancel_msg,
+                "intent": "order_cancelled_payment",
+                "confidence": 1.0,
+                "needs_human": False,
+                "suggested_actions": ["Browse products", "Start over"],
+                "metadata": {"generation_method": "payment_cancelled"}
+            }
+            
+        # Check payment status
+        payment_link_id = state.collected_fields.get("payment_link_id")
+        payment_settings = business_data.get("payment_settings", {})
+        key_id = payment_settings.get("key_id")
+        key_secret = payment_settings.get("key_secret")
+        
+        if not payment_link_id or not key_id or not key_secret:
+            # SECURITY: Do NOT skip payment if credentials are missing
+            # This prevents orders without payment verification
+            logger.error(f"📦 SECURITY: Payment link or credentials missing for user: {user_id}")
+            response_text = (
+                "I'm having trouble with the payment system right now. "
+                "Please contact support or try again later. Your order cannot be processed without payment verification."
+            )
+            self.conversation_manager.add_message(user_id, "user", message)
+            self.conversation_manager.add_message(user_id, "assistant", response_text)
+            return {
+                "reply": response_text,
+                "intent": "payment_error",
+                "confidence": 1.0,
+                "needs_human": True,
+                "suggested_actions": ["Contact Support", "Cancel"],
+                "metadata": {"error": "payment_credentials_missing"}
+            }
+            
+        try:
+            import razorpay
+            client = razorpay.Client(auth=(key_id, key_secret))
+            
+            # Fetch payment link details
+            response = client.payment_link.fetch(payment_link_id)
+            status = response.get("status")
+            
+            if status == "paid":
+                # Payment successful!
+                state.collect_field("payment_status", "paid")
+                state.collect_field("payment_details", {
+                    "method": "razorpay",
+                    "link_id": payment_link_id,
+                    "amount": response.get("amount_paid"),
+                    "reference_id": response.get("reference_id")
+                })
+                
+                # Proceed to complete order
+                return self._complete_order(user_id, state, business_data)
+                
+            elif status == "expired":
+                # Link expired
+                response_text = "The payment link has expired. Would you like me to generate a new one?"
+                state.collect_field("payment_link_id", None) # Clear to regenerate
+                self.conversation_manager.add_message(user_id, "assistant", response_text)
+                return {
+                    "reply": response_text,
+                    "intent": "payment_expired",
+                    "confidence": 1.0,
+                    "suggested_actions": ["Yes", "Cancel Order"],
+                    "metadata": {"status": "expired"}
+                }
+            else:
+                # Not paid yet
+                
+                # Check if user claims to have paid ("paid", "done", "screenshot")
+                if any(x in msg_lower for x in ["paid", "done", "complete", "screenshot"]):
+                     # CRITICAL: Re-verify strictly with Razorpay API
+                     # This is the ONLY way payment_status can be set to "paid"
+                     try:
+                         response = client.payment_link.fetch(payment_link_id)
+                         razorpay_status = response.get("status")
+                         
+                         # ONLY set payment_status to "paid" if Razorpay confirms it
+                         if razorpay_status == "paid":
+                             # Payment verified - store complete payment details
+                             state.collect_field("payment_status", "paid")
+                             state.collect_field("payment_details", {
+                                 "method": "razorpay",
+                                 "link_id": payment_link_id,
+                                 "amount": response.get("amount_paid", 0),
+                                 "reference_id": response.get("reference_id"),
+                                 "verified_at": time.strftime("%Y-%m-%dT%H:%M:%S", time.gmtime())
+                             })
+                             logger.info(f"📦 Payment verified via Razorpay API for user: {user_id}, link: {payment_link_id}")
+                             return self._complete_order(user_id, state, business_data)
+                         else:
+                             # Payment not confirmed by Razorpay - DO NOT set payment_status
+                             response_text = (
+                                f"I checked with the payment gateway, but the payment status is still '{razorpay_status}'. "
+                                "It might take a moment to update. Please wait a minute and reply 'Check' again.\n\n"
+                                "If you made the payment, please don't worry, it will be updated soon! 🙏"
+                             )
+                             self.conversation_manager.add_message(user_id, "user", message)
+                             self.conversation_manager.add_message(user_id, "assistant", response_text)
+                             return {
+                                "reply": response_text,
+                                "intent": "payment_check_failed",
+                                "confidence": 1.0, 
+                                "suggested_actions": ["Check Again", "Pay Later (COD)"],
+                                "metadata": {"status": razorpay_status, "verified": False}
+                             }
+                     except Exception as e:
+                         logger.error(f"📦 SECURITY: Payment verification failed for user: {user_id}: {e}")
+                         response_text = (
+                            "I'm having trouble verifying the payment right now. "
+                            "Please try again in a moment or contact support if the issue persists."
+                         )
+                         self.conversation_manager.add_message(user_id, "user", message)
+                         self.conversation_manager.add_message(user_id, "assistant", response_text)
+                         return {
+                            "reply": response_text,
+                            "intent": "payment_verification_error",
+                            "confidence": 1.0,
+                            "needs_human": True,
+                            "suggested_actions": ["Check Again", "Cancel"],
+                            "metadata": {"error": str(e), "verified": False}
+                         }
+
+                response_text = (
+                    "I haven't received the payment confirmation yet. "
+                    "Please complete the payment using the link above and reply with 'Paid' or 'Done'.\n\n"
+                    "If you face any issues, you can choose to 'Pay later' (COD) if available."
+                )
+                
+                # Allow switching to COD if user insists (simple heuristic)
+                if any(x in msg_lower for x in ["cod", "pay later", "cash", "delivery"]):
+                     state.collect_field("payment_status", "cod")
+                     return self._complete_order(user_id, state, business_data)
+                
+                self.conversation_manager.add_message(user_id, "user", message)
+                self.conversation_manager.add_message(user_id, "assistant", response_text)
+                return {
+                    "reply": response_text,
+                    "intent": "payment_pending",
+                    "confidence": 1.0,
+                    "suggested_actions": ["Paid", "Check Status", "Cancel"],
+                    "metadata": {"status": status}
+                }
+                
+        except Exception as e:
+            logger.error(f"Payment verification failed: {e}")
+            response_text = "I'm having trouble verifying the payment right now. Please try again in a moment."
+            return {
+                "reply": response_text,
+                "intent": "payment_error",
+                "confidence": 0.8,
+                "suggested_actions": ["Check Status", "Cancel"],
+                "metadata": {"error": str(e)}
+            }
+
     def _complete_order(
         self,
         user_id: str,
         state: ConversationState,
-        business_data: Dict[str, Any]
+        business_data: Dict[str, Any],
+        skip_payment: bool = False
     ) -> Dict[str, Any]:
         """
         Complete the order after user confirmation.
@@ -2200,6 +2371,212 @@ class AIBrain:
                 "suggested_actions": [],
                 "metadata": {"generation_method": "order_duplicate_attempt"}
             }
+            
+        # =================================================================
+        # PAYMENT INTEGRATION
+        # =================================================================
+        payment_settings = business_data.get("payment_settings", {})
+        try:
+             # Check if payment is enabled and not already skipped/paid
+            if (payment_settings.get("enabled") and 
+                not skip_payment and 
+                state.collected_fields.get("payment_status") != "paid" and
+                state.collected_fields.get("payment_status") != "cod"):
+                
+                key_id = payment_settings.get("key_id")
+                key_secret = payment_settings.get("key_secret")
+                
+                if key_id and key_secret:
+                    # Calculate total amount
+                    items = state.collected_fields.get("items", [])
+                    total_amount = 0
+                    for item in items:
+                        price = item.get('price', 0)
+                        quantity = item.get('quantity', 1)
+                        total_amount += float(price) * quantity
+                    
+                    if total_amount > 0:
+                        # Generate Payment Link
+                        import razorpay
+                        import time
+                        
+                        client = razorpay.Client(auth=(key_id, key_secret))
+                        
+                        # Check if we already have an active link
+                        existing_link_id = state.collected_fields.get("payment_link_id")
+                        payment_link_url = state.collected_fields.get("payment_link_url")
+                        
+                        if not existing_link_id:
+                            customer_name = state.collected_fields.get("customer_name", "Customer")
+                            customer_phone = state.collected_fields.get("customer_phone", "")
+                            
+                            # Clean phone number
+                            phone = re.sub(r'[^\d]', '', customer_phone)
+                            if len(phone) == 10:
+                                phone = f"+91{phone}"
+                            elif not phone.startswith("+"):
+                                phone = f"+{phone}"
+                                
+                            reference_id = f"ORDER_{user_id[-6:]}_{int(time.time())}"
+                            
+                            link_data = {
+                                "amount": int(total_amount * 100), # Paise
+                                "currency": "INR",
+                                "description": f"Order for {len(items)} items from {business_data.get('business_name')}",
+                                "customer": {
+                                    "name": customer_name,
+                                    "contact": phone
+                                },
+                                "reference_id": reference_id,
+                                "callback_url": "https://flowauxi.com/payment-success", # Generic success page
+                                "callback_method": "get"
+                            }
+                            
+                            logger.info(f"Generating payment link for amount: {total_amount}")
+                            link = client.payment_link.create(link_data)
+                            
+                            existing_link_id = link.get('id')
+                            payment_link_url = link.get('short_url')
+                            
+                            # Store link details in state
+                            state.collect_field("payment_link_id", existing_link_id)
+                            state.collect_field("payment_link_url", payment_link_url)
+                            state.collect_field("order_reference_id", reference_id)
+                            
+                            # Update flow status
+                            state.flow_status = FlowStatus.AWAITING_PAYMENT
+                            self.conversation_manager.persist_state(user_id)
+                        
+                        # Send Link Response
+                        response_text = (
+                            f"Thank you! The total amount is *₹{int(total_amount)}*.\n\n"
+                            f"Please click the link below to verify your payment securely via Razorpay:\n"
+                            f"👉 {payment_link_url}\n\n"
+                            f"After paying, reply with *'Paid'* to confirm your order instantly! 🚀"
+                        )
+                        
+                        self.conversation_manager.add_message(user_id, "assistant", response_text)
+                        
+                        return {
+                            "reply": response_text,
+                            "intent": "order_payment_link",
+                            "confidence": 1.0,
+                            "needs_human": False,
+                            "suggested_actions": ["Paid", "Check Status", "Cancel"],
+                            "metadata": {
+                                "generation_method": "payment_link",
+                                "payment_link": payment_link_url
+                            }
+                        }
+        except Exception as e:
+            logger.error(f"Failed to generate payment link: {e}")
+            # Continue to COD flow on error
+            pass
+        
+        # =================================================================
+        # CRITICAL SECURITY CHECK: VERIFY PAYMENT BEFORE ORDER CREATION
+        # =================================================================
+        # This prevents orders from being created without verified payment
+        # skip_payment should ONLY be used when payment is explicitly disabled in settings
+        payment_settings = business_data.get("payment_settings", {})
+        payment_status = state.collected_fields.get("payment_status")
+        payment_link_id = state.collected_fields.get("payment_link_id")
+        
+        # SECURITY: Only allow skip_payment if payment is explicitly disabled in settings
+        # This prevents abuse of the skip_payment parameter
+        payment_enabled = payment_settings.get("enabled", False)
+        if payment_enabled and skip_payment:
+            logger.error(f"📦 SECURITY: Attempt to skip payment when payment is enabled for user: {user_id}")
+            return {
+                "reply": "Payment verification is required. Cannot skip payment when payment is enabled.",
+                "intent": "payment_required",
+                "confidence": 1.0,
+                "needs_human": True,
+                "suggested_actions": ["Complete Payment", "Cancel"],
+                "metadata": {"error": "payment_skip_not_allowed"}
+            }
+        
+        # If payment is enabled, MUST verify payment (skip_payment is not allowed)
+        if payment_enabled:
+            # Only allow "cod" or verified "paid" status
+            if payment_status != "cod":
+                # For "paid" status, MUST verify with Razorpay API
+                if payment_status == "paid":
+                    if not payment_link_id:
+                        logger.error(f"📦 SECURITY: Payment marked as paid but no payment_link_id found for user: {user_id}")
+                        return {
+                            "reply": "Payment verification failed. Please complete the payment using the payment link.",
+                            "intent": "payment_verification_failed",
+                            "confidence": 1.0,
+                            "needs_human": False,
+                            "suggested_actions": ["Check Payment", "Cancel"],
+                            "metadata": {"error": "missing_payment_link_id"}
+                        }
+                    
+                    # CRITICAL: Verify payment status with Razorpay API
+                    try:
+                        import razorpay
+                        key_id = payment_settings.get("key_id")
+                        key_secret = payment_settings.get("key_secret")
+                        
+                        if not key_id or not key_secret:
+                            logger.error(f"📦 SECURITY: Payment credentials missing for user: {user_id}")
+                            return {
+                                "reply": "Payment verification failed. Please contact support.",
+                                "intent": "payment_verification_failed",
+                                "confidence": 1.0,
+                                "needs_human": True,
+                                "metadata": {"error": "missing_payment_credentials"}
+                            }
+                        
+                        client = razorpay.Client(auth=(key_id, key_secret))
+                        response = client.payment_link.fetch(payment_link_id)
+                        razorpay_status = response.get("status")
+                        
+                        # ONLY proceed if Razorpay confirms payment is "paid"
+                        if razorpay_status != "paid":
+                            logger.warning(f"📦 SECURITY: Payment verification failed - status is '{razorpay_status}' not 'paid' for user: {user_id}, link: {payment_link_id}")
+                            return {
+                                "reply": f"Payment verification failed. The payment status is '{razorpay_status}'. Please complete the payment using the payment link and try again.",
+                                "intent": "payment_verification_failed",
+                                "confidence": 1.0,
+                                "needs_human": False,
+                                "suggested_actions": ["Check Payment", "Cancel"],
+                                "metadata": {"error": "payment_not_verified", "razorpay_status": razorpay_status}
+                            }
+                        
+                        # Payment verified - update payment details from Razorpay response
+                        from datetime import datetime as dt_module
+                        state.collect_field("payment_details", {
+                            "method": "razorpay",
+                            "link_id": payment_link_id,
+                            "amount": response.get("amount_paid", 0),
+                            "reference_id": response.get("reference_id"),
+                            "verified_at": dt_module.utcnow().isoformat()
+                        })
+                        logger.info(f"📦 Payment verified successfully for user: {user_id}, link: {payment_link_id}")
+                        
+                    except Exception as e:
+                        logger.error(f"📦 SECURITY: Payment verification exception for user: {user_id}: {e}")
+                        return {
+                            "reply": "Payment verification failed. Please try again or contact support if the issue persists.",
+                            "intent": "payment_verification_error",
+                            "confidence": 1.0,
+                            "needs_human": True,
+                            "suggested_actions": ["Check Payment", "Cancel"],
+                            "metadata": {"error": str(e)}
+                        }
+                else:
+                    # Payment required but status is not "paid" or "cod"
+                    logger.warning(f"📦 SECURITY: Order creation blocked - payment required but status is '{payment_status}' for user: {user_id}")
+                    return {
+                        "reply": "Payment is required to complete this order. Please complete the payment using the payment link provided.",
+                        "intent": "payment_required",
+                        "confidence": 1.0,
+                        "needs_human": False,
+                        "suggested_actions": ["Check Payment", "Cancel"],
+                        "metadata": {"error": "payment_not_completed", "payment_status": payment_status}
+                    }
         
         # Set lock
         state._persistence_locked = True
@@ -2226,10 +2603,25 @@ class AIBrain:
                     if value:
                         custom_fields[field_id] = value
             
-            # Build notes from custom fields only (address is stored in dedicated column)
+            # Build notes from custom fields and payment details
             notes_parts = []
             for key, value in custom_fields.items():
                 notes_parts.append(f"{key}: {value}")
+            
+            # Add payment info (payment_status is now verified above)
+            payment_status = state.collected_fields.get("payment_status")
+            if payment_status == "paid":
+                details = state.collected_fields.get("payment_details", {})
+                amount = details.get("amount", 0)
+                if amount:
+                    notes_parts.append(f"PAID via Razorpay: ₹{amount/100}")
+                else:
+                    notes_parts.append("PAID via Razorpay")
+                if details.get("reference_id"):
+                    notes_parts.append(f"Ref: {details.get('reference_id')}")
+            elif payment_status == "cod":
+                 notes_parts.append("Payment: COD (Cash on Delivery)")
+            
             notes = " | ".join(notes_parts) if notes_parts else None
             
             # =================================================================

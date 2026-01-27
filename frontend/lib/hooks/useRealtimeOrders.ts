@@ -186,20 +186,27 @@ export function useRealtimeOrders({
           }
         },
       )
-      .subscribe((status) => {
-        console.log(`🔌 Orders realtime subscription status: ${status}`);
+      .subscribe((status, err) => {
+        console.log(`🔌 Orders realtime subscription status: ${status}`, err || "");
         if (status === "SUBSCRIBED") {
           console.log("✅ Successfully subscribed to orders updates");
           setIsConnected(true);
           setConnectionError(null);
         } else if (status === "CHANNEL_ERROR") {
-          console.error("❌ Failed to subscribe to orders");
+          const errorMessage = err?.message || "Failed to connect to realtime updates";
+          console.error("❌ Failed to subscribe to orders:", errorMessage);
+          console.error("   This usually means:");
+          console.error("   1. The 'orders' table is not enabled for Realtime (run migration 016_enable_realtime_orders.sql)");
+          console.error("   2. RLS policies are blocking the subscription");
+          console.error("   3. Network connectivity issues");
           setIsConnected(false);
-          setConnectionError("Failed to connect to realtime updates");
+          setConnectionError(`Failed to connect: ${errorMessage}`);
         } else if (status === "TIMED_OUT") {
+          console.error("⏱️ Connection timed out - check network connectivity");
           setIsConnected(false);
-          setConnectionError("Connection timed out");
+          setConnectionError("Connection timed out. Please check your network connection.");
         } else if (status === "CLOSED") {
+          console.log("🔌 Channel closed");
           setIsConnected(false);
         }
       });

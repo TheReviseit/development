@@ -35,6 +35,7 @@ class FlowStatus(str, Enum):
     IDLE = "idle"
     IN_PROGRESS = "in_progress"
     AWAITING_CONFIRMATION = "awaiting_confirmation"
+    AWAITING_PAYMENT = "awaiting_payment"
     COMPLETE = "complete"
     CANCELLED = "cancelled"
 
