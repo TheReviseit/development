@@ -118,10 +118,11 @@ class ConversationState:
         self.current_field = None
     
     def is_active(self) -> bool:
-        """Check if a flow is currently active (including awaiting confirmation)."""
+        """Check if a flow is currently active (including awaiting confirmation or payment)."""
         return self.active_flow is not None and self.flow_status in (
             FlowStatus.IN_PROGRESS, 
-            FlowStatus.AWAITING_CONFIRMATION
+            FlowStatus.AWAITING_CONFIRMATION,
+            FlowStatus.AWAITING_PAYMENT  # CRITICAL: Include payment waiting state
         )
     
     def has_field(self, field_name: str) -> bool:
@@ -285,7 +286,7 @@ class ConversationManager:
             
             key = self._get_redis_key(user_id)
             self._redis.setex(key, self.REDIS_STATE_TTL, json.dumps(state_data))
-            logger.debug(f"💾 Persisted conversation state for {user_id[:12]}... (flow: {state.active_flow})")
+            logger.info(f"💾 Persisted conversation state for {user_id[:12]}... (flow: {state.active_flow}, status: {state.flow_status}, fields: {len(state.collected_fields)})")
             return True
             
         except Exception as e:
@@ -324,7 +325,12 @@ class ConversationManager:
             # Reconstruct conversation state
             state = session.conversation_state
             state.active_flow = state_data.get("active_flow")
-            state.flow_status = FlowStatus(state_data.get("flow_status", "idle"))
+            flow_status_str = state_data.get("flow_status", "idle")
+            try:
+                state.flow_status = FlowStatus(flow_status_str)
+            except ValueError:
+                logger.warning(f"Invalid flow_status '{flow_status_str}' for user {user_id[:12]}..., defaulting to idle")
+                state.flow_status = FlowStatus.IDLE
             state.collected_fields = state_data.get("collected_fields", {})
             state.missing_fields = state_data.get("missing_fields", [])
             state.current_field = state_data.get("current_field")
@@ -332,7 +338,7 @@ class ConversationManager:
             state.flow_config = state_data.get("flow_config", {})
             state.flow_started_at = state_data.get("flow_started_at")
             
-            logger.info(f"🔄 Recovered conversation state for {user_id[:12]}... (flow: {state.active_flow}, collected: {list(state.collected_fields.keys())})")
+            logger.info(f"🔄 Recovered conversation state for {user_id[:12]}... (flow: {state.active_flow}, status: {state.flow_status}, collected: {list(state.collected_fields.keys())[:5]})")
             return session
             
         except Exception as e:
@@ -639,7 +645,15 @@ class ConversationManager:
     def is_flow_active(self, user_id: str) -> bool:
         """Check if user has an active conversation flow."""
         session = self.get_session(user_id)
-        return session is not None and session.conversation_state.is_active()
+        if session is None:
+            logger.info(f"📋 No session found for user: {user_id[:12]}...")
+            return False
+        is_active = session.conversation_state.is_active()
+        if is_active:
+            logger.info(f"📋 Flow is active for user: {user_id[:12]}..., flow: {session.conversation_state.active_flow}, status: {session.conversation_state.flow_status}")
+        else:
+            logger.info(f"📋 Flow is NOT active for user: {user_id[:12]}..., flow: {session.conversation_state.active_flow}, status: {session.conversation_state.flow_status}")
+        return is_active
     
     def persist_state(self, user_id: str) -> bool:
         """

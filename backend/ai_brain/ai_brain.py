@@ -8,6 +8,7 @@ import time
 import re
 import random
 import logging
+import os
 from typing import Dict, List, Any, Optional, Union
 from dataclasses import asdict
 
@@ -246,7 +247,8 @@ class AIBrain:
             # Get the current flow type
             state = self.conversation_manager.get_state(user_id)
             flow_name = state.active_flow if state else None
-            logger.info(f"📋 Active flow: {flow_name}")
+            flow_status = state.flow_status if state else None
+            logger.info(f"📋 Active flow: {flow_name}, flow_status: {flow_status}")
             
             # Check if this is a question/interruption (optional heuristic)
             is_question = "?" in user_message or any(w in user_message.lower() for w in ["what", "how", "where", "price", "cost"])
@@ -582,7 +584,6 @@ class AIBrain:
             {"id": "name", "label": "Full Name", "type": "text", "required": True, "order": 1},
             {"id": "phone", "label": "Phone Number", "type": "phone", "required": True, "order": 2},
             {"id": "address", "label": "Delivery Address", "type": "textarea", "required": True, "order": 3},
-            {"id": "notes", "label": "Order Notes", "type": "textarea", "required": False, "order": 4},
         ]
         
         if not self.supabase_client:
@@ -597,6 +598,9 @@ class AIBrain:
                 fields = result.data.get("order_fields", default_fields)
                 minimal_mode = result.data.get("order_minimal_mode", False)
                 
+                # Filter out notes field - not needed
+                fields = [f for f in fields if f.get("id") != "notes"]
+                
                 # If minimal mode, only use name and phone
                 if minimal_mode:
                     fields = [f for f in fields if f.get("id") in ["name", "phone"]]
@@ -606,11 +610,83 @@ class AIBrain:
                     "minimal_mode": minimal_mode
                 }
             
-            return {"fields": default_fields, "minimal_mode": False}
+            # Filter out notes field from default fields as well
+            filtered_defaults = [f for f in default_fields if f.get("id") != "notes"]
+            return {"fields": filtered_defaults, "minimal_mode": False}
             
         except Exception as e:
             logger.warning(f"📦 Failed to get order config: {e}")
-            return {"fields": default_fields, "minimal_mode": False}
+            # Filter out notes field from default fields as well
+            filtered_defaults = [f for f in default_fields if f.get("id") != "notes"]
+            return {"fields": filtered_defaults, "minimal_mode": False}
+    
+    def _get_available_colors_for_product(
+        self, product: Dict[str, Any], selected_size: Optional[str] = None
+    ) -> List[str]:
+        """
+        Derive available colors from product, preferring variant-level colors over base.
+        When product has variants, use unique colors from variants (optionally filtered by
+        selected_size). Otherwise fall back to base product 'colors'.
+        """
+        if not product or not isinstance(product, dict):
+            return []
+        variants = product.get("variants", []) or []
+        if variants:
+            def collect(by_size: Optional[str]) -> List[str]:
+                seen: set = set()
+                out: List[str] = []
+                for v in variants:
+                    if not isinstance(v, dict):
+                        continue
+                    if by_size is not None:
+                        v_size = (v.get("size") or "").strip()
+                        if v_size and v_size != by_size:
+                            continue
+                    c = (v.get("color") or "").strip()
+                    if c and c not in seen:
+                        seen.add(c)
+                        out.append(c)
+                return out
+
+            colors_from_variants = collect(selected_size)
+            if not colors_from_variants and selected_size is not None:
+                colors_from_variants = collect(None)
+            if colors_from_variants:
+                logger.info(
+                    f"🎨 Using variant-derived colors (size={selected_size!r}): {colors_from_variants}"
+                )
+                return colors_from_variants[:10]
+        base = product.get("colors", []) or []
+        if isinstance(base, list):
+            return [str(x).strip() for x in base if str(x).strip()][:10]
+        return []
+    
+    def _resolve_variant_for_product(
+        self,
+        product: Dict[str, Any],
+        selected_size: Optional[str] = None,
+        selected_color: Optional[str] = None,
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Find a variant matching the given size and/or color.
+        Returns the variant dict or None. Use for variant-level pricing.
+        """
+        if not product or not isinstance(product, dict):
+            return None
+        variants = product.get("variants", []) or []
+        for v in variants:
+            if not isinstance(v, dict):
+                continue
+            if selected_size is not None:
+                v_size = (v.get("size") or "").strip()
+                if v_size and v_size != selected_size:
+                    continue
+            if selected_color is not None:
+                v_color = (v.get("color") or "").strip()
+                if v_color and v_color != selected_color:
+                    continue
+            return v
+        return None
     
     def _start_order_flow(
         self,
@@ -739,7 +815,7 @@ class AIBrain:
             product_id = mentioned_product.get("id") or mentioned_product.get("sku") or product_name
             product_price = mentioned_product.get("price", "")
             sizes = mentioned_product.get("sizes", [])
-            colors = mentioned_product.get("colors", [])
+            colors = self._get_available_colors_for_product(mentioned_product)
             
             price_str = f" (₹{product_price})" if product_price else ""
             
@@ -754,24 +830,36 @@ class AIBrain:
                 state.collect_field("_available_sizes", sizes)
                 size_list = ", ".join(sizes[:6])
                 response_text = (
-                    f"Great choice! 🎉 *{product_name}*{price_str}\n\n"
+                    f"Great choice! 🎉\n*{product_name}*\n\n"
                     f"Available sizes: {size_list}\n\n"
                     f"Which size would you like?"
                 )
                 suggested_actions = sizes[:4] + ["Cancel"]
             elif colors:
-                state.collect_field("_needs_color", True)
-                state.collect_field("_available_colors", colors)
-                color_list = ", ".join(colors[:6])
-                response_text = (
-                    f"Great choice! 🎉 *{product_name}*{price_str}\n\n"
-                    f"Available colors: {color_list}\n\n"
-                    f"Which color would you like?"
-                )
-                suggested_actions = colors[:4] + ["Cancel"]
+                # If only one color, automatically select it
+                if len(colors) == 1:
+                    # Auto-select the single color
+                    state.collect_field("selected_color", colors[0])
+                    response_text = (
+                        f"Great choice! 🎉\n*{product_name}*\n\n"
+                        f"Color: *{colors[0]}*\n\n"
+                        f"How many would you like to order?"
+                    )
+                    suggested_actions = ["1", "2", "3", "Cancel"]
+                else:
+                    # Multiple colors - ask user to select
+                    state.collect_field("_needs_color", True)
+                    state.collect_field("_available_colors", colors)
+                    color_list = ", ".join(colors[:6])
+                    response_text = (
+                        f"Great choice! 🎉\n*{product_name}*\n\n"
+                        f"Available colors: {color_list}\n\n"
+                        f"Which color would you like?"
+                    )
+                    suggested_actions = colors[:4] + ["Cancel"]
             else:
                 response_text = (
-                    f"Great choice! 🎉 You want to order *{product_name}*{price_str}.\n\n"
+                    f"Great choice! 🎉\n*{product_name}*\n\n"
                     f"How many would you like to order?"
                 )
                 suggested_actions = ["1", "2", "3", "Cancel"]
@@ -786,28 +874,22 @@ class AIBrain:
             
             if filtered_products:
                 response_text, suggested_actions, product_meta = self._format_product_list(filtered_products[:8], state)
-                response_text = f"📁 *{mentioned_category}*\n\n" + response_text.split("\n\n", 1)[1] if "\n\n" in response_text else response_text
+                response_text = f"*{mentioned_category}*\n\n" + response_text.split("\n\n", 1)[1] if "\n\n" in response_text else response_text
                 # Add store link if available
                 if store_link:
-                    response_text += f"\n\n🛍️ Or browse our full catalog: {store_link}"
+                    response_text += f"\n\nOr visit our Web store: {store_link}"
             else:
                 # Category mentioned but no products found
                 response_text = f"I couldn't find any products in the {mentioned_category} category. Let me show you all our categories."
                 mentioned_category = None  # Fall through to category selection
         
         if not mentioned_product and not mentioned_category and categories:
-            # Show category selection - ALWAYS use menu buttons (even for 1 category)
+            # Show category selection: URL button for "Visit Website" + Category list menu
             state.collect_field("awaiting_category", True)
             state.collect_field("_available_categories", categories)
-            header_text = "🛒 Place an Order"
-            use_list = True
-            list_sections = None
+            header_text = "Start Shopping ❤️"
             
-            # ALWAYS use WhatsApp List Message for categories (menu picker)
-            response_text = "What would you like to order today?\n\nTap the button below to see all categories."
-            suggested_actions = ["View Categories"]
-            
-            # Build list sections for WhatsApp List Message
+            # Build list sections for categories
             list_sections = [{
                 "title": "Categories",
                 "rows": [
@@ -816,25 +898,34 @@ class AIBrain:
                 ]
             }]
             
-            # Add store link if available
+            # If store link exists, send URL button first, then category list menu as second message
             if store_link:
-                response_text += f"\n\n🛍️ Or visit our store: {store_link}"
+                response_text = "our perfect picks are just a tap away. visit our online store now."
+                use_url_button = True
+                use_list = True  # Send category list menu as second message
+                list_body_text = "View categories to continue shopping on WhatsApp."
+                suggested_actions = ["View Categories"]
+            else:
+                response_text = "Tap below to explore our product categories."
+                use_url_button = False
+                use_list = True
+                suggested_actions = ["View Categories"]
         
         elif not mentioned_product and not mentioned_category and products:
             # No categories - show products directly
             response_text, suggested_actions, product_meta = self._format_product_list(products[:8], state)
             # Add store link if available
             if store_link:
-                response_text += f"\n\n🛍️ Browse more: {store_link}"
+                response_text += f"\n\nOr visit our Web store: {store_link}"
         
         elif not mentioned_product and not mentioned_category:
             # No products or categories
             response_text = (
-                f"📦 I'd be happy to help you place an order!\n\n"
+                f"I'd be happy to help you place an order!\n\n"
                 f"What would you like to order today?"
             )
             if store_link:
-                response_text += f"\n\n🛍️ Visit our store: {store_link}"
+                response_text += f"\n\nOr visit our Web store: {store_link}"
             suggested_actions = ["Cancel order"]
         
         # Add to conversation history
@@ -847,12 +938,28 @@ class AIBrain:
             "flow": "order_booking",
             "mentioned_product": mentioned_product.get("name") if mentioned_product else None,
             "categories_available": len(categories) if categories else 0,
-            "header_text": header_text if 'header_text' in dir() else "🛒 Place an Order",
-            "footer_text": "Tap to continue",
+            "header_text": header_text if 'header_text' in dir() else "Start Shopping",
+            "footer_text": "Start Shopping",
             **product_meta,  # Include product_cards if present
         }
         
-        if 'use_list' in dir() and use_list and list_sections:
+        # Add URL button for "Visit Website" if store link exists (sent first)
+        if store_link and not mentioned_product and not mentioned_category and categories and 'use_url_button' in dir() and use_url_button:
+            metadata["use_url_button"] = True
+            metadata["url_button_text"] = "Visit Website"
+            metadata["url_button_url"] = store_link
+            metadata["url_button_body"] = response_text  # Use the updated response_text
+            metadata["url_button_header"] = "Start Shopping ❤️"
+            metadata["url_button_footer"] = ""
+            # Send category list menu as second message
+            if 'use_list' in dir() and use_list and list_sections:
+                metadata["use_list"] = True
+                metadata["list_button"] = "View Categories"
+                metadata["list_sections"] = list_sections
+                metadata["list_body_text"] = list_body_text if 'list_body_text' in dir() else "View categories to continue shopping on WhatsApp."
+                metadata["list_header_text"] = ""
+                metadata["list_footer_text"] = ""
+        elif 'use_list' in dir() and use_list and list_sections:
             # Use WhatsApp List Message
             metadata["use_list"] = True
             metadata["list_button"] = "View Categories"
@@ -910,6 +1017,8 @@ class AIBrain:
         product_lines = []
         product_map = {}
         product_cards = []  # For WhatsApp image rendering
+        card_index_map = {}  # Maps card index (0, 1, 2, ...) → full product_id for unique button IDs
+        card_index_counter = 0  # Global counter for all cards (base + variants)
         
         for i, p in enumerate(page_products):
             if not isinstance(p, dict):
@@ -924,6 +1033,11 @@ class AIBrain:
             product_id = p.get('id') or p.get('sku') or name
             # Handle both camelCase (imageUrl) and snake_case (image_url) for compatibility
             image_url = p.get('imageUrl') or p.get('image_url') or p.get('image', '')
+            
+            # Debug logging for product pricing
+            logger.info(f"📦 Formatting product: {name}")
+            logger.info(f"   base_price: {base_price} (type: {type(base_price)})")
+            logger.info(f"   original_price (compare_at_price): {original_price} (type: {type(original_price)})")
             
             # Size-based pricing support
             has_size_pricing = p.get('has_size_pricing', False)
@@ -950,44 +1064,83 @@ class AIBrain:
                 except (ValueError, TypeError):
                     pass
             
+            logger.info(f"   display_price: {display_price} (has_size_pricing: {has_size_pricing})")
+            
             # Calculate discount percentage if offer price exists
             discount_percent = 0
             has_offer = False
             
             # Check for offer: compare_at_price > price means there's an offer
+            # IMPORTANT: Always preserve original_price in the card, even if comparison fails
+            # The comparison logic in app.py will handle the display
             if original_price:
                 try:
                     # Ensure both are numbers
                     current_num = float(display_price) if display_price else 0
                     original_num = float(original_price) if original_price else 0
                     
+                    logger.info(f"   Comparing prices: original={original_num} > current={current_num}?")
+                    
                     if original_num > current_num and current_num > 0:
                         discount_percent = int(((original_num - current_num) / original_num) * 100)
                         has_offer = True
-                except (ValueError, TypeError, ZeroDivisionError):
+                        logger.info(f"   ✅ Offer detected: {discount_percent}% off")
+                    else:
+                        logger.info(f"   ⚠️ No valid offer (original not greater than current)")
+                except (ValueError, TypeError, ZeroDivisionError) as e:
                     discount_percent = 0
                     has_offer = False
+                    logger.warning(f"   ❌ Error calculating offer: {e}")
+            else:
+                logger.info(f"   ℹ️ No original_price (compare_at_price) found")
             
-            # Build product card for WhatsApp image messages (BASE PRODUCT)
-            product_cards.append({
-                'index': global_index,
-                'name': name,
-                'price': display_price,
-                'compare_at_price': original_price,
-                'discount_percent': discount_percent,
-                'product_id': product_id,
-                'image_url': image_url if image_url and not image_url.startswith('data:') else '',
-                'colors': p.get('colors', [])[:5],
-                'sizes': p.get('sizes', [])[:6],
-                # Size-based pricing info for product card
-                'has_size_pricing': has_size_pricing,
-                'size_prices': size_prices,
-                'price_range': price_range_str,
-                'is_variant': False,  # Mark as base product
-            })
-            
-            # Now create separate product cards for each variant
+            # Check if product has variants
             variants = p.get('variants', []) or []
+            has_variants = len(variants) > 0
+            
+            # CRITICAL FIX: Always create base product card if it has valid displayable attributes
+            # The base product represents one color/size combination, variants are OTHER combinations
+            # Users should be able to order BOTH the base product AND any variants
+            # Example: Base = Blue/Free Size/XL, Variant 1 = Yellow/Free Size/M
+            # Both should be shown as separate orderable items
+            
+            # Only skip base product card if it has NO colors/sizes (pure template with only variants)
+            base_colors = p.get('colors', []) or []
+            base_sizes = p.get('sizes', []) or []
+            has_base_attributes = len(base_colors) > 0 or len(base_sizes) > 0
+            
+            # Create base product card if it has displayable attributes
+            if has_base_attributes:
+                # Build product card for WhatsApp image messages (BASE PRODUCT)
+                # CRITICAL: Always include compare_at_price if it exists, even if has_offer is False
+                # The display logic in app.py will handle the comparison
+                product_cards.append({
+                    'index': global_index,
+                    'name': name,
+                    'price': display_price,
+                    'compare_at_price': original_price,  # Always include if exists, let app.py decide display
+                    'discount_percent': discount_percent,
+                    'product_id': product_id,
+                    'card_index': card_index_counter,  # CRITICAL FIX: Unique card index for button ID
+                    'image_url': image_url if image_url and not image_url.startswith('data:') else '',
+                    'colors': base_colors[:5],
+                    'sizes': base_sizes[:6],
+                    # Size-based pricing info for product card
+                    'has_size_pricing': has_size_pricing,
+                    'size_prices': size_prices,
+                    'price_range': price_range_str,
+                    'is_variant': False,  # Mark as base product
+                })
+                
+                # Store mapping: card_index → full product_id
+                card_index_map[card_index_counter] = product_id
+                card_index_counter += 1
+                
+                logger.info(f"   📋 Base product card created: {name} (colors={base_colors}, sizes={base_sizes}, has_variants={has_variants}, card_index={card_index_counter-1})")
+            else:
+                logger.info(f"   ⏭️ Skipping base product card (no colors/sizes, only variants): {name}")
+            
+            # Now create separate product cards for each variant (if any)
             variant_counter = 0
             for variant in variants:
                 if not isinstance(variant, dict):
@@ -1050,6 +1203,22 @@ class AIBrain:
                 if not variant_image_url or variant_image_url.startswith('data:'):
                     variant_image_url = image_url if image_url and not image_url.startswith('data:') else ''
                 
+                # CRITICAL FIX: Parse variant size properly - it can be comma-separated string
+                # e.g., "Free Size, M" from database should become ["Free Size", "M"]
+                variant_sizes_parsed = []
+                if variant_size:
+                    if isinstance(variant_size, str) and ',' in variant_size:
+                        # Split comma-separated sizes
+                        variant_sizes_parsed = [s.strip() for s in variant_size.split(',') if s.strip()]
+                    elif isinstance(variant_size, str):
+                        # Single size string
+                        variant_sizes_parsed = [variant_size.strip()]
+                    elif isinstance(variant_size, list):
+                        # Already a list
+                        variant_sizes_parsed = variant_size
+                
+                logger.info(f"   📏 Variant {variant_counter}: color={variant_color}, sizes={variant_sizes_parsed}")
+                
                 # Create variant product card
                 variant_product_id = f"{product_id}_variant_{variant.get('id', variant_counter)}"
                 product_cards.append({
@@ -1059,15 +1228,20 @@ class AIBrain:
                     'compare_at_price': variant_compare_at_price if variant_has_offer else None,
                     'discount_percent': variant_discount_percent,
                     'product_id': variant_product_id,
+                    'card_index': card_index_counter,  # CRITICAL FIX: Unique card index for button ID
                     'image_url': variant_image_url,
                     'colors': [variant_color] if variant_color else [],
-                    'sizes': [variant_size] if variant_size else [],
+                    'sizes': variant_sizes_parsed,  # FIXED: Use properly parsed sizes
                     'has_size_pricing': variant_has_size_pricing,
                     'size_prices': variant_size_prices,
                     'price_range': variant_price_range_str,
                     'is_variant': True,  # Mark as variant
                     'base_product_id': product_id,  # Reference to base product
                 })
+                
+                # Store mapping: card_index → full variant product_id
+                card_index_map[card_index_counter] = variant_product_id
+                card_index_counter += 1
             
             # Build text entry with comprehensive price formatting
             lines = []
@@ -1141,6 +1315,9 @@ class AIBrain:
             logger.info(f"🖼️ [{card_type}] Product: {card.get('name')} - {img_status} - Price: {price_info}")
         
         # Return with product_cards for image rendering
+        state.collect_field("_card_index_map", card_index_map)
+        logger.info(f"🗺️ Stored card_index_map with {len(card_index_map)} entries")
+        
         return response_text, suggested_actions, {'product_cards': product_cards}
     
     def _handle_order_flow(
@@ -1172,6 +1349,16 @@ class AIBrain:
         
         # Check for payment confirmation
         if state.flow_status == FlowStatus.AWAITING_PAYMENT:
+            # Check if user wants a new payment link
+            msg_lower = message.lower().strip()
+            if any(x in msg_lower for x in ["new link", "new payment", "regenerate", "new"]):
+                logger.info(f"📦 User requested new payment link while awaiting payment for user: {user_id}")
+                # Clear existing link to force regeneration
+                state.collect_field("payment_link_id", None)
+                state.collect_field("payment_link_url", None)
+                # Regenerate payment link
+                return self._complete_order(user_id, state, business_data)
+            
             return self._handle_payment_verification(user_id, state, message, business_data)
 
         # Check for confirmation response
@@ -1276,6 +1463,60 @@ class AIBrain:
             # Search term comes from button ID: sanitized (underscores) or spaces
             raw_term = msg_lower.replace("order ", "").strip()
             
+            # CRITICAL FIX: Check if this is the new card_index format (order_card_0, order_card_1, etc.)
+            if raw_term.startswith("card_"):
+                try:
+                    # Extract card index from "card_0", "card_1", etc.
+                    card_index = int(raw_term.replace("card_", ""))
+                    card_index_map = state.collected_fields.get("_card_index_map", {})
+                    
+                    logger.info(f"🗺️ Card-based button detected: {raw_term}, card_index={card_index}")
+                    logger.info(f"🗺️ Card index map has {len(card_index_map)} entries")
+                    
+                    # Look up the full product_id using the card_index
+                    # Convert string keys to int if needed
+                    card_index_map_int = {int(k) if isinstance(k, str) else k: v for k, v in card_index_map.items()}
+                    
+                    if card_index in card_index_map_int:
+                        full_product_id = card_index_map_int[card_index]
+                        logger.info(f"OK Mapped card_index {card_index} → product_id: {full_product_id}")
+                        
+                        # Override raw_term to use the full product ID
+                        raw_term = full_product_id.lower()
+                        logger.info(f"🔄 Using mapped product_id for matching: raw='{raw_term}'")
+                    else:
+                        logger.warning(f"⚠️ Card index {card_index} not found in map! Available: {list(card_index_map_int.keys())}")
+                except (ValueError, TypeError) as e:
+                    logger.error(f"❌ Failed to parse card index from '{raw_term}': {e}")
+            
+            
+            # CRITICAL FIX: Check if this is the new card_index format (order_card_0, order_card_1, etc.)
+            if raw_term.startswith("card_"):
+                try:
+                    # Extract card index from "card_0", "card_1", etc.
+                    card_index = int(raw_term.replace("card_", ""))
+                    card_index_map = state.collected_fields.get("_card_index_map", {})
+                    
+                    logger.info(f"🗺️ Card-based button detected: {raw_term}, card_index={card_index}")
+                    logger.info(f"🗺️ Card index map has {len(card_index_map)} entries")
+                    
+                    # Look up the full product_id using the card_index
+                    # Convert string keys to int if needed
+                    card_index_map_int = {int(k) if isinstance(k, str) else k: v for k, v in card_index_map.items()}
+                    
+                    if card_index in card_index_map_int:
+                        full_product_id = card_index_map_int[card_index]
+                        logger.info(f"✅ Mapped card_index {card_index} → product_id: {full_product_id}")
+                        
+                        # Override raw_term to use the full product ID
+                        raw_term = full_product_id.lower()
+                        logger.info(f"🔄 Using mapped product_id for matching: raw='{raw_term}'")
+                    else:
+                        logger.warning(f"⚠️ Card index {card_index} not found in map! Available: {list(card_index_map_int.keys())}")
+                except (ValueError, TypeError) as e:
+                    logger.error(f"❌ Failed to parse card index from '{raw_term}': {e}")
+            
+            
             # Create a "clean" search term for robust matching (no spaces, dashes, underscores)
             clean_search_term = re.sub(r'[\s\-_]', '', raw_term)
             
@@ -1288,8 +1529,9 @@ class AIBrain:
             mentioned_variant = None
             best_match_score = 0
             
-            # First, check if this is a variant product ID (contains "_variant_")
+            # First, check if this is a variant product ID (contains "_variant_" OR matches a variant ID directly)
             is_variant_id = "_variant_" in raw_term or "_variant_" in clean_search_term
+            logger.info(f"🔍 Variant detection: is_variant_id={is_variant_id}, raw_term='{raw_term}', clean_search_term='{clean_search_term}'")
             
             for product in products:
                 if isinstance(product, dict):
@@ -1302,9 +1544,11 @@ class AIBrain:
                     clean_id = re.sub(r'[\s\-_]', '', product_id)
                     clean_sku = re.sub(r'[\s\-_]', '', sku)
                     
-                    # Check variants if this looks like a variant ID
-                    if is_variant_id:
-                        variants = product.get('variants', []) or []
+                    # CRITICAL: Always check variants FIRST (button IDs are truncated, so _variant_ might be missing)
+                    # Check variants for ALL products, not just when is_variant_id=True
+                    variants = product.get('variants', []) or []
+                    if variants:
+                        logger.info(f"🔍 Checking variants for product: {name}, search_term: {clean_search_term}")
                         for variant in variants:
                             if not isinstance(variant, dict):
                                 continue
@@ -1313,44 +1557,89 @@ class AIBrain:
                             variant_product_id = f"{product_id}_variant_{variant_id}".lower()
                             clean_variant_id = re.sub(r'[\s\-_]', '', variant_product_id)
                             
-                            # Match variant ID
-                            if clean_variant_id == clean_search_term or clean_variant_id.startswith(clean_search_term):
+                            # Also check variant ID directly (for truncated button IDs)
+                            clean_variant_id_only = re.sub(r'[\s\-_]', '', variant_id)
+                            
+                            logger.info(f"   Comparing: clean_variant_id={clean_variant_id[:30]}..., clean_variant_id_only={clean_variant_id_only}, vs clean_search_term={clean_search_term}")
+                            
+                            # Match variant ID - handle truncated button IDs (WhatsApp buttons are limited to 20 chars)
+                            # Check multiple matching strategies:
+                            # 1. Exact match with full variant_product_id
+                            # 2. clean_variant_id starts with clean_search_term (search_term is prefix) - BUT NOT if search_term is exactly the base product ID
+                            # 3. clean_search_term starts with first 20 chars of clean_variant_id (truncated button ID)
+                            # 4. Both start with same prefix (for very long IDs)
+                            # 5. NEW: Match variant ID directly (for truncated IDs that lost _variant_ part)
+                            
+                            # CRITICAL FIX: Don't match variant if search_term is exactly the base product ID
+                            # (variant IDs are "base_id_variant_variant_id", so they start with base_id)
+                            is_base_product_id = (clean_search_term == clean_id)
+                            
+                            # CRITICAL FIX: Apply is_base_product_id check to ALL prefix-based matching conditions
+                            # If search_term is exactly the base product ID, we should NOT match any variant
+                            matches = (
+                                clean_variant_id == clean_search_term or 
+                                # Only match prefix if search_term is NOT the base product ID
+                                (not is_base_product_id and clean_variant_id.startswith(clean_search_term)) or
+                                (not is_base_product_id and len(clean_search_term) >= 15 and clean_variant_id.startswith(clean_search_term[:20])) or
+                                (not is_base_product_id and len(clean_variant_id) >= 20 and clean_search_term.startswith(clean_variant_id[:20])) or
+                                # NEW: Match variant ID directly (button ID might be just the variant ID)
+                                clean_variant_id_only == clean_search_term or
+                                (not is_base_product_id and clean_variant_id_only.startswith(clean_search_term)) or
+                                (not is_base_product_id and clean_search_term.startswith(clean_variant_id_only[:20]))
+                            )
+                            
+                            if matches:
                                 mentioned_product = product
                                 mentioned_variant = variant
-                                logger.info(f"📦 Variant match found: {name} - Variant ID: {variant_id}")
+                                variant_color = variant.get("color", "")
+                                logger.info(f"📦 ✅ Variant match found: {name} - Variant ID: {variant_id}, Color: {variant_color}")
+                                logger.info(f"   Match type: variant_id_match={clean_variant_id_only == clean_search_term or clean_variant_id_only.startswith(clean_search_term)}")
                                 break
                         
                         if mentioned_variant:
                             break
                     
-                    # 1. Exact Name/ID/SKU match (Highest Priority)
-                    if clean_name == clean_search_term or clean_id == clean_search_term or clean_sku == clean_search_term:
-                        mentioned_product = product
-                        logger.info(f"📦 Exact match found: {name}")
-                        break
+                    # Only check base product if no variant was matched
+                    if not mentioned_variant:
+                        # CRITICAL: Don't match base product if search_term could be a truncated variant ID
+                        # If search_term starts with base product ID prefix, it might be a variant (skip base match)
+                        skip_base_match = False
+                        if clean_id and len(clean_search_term) >= 10:
+                            # Check if search_term starts with base product ID (could be truncated variant)
+                            if clean_search_term.startswith(clean_id[:15]) and clean_search_term != clean_id:
+                                # Search term starts with base ID but isn't exact match - likely truncated variant
+                                logger.info(f"   ⚠️ Search term '{clean_search_term}' starts with base product ID '{clean_id[:15]}...' - likely truncated variant, skipping base match")
+                                skip_base_match = True
                         
-                    # 2. Prefix match (for truncated IDs in buttons)
-                    # If the button ID was truncated, clean_search_term will be a prefix of clean_id/name
-                    if len(clean_search_term) >= 5:  # Only for reasonable length terms
-                        if clean_name.startswith(clean_search_term) or clean_id.startswith(clean_search_term) or clean_sku.startswith(clean_search_term):
-                            mentioned_product = product
-                            logger.info(f"📦 Prefix match found: {name}")
-                            break
+                        if not skip_base_match:
+                            # 1. Exact Name/ID/SKU match (Highest Priority)
+                            if clean_name == clean_search_term or clean_id == clean_search_term or clean_sku == clean_search_term:
+                                mentioned_product = product
+                                logger.info(f"📦 Exact match found: {name}")
+                                break
+                                
+                            # 2. Prefix match (for truncated IDs in buttons)
+                            # If the button ID was truncated, clean_search_term will be a prefix of clean_id/name
+                            if len(clean_search_term) >= 5:  # Only for reasonable length terms
+                                if clean_name.startswith(clean_search_term) or clean_id.startswith(clean_search_term) or clean_sku.startswith(clean_search_term):
+                                    mentioned_product = product
+                                    logger.info(f"📦 Prefix match found: {name}")
+                                    break
+                                    
+                            # 3. Flexible substring match (original logic fallback)
+                            if name and (name in search_term_spaces or search_term_spaces in name):
+                                mentioned_product = product
+                                logger.info(f"📦 Substring match found (name): {name}")
+                                break
                             
-                    # 3. Flexible substring match (original logic fallback)
-                    if name and (name in search_term_spaces or search_term_spaces in name):
-                        mentioned_product = product
-                        logger.info(f"📦 Substring match found (name): {name}")
-                        break
-                    
-                    # 4. ID match with flexible separators
-                    if product_id and product_id != "none":
-                        # Compare normalizing separators
-                        norm_id = product_id.replace("-", " ").replace("_", " ")
-                        if norm_id == search_term_spaces or norm_id in search_term_spaces or search_term_spaces in norm_id:
-                            mentioned_product = product
-                            logger.info(f"📦 ID match found: {product_id}")
-                            break
+                            # 4. ID match with flexible separators
+                            if product_id and product_id != "none":
+                                # Compare normalizing separators
+                                norm_id = product_id.replace("-", " ").replace("_", " ")
+                                if norm_id == search_term_spaces or norm_id in search_term_spaces or search_term_spaces in norm_id:
+                                    mentioned_product = product
+                                    logger.info(f"📦 ID match found: {product_id}")
+                                    break
             
             if mentioned_product:
                 # Clear any category selection state - we're directly ordering a product
@@ -1375,9 +1664,47 @@ class AIBrain:
                     has_size_pricing = mentioned_variant.get("has_size_pricing", False)
                     size_prices = mentioned_variant.get("size_prices", {}) or {}
                     
+                    # CRITICAL: Extract and set variant's color immediately
+                    variant_color = mentioned_variant.get("color", "")
+                    variant_id = mentioned_variant.get("id", "")
+                    if variant_color:
+                        # Auto-select the variant's color
+                        state.collect_field("selected_color", variant_color)
+                        logger.info(f"🎨 ✅ Variant selected - stored color: {variant_color} (variant_id: {variant_id})")
+                    else:
+                        logger.warning(f"🎨 ⚠️ Variant selected but has no color! variant_id: {variant_id}")
+                    
                     # Store variant info
                     state.collect_field("selected_variant", mentioned_variant)
                     state.collect_field("selected_variant_id", mentioned_variant.get('id'))
+                    
+                    # Store variant price early (will be used if variant goes straight to quantity)
+                    variant_price_early = mentioned_variant.get("price")
+                    logger.info(f"💰 DEBUG: Variant price check - variant_id={mentioned_variant.get('id')}, price={variant_price_early}, type={type(variant_price_early)}")
+                    
+                    # Only treat as "no price" if it's explicitly None, not if it's 0 (0 is a valid price)
+                    if variant_price_early is None:
+                        variant_size_prices_early = mentioned_variant.get("size_prices", {}) or {}
+                        logger.info(f"💰 DEBUG: Variant has no direct price, checking size_prices: {variant_size_prices_early}")
+                        if variant_size_prices_early and len(variant_size_prices_early) == 1:
+                            single_size_early = list(variant_size_prices_early.keys())[0]
+                            variant_price_early = variant_size_prices_early[single_size_early]
+                            logger.info(f"💰 DEBUG: Using single size price: {single_size_early} = ₹{variant_price_early}")
+                        else:
+                            # Variant should have price - log warning but don't fallback to base
+                            logger.warning(f"💰 ⚠️ Variant has no price field! variant_id={mentioned_variant.get('id')}, variant={mentioned_variant}")
+                            # Still try to use variant's price field (might be 0 or missing)
+                            variant_price_early = mentioned_variant.get("price", 0)
+                    
+                    # Always store the price (even if 0) - convert to float
+                    try:
+                        variant_price_early = float(variant_price_early) if variant_price_early is not None else 0.0
+                        state.collect_field("selected_variant_price", variant_price_early)
+                        logger.info(f"💰 ✅ Stored variant price early: ₹{variant_price_early} (variant_id={mentioned_variant.get('id')})")
+                    except (ValueError, TypeError) as e:
+                        logger.error(f"💰 ❌ Failed to convert variant price to float: {variant_price_early}, error: {e}")
+                        # Store 0 as fallback
+                        state.collect_field("selected_variant_price", 0.0)
                 else:
                     product_name = mentioned_product.get("name", "item")
                     product_id = mentioned_product.get("id") or mentioned_product.get("sku") or product_name
@@ -1423,35 +1750,109 @@ class AIBrain:
                 
                 # If variant was selected, check if it needs additional size selection (for variant-level size pricing)
                 if mentioned_variant:
-                    # Variant already selected - check if it has size-based pricing that needs selection
+                    # CRITICAL: Variant already selected - check if it has size-based pricing that needs selection
                     variant_size = mentioned_variant.get("size", "")
+                    variant_color = mentioned_variant.get("color", "")
                     variant_has_size_pricing = mentioned_variant.get("has_size_pricing", False)
                     variant_size_prices = mentioned_variant.get("size_prices", {}) or {}
                     
+                    # CRITICAL: Store variant info IMMEDIATELY when variant is selected
+                    # Store the full variant object so we can access it later
+                    state.collect_field("selected_variant", mentioned_variant)
+                    state.collect_field("selected_variant_id", mentioned_variant.get('id'))
+                    
+                    # CRITICAL: Store variant color IMMEDIATELY when variant is selected
+                    # This ensures the color is available even if size selection happens later
+                    if variant_color:
+                        state.collect_field("selected_color", variant_color)
+                        logger.info(f"🎨 ✅ Variant selected - stored color: {variant_color} (variant_id: {mentioned_variant.get('id')})")
+                    else:
+                        logger.warning(f"🎨 ⚠️ Variant selected but has no color! variant_id: {mentioned_variant.get('id')}")
+                    
+                    # Parse variant size if it's a comma-separated string (e.g., "Free Size, XXL")
+                    available_sizes = []
+                    if variant_size:
+                        if isinstance(variant_size, str) and ',' in variant_size:
+                            # Split comma-separated sizes
+                            available_sizes = [s.strip() for s in variant_size.split(',') if s.strip()]
+                        elif isinstance(variant_size, str):
+                            available_sizes = [variant_size.strip()]
+                        elif isinstance(variant_size, list):
+                            available_sizes = variant_size
+                    
+                    logger.info(f"📦 Variant selected: {product_name}, color={variant_color}, sizes={available_sizes}, has_size_pricing={variant_has_size_pricing}")
+                    
                     # If variant has size-based pricing with multiple sizes, ask for size selection
                     if variant_has_size_pricing and variant_size_prices and len(variant_size_prices) > 1:
-                        available_sizes = list(variant_size_prices.keys())
+                        # Use variant's size_prices for selection
+                        available_sizes_from_pricing = list(variant_size_prices.keys())
                         state.collect_field("_needs_size", True)
-                        state.collect_field("_available_sizes", available_sizes)
+                        state.collect_field("_available_sizes", available_sizes_from_pricing)
                         state.collect_field("_variant_size_prices", variant_size_prices)
                         
                         size_price_info = []
-                        for s in available_sizes[:6]:
+                        for s in available_sizes_from_pricing[:6]:
                             if s in variant_size_prices:
                                 size_price_info.append(f"{s}: ₹{int(float(variant_size_prices[s]))}")
                             else:
                                 size_price_info.append(s)
-                        size_display = ", ".join(size_price_info)
-                        response_text = f"Great choice! 🎉 *{product_name}*{price_str}\n\nAvailable sizes:\n{size_display}\n\nWhich size would you like?"
+                        size_display = "\n".join(size_price_info)
+                        
+                        # Show variant color if available
+                        color_display = f"\nColor: *{variant_color}*\n" if variant_color else "\n"
+                        response_text = f"Great choice! 🎉\n*{product_name}*{color_display}\nAvailable sizes:\n{size_display}\n\nWhich size would you like?"
+                        suggested_actions = available_sizes_from_pricing[:4] + ["Cancel"]
+                    elif available_sizes and len(available_sizes) > 1:
+                        # Variant has multiple sizes but no size pricing - ask for size selection
+                        state.collect_field("_needs_size", True)
+                        state.collect_field("_available_sizes", available_sizes)
+                        
+                        size_list = ", ".join(available_sizes[:6])
+                        color_display = f"\nColor: *{variant_color}*\n" if variant_color else "\n"
+                        response_text = f"Great choice! 🎉\n*{product_name}*{color_display}\nAvailable sizes: {size_list}\n\nWhich size would you like?"
                         suggested_actions = available_sizes[:4] + ["Cancel"]
                     else:
-                        # Variant fully specified - go straight to quantity
-                        response_text = f"Great choice! 🎉 You want to order *{product_name}*{price_str}.\n\nHow many would you like?"
+                        # Variant fully specified or only one size - go straight to quantity
+                        # CRITICAL: Store variant price for order item building
+                        variant_price = mentioned_variant.get("price")
+                        logger.info(f"💰 DEBUG: Variant fully specified - variant_id={mentioned_variant.get('id')}, price={variant_price}, type={type(variant_price)}")
+                        
+                        # If variant has single size in size_prices, use that price
+                        if variant_price is None and variant_size_prices and len(variant_size_prices) == 1:
+                            single_size = list(variant_size_prices.keys())[0]
+                            variant_price = variant_size_prices[single_size]
+                            # Auto-select the single size
+                            state.collect_field("selected_size", single_size)
+                            logger.info(f"💰 Using variant single size pricing: {single_size} = ₹{variant_price}")
+                        elif variant_price is None:
+                            # Variant should have price - log warning
+                            logger.warning(f"💰 ⚠️ Variant has no price field! variant_id={mentioned_variant.get('id')}, variant={mentioned_variant}")
+                            # Still try to use variant's price field (might be 0)
+                            variant_price = mentioned_variant.get("price", 0)
+                        
+                        # Auto-select single size if available
+                        if available_sizes and len(available_sizes) == 1:
+                            state.collect_field("selected_size", available_sizes[0])
+                            logger.info(f"📏 Auto-selected single size: {available_sizes[0]}")
+                        
+                        # Always store the price (even if 0) - convert to float
+                        try:
+                            variant_price = float(variant_price) if variant_price is not None else 0.0
+                            state.collect_field("selected_variant_price", variant_price)
+                            logger.info(f"💰 ✅ Stored variant price for quantity flow: ₹{variant_price} (variant_id={mentioned_variant.get('id')})")
+                        except (ValueError, TypeError) as e:
+                            logger.error(f"💰 ❌ Failed to convert variant price: {variant_price}, error: {e}")
+                            # Store 0 as fallback
+                            state.collect_field("selected_variant_price", 0.0)
+                        
+                        color_display = f"\nColor: *{variant_color}*\n" if variant_color else "\n"
+                        size_display = f"Size: *{available_sizes[0]}*\n" if available_sizes and len(available_sizes) == 1 else ""
+                        response_text = f"Great choice! 🎉\n*{product_name}*{color_display}{size_display}\nHow many would you like?"
                         suggested_actions = ["1", "2", "3", "Cancel"]
                 else:
                     # Base product selected - determine next step based on product attributes
                     sizes = mentioned_product.get("sizes", [])
-                    colors = mentioned_product.get("colors", [])
+                    colors = self._get_available_colors_for_product(mentioned_product)
                     
                     if sizes:
                         state.collect_field("_needs_size", True)
@@ -1466,18 +1867,26 @@ class AIBrain:
                                 else:
                                     size_price_info.append(s)
                             size_display = ", ".join(size_price_info)
-                            response_text = f"Great choice! 🎉 *{product_name}*{price_str}\n\nAvailable sizes:\n{size_display}\n\nWhich size would you like?"
+                            response_text = f"Great choice! 🎉\n*{product_name}*\n\nAvailable sizes:\n{size_display}\n\nWhich size would you like?"
                         else:
-                            response_text = f"Great choice! 🎉 *{product_name}*{price_str}\n\nAvailable sizes: {size_list}\n\nWhich size would you like?"
+                            response_text = f"Great choice! 🎉\n*{product_name}*\n\nAvailable sizes: {size_list}\n\nWhich size would you like?"
                         suggested_actions = sizes[:4] + ["Cancel"]
                     elif colors:
-                        state.collect_field("_needs_color", True)
-                        state.collect_field("_available_colors", colors)
-                        color_list = ", ".join(colors[:6])
-                        response_text = f"Great choice! 🎉 *{product_name}*{price_str}\n\nAvailable colors: {color_list}\n\nWhich color would you like?"
-                        suggested_actions = colors[:4] + ["Cancel"]
+                        # If only one color, automatically select it
+                        if len(colors) == 1:
+                            # Auto-select the single color
+                            state.collect_field("selected_color", colors[0])
+                            response_text = f"Great choice! 🎉\n*{product_name}*\n\nColor: *{colors[0]}*\n\nHow many would you like to order?"
+                            suggested_actions = ["1", "2", "3", "Cancel"]
+                        else:
+                            # Multiple colors - ask user to select
+                            state.collect_field("_needs_color", True)
+                            state.collect_field("_available_colors", colors)
+                            color_list = ", ".join(colors[:6])
+                            response_text = f"Great choice! 🎉\n*{product_name}*\n\nAvailable colors: {color_list}\n\nWhich color would you like?"
+                            suggested_actions = colors[:4] + ["Cancel"]
                     else:
-                        response_text = f"Great choice! 🎉 You want to order *{product_name}*{price_str}.\n\nHow many would you like?"
+                        response_text = f"Great choice! 🎉\n*{product_name}*\n\nHow many would you like?"
                         suggested_actions = ["1", "2", "3", "Cancel"]
                 
                 # Persist state after product selection
@@ -1501,6 +1910,64 @@ class AIBrain:
         # STEP 0: Handle category selection
         # =====================================================
         if state.collected_fields.get("awaiting_category"):
+            # Check for "Visit Website" button click - send URL button that opens website
+            if msg_lower in ["visit website", "visit_website"]:
+                store_link = state.collected_fields.get("store_link")
+                if not store_link:
+                    # Fallback: generate from business_id
+                    business_id = business_data.get("business_id")
+                    if business_id and business_id != "default" and len(business_id) > 10:
+                        store_link = f"https://flowauxi.com/store/{business_id}"
+                
+                if store_link:
+                    self.conversation_manager.add_message(user_id, "user", message)
+                    response_text = "Start Shopping ❤️"
+                    self.conversation_manager.add_message(user_id, "assistant", response_text)
+                    return {
+                        "reply": response_text,
+                        "intent": "visit_website",
+                        "confidence": 1.0,
+                        "needs_human": False,
+                        "metadata": {
+                            "use_url_button": True,
+                            "url_button_text": "Visit Website",
+                            "url_button_url": store_link,
+                            "url_button_body": "Start Shopping ❤️",
+                            "url_button_header": "",
+                            "url_button_footer": ""
+                        }
+                    }
+            
+            # Check for "View Categories" button click - show categories list
+            if msg_lower in ["view categories", "view_categories"]:
+                categories = state.collected_fields.get("_available_categories", [])
+                products = business_data.get("products_services", [])
+                
+                list_sections = [{
+                    "title": "Categories",
+                    "rows": [
+                        {"id": f"cat_{i}_{cat.replace(' ', '_').lower()[:20]}", "title": cat[:24]}
+                        for i, cat in enumerate(categories[:10])  # WhatsApp max 10 items
+                    ]
+                }]
+                
+                self.conversation_manager.add_message(user_id, "user", message)
+                response_text = "Tap the button to view categories."
+                self.conversation_manager.add_message(user_id, "assistant", response_text)
+                return {
+                    "reply": response_text,
+                    "intent": "view_categories",
+                    "confidence": 1.0,
+                    "needs_human": False,
+                    "metadata": {
+                        "use_list": True,
+                        "list_button": "View Categories",
+                        "list_body_text": "Tap the button to view categories.",
+                        "list_header_text": "",
+                        "list_sections": list_sections
+                    }
+                }
+            
             categories = state.collected_fields.get("_available_categories", [])
             products = business_data.get("products_services", [])
             matched_category = None
@@ -1645,24 +2112,38 @@ class AIBrain:
                         break
             
             if matched_size:
+                variant_size_prices = state.collected_fields.get("_variant_size_prices")
                 del state.collected_fields["_needs_size"]
                 del state.collected_fields["_available_sizes"]
+                if "_variant_size_prices" in state.collected_fields:
+                    del state.collected_fields["_variant_size_prices"]
                 state.collect_field("selected_size", matched_size)
                 
-                # Get product data for pricing
+                # Get product data and optionally variant for pricing
                 product_data = state.collected_fields.get("pending_product_data", {})
+                selected_variant = state.collected_fields.get("selected_variant")
                 
-                # Calculate price for selected size
-                has_size_pricing = product_data.get("has_size_pricing", False)
-                size_prices = product_data.get("size_prices", {}) or {}
-                base_price = product_data.get("price", 0)
-                original_price = product_data.get("compare_at_price")  # Original price for comparison
-                
-                # Get the price for the selected size
-                if has_size_pricing and size_prices and matched_size in size_prices:
+                # Use variant-level pricing when variant was selected (e.g. variant card tap)
+                if selected_variant and variant_size_prices and matched_size in variant_size_prices:
+                    has_size_pricing = True
+                    size_prices = variant_size_prices
+                    base_price = selected_variant.get("price")
+                    if base_price is None:
+                        base_price = product_data.get("price", 0)
+                    else:
+                        base_price = float(base_price)
+                    original_price = selected_variant.get("compare_at_price")
                     selected_price = float(size_prices[matched_size])
+                    logger.info(f"💰 Using variant size price for {matched_size}: ₹{selected_price}")
                 else:
-                    selected_price = float(base_price) if base_price else 0
+                    has_size_pricing = product_data.get("has_size_pricing", False)
+                    size_prices = product_data.get("size_prices", {}) or {}
+                    base_price = product_data.get("price", 0)
+                    original_price = product_data.get("compare_at_price")
+                    if has_size_pricing and size_prices and matched_size in size_prices:
+                        selected_price = float(size_prices[matched_size])
+                    else:
+                        selected_price = float(base_price) if base_price else 0
                 
                 # Store the selected size price in the state for order completion
                 state.collect_field("selected_size_price", selected_price)
@@ -1683,17 +2164,52 @@ class AIBrain:
                     price_display = f" (₹{int(selected_price)})"
                 
                 # Check if color selection needed
-                colors = product_data.get("colors", [])
+                # CRITICAL: If a variant was already selected, use its color; else use variant-derived or base colors
+                selected_variant = state.collected_fields.get("selected_variant")
+                selected_color_already = state.collected_fields.get("selected_color")  # Check if color was already set
+                variant_color = None
                 
-                if colors:
-                    state.collect_field("_needs_color", True)
-                    state.collect_field("_available_colors", colors)
-                    color_list = ", ".join(colors[:6])
-                    response_text = f"Size *{matched_size}*{price_display} selected. ✓\n\nAvailable colors: {color_list}\n\nWhich color would you like?"
-                    suggested_actions = colors[:4] + ["Cancel"]
-                else:
-                    response_text = f"Size *{matched_size}*{price_display} selected. ✓\n\nHow many would you like to order?"
+                logger.info(f"🎨 Size selection - checking for variant color")
+                logger.info(f"   selected_variant exists: {selected_variant is not None}")
+                logger.info(f"   selected_color_already: {selected_color_already}")
+                
+                if selected_variant:
+                    variant_color = selected_variant.get("color", "")
+                    logger.info(f"   variant_color from selected_variant: {variant_color}")
+                
+                # Priority 1: Use already selected color (from variant selection) - CHECK THIS FIRST
+                if selected_color_already:
+                    logger.info(f"🎨 ✅ Priority 1: Using already selected color: {selected_color_already}")
+                    response_text = f"Size: {matched_size} selected\n\nColor: *{selected_color_already}*\n\nHow many would you like to order?"
                     suggested_actions = ["1", "2", "3", "Cancel"]
+                # Priority 2: Use variant color if variant exists
+                elif selected_variant and variant_color:
+                    state.collect_field("selected_color", variant_color)
+                    logger.info(f"🎨 ✅ Priority 2: Using variant color after size selection: {variant_color}")
+                    response_text = f"Size: {matched_size} selected\n\nColor: *{variant_color}*\n\nHow many would you like to order?"
+                    suggested_actions = ["1", "2", "3", "Cancel"]
+                # Priority 3: Use variant-derived colors when product has variants, else base (no variant selected)
+                else:
+                    colors = self._get_available_colors_for_product(
+                        product_data, selected_size=matched_size
+                    )
+                    if colors:
+                        if len(colors) == 1:
+                            state.collect_field("selected_color", colors[0])
+                            logger.info(f"🎨 Priority 3: Auto-selecting single color: {colors[0]}")
+                            response_text = f"Size: {matched_size} selected\n\nColor: *{colors[0]}*\n\nHow many would you like to order?"
+                            suggested_actions = ["1", "2", "3", "Cancel"]
+                        else:
+                            state.collect_field("_needs_color", True)
+                            state.collect_field("_available_colors", colors)
+                            color_list = ", ".join(colors[:6])
+                            logger.info(f"🎨 Priority 3: Multiple colors, asking user to select")
+                            response_text = f"Size: {matched_size} selected\n\nAvailable colors: {color_list}\n\nWhich color would you like?"
+                            suggested_actions = colors[:4] + ["Cancel"]
+                    else:
+                        logger.info(f"🎨 No colors available")
+                        response_text = f"Size: {matched_size} selected\n\nHow many would you like to order?"
+                        suggested_actions = ["1", "2", "3", "Cancel"]
                 
                 # Persist state after size selection
                 self.conversation_manager.persist_state(user_id)
@@ -1949,24 +2465,32 @@ class AIBrain:
                     state.collect_field("pending_product_id", product_id)
                     state.collect_field("pending_product_data", matched_product_data)
                     
-                    # Check for variants
+                    # Check for variants / sizes / colors (use variant-derived colors when product has variants)
                     sizes = matched_product_data.get("sizes", [])
-                    colors = matched_product_data.get("colors", [])
+                    colors = self._get_available_colors_for_product(matched_product_data)
                     
                     if sizes:
                         state.collect_field("_needs_size", True)
                         state.collect_field("_available_sizes", sizes)
                         size_list = ", ".join(sizes[:6])
-                        response_text = f"Great choice! 🎉 *{matched_product}*\n\nAvailable sizes: {size_list}\n\nWhich size would you like?"
+                        response_text = f"Great choice! 🎉\n*{matched_product}*\n\nAvailable sizes: {size_list}\n\nWhich size would you like?"
                         suggested_actions = sizes[:4] + ["Cancel"]
                     elif colors:
-                        state.collect_field("_needs_color", True)
-                        state.collect_field("_available_colors", colors)
-                        color_list = ", ".join(colors[:6])
-                        response_text = f"Great choice! 🎉 *{matched_product}*\n\nAvailable colors: {color_list}\n\nWhich color would you like?"
-                        suggested_actions = colors[:4] + ["Cancel"]
+                        # If only one color, automatically select it
+                        if len(colors) == 1:
+                            # Auto-select the single color
+                            state.collect_field("selected_color", colors[0])
+                            response_text = f"Great choice! 🎉\n*{matched_product}*\n\nColor: *{colors[0]}*\n\nHow many would you like to order?"
+                            suggested_actions = ["1", "2", "3", "Cancel"]
+                        else:
+                            # Multiple colors - ask user to select
+                            state.collect_field("_needs_color", True)
+                            state.collect_field("_available_colors", colors)
+                            color_list = ", ".join(colors[:6])
+                            response_text = f"Great choice! 🎉\n*{matched_product}*\n\nAvailable colors: {color_list}\n\nWhich color would you like?"
+                            suggested_actions = colors[:4] + ["Cancel"]
                     else:
-                        response_text = f"Great choice! 🎉 You want to order *{matched_product}*.\n\nHow many would you like?"
+                        response_text = f"Great choice! 🎉\n*{matched_product}*\n\nHow many would you like?"
                         suggested_actions = ["1", "2", "3", "Cancel"]
                 else:
                     response_text = f"Great choice! 🎉 You want to order *{matched_product}*.\n\nHow many would you like?"
@@ -2015,17 +2539,74 @@ class AIBrain:
                     
                     # Build complete item with stable product references
                     product_data = state.collected_fields.get("pending_product_data", {})
-                    
-                    # Get the correct price: use size-specific price if available
+                    selected_variant = state.collected_fields.get("selected_variant")
+                    selected_size = state.collected_fields.get("selected_size")
+                    selected_color = state.collected_fields.get("selected_color")
                     selected_size_price = state.collected_fields.get("selected_size_price")
                     base_price = product_data.get("price", 0)
-                    original_price = product_data.get("compare_at_price")  # Original/compare price
+                    original_price = product_data.get("compare_at_price")
                     
-                    # Determine the final price to use
-                    if selected_size_price is not None:
-                        item_price = selected_size_price
+                    # Determine price: prefer variant-level over base/size-level
+                    item_price = None
+                    item_original_price = None
+                    
+                    logger.info(f"💰 DEBUG: Building order item - selected_variant={selected_variant is not None}, selected_size={selected_size}, selected_color={selected_color}")
+                    if selected_variant:
+                        logger.info(f"💰 DEBUG: Variant details - id={selected_variant.get('id')}, price={selected_variant.get('price')}, size_prices={selected_variant.get('size_prices')}")
+                        logger.info(f"💰 DEBUG: State - selected_size_price={selected_size_price}, selected_variant_price={state.collected_fields.get('selected_variant_price')}")
+                        
+                        # Priority 1: Use size-specific price if size was selected
+                        if selected_size_price is not None:
+                            item_price = selected_size_price
+                            item_original_price = selected_variant.get("compare_at_price") or original_price
+                            logger.info(f"💰 ✅ Priority 1: Using variant size price for item: ₹{item_price} (variant_id={selected_variant.get('id')}, size={selected_size})")
+                        # Priority 2: Use stored variant price (when variant selected without size selection)
+                        elif state.collected_fields.get("selected_variant_price") is not None:
+                            item_price = float(state.collected_fields.get("selected_variant_price"))
+                            item_original_price = selected_variant.get("compare_at_price") or original_price
+                            logger.info(f"💰 ✅ Priority 2: Using stored variant price for item: ₹{item_price} (variant_id={selected_variant.get('id')})")
+                        # Priority 3: Try variant's direct price field
+                        else:
+                            vp = selected_variant.get("price")
+                            logger.info(f"💰 DEBUG: Priority 3 - variant direct price: {vp}, type={type(vp)}")
+                            if vp is not None:
+                                # Use variant price even if it's 0 (0 is a valid price)
+                                item_price = float(vp)
+                                item_original_price = selected_variant.get("compare_at_price") or original_price
+                                logger.info(f"💰 ✅ Priority 3: Using variant direct price for item: ₹{item_price} (variant_id={selected_variant.get('id')})")
+                            else:
+                                # Last resort: check if variant has single size pricing
+                                variant_size_prices = selected_variant.get("size_prices", {}) or {}
+                                logger.info(f"💰 DEBUG: Priority 4 - checking variant size_prices: {variant_size_prices}")
+                                if variant_size_prices and len(variant_size_prices) == 1:
+                                    single_size = list(variant_size_prices.keys())[0]
+                                    item_price = float(variant_size_prices[single_size])
+                                    item_original_price = selected_variant.get("compare_at_price") or original_price
+                                    logger.info(f"💰 ✅ Priority 4: Using variant single-size price for item: ₹{item_price} (variant_id={selected_variant.get('id')}, size={single_size})")
+                                else:
+                                    # Fallback to base price (shouldn't happen if variant is properly configured)
+                                    item_price = float(base_price) if base_price else 0
+                                    item_original_price = original_price
+                                    logger.error(f"💰 ❌ ERROR: Variant has no price! Falling back to base: ₹{item_price} (variant_id={selected_variant.get('id')}, variant={selected_variant})")
                     else:
-                        item_price = float(base_price) if base_price else 0
+                        resolved = self._resolve_variant_for_product(
+                            product_data, selected_size=selected_size, selected_color=selected_color
+                        )
+                        if resolved:
+                            sp = resolved.get("size_prices") or {}
+                            if selected_size and sp.get(selected_size) is not None:
+                                item_price = float(sp[selected_size])
+                            else:
+                                vp = resolved.get("price")
+                                item_price = float(vp) if vp is not None else (float(base_price) if base_price else 0)
+                            item_original_price = resolved.get("compare_at_price") or original_price
+                            logger.info(f"💰 Using resolved variant price for item: ₹{item_price} (size={selected_size}, color={selected_color})")
+                        elif selected_size_price is not None:
+                            item_price = selected_size_price
+                            item_original_price = original_price
+                        else:
+                            item_price = float(base_price) if base_price else 0
+                            item_original_price = original_price
                     
                     item = {
                         "name": pending_item,
@@ -2033,12 +2614,11 @@ class AIBrain:
                         "product_id": state.collected_fields.get("pending_product_id") or product_data.get("id") or product_data.get("sku"),
                         "variant_id": None,
                         "variant_display": state.collected_fields.get("variant_display"),
-                        "price": item_price,  # Use the size-specific or base price
-                        "original_price": float(original_price) if original_price else None,  # Store original for display
+                        "price": item_price,
+                        "original_price": float(item_original_price) if item_original_price else None,
                         "sku": product_data.get("sku"),
-                        # Store size and color explicitly for database persistence
-                        "size": state.collected_fields.get("selected_size"),
-                        "color": state.collected_fields.get("selected_color"),
+                        "size": selected_size,
+                        "color": selected_color,
                     }
                     
                     # Build variant_id from size/color
@@ -2073,7 +2653,7 @@ class AIBrain:
                         question = self._generate_order_field_question(first_field)
                         
                         self.conversation_manager.add_message(user_id, "user", message)
-                        response_text = f"Great! {quantity}x {pending_item} added. ✓\n\n{question}"
+                        response_text = f"Great\n{quantity}x {pending_item} added.\n\n{question}"
                         self.conversation_manager.add_message(user_id, "assistant", response_text)
                         
                         return {
@@ -2180,6 +2760,8 @@ class AIBrain:
         """Handle messages when waiting for payment."""
         msg_lower = message.lower().strip()
         
+        logger.info(f"📦 Payment verification handler called for user: {user_id}, message: '{message}'")
+        
         # Check if user wants to cancel
         if msg_lower in ["no", "cancel", "cancel order", "nahi", "nako", "na", "n"]:
             self.conversation_manager.cancel_flow(user_id)
@@ -2200,6 +2782,8 @@ class AIBrain:
         payment_settings = business_data.get("payment_settings", {})
         key_id = payment_settings.get("key_id")
         key_secret = payment_settings.get("key_secret")
+        
+        logger.info(f"📦 Payment link ID: {payment_link_id}, Has credentials: {bool(key_id and key_secret)}")
         
         if not payment_link_id or not key_id or not key_secret:
             # SECURITY: Do NOT skip payment if credentials are missing
@@ -2224,102 +2808,212 @@ class AIBrain:
             import razorpay
             client = razorpay.Client(auth=(key_id, key_secret))
             
-            # Fetch payment link details
-            response = client.payment_link.fetch(payment_link_id)
-            status = response.get("status")
+            # CRITICAL SECURITY FIX: ALWAYS verify payment status with Razorpay API
+            # Never trust cached or previous payment_status - always check with Razorpay
+            def verify_payment_with_retry(link_id, max_retries=3, retry_delay=2):
+                """Verify payment status with retry logic and exponential backoff."""
+                for attempt in range(max_retries):
+                    try:
+                        response = client.payment_link.fetch(link_id)
+                        return response.get("status"), response
+                    except Exception as e:
+                        if attempt < max_retries - 1:
+                            wait_time = retry_delay * (2 ** attempt)  # Exponential backoff
+                            logger.warning(f"📦 Payment verification attempt {attempt + 1} failed, retrying in {wait_time}s: {e}")
+                            time.sleep(wait_time)
+                        else:
+                            logger.error(f"📦 Payment verification failed after {max_retries} attempts: {e}")
+                            raise
+                return None, None
             
-            if status == "paid":
-                # Payment successful!
+            # CRITICAL: If user says "paid", verify IMMEDIATELY without waiting
+            # This prevents AI from generating a response before verification
+            user_claims_paid = any(x in msg_lower for x in ["paid", "done", "complete", "screenshot", "payment done"])
+            logger.info(f"📦 User claims paid: {user_claims_paid}, verifying with Razorpay API...")
+            
+            # Always fetch fresh status from Razorpay (never trust cached state)
+            razorpay_status = None
+            payment_response = None
+            try:
+                razorpay_status, payment_response = verify_payment_with_retry(payment_link_id)
+                if razorpay_status is None:
+                    raise Exception("Failed to fetch payment status from Razorpay after retries")
+                logger.info(f"📦 Razorpay status: {razorpay_status} for link: {payment_link_id}")
+            except Exception as verify_error:
+                logger.error(f"📦 Failed to verify payment with Razorpay for user: {user_id}, link: {payment_link_id}: {verify_error}")
+                raise  # Re-raise to be caught by outer exception handler
+            
+            if razorpay_status == "paid":
+                # Payment verified by Razorpay - store complete payment details
+                logger.info(f"📦 Payment CONFIRMED as paid by Razorpay, proceeding to complete order...")
                 state.collect_field("payment_status", "paid")
                 state.collect_field("payment_details", {
                     "method": "razorpay",
                     "link_id": payment_link_id,
-                    "amount": response.get("amount_paid"),
-                    "reference_id": response.get("reference_id")
+                    "amount": payment_response.get("amount_paid", 0) if payment_response else 0,
+                    "reference_id": payment_response.get("reference_id") if payment_response else None,
+                    "verified_at": time.strftime("%Y-%m-%dT%H:%M:%S", time.gmtime())
                 })
+                logger.info(f"📦 Payment verified successfully via Razorpay API for user: {user_id}, link: {payment_link_id}")
+                # Proceed to complete order immediately
+                order_result = self._complete_order(user_id, state, business_data)
+                logger.info(f"📦 Order completion result: {order_result.get('intent') if order_result else 'None'}")
+                return order_result
                 
-                # Proceed to complete order
-                return self._complete_order(user_id, state, business_data)
+            elif razorpay_status == "expired":
+                # Link expired - check if user wants new link
+                msg_lower = message.lower().strip()
+                if any(x in msg_lower for x in ["yes", "y", "ok", "okay", "sure", "new link", "generate"]):
+                    # User wants new link - clear old one and regenerate
+                    logger.info(f"📦 User requested new payment link after expiration for user: {user_id}")
+                    state.collect_field("payment_link_id", None) # Clear to regenerate
+                    state.collect_field("payment_link_url", None)
+                    # Regenerate payment link by calling _complete_order
+                    return self._complete_order(user_id, state, business_data)
                 
-            elif status == "expired":
-                # Link expired
-                response_text = "The payment link has expired. Would you like me to generate a new one?"
+                # Link expired - ask if they want new link
+                response_text = (
+                    "The payment link has expired. Would you like me to generate a new payment link?"
+                )
                 state.collect_field("payment_link_id", None) # Clear to regenerate
+                state.collect_field("payment_link_url", None)
+                self.conversation_manager.add_message(user_id, "user", message)
                 self.conversation_manager.add_message(user_id, "assistant", response_text)
                 return {
                     "reply": response_text,
                     "intent": "payment_expired",
                     "confidence": 1.0,
-                    "suggested_actions": ["Yes", "Cancel Order"],
+                    "suggested_actions": ["Yes, New Link", "Cancel Order"],
                     "metadata": {"status": "expired"}
                 }
-            else:
-                # Not paid yet
+            elif razorpay_status in ["failed", "cancelled"]:
+                # Payment failed or cancelled - offer to regenerate link
+                msg_lower = message.lower().strip()
                 
-                # Check if user claims to have paid ("paid", "done", "screenshot")
-                if any(x in msg_lower for x in ["paid", "done", "complete", "screenshot"]):
-                     # CRITICAL: Re-verify strictly with Razorpay API
-                     # This is the ONLY way payment_status can be set to "paid"
-                     try:
-                         response = client.payment_link.fetch(payment_link_id)
-                         razorpay_status = response.get("status")
-                         
-                         # ONLY set payment_status to "paid" if Razorpay confirms it
-                         if razorpay_status == "paid":
-                             # Payment verified - store complete payment details
-                             state.collect_field("payment_status", "paid")
-                             state.collect_field("payment_details", {
-                                 "method": "razorpay",
-                                 "link_id": payment_link_id,
-                                 "amount": response.get("amount_paid", 0),
-                                 "reference_id": response.get("reference_id"),
-                                 "verified_at": time.strftime("%Y-%m-%dT%H:%M:%S", time.gmtime())
-                             })
-                             logger.info(f"📦 Payment verified via Razorpay API for user: {user_id}, link: {payment_link_id}")
-                             return self._complete_order(user_id, state, business_data)
-                         else:
-                             # Payment not confirmed by Razorpay - DO NOT set payment_status
-                             response_text = (
-                                f"I checked with the payment gateway, but the payment status is still '{razorpay_status}'. "
-                                "It might take a moment to update. Please wait a minute and reply 'Check' again.\n\n"
-                                "If you made the payment, please don't worry, it will be updated soon! 🙏"
-                             )
-                             self.conversation_manager.add_message(user_id, "user", message)
-                             self.conversation_manager.add_message(user_id, "assistant", response_text)
-                             return {
-                                "reply": response_text,
-                                "intent": "payment_check_failed",
-                                "confidence": 1.0, 
-                                "suggested_actions": ["Check Again", "Pay Later (COD)"],
-                                "metadata": {"status": razorpay_status, "verified": False}
-                             }
-                     except Exception as e:
-                         logger.error(f"📦 SECURITY: Payment verification failed for user: {user_id}: {e}")
-                         response_text = (
-                            "I'm having trouble verifying the payment right now. "
-                            "Please try again in a moment or contact support if the issue persists."
-                         )
-                         self.conversation_manager.add_message(user_id, "user", message)
-                         self.conversation_manager.add_message(user_id, "assistant", response_text)
-                         return {
-                            "reply": response_text,
-                            "intent": "payment_verification_error",
-                            "confidence": 1.0,
-                            "needs_human": True,
-                            "suggested_actions": ["Check Again", "Cancel"],
-                            "metadata": {"error": str(e), "verified": False}
-                         }
-
+                # Check if user wants new link
+                if any(x in msg_lower for x in ["yes", "y", "ok", "okay", "sure", "new link", "generate", "new"]):
+                    # User wants new link - clear old one and regenerate
+                    logger.info(f"📦 User requested new payment link after {razorpay_status} for user: {user_id}")
+                    state.collect_field("payment_link_id", None)
+                    state.collect_field("payment_link_url", None)
+                    # Regenerate payment link by calling _complete_order
+                    return self._complete_order(user_id, state, business_data)
+                
+                # Payment failed or cancelled - offer to regenerate link
+                payment_link_url = state.collected_fields.get("payment_link_url")
                 response_text = (
-                    "I haven't received the payment confirmation yet. "
-                    "Please complete the payment using the link above and reply with 'Paid' or 'Done'.\n\n"
-                    "If you face any issues, you can choose to 'Pay later' (COD) if available."
+                    f"The payment status shows '{razorpay_status}'. "
+                    "Would you like me to generate a new payment link so you can try again?\n\n"
                 )
+                
+                if payment_link_url:
+                    response_text += f"Or you can try using the same link: 👉 {payment_link_url}\n\n"
+                
+                response_text += "Reply 'Yes' or 'New Link' to get a fresh payment link."
+                
+                # Clear old link to force regeneration on next attempt
+                state.collect_field("payment_link_id", None)
+                state.collect_field("payment_link_url", None)
+                
+                self.conversation_manager.add_message(user_id, "user", message)
+                self.conversation_manager.add_message(user_id, "assistant", response_text)
+                return {
+                    "reply": response_text,
+                    "intent": "payment_failed",
+                    "confidence": 1.0,
+                    "suggested_actions": ["Yes, New Link", "Cancel Order"],
+                    "metadata": {"status": razorpay_status, "can_retry": True}
+                }
+            elif razorpay_status in ["issued", "pending", "created"]:
+                # Link is still active - user can retry with same link
+                payment_link_url = state.collected_fields.get("payment_link_url")
+                
+                if user_claims_paid:
+                    # User says paid but status is still pending/issued
+                    response_text = (
+                        f"The payment link is still active (status: '{razorpay_status}'). "
+                        "You can use the same payment link to complete your payment.\n\n"
+                        f"👉 {payment_link_url}\n\n"
+                        "After completing the payment, reply with 'Paid' or 'Done' and I'll verify it immediately.\n\n"
+                        "If you've already paid, please wait 1-2 minutes for the status to update, then reply 'Check' again."
+                    )
+                else:
+                    response_text = (
+                        f"Your payment link is still active. You can use it to complete your payment:\n\n"
+                        f"👉 {payment_link_url}\n\n"
+                        "After paying, reply with 'Paid' or 'Done' and I'll verify your payment!"
+                    )
+                
+                self.conversation_manager.add_message(user_id, "user", message)
+                self.conversation_manager.add_message(user_id, "assistant", response_text)
+                return {
+                    "reply": response_text,
+                    "intent": "payment_pending_retry",
+                    "confidence": 1.0,
+                    "suggested_actions": ["Paid", "Check Status", "Cancel"],
+                    "metadata": {"status": razorpay_status, "can_retry": True, "link_url": payment_link_url}
+                }
+            else:
+                # Unknown or other status
+                # Payment not confirmed by Razorpay
+                # Check if user claims to have paid
+                if user_claims_paid:
+                    # User claims to have paid, but Razorpay says otherwise
+                    # Provide clear feedback and ask them to check
+                    payment_link_url = state.collected_fields.get("payment_link_url")
+                    response_text = (
+                        f"I checked with the payment gateway, but the payment status is '{razorpay_status}'. "
+                        "Please ensure you have completed the payment using the link provided.\n\n"
+                    )
+                    
+                    if payment_link_url:
+                        response_text += f"You can use the same payment link: 👉 {payment_link_url}\n\n"
+                    
+                    response_text += (
+                        "If you have already paid, it may take a few moments to update. Please wait 1-2 minutes and reply 'Check' or 'Paid' again.\n\n"
+                        "If the payment failed, reply 'New Link' and I'll generate a fresh payment link for you."
+                    )
+                    self.conversation_manager.add_message(user_id, "user", message)
+                    self.conversation_manager.add_message(user_id, "assistant", response_text)
+                    return {
+                        "reply": response_text,
+                        "intent": "payment_check_failed",
+                        "confidence": 1.0, 
+                        "suggested_actions": ["Check Again", "New Link", "Pay Later (COD)"],
+                        "metadata": {"status": razorpay_status, "verified": False}
+                    }
+
+                # User hasn't claimed to have paid yet - show payment link
+                payment_link_url = state.collected_fields.get("payment_link_url")
+                if payment_link_url:
+                    response_text = (
+                        "I haven't received the payment confirmation yet. "
+                        f"Please complete the payment using this link:\n\n"
+                        f"👉 {payment_link_url}\n\n"
+                        "After paying, reply with 'Paid' or 'Done' and I'll verify your payment immediately!\n\n"
+                        "If you face any issues, you can choose to 'Pay later' (COD) if available."
+                    )
+                else:
+                    response_text = (
+                        "I haven't received the payment confirmation yet. "
+                        "Please complete the payment using the link provided earlier.\n\n"
+                        "After paying, reply with 'Paid' or 'Done'.\n\n"
+                        "If you face any issues, you can choose to 'Pay later' (COD) if available."
+                    )
                 
                 # Allow switching to COD if user insists (simple heuristic)
                 if any(x in msg_lower for x in ["cod", "pay later", "cash", "delivery"]):
                      state.collect_field("payment_status", "cod")
                      return self._complete_order(user_id, state, business_data)
+                
+                # Check if user wants a new link
+                if any(x in msg_lower for x in ["new link", "new payment", "regenerate", "new"]):
+                    # Clear existing link to force regeneration
+                    state.collect_field("payment_link_id", None)
+                    state.collect_field("payment_link_url", None)
+                    logger.info(f"📦 User requested new payment link, clearing old link for user: {user_id}")
+                    # Trigger payment link regeneration by calling _complete_order again
+                    return self._complete_order(user_id, state, business_data)
                 
                 self.conversation_manager.add_message(user_id, "user", message)
                 self.conversation_manager.add_message(user_id, "assistant", response_text)
@@ -2327,19 +3021,42 @@ class AIBrain:
                     "reply": response_text,
                     "intent": "payment_pending",
                     "confidence": 1.0,
-                    "suggested_actions": ["Paid", "Check Status", "Cancel"],
-                    "metadata": {"status": status}
+                    "suggested_actions": ["Paid", "Check Status", "New Link", "Cancel"],
+                    "metadata": {"status": razorpay_status}
                 }
                 
         except Exception as e:
-            logger.error(f"Payment verification failed: {e}")
-            response_text = "I'm having trouble verifying the payment right now. Please try again in a moment."
+            import traceback
+            error_trace = traceback.format_exc()
+            logger.error(f"📦 Payment verification exception for user: {user_id}: {e}\n{error_trace}")
+            
+            # Try to get more context about what went wrong
+            error_details = str(e)
+            if "razorpay" in error_details.lower():
+                response_text = (
+                    "I'm having trouble connecting to the payment gateway right now. "
+                    "Please try again in a moment, or contact support if the issue persists."
+                )
+            elif "timeout" in error_details.lower() or "connection" in error_details.lower():
+                response_text = (
+                    "The payment verification is taking longer than expected. "
+                    "Please wait a moment and reply 'Check' or 'Paid' again."
+                )
+            else:
+                response_text = (
+                    "I'm having trouble verifying the payment right now. "
+                    "Please try again in a moment or contact support if the issue persists."
+                )
+            
+            self.conversation_manager.add_message(user_id, "user", message)
+            self.conversation_manager.add_message(user_id, "assistant", response_text)
             return {
                 "reply": response_text,
                 "intent": "payment_error",
                 "confidence": 0.8,
-                "suggested_actions": ["Check Status", "Cancel"],
-                "metadata": {"error": str(e)}
+                "needs_human": True,
+                "suggested_actions": ["Check Status", "Cancel", "Contact Support"],
+                "metadata": {"error": str(e), "error_type": type(e).__name__}
             }
 
     def _complete_order(
@@ -2419,6 +3136,12 @@ class AIBrain:
                                 
                             reference_id = f"ORDER_{user_id[-6:]}_{int(time.time())}"
                             
+                            # Dynamic callback URL for local and production
+                            frontend_url = os.getenv('FRONTEND_URL', 'https://flowauxi.com')
+                            # Ensure URL doesn't end with slash
+                            frontend_url = frontend_url.rstrip('/')
+                            callback_url = f"{frontend_url}/payment-success"
+                            
                             link_data = {
                                 "amount": int(total_amount * 100), # Paise
                                 "currency": "INR",
@@ -2428,7 +3151,7 @@ class AIBrain:
                                     "contact": phone
                                 },
                                 "reference_id": reference_id,
-                                "callback_url": "https://flowauxi.com/payment-success", # Generic success page
+                                "callback_url": callback_url,
                                 "callback_method": "get"
                             }
                             
@@ -2447,15 +3170,19 @@ class AIBrain:
                             state.flow_status = FlowStatus.AWAITING_PAYMENT
                             self.conversation_manager.persist_state(user_id)
                         
-                        # Send Link Response
-                        response_text = (
-                            f"Thank you! The total amount is *₹{int(total_amount)}*.\n\n"
-                            f"Please click the link below to verify your payment securely via Razorpay:\n"
-                            f"👉 {payment_link_url}\n\n"
-                            f"After paying, reply with *'Paid'* to confirm your order instantly! 🚀"
+                        # Send Link Response - Professional format with CTA URL button
+                        body_text = (
+                            f"Your total payable amount is ₹{int(total_amount)}.\n\n"
+                            f"Click the btn to make payment\n\n"
+                            f"Reply with paid to confirm"
                         )
                         
+                        response_text = body_text  # For conversation history
                         self.conversation_manager.add_message(user_id, "assistant", response_text)
+                        
+                        # CRITICAL: Log flow status after setting AWAITING_PAYMENT
+                        logger.info(f"📦 Payment link generated, flow_status set to AWAITING_PAYMENT for user: {user_id}")
+                        logger.info(f"📦 Flow active check: {self.conversation_manager.is_flow_active(user_id)}")
                         
                         return {
                             "reply": response_text,
@@ -2465,7 +3192,12 @@ class AIBrain:
                             "suggested_actions": ["Paid", "Check Status", "Cancel"],
                             "metadata": {
                                 "generation_method": "payment_link",
-                                "payment_link": payment_link_url
+                                "payment_link": payment_link_url,
+                                "use_url_button": True,
+                                "url_button_text": "Pay Now",
+                                "url_button_url": payment_link_url,
+                                "header_text": "Payment Details ❤️",
+                                "footer_text": ""  # No footer text
                             }
                         }
         except Exception as e:
@@ -2500,82 +3232,97 @@ class AIBrain:
         if payment_enabled:
             # Only allow "cod" or verified "paid" status
             if payment_status != "cod":
-                # For "paid" status, MUST verify with Razorpay API
-                if payment_status == "paid":
-                    if not payment_link_id:
-                        logger.error(f"📦 SECURITY: Payment marked as paid but no payment_link_id found for user: {user_id}")
+                # CRITICAL SECURITY: ALWAYS verify payment with Razorpay API before order creation
+                # Never trust payment_status from state - always verify with Razorpay
+                if not payment_link_id:
+                    logger.error(f"📦 SECURITY: Payment required but no payment_link_id found for user: {user_id}")
+                    return {
+                        "reply": "Payment verification failed. Please complete the payment using the payment link.",
+                        "intent": "payment_verification_failed",
+                        "confidence": 1.0,
+                        "needs_human": False,
+                        "suggested_actions": ["Check Payment", "Cancel"],
+                        "metadata": {"error": "missing_payment_link_id"}
+                    }
+                
+                # CRITICAL: Always verify payment status with Razorpay API (even if payment_status says "paid")
+                try:
+                    import razorpay
+                    key_id = payment_settings.get("key_id")
+                    key_secret = payment_settings.get("key_secret")
+                    
+                    if not key_id or not key_secret:
+                        logger.error(f"📦 SECURITY: Payment credentials missing for user: {user_id}")
                         return {
-                            "reply": "Payment verification failed. Please complete the payment using the payment link.",
+                            "reply": "Payment verification failed. Please contact support.",
+                            "intent": "payment_verification_failed",
+                            "confidence": 1.0,
+                            "needs_human": True,
+                            "metadata": {"error": "missing_payment_credentials"}
+                        }
+                    
+                    # Verify payment with retry logic
+                    def verify_payment_final(link_id, max_retries=3, retry_delay=2):
+                        """Final payment verification with retry logic."""
+                        for attempt in range(max_retries):
+                            try:
+                                client = razorpay.Client(auth=(key_id, key_secret))
+                                response = client.payment_link.fetch(link_id)
+                                return response.get("status"), response
+                            except Exception as e:
+                                if attempt < max_retries - 1:
+                                    wait_time = retry_delay * (2 ** attempt)
+                                    logger.warning(f"📦 Final payment verification attempt {attempt + 1} failed, retrying in {wait_time}s: {e}")
+                                    time.sleep(wait_time)
+                                else:
+                                    logger.error(f"📦 Final payment verification failed after {max_retries} attempts: {e}")
+                                    raise
+                        return None, None
+                    
+                    razorpay_status, payment_response = verify_payment_final(payment_link_id)
+                    
+                    # ONLY proceed if Razorpay confirms payment is "paid"
+                    if razorpay_status != "paid":
+                        logger.warning(f"📦 SECURITY: Final payment verification failed - status is '{razorpay_status}' not 'paid' for user: {user_id}, link: {payment_link_id}")
+                        
+                        # Provide helpful message based on status
+                        if razorpay_status == "expired":
+                            error_msg = "The payment link has expired. Please generate a new payment link."
+                        elif razorpay_status == "cancelled":
+                            error_msg = "The payment was cancelled. Please try again with a new payment link."
+                        else:
+                            error_msg = f"Payment verification failed. The payment status is '{razorpay_status}'. Please complete the payment using the payment link and try again."
+                        
+                        return {
+                            "reply": error_msg,
                             "intent": "payment_verification_failed",
                             "confidence": 1.0,
                             "needs_human": False,
                             "suggested_actions": ["Check Payment", "Cancel"],
-                            "metadata": {"error": "missing_payment_link_id"}
+                            "metadata": {"error": "payment_not_verified", "razorpay_status": razorpay_status}
                         }
                     
-                    # CRITICAL: Verify payment status with Razorpay API
-                    try:
-                        import razorpay
-                        key_id = payment_settings.get("key_id")
-                        key_secret = payment_settings.get("key_secret")
-                        
-                        if not key_id or not key_secret:
-                            logger.error(f"📦 SECURITY: Payment credentials missing for user: {user_id}")
-                            return {
-                                "reply": "Payment verification failed. Please contact support.",
-                                "intent": "payment_verification_failed",
-                                "confidence": 1.0,
-                                "needs_human": True,
-                                "metadata": {"error": "missing_payment_credentials"}
-                            }
-                        
-                        client = razorpay.Client(auth=(key_id, key_secret))
-                        response = client.payment_link.fetch(payment_link_id)
-                        razorpay_status = response.get("status")
-                        
-                        # ONLY proceed if Razorpay confirms payment is "paid"
-                        if razorpay_status != "paid":
-                            logger.warning(f"📦 SECURITY: Payment verification failed - status is '{razorpay_status}' not 'paid' for user: {user_id}, link: {payment_link_id}")
-                            return {
-                                "reply": f"Payment verification failed. The payment status is '{razorpay_status}'. Please complete the payment using the payment link and try again.",
-                                "intent": "payment_verification_failed",
-                                "confidence": 1.0,
-                                "needs_human": False,
-                                "suggested_actions": ["Check Payment", "Cancel"],
-                                "metadata": {"error": "payment_not_verified", "razorpay_status": razorpay_status}
-                            }
-                        
-                        # Payment verified - update payment details from Razorpay response
-                        from datetime import datetime as dt_module
-                        state.collect_field("payment_details", {
-                            "method": "razorpay",
-                            "link_id": payment_link_id,
-                            "amount": response.get("amount_paid", 0),
-                            "reference_id": response.get("reference_id"),
-                            "verified_at": dt_module.utcnow().isoformat()
-                        })
-                        logger.info(f"📦 Payment verified successfully for user: {user_id}, link: {payment_link_id}")
-                        
-                    except Exception as e:
-                        logger.error(f"📦 SECURITY: Payment verification exception for user: {user_id}: {e}")
-                        return {
-                            "reply": "Payment verification failed. Please try again or contact support if the issue persists.",
-                            "intent": "payment_verification_error",
-                            "confidence": 1.0,
-                            "needs_human": True,
-                            "suggested_actions": ["Check Payment", "Cancel"],
-                            "metadata": {"error": str(e)}
-                        }
-                else:
-                    # Payment required but status is not "paid" or "cod"
-                    logger.warning(f"📦 SECURITY: Order creation blocked - payment required but status is '{payment_status}' for user: {user_id}")
+                    # Payment verified by Razorpay - update payment details
+                    from datetime import datetime as dt_module
+                    state.collect_field("payment_status", "paid")  # Update state after verification
+                    state.collect_field("payment_details", {
+                        "method": "razorpay",
+                        "link_id": payment_link_id,
+                        "amount": payment_response.get("amount_paid", 0) if payment_response else 0,
+                        "reference_id": payment_response.get("reference_id") if payment_response else None,
+                        "verified_at": dt_module.utcnow().isoformat()
+                    })
+                    logger.info(f"📦 Final payment verification successful for user: {user_id}, link: {payment_link_id}")
+                    
+                except Exception as e:
+                    logger.error(f"📦 SECURITY: Payment verification exception for user: {user_id}: {e}")
                     return {
-                        "reply": "Payment is required to complete this order. Please complete the payment using the payment link provided.",
-                        "intent": "payment_required",
+                        "reply": "Payment verification failed. Please try again or contact support if the issue persists.",
+                        "intent": "payment_verification_error",
                         "confidence": 1.0,
-                        "needs_human": False,
+                        "needs_human": True,
                         "suggested_actions": ["Check Payment", "Cancel"],
-                        "metadata": {"error": "payment_not_completed", "payment_status": payment_status}
+                        "metadata": {"error": str(e)}
                     }
         
         # Set lock
@@ -2708,15 +3455,16 @@ class AIBrain:
                 ])
                 
                 response_text = (
-                    f"✅ *Order Confirmed!*\n\n"
-                    f"📋 *Order #{order_id}*\n"
+                    f"*Order Confirmed 💚*\n"
+                    f"Order ID: {order_id}\n"
                     f"━━━━━━━━━━━━━━━━━\n\n"
-                    f"*Items:*\n{items_text}\n\n"
-                    f"*Customer:*\n"
-                    f"👤 {created_order.customer_name}\n"
-                    f"📱 {created_order.customer_phone}\n"
-                    + (f"📍 {customer_address}\n" if customer_address else "") +
-                    f"\n*Total Items: {created_order.total_quantity}*\n\n"
+                    f"*Products:*\n{items_text}\n\n"
+                    f"*Total Items: {created_order.total_quantity}*\n\n"
+                    f"*Customer Details:*\n"
+                    f"name: {created_order.customer_name}\n"
+                    f"phone number: {created_order.customer_phone}\n"
+                    + (f"address: {customer_address}\n" if customer_address else "") +
+                    f"━━━━━━━━━━━━━━━━━\n\n"
                     f"Your order has been received! We'll process it shortly. 🎉"
                 )
                 
@@ -2812,9 +3560,8 @@ class AIBrain:
         questions = {
             "name": "May I have your name for this order?",
             "phone": "What's your phone number?",
-            "address": "Where should we deliver this order? (Please provide your full address)",
+            "address": "Enter your delivery address with PIN code.",
             "email": "What's your email address?",
-            "notes": "Any special instructions or notes for your order? (Type 'skip' if none)",
         }
         
         if field_id in questions:
@@ -2887,26 +3634,42 @@ class AIBrain:
             line_total = float(price) * quantity if price else 0
             total_amount += line_total
             
-            # Build the item line with pricing
-            item_line = f"• {quantity}x {item_name}"
+            # Build the item line in new format: name, price, color, size
+            item_lines = [f"name: {item_name}"]
             
-            # Add variant info (size/color) if present
-            if variant_display:
-                item_line += f" ({variant_display})"
-            
-            # Add price with offer display
+            # Add price
             if price:
-                if original_price and float(original_price) > float(price):
-                    # Has offer - show original crossed out
-                    item_line += f" - ~~₹{int(float(original_price))}~~ ₹{int(float(price))}"
-                else:
-                    item_line += f" - ₹{int(float(price))}"
-                
-                # Add line total if quantity > 1
-                if quantity > 1:
-                    item_line += f" = ₹{int(line_total)}"
+                item_lines.append(f"price: ₹{int(float(price))}")
             
-            items_lines.append(item_line)
+            # Extract color and size from variant_display or item fields
+            item_color = item.get('color', '')
+            item_size = item.get('size', '')
+            
+            # If variant_display exists, try to parse it
+            if variant_display and not item_color and not item_size:
+                # variant_display format: "Size: M, Color: White" or "Color: White" or "Size: M"
+                if "Color:" in variant_display:
+                    try:
+                        color_part = variant_display.split("Color:")[1].split(",")[0].strip()
+                        item_color = color_part
+                    except:
+                        pass
+                if "Size:" in variant_display:
+                    try:
+                        size_part = variant_display.split("Size:")[1].split(",")[0].strip()
+                        item_size = size_part
+                    except:
+                        pass
+            
+            # Add color if available
+            if item_color:
+                item_lines.append(f"color: {item_color}")
+            
+            # Add size if available
+            if item_size:
+                item_lines.append(f"size: {item_size}")
+            
+            items_lines.append("\n".join(item_lines))
         
         items_text = "\n".join(items_lines)
         
@@ -2925,7 +3688,7 @@ class AIBrain:
             label = field.get("label", field_id.title())
             value = state.collected_fields.get(field_id, "")
             if value:
-                details_lines.append(f"*{label}:* {value}")
+                details_lines.append(f"{label}: {value}")
         
         details_text = "\n".join(details_lines)
         
@@ -2947,11 +3710,16 @@ class AIBrain:
         # Build total line if we have amounts
         total_line = ""
         if total_amount > 0:
-            total_line = f"\n\n💰 *Total: ₹{int(total_amount)}*"
+            total_line = f"\nTotal: ₹{int(total_amount)}"
+        
+        # Build customer details section with title and line separator
+        customer_details_section = ""
+        if details_text:
+            customer_details_section = f"\n\nCustomer Details\n━━━━━━━━━━━━━━━━━\n{details_text}"
         
         response_text = (
-            f"*Items:*\n{items_text}{total_line}\n\n"
-            f"{details_text}\n\n"
+            f"━━━━━━━━━━━━━━━━━\n\n"
+            f"Products:\n\n{items_text}{total_line}{customer_details_section}\n\n"
             f"Would you like to confirm this order?"
         )
         self.conversation_manager.add_message(user_id, "assistant", response_text)
@@ -2987,16 +3755,18 @@ class AIBrain:
             "suggested_actions": ["Yes, Confirm", "Edit Details", "Cancel"],
             "metadata": {
                 "generation_method": "order_flow",
-                "header_text": "📋 Order Summary",
-                "footer_text": "Tap to continue",
+                "header_text": "Order Summary 💛",  # Yellow heart for order summary card only
+                "footer_text": "",  # No footer text
                 # Use BOTH buttons and list
                 "use_buttons": True,
                 "buttons": [
-                    {"id": "confirm_yes", "title": "✅ Yes, Confirm"},
-                    {"id": "confirm_no", "title": "❌ Cancel"}
+                    {"id": "confirm_yes", "title": "Yes, Confirm"},
+                    {"id": "confirm_no", "title": "Cancel"}
                 ],
                 "use_list": True,
                 "list_button": "Edit Details",
+                "list_body_text": "Edit Details",  # Body text for list message
+                "list_header_text": "",  # No header for Edit Details list message
                 "list_sections": list_sections
             }
         }
@@ -3056,11 +3826,7 @@ class AIBrain:
             "rows": list_rows
         }]
         
-        response_text = (
-            "✏️ *Edit Order Details*\n\n"
-            "Select which detail you'd like to edit:\n\n"
-            "Tap the button below to see all fields."
-        )
+        response_text = ""
         
         self.conversation_manager.add_message(user_id, "assistant", response_text)
         
@@ -3075,8 +3841,8 @@ class AIBrain:
                 "use_list": True,
                 "list_button": "View Fields",
                 "list_sections": list_sections,
-                "header_text": "✏️ Edit Details",
-                "footer_text": "Tap to edit"
+                "header_text": "",
+                "footer_text": ""
             }
         }
     

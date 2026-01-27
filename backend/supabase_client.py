@@ -1099,22 +1099,43 @@ def convert_supabase_business_to_ai_format(data: Dict[str, Any]) -> Dict[str, An
         # Handle pricing: Frontend convention is:
         # - price = current selling price (offer/discounted price)
         # - compare_at_price = original price (before discount)
-        # Robust type conversion: handle string, Decimal, float, int, or None
-        current_price = float(p.get('price', 0)) if p.get('price') else 0.0
+        # 
+        # IMPORTANT: Check if prices are swapped (compare_at_price < price means they're backwards)
+        # If swapped, we need to correct them
+        price_raw = p.get('price', 0)
+        compare_at_price_raw = p.get('compare_at_price')
         
-        original_price_raw = p.get('compare_at_price')
-        original_price = None
+        # Convert to floats for comparison
+        try:
+            price_float = float(price_raw) if price_raw else 0.0
+            compare_at_float = float(compare_at_price_raw) if compare_at_price_raw else None
+        except (ValueError, TypeError):
+            price_float = float(price_raw) if price_raw else 0.0
+            compare_at_float = None
         
-        if original_price_raw:
-            try:
-                # Convert to float regardless of input type (string, Decimal, etc.)
-                original_price = float(original_price_raw)
-                # Only use if it's actually higher than current price (valid discount)
-                if original_price <= current_price:
-                    original_price = None
-            except (ValueError, TypeError):
-                # If conversion fails, ignore the original price
-                original_price = None
+        # Debug logging
+        print(f"🔍 Product: {p.get('name')} - price (raw): {price_raw}, compare_at_price (raw): {compare_at_price_raw}")
+        print(f"   Converted: price={price_float}, compare_at={compare_at_float}")
+        
+        # Check if prices are swapped (compare_at_price < price means original < offer, which is wrong)
+        # In correct e-commerce: compare_at_price (original) > price (offer)
+        if compare_at_float is not None and compare_at_float > 0:
+            if compare_at_float < price_float:
+                # Prices are SWAPPED - fix them
+                print(f"   ⚠️ Prices are SWAPPED! compare_at ({compare_at_float}) < price ({price_float})")
+                print(f"   🔄 Swapping: original_price={price_float}, offer_price={compare_at_float}")
+                original_price = price_float  # The higher value is the original
+                current_price = compare_at_float  # The lower value is the offer
+            else:
+                # Prices are correct
+                print(f"   ✅ Prices are correct: original={compare_at_float}, offer={price_float}")
+                original_price = compare_at_float
+                current_price = price_float
+        else:
+            # No compare_at_price, use price as current selling price
+            print(f"   ℹ️ No compare_at_price, using price as current: {price_float}")
+            original_price = None
+            current_price = price_float
         
         # Handle size-based pricing (JSONB fields may come as strings)
         has_size_pricing = p.get('has_size_pricing', False)
@@ -1176,20 +1197,39 @@ def convert_supabase_business_to_ai_format(data: Dict[str, Any]) -> Dict[str, An
             else:
                 v_size_stocks = v_size_stocks_raw or {}
             
-            # Handle variant pricing
+            # Handle variant pricing - check for swapped prices
             v_price_raw = v.get('price')
-            v_price = float(v_price_raw) if v_price_raw else None
-            
             v_compare_at_price_raw = v.get('compare_at_price')
-            v_compare_at_price = None
-            if v_compare_at_price_raw:
-                try:
-                    v_compare_at_price = float(v_compare_at_price_raw)
-                    # Only use if it's actually higher than variant price
-                    if v_price and v_compare_at_price <= v_price:
-                        v_compare_at_price = None
-                except (ValueError, TypeError):
-                    v_compare_at_price = None
+            
+            # Convert to floats
+            v_price_float = None
+            v_compare_at_float = None
+            try:
+                v_price_float = float(v_price_raw) if v_price_raw else None
+                v_compare_at_float = float(v_compare_at_price_raw) if v_compare_at_price_raw else None
+            except (ValueError, TypeError):
+                v_price_float = float(v_price_raw) if v_price_raw else None
+                v_compare_at_float = None
+            
+            # Check if variant prices are swapped (same logic as product)
+            if v_compare_at_float is not None and v_price_float is not None:
+                if v_compare_at_float < v_price_float:
+                    # Prices are SWAPPED - fix them
+                    print(f"   ⚠️ Variant prices SWAPPED! compare_at ({v_compare_at_float}) < price ({v_price_float})")
+                    print(f"   🔄 Swapping variant: original={v_price_float}, offer={v_compare_at_float}")
+                    v_compare_at_price = v_price_float  # Higher value is original
+                    v_price = v_compare_at_float  # Lower value is offer
+                else:
+                    # Prices are correct
+                    v_price = v_price_float
+                    v_compare_at_price = v_compare_at_float
+            elif v_price_float:
+                v_price = v_price_float
+                v_compare_at_price = None
+            else:
+                # Fallback to base product price
+                v_price = current_price
+                v_compare_at_price = original_price
             
             converted_variants.append({
                 'id': str(v.get('id', '')),
@@ -1212,8 +1252,8 @@ def convert_supabase_business_to_ai_format(data: Dict[str, Any]) -> Dict[str, An
             'name': p.get('name', ''),
             'category': category_name,
             'description': p.get('description', ''),
-            'price': current_price,  # Current selling price (base)
-            'compare_at_price': original_price,  # Original price (if on sale)
+            'price': current_price,  # Current selling price (offer price)
+            'compare_at_price': original_price,  # Original price (before discount, if on sale)
             'price_unit': p.get('price_unit', p.get('priceUnit', 'INR')),
             'duration': p.get('duration', ''),
             'available': is_available,

@@ -277,6 +277,7 @@ def convert_products(products: list) -> list:
             'category': p.get('category', ''),
             'description': p.get('description', ''),
             'price': p.get('price', 0),
+            'compare_at_price': p.get('compare_at_price') or p.get('compareAtPrice'),  # Original price (if on sale)
             'price_unit': p.get('priceUnit') or p.get('price_unit', 'INR'),
             'duration': p.get('duration', ''),
             'available': p.get('available', True),

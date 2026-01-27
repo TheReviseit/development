@@ -800,41 +800,84 @@ def webhook():
                         # Size-based pricing support
                         price_range = card.get('price_range')  # e.g., "₹700-₹800"
                         has_size_pricing = card.get('has_size_pricing', False)
+                        size_prices = card.get('size_prices', {}) or {}
+                        
+                        # Debug logging for price information
+                        logger.info(f"💰 Product Card: {name}")
+                        logger.info(f"   current_price: {current_price} (type: {type(current_price)})")
+                        logger.info(f"   original_price (compare_at_price): {original_price} (type: {type(original_price)})")
+                        logger.info(f"   has_size_pricing: {has_size_pricing}")
+                        logger.info(f"   size_prices: {size_prices}")
                         
                         # Sanitize product_id for button ID: replace spaces with underscores
                         # This ensures valid button IDs and proper matching in ai_brain
                         safe_product_id = str(product_id).replace(' ', '_').replace('-', '_').lower()
                         
-                        # Build rich product details for body text with comprehensive pricing
+                        # Build rich product details for body text with professional formatting
                         body_parts = [f"*{name}*"]
                         
-                        # Format price based on available pricing info
-                        if has_size_pricing and price_range:
-                            # Has size-based pricing with a range
-                            if original_price and float(original_price) > float(current_price):
-                                # Show original price struck through, then size range
-                                body_parts.append(f"~~₹{int(float(original_price))}~~ {price_range}")
+                        # Determine the display price (offer price or regular price)
+                        display_price_value = None
+                        if has_size_pricing and size_prices:
+                            # For size-based pricing, use the first available size price
+                            first_size_price = next(iter(size_prices.values()), None)
+                            if first_size_price:
+                                display_price_value = float(first_size_price)
                             else:
-                                body_parts.append(f"💰 {price_range}")
-                        elif original_price and float(original_price) > float(current_price):
-                            # Has offer (original > current)
-                            body_parts.append(f"~~₹{int(float(original_price))}~~ → ₹{int(float(current_price))}")
+                                display_price_value = float(current_price) if current_price else 0
                         else:
-                            # Regular price display
-                            body_parts.append(f"💰 ₹{int(float(current_price))}")
+                            display_price_value = float(current_price) if current_price else 0
                         
-                        # Add sizes/colors if available for complete product info
-                        if card.get('sizes'):
-                            body_parts.append(f"📏 Sizes: {', '.join(card['sizes'][:4])}")
+                        logger.info(f"   display_price_value: {display_price_value}")
+                        
+                        # Format price based on available pricing info
+                        # Check if there's an offer (original_price > display_price)
+                        if original_price is not None and original_price != '':
+                            try:
+                                original_price_float = float(original_price)
+                                logger.info(f"   Comparing: original_price_float={original_price_float} > display_price_value={display_price_value}")
+                                if original_price_float > display_price_value and display_price_value > 0:
+                                    # Has offer - show both original and offer price
+                                    logger.info(f"   ✅ Showing offer: original ₹{int(original_price_float)}, offer ₹{int(display_price_value)}")
+                                    body_parts.append(f"original price: ₹{int(original_price_float)}\noffer price: ₹{int(display_price_value)}")
+                                else:
+                                    # Original price exists but not greater than display price - show only display price
+                                    logger.info(f"   ⚠️ Original price not greater, showing only display price")
+                                    body_parts.append(f"price: ₹{int(display_price_value)}")
+                            except (ValueError, TypeError) as e:
+                                # Invalid original_price, just show display price
+                                logger.warning(f"   ❌ Error converting original_price: {e}")
+                                body_parts.append(f"price: ₹{int(display_price_value)}")
+                        else:
+                            # No original price - show regular price
+                            logger.info(f"   ℹ️ No original_price found, showing regular price")
+                            body_parts.append(f"price: ₹{int(display_price_value)}")
+                        
+                        # Add colors first, then sizes if available
                         if card.get('colors'):
-                            body_parts.append(f"🎨 Colors: {', '.join(card['colors'][:4])}")
+                            colors_list = ', '.join(card['colors'][:4])
+                            body_parts.append(f"colors: {colors_list}")
+                        if card.get('sizes'):
+                            sizes_list = ', '.join(card['sizes'][:4])
+                            body_parts.append(f"sizes: {sizes_list}")
                         
                         body_text = "\n".join(body_parts)
                         
                         # Single "Order This" button with product ID for direct selection
-                        # Use sanitized product_id (lowercase, underscores instead of spaces)
+                        # CRITICAL FIX: Use card_index instead of truncated product_id to avoid collisions
+                        card_index = card.get("card_index", 0)
+                        button_id = f"order_card_{card_index}"
+                        
+                        logger.info(f"🔘 Creating button for: {name}")
+                        logger.info(f"   Full product_id: {product_id}")
+                        logger.info(f"   Card index: {card_index}")
+                        logger.info(f"   Button ID: {button_id}")
+                        logger.info(f"   Card colors: {card.get('colors')}")
+                        logger.info(f"   Card sizes: {card.get('sizes')}")
+                        logger.info(f"   Card is_variant: {card.get('is_variant', False)}")
+                        
                         order_buttons = [
-                            {"id": f"order_{safe_product_id[:20]}", "title": "🛒 Order This"}
+                            {"id": button_id, "title": "Order This"}
                         ]
                         
                         # Send UNIFIED message: image header + product details + order button
@@ -863,8 +906,60 @@ def webhook():
                         logger.info(f"✅ Product catalog sent to {from_number}")
                         return jsonify({'status': 'ok'}), 200
             
+            # Check if we should send URL button (for payment links, store links, etc.)
+            if ai_metadata.get('use_url_button'):
+                url_button_text = ai_metadata.get('url_button_text', 'Open Link')
+                url_button_url = ai_metadata.get('url_button_url')
+                # Use URL button specific body/header/footer if provided, otherwise fallback to general ones
+                url_button_body = ai_metadata.get('url_button_body') or reply_text
+                url_button_header = ai_metadata.get('url_button_header') or ai_metadata.get('header_text', '')
+                url_button_footer = ai_metadata.get('url_button_footer') or ai_metadata.get('footer_text', '')
+                
+                if url_button_url:
+                    logger.info(f"🔗 Sending CTA URL button: {url_button_text}")
+                    send_result = whatsapp_service.send_interactive_url_button(
+                        phone_number_id=credentials['phone_number_id'],
+                        access_token=credentials['access_token'],
+                        to=from_number,
+                        body_text=url_button_body,
+                        button_text=url_button_text,
+                        button_url=url_button_url,
+                        header_text=url_button_header if url_button_header else None,
+                        footer_text=url_button_footer if url_button_footer else None
+                    )
+                    
+                    # If there's also a list (categories), send it as a second message
+                    if ai_metadata.get('use_list') and ai_metadata.get('list_sections'):
+                        time.sleep(0.5)  # Small delay between messages
+                        list_sections = ai_metadata.get('list_sections', [])
+                        list_button = ai_metadata.get('list_button', 'View Categories')
+                        list_body = ai_metadata.get('list_body_text') or "."
+                        list_header = ai_metadata.get('list_header_text')
+                        if list_header is None:
+                            list_header = ai_metadata.get('header_text', '')
+                        list_footer = ai_metadata.get('list_footer_text', '')
+                        logger.info(f"📋 Sending interactive list after URL button: {list_button}")
+                        whatsapp_service.send_interactive_list(
+                            phone_number_id=credentials['phone_number_id'],
+                            access_token=credentials['access_token'],
+                            to=from_number,
+                            body_text=list_body,
+                            button_text=list_button,
+                            sections=list_sections,
+                            header_text=list_header if list_header else None,
+                            footer_text=list_footer if list_footer else None
+                        )
+                else:
+                    logger.warning("⚠️ URL button requested but url_button_url is missing")
+                    # Fallback to regular text message
+                    send_result = whatsapp_service.send_message_with_credentials(
+                        phone_number_id=credentials['phone_number_id'],
+                        access_token=credentials['access_token'],
+                        to=from_number,
+                        message=reply_text
+                    )
             
-            if use_buttons and buttons:
+            elif use_buttons and buttons:
                 # Send interactive message with buttons
                 logger.info(f"🔘 Sending interactive buttons: {[b.get('title') for b in buttons]}")
                 # Use dynamic header/footer from AI metadata, fallback to defaults
@@ -885,7 +980,13 @@ def webhook():
                     time.sleep(0.5)  # Small delay between messages
                     list_sections = ai_metadata.get('list_sections', [])
                     list_button = ai_metadata.get('list_button', 'View Options')
-                    list_body = "Or tap below to edit your details:"
+                    # Use custom body text from metadata, or fallback to button text, or minimal text
+                    list_body = ai_metadata.get('list_body_text') or list_button or "."
+                    # Use list-specific header if provided, otherwise use general header, otherwise empty
+                    list_header = ai_metadata.get('list_header_text')
+                    if list_header is None:  # Not explicitly set
+                        list_header = ai_metadata.get('header_text', '')
+                    footer = ai_metadata.get('footer_text', '')
                     logger.info(f"📋 Sending interactive list: {list_button}")
                     whatsapp_service.send_interactive_list(
                         phone_number_id=credentials['phone_number_id'],
@@ -894,26 +995,31 @@ def webhook():
                         body_text=list_body,
                         button_text=list_button,
                         sections=list_sections,
-                        header_text="✏️ Edit Order Details",
-                        footer_text="Tap to edit"
+                        header_text=list_header if list_header else None,
+                        footer_text=footer if footer else None
                     )
                     
             elif ai_metadata.get('use_list') and ai_metadata.get('list_sections'):
                 # Send interactive list message (menu with up to 10 items)
                 list_sections = ai_metadata.get('list_sections', [])
                 list_button = ai_metadata.get('list_button', 'View Options')
-                header = ai_metadata.get('header_text', 'Select an Option')
-                footer = ai_metadata.get('footer_text', 'Tap to continue')
+                # Use custom body text from metadata, or fallback to reply_text
+                list_body = ai_metadata.get('list_body_text') or reply_text
+                # Use list-specific header if provided, otherwise use general header, otherwise default
+                list_header = ai_metadata.get('list_header_text')
+                if list_header is None:  # Not explicitly set
+                    list_header = ai_metadata.get('header_text', 'Select an Option')
+                footer = ai_metadata.get('footer_text', '')
                 logger.info(f"📋 Sending interactive list: {list_button}")
                 send_result = whatsapp_service.send_interactive_list(
                     phone_number_id=credentials['phone_number_id'],
                     access_token=credentials['access_token'],
                     to=from_number,
-                    body_text=reply_text,
+                    body_text=list_body,
                     button_text=list_button,
                     sections=list_sections,
-                    header_text=header,
-                    footer_text=footer
+                    header_text=list_header if list_header else None,
+                    footer_text=footer if footer else None
                 )
             else:
                 # Send regular text message
