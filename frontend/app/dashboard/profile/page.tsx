@@ -4,6 +4,7 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { useAuth } from "@/app/components/auth/AuthProvider";
 import Toast from "@/app/components/Toast/Toast";
 import PaymentSettings from "./PaymentSettings";
+import InvoiceSettings from "./InvoiceSettings";
 import styles from "./profile.module.css";
 
 interface BusinessProfile {
@@ -19,7 +20,9 @@ export default function ProfilePage() {
     logoUrl: "",
     logoPublicId: "",
   });
-  const [activeTab, setActiveTab] = useState<"profile" | "payment">("profile");
+  const [activeTab, setActiveTab] = useState<"profile" | "payment" | "invoice">(
+    "profile",
+  );
   const [paymentData, setPaymentData] = useState({
     razorpayKeyId: "",
     razorpayKeySecret: "",
@@ -307,6 +310,12 @@ export default function ProfilePage() {
         >
           Payment Gateway
         </button>
+        <button
+          className={`${styles.tab} ${activeTab === "invoice" ? styles.activeTab : ""}`}
+          onClick={() => setActiveTab("invoice")}
+        >
+          Invoice
+        </button>
       </div>
 
       {/* Toast Notification */}
@@ -416,6 +425,13 @@ export default function ProfilePage() {
       {activeTab === "payment" && (
         <PaymentSettings
           initialData={paymentData}
+          showToast={(text, type) => setMessage({ text, type })}
+        />
+      )}
+
+      {/* Invoice Tab Content */}
+      {activeTab === "invoice" && (
+        <InvoiceSettings
           showToast={(text, type) => setMessage({ text, type })}
         />
       )}

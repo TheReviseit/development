@@ -128,7 +128,26 @@ export default function CheckoutPage() {
   const handleInputChange = (
     e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>,
   ) => {
-    setFormData({ ...formData, [e.target.name]: e.target.value });
+    const { name, value } = e.target;
+    setFormData((prev) => ({
+      ...prev,
+      [name]: value,
+    }));
+  };
+
+  // Handle phone input change - allow numbers only
+  const handlePhoneChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const { value } = e.target;
+    // Remove non-digit characters
+    const numericValue = value.replace(/\D/g, "");
+
+    // Limit to 10 digits if needed (optional, keeping it flexible for now or strictly 10)
+    // Common Indian mobile number length is 10. Let's not strictly limit to 10 to allow for typos/corrections easily, but we can max length in input.
+
+    setFormData((prev) => ({
+      ...prev,
+      phone: numericValue,
+    }));
   };
 
   const formatPrice = (price: number) => {
@@ -146,10 +165,13 @@ export default function CheckoutPage() {
     try {
       const fullAddress = `${formData.address}, ${formData.city} - ${formData.pincode}`;
 
+      // Prepend +91 to phone number
+      const fullPhoneNumber = `+91${formData.phone}`;
+
       const orderData = {
         user_id: storeSlug, // storeSlug is the business/user ID
         customer_name: formData.name,
-        customer_phone: formData.phone,
+        customer_phone: fullPhoneNumber,
         customer_address: fullAddress,
         customer_email: formData.email || null,
         items: cartItems.map((item) => ({
@@ -169,11 +191,10 @@ export default function CheckoutPage() {
         }`,
       };
 
-      const response = await fetch("/api/orders", {
+      const response = await fetch(`/api/store/${storeSlug}/orders`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "X-User-Id": storeSlug,
         },
         body: JSON.stringify(orderData),
       });
@@ -200,47 +221,51 @@ export default function CheckoutPage() {
 
     setLoading(true);
 
-    // 1. Create Order in Backend
-    const orderId = await createBackendOrder(undefined, "manual");
+    try {
+      // 1. Create order in backend first (for tracking)
+      const orderId = await createBackendOrder(undefined, "manual");
 
-    const orderLines = cartItems.map(
-      (item) =>
-        `• ${item.name}${item.options?.size ? ` (${item.options.size})` : ""}${
-          item.options?.color ? ` - ${item.options.color}` : ""
-        } x${item.quantity} = ${formatPrice(item.price * item.quantity)}`,
-    );
+      // 2. Construct WhatsApp message
+      const orderNum = orderId ? `#${orderId.slice(0, 8).toUpperCase()}` : "";
+      const header = `*New Order ${orderNum}*`;
+      const customerDetails = `\n👤 *Customer:* ${formData.name}\n📞 *Phone:* +91${formData.phone}\n📍 *Address:* ${formData.address}, ${formData.city} - ${formData.pincode}`;
 
-    const customerDetails = `
-👤 *Customer Details:*
-Name: ${formData.name}
-Phone: ${formData.phone}
-Address: ${formData.address}, ${formData.city} - ${formData.pincode}
-${formData.notes ? `Notes: ${formData.notes}` : ""}
-`;
+      const itemsList = cartItems
+        .map(
+          (item) =>
+            `- ${item.name} x ${item.quantity} (${formatPrice(
+              item.price * item.quantity,
+            )}) ${item.options?.size ? `[${item.options.size}]` : ""} ${
+              item.options?.color ? `[${item.options.color}]` : ""
+            }`,
+        )
+        .join("\n");
 
-    // Add Order ID to message if available
-    const orderRef = orderId ? `\n🆔 *Order ID:* #${orderId.slice(0, 8)}` : "";
+      const totals = `\n💰 *Subtotal:* ${formatPrice(cartTotal)}\n🚚 *Shipping:* ${
+        shippingCost === 0 ? "Free" : formatPrice(shippingCost)
+      }\n💵 *Total:* ${formatPrice(finalTotal)}`;
 
-    const message = `🛒 *New Order Request*${orderRef}\n${customerDetails}\n📦 *Order Items:*\n${orderLines.join(
-      "\n",
-    )}\n\nSubtotal: ${formatPrice(cartTotal)}\nShipping: ${
-      shippingCost > 0 ? formatPrice(shippingCost) : "Free"
-    }\n*Total Order Value: ${formatPrice(finalTotal)}*\n\nPlease confirm my order!`;
+      const footer = `\n------------------\nOrdered via Store`;
 
-    const encodedMessage = encodeURIComponent(message);
+      const message = encodeURIComponent(
+        `${header}\n${customerDetails}\n\n🛒 *Items:*\n${itemsList}\n\n${totals}${footer}`,
+      );
 
-    // Open WhatsApp
-    window.open(`https://wa.me/?text=${encodedMessage}`, "_blank");
+      // Default phone number if not set in settings
+      const storePhone = "919000000000"; // Replace with actual default or from settings
 
-    // Show success animation
-    setShowSuccess(true);
-    setLoading(false);
-    clearCart();
+      // Clear cart
+      clearCart();
+      setShowSuccess(true);
 
-    // Redirect after delay
-    setTimeout(() => {
-      router.push(`/store/${storeSlug}`);
-    }, 3500);
+      // Redirect to WhatsApp
+      window.open(`https://wa.me/${storePhone}?text=${message}`, "_blank");
+    } catch (error) {
+      console.error("Error processing WhatsApp order:", error);
+      alert("Something went wrong. Please try again.");
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleCODOrder = async () => {
@@ -407,28 +432,117 @@ ${formData.notes ? `Notes: ${formData.notes}` : ""}
             </h2>
 
             <div className={styles.cartItems}>
-              {cartItems.map((item) => (
-                <div key={item.id} className={styles.summaryItem}>
-                  {item.imageUrl && (
-                    <img
-                      src={item.imageUrl}
-                      alt={item.name}
-                      className={styles.itemImage}
-                    />
-                  )}
-                  <div className={styles.itemInfo}>
-                    <div className={styles.itemName}>{item.name}</div>
+              {cartItems.map((item) => {
+                // Helper function to get available sizes for a specific color
+                const getAvailableSizesForColor = (
+                  selectedColor: string,
+                ): string[] => {
+                  if (!item.pricingInfo) return item.availableSizes || [];
 
-                    {/* Size/Color Selection for Quick Added Items */}
-                    {item.addedFromDashboard &&
-                    (item.availableSizes?.length ||
-                      item.availableColors?.length) ? (
-                      <div className={styles.itemOptionsDropdowns}>
-                        {item.availableSizes &&
-                          item.availableSizes.length > 0 && (
+                  // Check if this is a base product color
+                  const isBaseColor =
+                    item.pricingInfo.baseProductColors?.includes(selectedColor);
+
+                  if (isBaseColor) {
+                    // For base product colors, use base product sizes
+                    if (
+                      item.pricingInfo.baseProductSizes &&
+                      item.pricingInfo.baseProductSizes.length > 0
+                    ) {
+                      return item.pricingInfo.baseProductSizes;
+                    }
+                    return item.availableSizes || [];
+                  }
+
+                  // For variant colors, extract sizes from variantSizePrices
+                  if (item.pricingInfo.variantSizePrices) {
+                    const sizesForColor = new Set<string>();
+                    Object.keys(item.pricingInfo.variantSizePrices).forEach(
+                      (key) => {
+                        const parts = key.split("_");
+                        if (parts.length >= 2) {
+                          const color = parts[0];
+                          const size = parts.slice(1).join("_");
+                          if (color === selectedColor && size) {
+                            sizesForColor.add(size);
+                          }
+                        }
+                      },
+                    );
+
+                    if (sizesForColor.size > 0) {
+                      return Array.from(sizesForColor);
+                    }
+                  }
+
+                  return item.availableSizes || [];
+                };
+
+                const currentColor = item.options?.color || "";
+                const availableSizesForColor =
+                  getAvailableSizesForColor(currentColor);
+
+                // Handle color change - update color and reset size
+                const handleColorChange = (newColor: string) => {
+                  const newAvailableSizes = getAvailableSizesForColor(newColor);
+                  const firstSize =
+                    newAvailableSizes[0] || item.options?.size || "";
+
+                  updateItemOptions(item.id, {
+                    color: newColor,
+                    size: firstSize,
+                  });
+                };
+
+                return (
+                  <div key={item.id} className={styles.summaryItem}>
+                    {item.imageUrl && (
+                      <img
+                        src={item.imageUrl}
+                        alt={item.name}
+                        className={styles.itemImage}
+                      />
+                    )}
+                    <div className={styles.itemInfo}>
+                      <div className={styles.itemName}>{item.name}</div>
+
+                      {/* Size/Color Selection for Quick Added Items - only show dropdowns if multiple options */}
+                      {item.addedFromDashboard &&
+                      ((item.availableColors &&
+                        item.availableColors.length > 1) ||
+                        availableSizesForColor.length > 1) ? (
+                        <div className={styles.itemOptionsDropdowns}>
+                          {/* Color dropdown - only show if more than 1 color */}
+                          {item.availableColors &&
+                            item.availableColors.length > 1 && (
+                              <div className={styles.optionSelector}>
+                                <label htmlFor={`checkout-color-${item.id}`}>
+                                  Color:
+                                </label>
+                                <select
+                                  id={`checkout-color-${item.id}`}
+                                  value={item.options?.color || ""}
+                                  onChange={(e) =>
+                                    handleColorChange(e.target.value)
+                                  }
+                                  className={styles.optionSelect}
+                                >
+                                  {item.availableColors.map((color) => (
+                                    <option key={color} value={color}>
+                                      {color}
+                                    </option>
+                                  ))}
+                                </select>
+                              </div>
+                            )}
+                          {/* Size dropdown - only show if more than 1 size for current color */}
+                          {availableSizesForColor.length > 1 && (
                             <div className={styles.optionSelector}>
-                              <label>Size:</label>
+                              <label htmlFor={`checkout-size-${item.id}`}>
+                                Size:
+                              </label>
                               <select
+                                id={`checkout-size-${item.id}`}
                                 value={item.options?.size || ""}
                                 onChange={(e) =>
                                   updateItemOptions(item.id, {
@@ -437,7 +551,7 @@ ${formData.notes ? `Notes: ${formData.notes}` : ""}
                                 }
                                 className={styles.optionSelect}
                               >
-                                {item.availableSizes.map((size) => (
+                                {availableSizesForColor.map((size) => (
                                   <option key={size} value={size}>
                                     {size}
                                   </option>
@@ -445,54 +559,37 @@ ${formData.notes ? `Notes: ${formData.notes}` : ""}
                               </select>
                             </div>
                           )}
-                        {item.availableColors &&
-                          item.availableColors.length > 0 && (
-                            <div className={styles.optionSelector}>
-                              <label>Color:</label>
-                              <select
-                                value={item.options?.color || ""}
-                                onChange={(e) =>
-                                  updateItemOptions(item.id, {
-                                    color: e.target.value,
-                                  })
-                                }
-                                className={styles.optionSelect}
-                              >
-                                {item.availableColors.map((color) => (
-                                  <option key={color} value={color}>
-                                    {color}
-                                  </option>
-                                ))}
-                              </select>
-                            </div>
-                          )}
-                      </div>
-                    ) : (
-                      /* Static Options for specific variants */
-                      <div className={styles.itemVariant}>
-                        {item.options?.size && (
-                          <span>Size: {item.options.size} </span>
-                        )}
-                        {item.options?.color && (
-                          <span>• {item.options.color}</span>
-                        )}
-                      </div>
-                    )}
+                        </div>
+                      ) : (
+                        /* Static Options for specific variants or single option items */
+                        (item.options?.color || item.options?.size) && (
+                          <div className={styles.itemVariant}>
+                            {item.options?.color && (
+                              <span>Color: {item.options.color} </span>
+                            )}
+                            {item.options?.size && (
+                              <span>• Size: {item.options.size}</span>
+                            )}
+                          </div>
+                        )
+                      )}
 
-                    <div className={styles.itemMeta}>
-                      <span>Qty: {item.quantity}</span>
-                      <span>{formatPrice(item.price * item.quantity)}</span>
+                      <div className={styles.itemMeta}>
+                        <span>Qty: {item.quantity}</span>
+                        <span>{formatPrice(item.price * item.quantity)}</span>
+                      </div>
                     </div>
+                    <button
+                      onClick={() => removeFromCart(item.id)}
+                      className={styles.removeButton}
+                      aria-label="Remove item"
+                      type="button"
+                    >
+                      <Trash2 size={16} />
+                    </button>
                   </div>
-                  <button
-                    onClick={() => removeFromCart(item.id)}
-                    className={styles.removeButton}
-                    aria-label="Remove item"
-                  >
-                    <Trash2 size={16} />
-                  </button>
-                </div>
-              ))}
+                );
+              })}
             </div>
 
             <div className={styles.summaryTotal}>
@@ -541,14 +638,19 @@ ${formData.notes ? `Notes: ${formData.notes}` : ""}
                 </div>
                 <div className={styles.formGroup}>
                   <label className={styles.label}>Phone Number *</label>
-                  <input
-                    name="phone"
-                    required
-                    type="tel"
-                    className={styles.input}
-                    placeholder="+91 98765 43210"
-                    onChange={handleInputChange}
-                  />
+                  <div className={styles.phoneInputGroup}>
+                    <div className={styles.countryCode}>+91</div>
+                    <input
+                      name="phone"
+                      required
+                      type="tel"
+                      className={styles.phoneInput}
+                      placeholder="98765 43210"
+                      value={formData.phone}
+                      onChange={handlePhoneChange}
+                      maxLength={10}
+                    />
+                  </div>
                 </div>
                 <div className={styles.formGroupFull}>
                   <label className={styles.label}>Email (Optional)</label>

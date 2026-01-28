@@ -131,6 +131,10 @@ export async function POST(request: NextRequest) {
       dbData.payments_enabled =
         businessData.paymentsEnabled ?? businessData.payments_enabled ?? false;
     }
+    if ("brandColor" in businessData || "brand_color" in businessData) {
+      dbData.brand_color =
+        businessData.brandColor || businessData.brand_color || null;
+    }
 
     // Check if we have any fields to update besides user_id
     const fieldCount = Object.keys(dbData).length - 1;

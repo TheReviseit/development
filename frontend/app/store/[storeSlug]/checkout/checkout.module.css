@@ -138,6 +138,46 @@
   resize: vertical;
 }
 
+/* Phone Input styles */
+.phoneInputGroup {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  border: 1px solid var(--card-border);
+  border-radius: var(--radius-md);
+  background: #f9f9faf0;
+  transition: all 0.2s;
+}
+
+.phoneInputGroup:focus-within {
+  border-color: var(--accent-primary);
+  background: white;
+  box-shadow: 0 0 0 3px rgba(34, 193, 90, 0.1);
+}
+
+.countryCode {
+  padding: 12px 4px 12px 16px;
+  color: var(--text-secondary);
+  font-weight: 500;
+  font-size: 15px;
+  user-select: none;
+}
+
+.phoneInput {
+  flex: 1;
+  width: 100%;
+  border: none;
+  background: transparent;
+  padding: 12px 16px 12px 8px;
+  font-size: 15px;
+  color: var(--text-primary);
+  outline: none;
+}
+
+.phoneInput::placeholder {
+  color: var(--text-muted);
+}
+
 /* Order Summary */
 .summaryItem {
   display: flex;
@@ -318,7 +358,7 @@
 .payButton {
   width: 100%;
   padding: 16px;
-  background: var(--accent-primary);
+  background: black;
   color: white;
   border: none;
   border-radius: var(--radius-lg);
@@ -407,6 +447,127 @@
 @media (max-width: 768px) {
   .checkoutContent {
     grid-template-columns: 1fr;
-    padding: 24px;
+    padding: 16px;
+    gap: 20px;
+  }
+
+  .formGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .formGroupFull {
+    grid-column: span 1;
+  }
+
+  .card {
+    padding: 20px;
+    border-radius: 16px;
+  }
+
+  .checkoutHeader {
+    padding: 0 8px;
+    margin-bottom: 24px;
+  }
+
+  .storeName {
+    font-size: 20px;
+  }
+
+  .itemOptionsDropdowns {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  /* Mobile Order Summary Redesign - Premium Card Style */
+  .summaryItem {
+    flex-direction: row;
+    align-items: flex-start;
+    padding: 16px;
+    gap: 16px;
+    background: #ffffff;
+    border: 1px solid var(--card-border);
+    border-radius: 16px;
+    margin-bottom: 16px;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.03);
+    position: relative;
+  }
+
+  /* Remove the dashed border from the list item wrapper since we are using cards now */
+  .summaryItem:last-child {
+    margin-bottom: 0;
+  }
+
+  .itemImage {
+    width: 100px;
+    height: 100px;
+    border-radius: 12px;
+    box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.05);
+  }
+
+  .itemInfo {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    min-height: 100px;
+    gap: 6px;
+  }
+
+  .itemName {
+    font-size: 16px;
+    font-weight: 700;
+    line-height: 1.3;
+    color: #1a1a1a;
+  }
+
+  .itemVariant {
+    font-size: 13px;
+    color: #666;
+    background: #f5f5f7;
+    padding: 4px 8px;
+    border-radius: 6px;
+    display: inline-block;
+    align-self: flex-start;
+    margin-bottom: 4px;
+  }
+
+  /* Hide default remove button position and restyle */
+  .removeButton {
+    position: absolute;
+    top: 12px;
+    right: 12px;
+    background: #fff0f0;
+    color: #ff4444;
+    width: 28px;
+    height: 28px;
+    border-radius: 8px;
+  }
+
+  .itemMeta {
+    margin-top: auto;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    width: 100%;
+    font-weight: 600;
+    font-size: 15px;
+  }
+
+  .checkoutContainer {
+    padding-bottom: 40px;
+  }
+}
+
+@media (max-width: 480px) {
+  .checkoutContent {
+    padding: 12px;
+  }
+
+  .card {
+    padding: 16px;
+  }
+
+  .input,
+  .phoneInputGroup {
+    font-size: 16px; /* Prevent zoom on iOS */
   }
 }

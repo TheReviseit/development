@@ -5,7 +5,7 @@ const resendApiKey = process.env.RESEND_API_KEY;
 
 if (!resendApiKey) {
   console.error(
-    "❌ CRITICAL: RESEND_API_KEY is not set in environment variables. Emails will NOT be sent!"
+    "❌ CRITICAL: RESEND_API_KEY is not set in environment variables. Emails will NOT be sent!",
   );
 }
 
@@ -16,12 +16,14 @@ export async function sendEmail({
   to,
   subject,
   html,
-  from = "Flowauxi <noreply@flowauxi.com>",
+  from = "Flowauxi Invoice <invoice@flowauxi.com>",
+  attachments,
 }: {
   to: string | string[];
   subject: string;
   html: string;
   from?: string;
+  attachments?: any[];
 }) {
   // Check if Resend is configured
   if (!resend) {
@@ -34,7 +36,7 @@ export async function sendEmail({
 
   try {
     console.log(
-      `📧 Attempting to send email to ${to} with subject: "${subject}"`
+      `📧 Attempting to send email to ${to} with subject: "${subject}"`,
     );
 
     const response = await resend.emails.send({
@@ -42,6 +44,7 @@ export async function sendEmail({
       to,
       subject,
       html,
+      attachments,
     });
 
     if (response.error) {
@@ -74,7 +77,7 @@ export async function sendBatchEmails(
     subject: string;
     html: string;
   }>,
-  delayMs: number = 100 // Delay between emails to avoid rate limits
+  delayMs: number = 100, // Delay between emails to avoid rate limits
 ): Promise<{
   success: boolean;
   results: Array<{ email: string; success: boolean; error?: string }>;

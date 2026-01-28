@@ -26,6 +26,10 @@ export interface CartPricingInfo {
   variantSizePrices?: Record<string, number>;
   // Flag to indicate if size-based pricing is enabled
   hasSizePricing?: boolean;
+  // Base product colors (not variant colors) - for filtering
+  baseProductColors?: string[];
+  // Base product sizes (available for base product colors)
+  baseProductSizes?: string[];
 }
 
 export interface CartItem {

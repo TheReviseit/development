@@ -65,6 +65,7 @@ export default function ProductCardStore({
   const params = useParams();
   const [isImageLoaded, setIsImageLoaded] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+  const [isBuyNowLoading, setIsBuyNowLoading] = useState(false);
   const [isWishlisted, setIsWishlisted] = useState(
     product.isWishlisted || false,
   );
@@ -201,100 +202,224 @@ export default function ProductCardStore({
 
   const discountInfo = getDiscountInfo();
 
-  // Get first available color
+  // Check if a color is from the base product (not a variant)
+  const isBaseProductColor = (color: string): boolean => {
+    if (product.colors) {
+      if (Array.isArray(product.colors)) {
+        return product.colors.includes(color);
+      }
+      if (typeof product.colors === "string") {
+        return product.colors === color;
+      }
+    }
+    return false;
+  };
+
+  // Get variant colors (colors that are only in variants, not base product)
+  const getVariantColors = (): string[] => {
+    if (!product.variants || product.variants.length === 0) return [];
+    const variantColors = new Set<string>();
+    product.variants.forEach((v) => {
+      if (v.color && !isBaseProductColor(v.color)) {
+        variantColors.add(v.color);
+      }
+    });
+    return Array.from(variantColors);
+  };
+
+  // Get base product colors only
+  const getBaseProductColors = (): string[] => {
+    if (!product.colors) return [];
+    if (Array.isArray(product.colors)) {
+      return product.colors;
+    }
+    if (typeof product.colors === "string" && product.colors) {
+      return [product.colors];
+    }
+    return [];
+  };
+
+  // Get first available color - PRIORITIZE BASE PRODUCT colors over variants
   const getFirstColor = (): string | undefined => {
+    // First, try base product colors
+    const baseColors = getBaseProductColors();
+    if (baseColors.length > 0) {
+      return baseColors[0];
+    }
+    // Fallback to variant colors if no base colors
     if (product.variants && product.variants.length > 0) {
       return product.variants[0].color;
     }
-    if (product.colors) {
-      if (Array.isArray(product.colors) && product.colors.length > 0) {
-        return product.colors[0];
-      }
-      if (typeof product.colors === "string") {
-        return product.colors;
-      }
-    }
     return undefined;
   };
 
-  // Get first available size
-  const getFirstSize = (): string | undefined => {
+  // Get available sizes for a specific color
+  const getSizesForColor = (color: string): string[] => {
+    // If it's a base product color, return base product sizes
+    if (isBaseProductColor(color)) {
+      return product.sizes || [];
+    }
+
+    // For variant colors, find sizes from matching variants
     if (product.variants && product.variants.length > 0) {
-      const firstVariant = product.variants[0];
-      if (Array.isArray(firstVariant.size) && firstVariant.size.length > 0) {
-        return firstVariant.size[0];
+      const sizesSet = new Set<string>();
+      product.variants.forEach((v) => {
+        if (v.color === color) {
+          if (Array.isArray(v.size)) {
+            v.size.forEach((s) => sizesSet.add(s));
+          } else if (typeof v.size === "string" && v.size) {
+            const sizes = v.size
+              .split(",")
+              .map((s) => s.trim())
+              .filter(Boolean);
+            sizes.forEach((s) => sizesSet.add(s));
+          }
+        }
+      });
+      if (sizesSet.size > 0) {
+        return Array.from(sizesSet);
       }
-      if (typeof firstVariant.size === "string" && firstVariant.size) {
-        // Handle comma-separated size strings - return first size only
-        const sizes = firstVariant.size
-          .split(",")
-          .map((s) => s.trim())
-          .filter(Boolean);
-        if (sizes.length > 0) {
+    }
+
+    // Fallback to base product sizes
+    return product.sizes || [];
+  };
+
+  // Get first available size for a specific color
+  const getFirstSizeForColor = (color?: string): string | undefined => {
+    if (!color) {
+      // No color specified, use base product sizes first
+      if (product.sizes && product.sizes.length > 0) {
+        return product.sizes[0];
+      }
+      // Fallback to first variant's sizes
+      if (product.variants && product.variants.length > 0) {
+        const firstVariant = product.variants[0];
+        if (Array.isArray(firstVariant.size) && firstVariant.size.length > 0) {
+          return firstVariant.size[0];
+        }
+        if (typeof firstVariant.size === "string" && firstVariant.size) {
+          const sizes = firstVariant.size
+            .split(",")
+            .map((s) => s.trim())
+            .filter(Boolean);
           return sizes[0];
         }
       }
+      return undefined;
     }
-    if (product.sizes && product.sizes.length > 0) {
-      return product.sizes[0];
-    }
-    return undefined;
+
+    const sizes = getSizesForColor(color);
+    return sizes.length > 0 ? sizes[0] : undefined;
   };
 
-  // Get all available colors for the product
+  // Get first available size (backward compatible)
+  const getFirstSize = (): string | undefined => {
+    const firstColor = getFirstColor();
+    return getFirstSizeForColor(firstColor);
+  };
+
+  // Get all available colors for the product - BASE PRODUCT COLORS FIRST
   const getAllColors = (): string[] => {
-    const colorSet = new Set<string>();
-    if (product.variants && product.variants.length > 0) {
-      product.variants.forEach((v) => colorSet.add(v.color));
-    }
+    const colorList: string[] = [];
+    const addedColors = new Set<string>();
+
+    // First, add base product colors (they should appear first in dropdown)
     if (product.colors) {
       if (Array.isArray(product.colors)) {
-        product.colors.forEach((c) => colorSet.add(c));
+        product.colors.forEach((c) => {
+          if (!addedColors.has(c)) {
+            colorList.push(c);
+            addedColors.add(c);
+          }
+        });
       } else if (typeof product.colors === "string") {
-        colorSet.add(product.colors);
+        if (!addedColors.has(product.colors)) {
+          colorList.push(product.colors);
+          addedColors.add(product.colors);
+        }
       }
     }
-    return Array.from(colorSet);
+
+    // Then, add variant colors (only those not already added)
+    if (product.variants && product.variants.length > 0) {
+      product.variants.forEach((v) => {
+        if (v.color && !addedColors.has(v.color)) {
+          colorList.push(v.color);
+          addedColors.add(v.color);
+        }
+      });
+    }
+
+    return colorList;
   };
 
-  // Get all available sizes for the product
+  // Get all available sizes for the product - BASE PRODUCT SIZES FIRST
   const getAllSizes = (): string[] => {
-    const sizeSet = new Set<string>();
+    const sizeList: string[] = [];
+    const addedSizes = new Set<string>();
+
+    // First, add base product sizes (they should appear first in dropdown)
+    if (product.sizes && product.sizes.length > 0) {
+      product.sizes.forEach((s) => {
+        if (!addedSizes.has(s)) {
+          sizeList.push(s);
+          addedSizes.add(s);
+        }
+      });
+    }
+
+    // Then, add variant sizes (only those not already added)
     if (product.variants && product.variants.length > 0) {
       product.variants.forEach((v) => {
         if (Array.isArray(v.size)) {
-          v.size.forEach((s) => sizeSet.add(s));
+          v.size.forEach((s) => {
+            if (!addedSizes.has(s)) {
+              sizeList.push(s);
+              addedSizes.add(s);
+            }
+          });
         } else if (typeof v.size === "string" && v.size) {
           // Handle comma-separated size strings - split into individual sizes
           const sizes = v.size
             .split(",")
             .map((s) => s.trim())
             .filter(Boolean);
-          sizes.forEach((s) => sizeSet.add(s));
+          sizes.forEach((s) => {
+            if (!addedSizes.has(s)) {
+              sizeList.push(s);
+              addedSizes.add(s);
+            }
+          });
         }
       });
     }
-    if (product.sizes && product.sizes.length > 0) {
-      product.sizes.forEach((s) => sizeSet.add(s));
-    }
-    return Array.from(sizeSet);
+
+    return sizeList;
   };
 
   // Build pricing info for cart price updates
   // This mirrors the getPriceForVariant logic from ProductDetailModal
   const buildPricingInfo = () => {
+    const baseColors = getBaseProductColors();
+    const baseSizes = product.sizes || [];
+
     const pricingInfo: {
       basePrice: number;
       colorPrices?: Record<string, number>;
       sizePrices?: Record<string, number>;
       variantSizePrices?: Record<string, number>;
       hasSizePricing?: boolean;
+      baseProductColors?: string[];
+      baseProductSizes?: string[];
     } = {
       basePrice:
         product.compareAtPrice && product.compareAtPrice > 0
           ? product.compareAtPrice // Use offer price as base
           : product.price,
       hasSizePricing: product.hasSizePricing,
+      baseProductColors: baseColors.length > 0 ? baseColors : undefined,
+      baseProductSizes: baseSizes.length > 0 ? baseSizes : undefined,
     };
 
     // Build pricing from variants
@@ -508,8 +633,10 @@ export default function ProductCardStore({
     }
   };
 
-  const handleBuyNow = (e: React.MouseEvent) => {
+  const handleBuyNow = async (e: React.MouseEvent) => {
     e.stopPropagation();
+    setIsBuyNowLoading(true);
+
     if (quantityInCart === 0) {
       // Auto-select first color and size when adding from dashboard
       const firstColor = getFirstColor();
@@ -782,12 +909,17 @@ export default function ProductCardStore({
           )}
 
           <motion.button
-            className={styles.novaBuyNowBtn}
+            className={`${styles.novaBuyNowBtn} ${isBuyNowLoading ? styles.novaBuyNowBtnLoading : ""}`}
             onClick={handleBuyNow}
-            whileHover={{ scale: 1.02 }}
-            whileTap={{ scale: 0.98 }}
+            whileHover={{ scale: isBuyNowLoading ? 1 : 1.02 }}
+            whileTap={{ scale: isBuyNowLoading ? 1 : 0.98 }}
+            disabled={isBuyNowLoading}
           >
-            Buy Now
+            {isBuyNowLoading ? (
+              <span className={styles.buyNowSpinner}></span>
+            ) : (
+              "Buy Now"
+            )}
           </motion.button>
         </div>
       </div>

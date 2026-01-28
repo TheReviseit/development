@@ -64,6 +64,7 @@ export async function GET(request: NextRequest) {
         razorpayKeyId: supabaseData.razorpay_key_id,
         razorpayKeySecret: supabaseData.razorpay_key_secret,
         paymentsEnabled: supabaseData.payments_enabled,
+        brandColor: supabaseData.brand_color,
       };
       return NextResponse.json({ data: frontendData, source: "supabase" });
     }

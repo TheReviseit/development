@@ -1,0 +1,59 @@
+/* ============================================
+   INVOICE SETTINGS TAB STYLES
+   ============================================ */
+
+.container {
+  width: 100%;
+}
+
+.loading {
+  padding: 40px;
+  text-align: center;
+  color: var(--text-secondary);
+  font-size: 14px;
+}
+
+/* Card */
+.card {
+  background: var(--bg-card);
+  border-radius: 16px;
+  overflow: hidden;
+  margin-bottom: 24px;
+}
+
+.cardHeader {
+  padding: 24px 24px 16px;
+  border-bottom: 1px solid var(--border);
+}
+
+.cardTitle {
+  font-size: 18px;
+  font-weight: 700;
+  color: #ffffff;
+  margin: 0;
+}
+
+/* Preview Section */
+.previewSection {
+  background: var(
+    --bg-card
+  ); /* Match the card background to remove 'patchy' look */
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 20px;
+  position: relative;
+  width: 100%;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .previewSection {
+    padding: 16px 8px;
+    border-radius: 12px;
+  }
+
+  .infoNote {
+    margin: 12px;
+    padding: 12px 16px;
+  }
+}

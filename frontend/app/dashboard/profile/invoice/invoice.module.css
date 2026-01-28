@@ -1,0 +1,719 @@
+/* ============================================
+   INVOICE STYLES - Enterprise Level Design
+   Premium, Clean, Professional Invoice
+   ============================================ */
+
+/* Container */
+.invoiceContainer {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 0;
+  width: 100%;
+}
+
+/* Invoice Paper - Main Document */
+.invoicePaper {
+  background: #ffffff;
+  border-radius: 16px;
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.05); /* Softer shadow */
+  overflow: hidden;
+  padding: 32px;
+}
+
+@media print {
+  .invoicePaper {
+    box-shadow: none;
+    border-radius: 0;
+    padding: 20px;
+  }
+}
+
+/* ============================================
+   HEADER - Store Name Left, Logo Right
+   ============================================ */
+
+.invoiceHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 24px;
+}
+
+.headerLeft {
+  flex: 1;
+}
+
+.storeName {
+  font-size: 28px;
+  font-weight: 800;
+  color: #1a1a1a;
+  margin: 0 0 4px;
+  letter-spacing: -0.02em;
+}
+
+.storeDetails {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-bottom: 12px;
+}
+
+.storeDetail {
+  font-size: 13px;
+  color: #666;
+  margin: 0;
+}
+
+.invoiceMeta {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 20px;
+}
+
+.invoiceLabel {
+  display: inline-block;
+  background: linear-gradient(135deg, #22c55e, #16a34a);
+  color: white;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 5px 12px;
+  border-radius: 6px;
+  letter-spacing: 0.5px;
+  width: fit-content;
+}
+
+.invoiceDetails {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 4px;
+}
+
+.invoiceNumber {
+  font-size: 14px;
+  font-weight: 600;
+  color: #1a1a1a;
+}
+
+.invoiceDate {
+  font-size: 13px;
+  color: #888;
+}
+
+/* Header Right - Logo */
+.headerRight {
+  flex-shrink: 0;
+}
+
+.storeLogo {
+  width: 100px;
+  height: 100px;
+  object-fit: contain;
+  border-radius: 16px;
+  background: #f9fafb;
+  padding: 8px;
+}
+
+.logoPlaceholder {
+  width: 100px;
+  height: 100px;
+  background: linear-gradient(135deg, #22c55e, #16a34a);
+  border-radius: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.logoPlaceholder span {
+  font-size: 40px;
+  font-weight: 800;
+  color: white;
+}
+
+/* ============================================
+   DIVIDERS
+   ============================================ */
+
+.divider {
+  height: 1px;
+  background: linear-gradient(90deg, transparent, #e5e5e5, transparent);
+  margin: 28px 0;
+}
+
+.dividerThin {
+  height: 1px;
+  background: #e5e5e5;
+  margin: 12px 0;
+}
+
+/* ============================================
+   CUSTOMER SECTION
+   ============================================ */
+
+.customerSection {
+  margin-bottom: 28px;
+}
+
+.sectionTitle {
+  font-size: 11px;
+  font-weight: 700;
+  color: #888;
+  text-transform: uppercase;
+  letter-spacing: 1.5px;
+  margin-bottom: 14px;
+}
+
+.customerInfo {
+  background: #f9fafb;
+  border-radius: 12px;
+  padding: 20px;
+}
+
+.customerName {
+  font-size: 18px;
+  font-weight: 700;
+  color: #1a1a1a;
+  margin: 0 0 12px;
+}
+
+.customerDetail {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: #666;
+  margin: 0 0 6px;
+  line-height: 1.5;
+}
+
+.customerDetail:last-child {
+  margin-bottom: 0;
+}
+
+.customerDetail svg {
+  flex-shrink: 0;
+  color: #888;
+}
+
+/* ============================================
+   ITEMS TABLE
+   ============================================ */
+
+.itemsSection {
+  margin-bottom: 28px;
+}
+
+.itemsTable {
+  width: 100%;
+  border-collapse: collapse;
+  border: 1px solid #f0f0f0;
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.itemsTable thead tr {
+  background: #f9fafb;
+}
+
+.itemsTable th {
+  padding: 14px 12px;
+  font-size: 11px;
+  font-weight: 700;
+  color: #888;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  border-bottom: 1px solid #f0f0f0;
+}
+
+.thSerial {
+  text-align: center;
+  width: 60px;
+}
+
+.thProduct {
+  text-align: left;
+}
+
+.thQty {
+  text-align: center;
+  width: 60px;
+}
+
+.thPrice {
+  text-align: right;
+  width: 100px;
+}
+
+.thTotal {
+  text-align: right;
+  width: 110px;
+}
+
+/* Table Body */
+.itemsTable tbody tr {
+  transition: background 0.2s ease;
+}
+
+.itemsTable tbody tr:hover {
+  background: #fafafa;
+}
+
+.itemsTable td {
+  padding: 16px 12px;
+  border-bottom: 1px solid #f0f0f0;
+  vertical-align: middle;
+}
+
+.itemsTable tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.tdSerial {
+  text-align: center;
+  font-size: 13px;
+  color: #888;
+}
+
+.tdProduct {
+  /* Product cell uses flexbox via productCell class */
+  padding: 16px 12px;
+}
+
+.productCell {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.productImage {
+  width: 48px;
+  height: 48px;
+  object-fit: cover;
+  border-radius: 10px;
+  flex-shrink: 0;
+  background: #f5f5f5;
+}
+
+.productImagePlaceholder {
+  width: 48px;
+  height: 48px;
+  background: #f5f5f5;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  color: #ccc;
+}
+
+.productInfo {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.productName {
+  font-size: 14px;
+  font-weight: 600;
+  color: #1a1a1a;
+}
+
+.productVariant {
+  font-size: 12px;
+  color: #888;
+}
+
+.tdQty {
+  text-align: center;
+  font-size: 14px;
+  font-weight: 600;
+  color: #1a1a1a;
+}
+
+.tdPrice {
+  text-align: right;
+  font-size: 14px;
+  color: #666;
+}
+
+.tdTotal {
+  text-align: right;
+  font-size: 14px;
+  font-weight: 700;
+  color: #1a1a1a;
+}
+
+/* ============================================
+   TOTALS SECTION
+   ============================================ */
+
+.totalsSection {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 28px;
+  flex-wrap: wrap;
+  gap: 24px;
+}
+
+.totalsBox {
+  background: #f9fafb;
+  border-radius: 12px;
+  padding: 20px 24px;
+  min-width: 260px;
+}
+
+.totalRow {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 0;
+  font-size: 14px;
+  color: #666;
+}
+
+.totalRow span:last-child {
+  color: #1a1a1a;
+}
+
+.grandTotal {
+  font-size: 18px;
+  font-weight: 800;
+  color: #1a1a1a !important;
+}
+
+.grandTotal span {
+  color: #1a1a1a !important;
+}
+
+.freeShipping {
+  color: #22c55e !important;
+  font-weight: 600;
+}
+
+/* ============================================
+   FOOTER
+   ============================================ */
+
+.invoiceFooter {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  padding-top: 20px;
+  border-top: 1px solid #f0f0f0;
+}
+
+.footerLeft {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.qrSection {
+  display: flex;
+  flex-direction: column;
+  align-items: center; /* Center align everything */
+  gap: 8px;
+  margin-bottom: 20px;
+  width: fit-content; /* Ensure it doesn't stretch */
+}
+
+.qrLabel {
+  font-size: 11px;
+  font-weight: 600;
+  color: #1a1a1a;
+  text-transform: uppercase;
+  margin: 0;
+  letter-spacing: 0.5px;
+  text-align: center;
+}
+
+.qrCode {
+  width: 120px;
+  height: 120px;
+  mix-blend-mode: multiply;
+}
+
+.orText {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  font-size: 10px;
+  font-weight: 600;
+  color: #999;
+  margin: 6px 0;
+  gap: 8px;
+}
+
+.orText::before,
+.orText::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: #e5e5e5;
+}
+
+.qrLink {
+  font-size: 11px;
+  color: #ffffff;
+  background: #000000;
+  padding: 6px 12px;
+  border-radius: 6px;
+  text-decoration: none;
+  font-weight: 600;
+  display: inline-block;
+  text-align: center;
+  width: fit-content;
+  transition: all 0.2s ease;
+}
+
+.qrLink:hover {
+  background: #333333;
+  text-decoration: none;
+  transform: translateY(-1px);
+}
+
+.paymentLabel {
+  display: block;
+  font-size: 11px;
+  font-weight: 600;
+  color: #666;
+  margin-bottom: 4px;
+}
+
+.paymentBadge {
+  display: inline-block;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 6px 14px;
+  border-radius: 8px;
+  letter-spacing: 0.5px;
+  width: fit-content;
+}
+
+.statusPaid {
+  background: #dcfce7;
+  color: #16a34a;
+}
+
+.statusPending {
+  background: #fef3c7;
+  color: #d97706;
+}
+
+.statusCod {
+  background: #dbeafe;
+  color: #2563eb;
+}
+
+.orderId {
+  font-size: 12px;
+  color: #888;
+}
+
+.footerRight {
+  text-align: right;
+}
+
+.thankYou {
+  font-size: 14px;
+  font-weight: 600;
+  color: #1a1a1a;
+  margin: 0;
+}
+
+/* ============================================
+   ACTION BUTTONS
+   ============================================ */
+
+.heart {
+  color: #ef4444;
+  display: inline-block;
+  margin-left: 4px;
+}
+
+.poweredBy {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+  margin-top: 8px;
+  font-size: 11px;
+  color: #888;
+  text-decoration: none;
+  transition: color 0.2s ease;
+}
+
+.poweredBy:hover {
+  color: #1a1a1a;
+}
+
+.brandName {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-weight: 700;
+  color: #1a1a1a;
+}
+
+.brandLogo {
+  width: 20px;
+  height: 20px;
+  object-fit: contain;
+}
+
+.invoiceActions {
+  display: flex;
+  gap: 12px;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+
+.actionBtn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 14px 24px;
+  border: 1.5px solid #e0e0e0;
+  background: #ffffff;
+  color: #1a1a1a;
+  font-size: 14px;
+  font-weight: 600;
+  border-radius: 12px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.actionBtn:hover {
+  border-color: #1a1a1a;
+  background: #fafafa;
+}
+
+.actionBtn svg {
+  flex-shrink: 0;
+}
+
+.actionBtnPrimary {
+  background: #1a1a1a;
+  border-color: #1a1a1a;
+  color: #ffffff;
+}
+
+.actionBtnPrimary:hover {
+  background: #333333;
+  border-color: #333333;
+}
+
+/* ============================================
+   RESPONSIVE
+   ============================================ */
+
+@media (max-width: 768px) {
+  .invoiceContainer {
+    padding: 16px;
+  }
+
+  .invoicePaper {
+    padding: 24px;
+    border-radius: 16px;
+  }
+
+  .invoiceHeader {
+    flex-direction: column-reverse;
+    gap: 16px;
+  }
+
+  .headerRight {
+    align-self: flex-end;
+  }
+
+  .storeLogo,
+  .logoPlaceholder {
+    width: 60px;
+    height: 60px;
+  }
+
+  .logoPlaceholder span {
+    font-size: 24px;
+  }
+
+  .storeName {
+    font-size: 22px;
+  }
+
+  .itemsTable th,
+  .itemsTable td {
+    padding: 12px 8px;
+  }
+
+  .productCell {
+    gap: 8px;
+  }
+
+  .productImage,
+  .productImagePlaceholder {
+    width: 40px;
+    height: 40px;
+  }
+
+  .productName {
+    font-size: 13px;
+  }
+
+  .thPrice,
+  .tdPrice {
+    display: none;
+  }
+
+  .totalsBox {
+    min-width: auto;
+    width: 100%;
+  }
+
+  .invoiceFooter {
+    flex-direction: column;
+    gap: 16px;
+    align-items: flex-start;
+  }
+
+  .footerRight {
+    text-align: left;
+  }
+
+  .invoiceActions {
+    flex-direction: column;
+  }
+
+  .actionBtn {
+    width: 100%;
+    justify-content: center;
+  }
+}
+
+/* ============================================
+   PRINT STYLES
+   ============================================ */
+
+@media print {
+  .invoiceContainer {
+    padding: 0;
+  }
+
+  .invoicePaper {
+    box-shadow: none;
+    border-radius: 0;
+  }
+
+  .invoiceActions {
+    display: none !important;
+  }
+
+  .itemsTable tbody tr:hover {
+    background: transparent;
+  }
+}

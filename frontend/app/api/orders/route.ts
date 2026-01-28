@@ -42,6 +42,7 @@ interface OrderItem {
   name: string;
   quantity: number;
   price?: number;
+  imageUrl?: string;
   notes?: string;
 }
 
@@ -126,8 +127,8 @@ export async function POST(request: NextRequest) {
     const {
       customer_name,
       customer_phone,
-    customer_address,
-    customer_email,
+      customer_address,
+      customer_email,
       items,
       status = "pending",
       source = "manual",
