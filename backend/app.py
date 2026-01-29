@@ -81,8 +81,14 @@ except ImportError as e:
 
 # Supabase client for multi-tenant credential lookup
 try:
+    # Use enterprise-grade credential manager for credentials (with caching, retry, fallback)
+    from credential_manager import (
+        get_credentials_by_phone_number_id,
+        get_credential_manager,
+        credential_health_check,
+    )
+    # Import other functions from supabase_client
     from supabase_client import (
-        get_credentials_by_phone_number_id, 
         get_business_data_for_user,
         get_firebase_uid_from_user_id,
         get_business_id_for_user,
@@ -94,18 +100,38 @@ try:
         get_or_create_conversation
     )
     SUPABASE_AVAILABLE = True
+    CREDENTIAL_MANAGER_AVAILABLE = True
+    logger.info("🚀 Enterprise Credential Manager loaded")
 except ImportError as e:
-    logger.warning(f"Supabase client not available: {e}")
-    SUPABASE_AVAILABLE = False
-    get_credentials_by_phone_number_id = None
-    get_business_data_for_user = None
-    get_firebase_uid_from_user_id = None
-    get_business_data_from_supabase = None
-    get_ai_capabilities_from_supabase = None
-    get_business_from_supabase = None
-    store_message = None
-    update_message_status = None
-    get_or_create_conversation = None
+    # Fallback to original supabase_client
+    logger.warning(f"Credential manager not available, using supabase_client: {e}")
+    CREDENTIAL_MANAGER_AVAILABLE = False
+    try:
+        from supabase_client import (
+            get_credentials_by_phone_number_id, 
+            get_business_data_for_user,
+            get_firebase_uid_from_user_id,
+            get_business_id_for_user,
+            get_business_data_from_supabase,
+            get_ai_capabilities_from_supabase,
+            get_business_from_supabase,
+            store_message,
+            update_message_status,
+            get_or_create_conversation
+        )
+        SUPABASE_AVAILABLE = True
+    except ImportError as e2:
+        logger.warning(f"Supabase client not available: {e2}")
+        SUPABASE_AVAILABLE = False
+        get_credentials_by_phone_number_id = None
+        get_business_data_for_user = None
+        get_firebase_uid_from_user_id = None
+        get_business_data_from_supabase = None
+        get_ai_capabilities_from_supabase = None
+        get_business_from_supabase = None
+        store_message = None
+        update_message_status = None
+        get_or_create_conversation = None
 
 # Firebase client for business data (Firestore)
 try:
@@ -294,6 +320,7 @@ def health_check():
             'firebase': FIREBASE_AVAILABLE,
             'cache': ADVANCED_CACHE_AVAILABLE,
             'resilience': RESILIENCE_AVAILABLE,
+            'credential_manager': CREDENTIAL_MANAGER_AVAILABLE if 'CREDENTIAL_MANAGER_AVAILABLE' in dir() else False,
         }
     }
     
@@ -319,6 +346,13 @@ def detailed_health_check():
     if cache_manager:
         health['cache'] = cache_manager.get_stats()
     
+    # Check credential manager
+    if CREDENTIAL_MANAGER_AVAILABLE:
+        try:
+            health['credentials'] = credential_health_check()
+        except Exception as e:
+            health['credentials'] = {'error': str(e)}
+    
     # Check KPIs
     if METRICS_AVAILABLE:
         try:
@@ -329,6 +363,29 @@ def detailed_health_check():
             health['kpis'] = {'error': str(e)}
     
     return jsonify(health), 200
+
+
+@app.route('/api/health/credentials', methods=['GET'])
+def credentials_health():
+    """Credential manager health and statistics."""
+    if CREDENTIAL_MANAGER_AVAILABLE:
+        try:
+            manager = get_credential_manager()
+            return jsonify({
+                'status': 'ok',
+                'health': manager.health_check(),
+                'stats': manager.get_stats(),
+            }), 200
+        except Exception as e:
+            return jsonify({
+                'status': 'error',
+                'error': str(e),
+            }), 500
+    else:
+        return jsonify({
+            'status': 'unavailable',
+            'message': 'Credential manager not available',
+        }), 200
 
 
 @app.route('/api/whatsapp/status', methods=['GET'])

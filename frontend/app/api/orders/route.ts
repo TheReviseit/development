@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { cookies } from "next/headers";
 import { adminAuth } from "@/lib/firebase-admin";
-
+import { randomUUID } from "crypto";
+import { generateOrderId } from "@/lib/order-id";
 // Backend Flask API base URL (used for Google Sheets sync)
 const BACKEND_URL =
   process.env.NODE_ENV === "development"
@@ -174,10 +175,18 @@ export async function POST(request: NextRequest) {
 
     const supabase = getSupabase();
 
-    // Create order
+    // Generate unique ID and order_id with consistent format
+    // Format: order_id = First 8 chars of UUID, UPPERCASE (e.g., "28C2CF22")
+    // This matches the backend Python format and DB trigger format
+    const orderId = randomUUID();
+    const shortOrderId = generateOrderId(orderId);
+
+    // Create order with pre-generated IDs
     const { data, error } = await supabase
       .from("orders")
       .insert({
+        id: orderId,
+        order_id: shortOrderId,
         user_id: userId,
         customer_name,
         customer_phone,

@@ -2,9 +2,10 @@ import React from "react";
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { sendEmail } from "@/lib/email/resend";
-// import { generateInvoiceEmailHTML } from "@/lib/invoice-utils"; // No longer used for body
 import { InvoiceDocument } from "@/lib/invoice-pdf";
 import { renderToBuffer } from "@react-pdf/renderer";
+import { randomUUID } from "crypto";
+import { generateOrderId } from "@/lib/order-id";
 
 // Initialize Supabase client
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
@@ -90,10 +91,18 @@ export async function POST(
 
     const supabase = getSupabase();
 
-    // Create order
+    // Generate unique ID and order_id with consistent format
+    // Format: order_id = First 8 chars of UUID, UPPERCASE (e.g., "28C2CF22")
+    // This matches the backend Python format and DB trigger format
+    const orderId = randomUUID();
+    const shortOrderId = generateOrderId(orderId);
+
+    // Create order with pre-generated IDs
     const { data: orderData, error: orderError } = await supabase
       .from("orders")
       .insert({
+        id: orderId,
+        order_id: shortOrderId,
         user_id: storeSlug, // storeSlug is the user_id
         customer_name,
         customer_phone,
