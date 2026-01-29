@@ -512,7 +512,10 @@ def _upsert_sheet_row(
     order_id: str,
     row_data: List[Any],
 ) -> bool:
-    """Insert or update row in Google Sheet (idempotent)."""
+    """Insert or update row in Google Sheet (idempotent).
+    
+    CRITICAL FIX: Properly searches for existing order to prevent duplicates.
+    """
     logger.info(f"📊 [Sheets Upsert] Starting upsert for order {order_id} to "
                f"spreadsheet {spreadsheet_id[:20]}..., sheet '{sheet_name}'")
     try:
@@ -525,25 +528,36 @@ def _upsert_sheet_row(
         logger.info(f"📊 [Sheets Upsert] Successfully accessed worksheet '{sheet_name}' "
                    f"({sheet.row_count} rows, {sheet.col_count} cols)")
         
-        # Try to find existing row with this order ID
-        logger.debug(f"📊 [Sheets Upsert] Searching for existing order ID: {order_id}")
+        # CRITICAL FIX: Get ALL values in column A (Order ID column) to find exact match
+        logger.debug(f"📊 [Sheets Upsert] Fetching all Order IDs from column A...")
         try:
-            cell = sheet.find(order_id)
-            if cell:
+            # Get all values in column A (Order ID column)
+            order_id_column = sheet.col_values(1)  # Column A = index 1
+            logger.debug(f"📊 [Sheets Upsert] Found {len(order_id_column)} rows in Order ID column")
+            
+            # Search for exact match (case-sensitive)
+            existing_row_num = None
+            for idx, cell_value in enumerate(order_id_column, start=1):
+                if str(cell_value).strip() == str(order_id).strip():
+                    existing_row_num = idx
+                    logger.info(f"📊 [Sheets Upsert] Found existing order '{order_id}' at row {existing_row_num}")
+                    break
+            
+            if existing_row_num and existing_row_num > 1:  # Skip header row
                 # Update existing row
-                row_num = cell.row
-                logger.info(f"📊 [Sheets Upsert] Found existing order at row {row_num}, updating...")
-                range_notation = f"A{row_num}:J{row_num}"
+                logger.info(f"📊 [Sheets Upsert] Updating existing order at row {existing_row_num}...")
+                range_notation = f"A{existing_row_num}:J{existing_row_num}"
                 logger.debug(f"📊 [Sheets Upsert] Updating range: {range_notation}")
                 sheet.update(range_notation, [row_data])
-                logger.info(f"✅ [Sheets Upsert] Successfully updated existing order {order_id} at row {row_num}")
+                logger.info(f"✅ [Sheets Upsert] Successfully updated existing order {order_id} at row {existing_row_num}")
                 return True
-        except gspread.exceptions.CellNotFound:
-            logger.debug(f"📊 [Sheets Upsert] Order ID not found, will append new row")
-        except Exception as find_error:
-            logger.warning(f"⚠️ [Sheets Upsert] Error during find operation: {find_error}, will append new row")
+            else:
+                logger.debug(f"📊 [Sheets Upsert] Order ID '{order_id}' not found in existing rows")
+                
+        except Exception as col_error:
+            logger.warning(f"⚠️ [Sheets Upsert] Error reading column values: {col_error}, will append new row")
         
-        # Append new row
+        # Append new row (order not found)
         logger.info(f"📊 [Sheets Upsert] Appending new row for order {order_id}")
         logger.debug(f"📊 [Sheets Upsert] Row data: {row_data}")
         sheet.append_row(row_data)
@@ -611,6 +625,7 @@ def _upsert_sheet_row(
     except Exception as e:
         logger.error(f"❌ [Sheets Upsert] Failed to upsert sheet row for order {order_id}: {e}", exc_info=True)
         return False
+
 
 
 

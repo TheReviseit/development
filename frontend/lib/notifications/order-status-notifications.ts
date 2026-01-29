@@ -303,19 +303,53 @@ function generateWhatsAppMessage(
   const statusInfo = STATUS_MESSAGES[status];
   const shortOrderId = order.order_id || order.id.slice(0, 8).toUpperCase();
 
-  return `
-${statusInfo.emoji} *${statusInfo.title}*
+  // Build items list with product details
+  let itemsText = "";
+  if (order.items && order.items.length > 0) {
+    itemsText = "\nItems:";
+    for (const item of order.items) {
+      const name = item.name || "Product";
+      const quantity = item.quantity || 1;
+      const price = item.price || 0;
 
-Hi ${order.customer_name},
+      // Build item line with available details
+      let itemLine = `\n${name}`;
+
+      // Add price if available
+      if (price && price > 0) {
+        itemLine += ` - ₹${price}`;
+      }
+
+      // Add color if available
+      const color = (item as any).color || (item as any).variant?.color;
+      if (color) {
+        itemLine += ` | ${color}`;
+      }
+
+      // Add size if available
+      const size = (item as any).size || (item as any).variant?.size;
+      if (size) {
+        itemLine += ` | ${size}`;
+      }
+
+      // Add quantity if more than 1
+      if (quantity > 1) {
+        itemLine += ` (x${quantity})`;
+      }
+
+      itemsText += itemLine;
+    }
+  }
+
+  return `Hi ${order.customer_name},
 
 ${statusInfo.description}
 
-📦 *Order ID:* #${shortOrderId}
-📊 *Status:* ${status.charAt(0).toUpperCase() + status.slice(1)}
-${order.total_quantity ? `🛒 *Items:* ${order.total_quantity} item${order.total_quantity > 1 ? "s" : ""}` : ""}
+Order ID: #${shortOrderId}
+Status: ${status.charAt(0).toUpperCase() + status.slice(1)}
+${itemsText}
 
-Thank you for choosing *${business.business_name}*!
-`.trim();
+Thank you for choosing ${business.business_name}! ❤️`.trim();
 }
 
 async function sendWhatsAppNotification(

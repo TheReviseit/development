@@ -338,39 +338,59 @@ def _format_order_status_message(
     total_quantity: Optional[int] = None
 ) -> str:
     """Format order status message for WhatsApp."""
-    STATUS_TEMPLATES = {
-        "pending": ("🕐", "Order Received", "Your order has been received and is awaiting confirmation."),
-        "confirmed": ("✅", "Order Confirmed", "Great news! Your order has been confirmed and is being prepared."),
-        "processing": ("📦", "Order Processing", "Your order is being packed and will be dispatched soon."),
-        "completed": ("🎉", "Order Completed", "Your order has been successfully delivered. Thank you for shopping with us!"),
-        "cancelled": ("❌", "Order Cancelled", "Your order has been cancelled. If you have any questions, please contact us."),
+    STATUS_MESSAGES = {
+        "pending": "Your order has been received and is awaiting confirmation.",
+        "confirmed": "Great news! Your order has been confirmed and is being prepared.",
+        "processing": "Your order is being packed and will be dispatched soon.",
+        "completed": "Your order has been successfully delivered. Thank you for shopping with us!",
+        "cancelled": "Your order has been cancelled. If you have any questions, please contact us.",
     }
     
-    emoji, title, description = STATUS_TEMPLATES.get(status, ("📋", "Order Update", "Your order status has been updated."))
+    description = STATUS_MESSAGES.get(status, "Your order status has been updated.")
     
-    # Build items summary
+    # Build items list with product details
     items_text = ""
     if items and len(items) > 0:
-        items_text = "\n\n📦 *Items:*"
-        for item in items[:5]:
-            items_text += f"\n• {item.get('name', 'Item')} × {item.get('quantity', 1)}"
-        if len(items) > 5:
-            items_text += f"\n• ...and {len(items) - 5} more items"
+        items_text = "\nItems:"
+        for item in items:
+            # Extract item details
+            name = item.get('name', 'Product')
+            quantity = item.get('quantity', 1)
+            price = item.get('price', 0)
+            
+            # Build item line with available details
+            item_line = f"\n{name}"
+            
+            # Add price if available
+            if price and price > 0:
+                item_line += f" - ₹{price}"
+            
+            # Add color if available
+            color = item.get('color') or item.get('variant', {}).get('color')
+            if color:
+                item_line += f" | {color}"
+            
+            # Add size if available
+            size = item.get('size') or item.get('variant', {}).get('size')
+            if size:
+                item_line += f" | {size}"
+            
+            # Add quantity
+            if quantity > 1:
+                item_line += f" (x{quantity})"
+            
+            items_text += item_line
     
-    message = f"""
-{emoji} *{title}*
-
-Hi {customer_name},
+    # Clean, professional message format
+    message = f"""Hi {customer_name},
 
 {description}
 
-🆔 *Order ID:* #{order_id}
-📊 *Status:* {status.capitalize()}
-{f"🛒 *Items:* {total_quantity} item{'s' if total_quantity != 1 else ''}" if total_quantity else ""}
+Order ID: #{order_id}
+Status: {status.capitalize()}
 {items_text}
 
-Thank you for choosing *{business_name}*!
-""".strip()
+Thank you for choosing {business_name}! ❤️""".strip()
     
     return message
 
