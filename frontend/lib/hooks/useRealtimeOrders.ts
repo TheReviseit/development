@@ -31,6 +31,15 @@ interface UseRealtimeOrdersOptions {
   onUpdate?: (order: Order) => void;
   onDelete?: (oldOrder: { id: string }) => void;
   enabled?: boolean;
+  /**
+   * Enable polling fallback when realtime fails.
+   * This ensures updates are still received even if WebSocket is blocked.
+   */
+  enablePollingFallback?: boolean;
+  /**
+   * Polling interval in ms (default: 10000 = 10 seconds)
+   */
+  pollingIntervalMs?: number;
 }
 
 /**
@@ -39,7 +48,11 @@ interface UseRealtimeOrdersOptions {
  * Uses Supabase Realtime to listen for INSERT, UPDATE, DELETE events
  * on the orders table filtered by user_id.
  *
- * FIX: Uses refs for callbacks to prevent subscription recreation on every render.
+ * Features:
+ * - Automatic retry with exponential backoff
+ * - Polling fallback when WebSocket fails
+ * - Connection state management
+ * - Graceful cleanup
  */
 export function useRealtimeOrders({
   userId,
@@ -47,20 +60,30 @@ export function useRealtimeOrders({
   onUpdate,
   onDelete,
   enabled = true,
+  enablePollingFallback = true,
+  pollingIntervalMs = 10000,
 }: UseRealtimeOrdersOptions) {
   const channelRef = useRef<RealtimeChannel | null>(null);
   const [isConnected, setIsConnected] = useState(false);
   const [connectionError, setConnectionError] = useState<string | null>(null);
+  const [isUsingPolling, setIsUsingPolling] = useState(false);
 
-  // =====================================================================
-  // FIX: Store callbacks in refs to prevent subscription recreation
-  // This ensures the subscription remains stable across renders
-  // =====================================================================
+  // Retry state
+  const retryCountRef = useRef(0);
+  const retryTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const MAX_RETRIES = 3;
+  const BASE_RETRY_DELAY = 2000; // 2 seconds
+
+  // Polling state
+  const pollingIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const lastFetchTimeRef = useRef<string | null>(null);
+
+  // Store callbacks in refs to prevent subscription recreation
   const onInsertRef = useRef(onInsert);
   const onUpdateRef = useRef(onUpdate);
   const onDeleteRef = useRef(onDelete);
 
-  // Update refs when callbacks change (without triggering re-subscription)
+  // Update refs when callbacks change
   useEffect(() => {
     onInsertRef.current = onInsert;
   }, [onInsert]);
@@ -73,43 +96,145 @@ export function useRealtimeOrders({
     onDeleteRef.current = onDelete;
   }, [onDelete]);
 
+  /**
+   * Parse order items if they're stored as JSON string
+   */
+  const parseOrder = useCallback((order: any): Order => {
+    if (typeof order.items === "string") {
+      try {
+        order.items = JSON.parse(order.items);
+      } catch (e) {
+        console.error("Failed to parse items:", e);
+        order.items = [];
+      }
+    }
+    return order as Order;
+  }, []);
+
+  /**
+   * Start polling fallback mode
+   */
+  const startPolling = useCallback(() => {
+    if (!userId || pollingIntervalRef.current) return;
+
+    console.log("🔄 [Realtime] Starting polling fallback mode");
+    setIsUsingPolling(true);
+
+    const poll = async () => {
+      try {
+        // Fetch orders updated since last poll
+        let query = supabase
+          .from("orders")
+          .select("*")
+          .eq("user_id", userId)
+          .order("updated_at", { ascending: false })
+          .limit(50);
+
+        if (lastFetchTimeRef.current) {
+          query = query.gt("updated_at", lastFetchTimeRef.current);
+        }
+
+        const { data, error } = await query;
+
+        if (error) {
+          console.error("🔄 [Realtime] Polling error:", error);
+          return;
+        }
+
+        if (data && data.length > 0) {
+          console.log(`🔄 [Realtime] Polled ${data.length} updated orders`);
+
+          // Update last fetch time
+          lastFetchTimeRef.current = new Date().toISOString();
+
+          // Trigger update callbacks for each order
+          data.forEach((order) => {
+            if (onUpdateRef.current) {
+              onUpdateRef.current(parseOrder(order));
+            }
+          });
+        }
+      } catch (e) {
+        console.error("🔄 [Realtime] Polling exception:", e);
+      }
+    };
+
+    // Initial poll
+    poll();
+
+    // Set up interval
+    pollingIntervalRef.current = setInterval(poll, pollingIntervalMs);
+  }, [userId, pollingIntervalMs, parseOrder]);
+
+  /**
+   * Stop polling fallback
+   */
+  const stopPolling = useCallback(() => {
+    if (pollingIntervalRef.current) {
+      console.log("🔄 [Realtime] Stopping polling");
+      clearInterval(pollingIntervalRef.current);
+      pollingIntervalRef.current = null;
+      setIsUsingPolling(false);
+    }
+  }, []);
+
+  /**
+   * Cleanup subscription and polling
+   */
   const cleanup = useCallback(() => {
+    // Clear retry timeout
+    if (retryTimeoutRef.current) {
+      clearTimeout(retryTimeoutRef.current);
+      retryTimeoutRef.current = null;
+    }
+
+    // Stop polling
+    stopPolling();
+
+    // Remove realtime channel
     if (channelRef.current) {
       console.log("🔌 Unsubscribing from orders realtime channel");
       supabase.removeChannel(channelRef.current);
       channelRef.current = null;
       setIsConnected(false);
     }
-  }, []);
 
-  useEffect(() => {
-    if (!enabled || !userId) {
-      cleanup();
-      return;
-    }
+    // Reset retry count
+    retryCountRef.current = 0;
+  }, [stopPolling]);
+
+  /**
+   * Subscribe to realtime changes with retry logic
+   */
+  const subscribe = useCallback(() => {
+    if (!userId) return;
 
     // Prevent duplicate subscriptions
     if (channelRef.current) {
-      console.log("🔌 Channel already exists, skipping...");
       return;
     }
 
     console.log("🔌 Setting up realtime subscription for orders");
     console.log(`   User ID: ${userId}`);
+    console.log(
+      `   Retry attempt: ${retryCountRef.current + 1}/${MAX_RETRIES}`,
+    );
 
-    // Create a unique channel name (without timestamp to prevent recreation)
     const channelName = `orders:${userId}`;
 
-    // Subscribe to orders table changes for this user
     const channel = supabase
-      .channel(channelName)
+      .channel(channelName, {
+        config: {
+          // Faster heartbeat to detect connection issues sooner
+          broadcast: { self: true },
+        },
+      })
       .on(
         "postgres_changes",
         {
           event: "INSERT",
           schema: "public",
           table: "orders",
-          // filter: `user_id=eq.${userId}`, // Removing filter to avoid potential RLS/Type mismatch issues, filtering client-side instead
         },
         (payload) => {
           console.log("📦 New order received:", payload.new);
@@ -119,18 +244,8 @@ export function useRealtimeOrders({
             return;
           }
 
-          // Use ref to get latest callback
           if (onInsertRef.current && payload.new) {
-            const order = payload.new as any;
-            // Parse items if it's a string (JSON)
-            if (typeof order.items === "string") {
-              try {
-                order.items = JSON.parse(order.items);
-              } catch (e) {
-                console.error("Failed to parse items:", e);
-              }
-            }
-            onInsertRef.current(order as Order);
+            onInsertRef.current(parseOrder(payload.new));
           }
         },
       )
@@ -140,7 +255,6 @@ export function useRealtimeOrders({
           event: "UPDATE",
           schema: "public",
           table: "orders",
-          // filter: `user_id=eq.${userId}`,
         },
         (payload) => {
           console.log("📦 Order updated:", payload.new);
@@ -150,18 +264,8 @@ export function useRealtimeOrders({
             return;
           }
 
-          // Use ref to get latest callback
           if (onUpdateRef.current && payload.new) {
-            const order = payload.new as any;
-            // Parse items if it's a string (JSON)
-            if (typeof order.items === "string") {
-              try {
-                order.items = JSON.parse(order.items);
-              } catch (e) {
-                console.error("Failed to parse items:", e);
-              }
-            }
-            onUpdateRef.current(order as Order);
+            onUpdateRef.current(parseOrder(payload.new));
           }
         },
       )
@@ -171,40 +275,85 @@ export function useRealtimeOrders({
           event: "DELETE",
           schema: "public",
           table: "orders",
-          // filter: `user_id=eq.${userId}`,
         },
         (payload) => {
           console.log("📦 Order deleted:", payload.old);
 
-          // Note: payload.old only contains the ID for DELETE events usually, unless REPLICA IDENTITY FULL is set
-          // We can't easily filter by user_id here if it's not present.
-          // However, we can trust the client handling to ignore IDs it doesn't know about.
-
-          // Use ref to get latest callback
           if (onDeleteRef.current && payload.old) {
             onDeleteRef.current({ id: (payload.old as { id: string }).id });
           }
         },
       )
       .subscribe((status, err) => {
-        console.log(`🔌 Orders realtime subscription status: ${status}`, err || "");
+        console.log(
+          `🔌 Orders realtime subscription status: ${status}`,
+          err || "",
+        );
+
         if (status === "SUBSCRIBED") {
           console.log("✅ Successfully subscribed to orders updates");
           setIsConnected(true);
           setConnectionError(null);
+          retryCountRef.current = 0; // Reset retry count on success
+
+          // Stop polling if we successfully connected
+          stopPolling();
         } else if (status === "CHANNEL_ERROR") {
-          const errorMessage = err?.message || "Failed to connect to realtime updates";
-          console.error("❌ Failed to subscribe to orders:", errorMessage);
-          console.error("   This usually means:");
-          console.error("   1. The 'orders' table is not enabled for Realtime (run migration 016_enable_realtime_orders.sql)");
-          console.error("   2. RLS policies are blocking the subscription");
-          console.error("   3. Network connectivity issues");
+          const errorMessage =
+            err?.message || "Failed to connect to realtime updates";
+          console.warn(`⚠️ Realtime subscription error: ${errorMessage}`);
+
           setIsConnected(false);
-          setConnectionError(`Failed to connect: ${errorMessage}`);
+
+          // Retry logic with exponential backoff
+          if (retryCountRef.current < MAX_RETRIES) {
+            const delay = BASE_RETRY_DELAY * Math.pow(2, retryCountRef.current);
+            console.log(
+              `🔄 Retrying in ${delay / 1000}s (attempt ${retryCountRef.current + 1}/${MAX_RETRIES})`,
+            );
+
+            retryCountRef.current++;
+
+            // Clean up current channel before retry
+            if (channelRef.current) {
+              supabase.removeChannel(channelRef.current);
+              channelRef.current = null;
+            }
+
+            retryTimeoutRef.current = setTimeout(() => {
+              subscribe();
+            }, delay);
+          } else {
+            // Max retries reached - fall back to polling
+            console.error("❌ Max retries reached for realtime subscription");
+            setConnectionError(
+              `Realtime unavailable. ${enablePollingFallback ? "Using polling fallback." : ""}`,
+            );
+
+            if (enablePollingFallback) {
+              startPolling();
+            }
+          }
         } else if (status === "TIMED_OUT") {
-          console.error("⏱️ Connection timed out - check network connectivity");
+          console.error("⏱️ Connection timed out");
           setIsConnected(false);
-          setConnectionError("Connection timed out. Please check your network connection.");
+          setConnectionError("Connection timed out. Will retry...");
+
+          // Retry on timeout
+          if (retryCountRef.current < MAX_RETRIES) {
+            retryCountRef.current++;
+
+            if (channelRef.current) {
+              supabase.removeChannel(channelRef.current);
+              channelRef.current = null;
+            }
+
+            retryTimeoutRef.current = setTimeout(() => {
+              subscribe();
+            }, BASE_RETRY_DELAY);
+          } else if (enablePollingFallback) {
+            startPolling();
+          }
         } else if (status === "CLOSED") {
           console.log("🔌 Channel closed");
           setIsConnected(false);
@@ -212,10 +361,31 @@ export function useRealtimeOrders({
       });
 
     channelRef.current = channel;
+  }, [userId, parseOrder, stopPolling, startPolling, enablePollingFallback]);
 
-    // Cleanup on unmount or when userId/enabled change
+  useEffect(() => {
+    if (!enabled || !userId) {
+      cleanup();
+      return;
+    }
+
+    subscribe();
+
     return cleanup;
-  }, [userId, enabled, cleanup]); // FIX: Removed onInsert, onUpdate, onDelete from deps
+  }, [userId, enabled, cleanup, subscribe]);
 
-  return { isConnected, connectionError, cleanup };
+  // Expose a method to manually refresh (useful when coming back from background)
+  const refresh = useCallback(() => {
+    cleanup();
+    retryCountRef.current = 0;
+    subscribe();
+  }, [cleanup, subscribe]);
+
+  return {
+    isConnected,
+    connectionError,
+    isUsingPolling,
+    cleanup,
+    refresh,
+  };
 }

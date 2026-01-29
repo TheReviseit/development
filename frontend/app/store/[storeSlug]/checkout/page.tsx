@@ -73,6 +73,7 @@ export default function CheckoutPage() {
   const [loading, setLoading] = useState(false);
   const [loadingSettings, setLoadingSettings] = useState(true);
   const [shippingCost, setShippingCost] = useState(0);
+  const [wantInvoice, setWantInvoice] = useState(false);
 
   // Fetch payment settings
   useEffect(() => {
@@ -653,14 +654,92 @@ export default function CheckoutPage() {
                   </div>
                 </div>
                 <div className={styles.formGroupFull}>
-                  <label className={styles.label}>Email (Optional)</label>
-                  <input
-                    name="email"
-                    type="email"
-                    className={styles.input}
-                    placeholder="john@example.com"
-                    onChange={handleInputChange}
-                  />
+                  <div
+                    onClick={() => {
+                      setWantInvoice(!wantInvoice);
+                      if (wantInvoice) {
+                        setFormData((prev) => ({ ...prev, email: "" }));
+                      }
+                    }}
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "12px",
+                      marginBottom: "16px",
+                      cursor: "pointer",
+                      userSelect: "none",
+                    }}
+                  >
+                    <div
+                      style={{
+                        width: "20px",
+                        height: "20px",
+                        borderRadius: "6px",
+                        border: wantInvoice
+                          ? "2px solid #22c15a"
+                          : "2px solid #d1d5db",
+                        backgroundColor: wantInvoice
+                          ? "#22c15a"
+                          : "transparent",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        transition: "all 0.2s ease",
+                        flexShrink: 0,
+                      }}
+                    >
+                      {wantInvoice && (
+                        <svg
+                          width="14"
+                          height="14"
+                          viewBox="0 0 14 14"
+                          fill="none"
+                          xmlns="http://www.w3.org/2000/svg"
+                          style={{
+                            animation: "checkmarkAppear 0.2s ease",
+                          }}
+                        >
+                          <path
+                            d="M11.6666 3.5L5.24992 9.91667L2.33325 7"
+                            stroke="white"
+                            strokeWidth="2"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                          />
+                        </svg>
+                      )}
+                    </div>
+                    <label
+                      style={{
+                        cursor: "pointer",
+                        fontWeight: 500,
+                        fontSize: "15px",
+                        margin: 0,
+                        color: "#1f2937",
+                      }}
+                    >
+                      I want invoice
+                    </label>
+                  </div>
+                  {wantInvoice && (
+                    <div
+                      style={{
+                        animation: "slideDown 0.3s ease",
+                        overflow: "hidden",
+                      }}
+                    >
+                      <label className={styles.label}>Email *</label>
+                      <input
+                        name="email"
+                        type="email"
+                        required
+                        className={styles.input}
+                        placeholder="john@example.com"
+                        value={formData.email}
+                        onChange={handleInputChange}
+                      />
+                    </div>
+                  )}
                 </div>
               </div>
             </div>

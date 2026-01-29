@@ -282,7 +282,39 @@ export async function POST(
       })();
     }
 
-    // Return immediately - don't wait for email
+    // ------------------------------------------------------------------
+    // GOOGLE SHEETS SYNC (Non-blocking, fire-and-forget)
+    // ------------------------------------------------------------------
+    // Fire-and-forget: trigger Google Sheets sync via Flask backend.
+    // Any failures here should NOT impact order creation for the customer.
+    try {
+      const BACKEND_URL =
+        process.env.NODE_ENV === "development"
+          ? "http://localhost:5000"
+          : process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
+
+      // Only attempt sync if we have an order id and user id.
+      if (orderData?.id && storeSlug) {
+        // Do not await this fetch; log errors but keep response fast.
+        fetch(`${BACKEND_URL}/api/orders/sheets/sync`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "X-User-Id": storeSlug,
+          },
+          body: JSON.stringify({
+            order_id: orderData.id,
+            user_id: storeSlug,
+          }),
+        }).catch((err) => {
+          console.error("Error triggering Google Sheets sync:", err);
+        });
+      }
+    } catch (err) {
+      console.error("Error preparing Google Sheets sync:", err);
+    }
+
+    // Return immediately - don't wait for email or sheets sync
     return NextResponse.json(
       {
         success: true,

@@ -43,6 +43,210 @@ def get_supabase_client() -> Optional[Client]:
         return None
 
 
+# =============================================================================
+# UNIFIED WHATSAPP CREDENTIAL LOOKUP
+# Production-grade multi-source credential resolution
+# =============================================================================
+
+def get_whatsapp_credentials_unified(
+    firebase_uid: str = None,
+    supabase_user_id: str = None
+) -> Optional[Dict[str, Any]]:
+    """
+    Unified WhatsApp credential lookup that checks ALL storage locations.
+    
+    This is the production-grade credential resolver that handles multiple
+    storage paths created by different onboarding flows.
+    
+    Lookup Priority:
+    1. Facebook Embedded Signup (connected_phone_numbers → connected_facebook_accounts)
+       - Most common for production users
+       - Always up-to-date with Facebook's token system
+       
+    2. Onboarding Flow (whatsapp_connections table)
+       - Legacy/manual onboarding path
+       - May have manually entered tokens
+    
+    Args:
+        firebase_uid: Firebase Auth UID (preferred - frontend identifier)
+        supabase_user_id: Supabase internal user ID (optional)
+        
+    Returns:
+        Dict with credentials:
+        {
+            'phone_number_id': str,
+            'access_token': str,
+            'display_phone_number': str,
+            'business_name': str,
+            'user_id': str,
+            'source': 'facebook_embedded' | 'whatsapp_connections'
+        }
+        or None if not found
+        
+    Raises:
+        No exceptions - returns None on any error
+    """
+    client = get_supabase_client()
+    if not client:
+        print("❌ [Credential Lookup] Supabase client not available")
+        return None
+    
+    # Resolve Supabase user_id from Firebase UID if needed
+    resolved_user_id = supabase_user_id
+    
+    if not resolved_user_id and firebase_uid:
+        try:
+            result = client.table('users').select('id').eq('firebase_uid', firebase_uid).single().execute()
+            if result.data:
+                resolved_user_id = result.data.get('id')
+                print(f"🔗 [Credential Lookup] Firebase UID {firebase_uid[:15]}... → Supabase {resolved_user_id[:8]}...")
+            else:
+                print(f"⚠️ [Credential Lookup] No Supabase user found for Firebase UID: {firebase_uid[:15]}...")
+        except Exception as e:
+            print(f"⚠️ [Credential Lookup] Error resolving user ID: {e}")
+    
+    if not resolved_user_id:
+        print("❌ [Credential Lookup] No user ID available for lookup")
+        return None
+    
+    # ==========================================================================
+    # METHOD 1: Facebook Embedded Signup (Primary)
+    # ==========================================================================
+    print(f"🔍 [Credential Lookup] Trying Facebook Embedded Signup path for user {resolved_user_id[:8]}...")
+    
+    try:
+        # Step 1a: Find active phone number for this user
+        phone_result = client.table('connected_phone_numbers').select(
+            'id, phone_number_id, display_phone_number, whatsapp_account_id, is_active'
+        ).eq('user_id', resolved_user_id).eq('is_active', True).limit(1).execute()
+        
+        if phone_result.data and len(phone_result.data) > 0:
+            phone_data = phone_result.data[0]
+            phone_number_id = phone_data.get('phone_number_id')
+            whatsapp_account_id = phone_data.get('whatsapp_account_id')
+            
+            print(f"📱 [Credential Lookup] Found phone: {phone_data.get('display_phone_number')} (ID: {phone_number_id})")
+            
+            # Step 1b: Get WhatsApp account
+            waba_result = client.table('connected_whatsapp_accounts').select(
+                'id, waba_id, waba_name, business_manager_id'
+            ).eq('id', whatsapp_account_id).eq('is_active', True).single().execute()
+            
+            if waba_result.data:
+                business_manager_id = waba_result.data.get('business_manager_id')
+                
+                # Step 1c: Get Business Manager
+                bm_result = client.table('connected_business_managers').select(
+                    'id, business_name, facebook_account_id'
+                ).eq('id', business_manager_id).eq('is_active', True).single().execute()
+                
+                if bm_result.data:
+                    facebook_account_id = bm_result.data.get('facebook_account_id')
+                    business_name = bm_result.data.get('business_name', 'Business')
+                    
+                    # Step 1d: Get Facebook account with access token
+                    fb_result = client.table('connected_facebook_accounts').select(
+                        'id, access_token, facebook_user_name, status'
+                    ).eq('id', facebook_account_id).single().execute()
+                    
+                    if fb_result.data and fb_result.data.get('access_token'):
+                        access_token = fb_result.data.get('access_token')
+                        
+                        # Decrypt token if needed
+                        if CRYPTO_AVAILABLE and decrypt_token:
+                            decrypted = decrypt_token(access_token)
+                            if decrypted:
+                                access_token = decrypted
+                                print(f"🔓 [Credential Lookup] Token decrypted successfully")
+                            else:
+                                print(f"⚠️ [Credential Lookup] Token decryption failed, using as-is")
+                        
+                        print(f"✅ [Credential Lookup] SUCCESS via Facebook Embedded Signup: {business_name}")
+                        
+                        return {
+                            'phone_number_id': phone_number_id,
+                            'access_token': access_token,
+                            'display_phone_number': phone_data.get('display_phone_number'),
+                            'business_name': business_name,
+                            'user_id': resolved_user_id,
+                            'waba_id': waba_result.data.get('waba_id'),
+                            'waba_name': waba_result.data.get('waba_name'),
+                            'source': 'facebook_embedded',
+                        }
+    
+    except Exception as e:
+        print(f"⚠️ [Credential Lookup] Error in Facebook Embedded lookup: {e}")
+    
+    # ==========================================================================
+    # METHOD 2: Onboarding Flow (Fallback)
+    # ==========================================================================
+    print(f"🔍 [Credential Lookup] Trying Onboarding whatsapp_connections path...")
+    
+    try:
+        # First, get business_id for this user from the businesses table
+        # The businesses table links to users via user_id (which is firebase_uid there)
+        business_result = client.table('businesses').select(
+            'id, business_name, user_id'
+        ).eq('user_id', firebase_uid).limit(1).execute()
+        
+        if not business_result.data or len(business_result.data) == 0:
+            # Try with supabase user_id as well
+            business_result = client.table('businesses').select(
+                'id, business_name, user_id'
+            ).eq('user_id', resolved_user_id).limit(1).execute()
+        
+        if business_result.data and len(business_result.data) > 0:
+            business_data = business_result.data[0]
+            business_id = business_data.get('id')
+            business_name = business_data.get('business_name', 'Business')
+            
+            print(f"🏢 [Credential Lookup] Found business: {business_name} (ID: {business_id[:8]}...)")
+            
+            # Get WhatsApp connection for this business
+            conn_result = client.table('whatsapp_connections').select(
+                'phone_number, phone_number_id, api_token, status'
+            ).eq('business_id', business_id).single().execute()
+            
+            if conn_result.data:
+                conn = conn_result.data
+                phone_number_id = conn.get('phone_number_id')
+                api_token = conn.get('api_token')
+                
+                if phone_number_id and api_token:
+                    # Decrypt token if needed
+                    access_token = api_token
+                    if CRYPTO_AVAILABLE and decrypt_token:
+                        decrypted = decrypt_token(api_token)
+                        if decrypted:
+                            access_token = decrypted
+                            print(f"🔓 [Credential Lookup] Token decrypted successfully")
+                        else:
+                            print(f"⚠️ [Credential Lookup] Token decryption failed, using as-is")
+                    
+                    print(f"✅ [Credential Lookup] SUCCESS via whatsapp_connections: {business_name}")
+                    
+                    return {
+                        'phone_number_id': phone_number_id,
+                        'access_token': access_token,
+                        'display_phone_number': conn.get('phone_number'),
+                        'business_name': business_name,
+                        'user_id': resolved_user_id,
+                        'source': 'whatsapp_connections',
+                    }
+                else:
+                    print(f"⚠️ [Credential Lookup] Incomplete credentials in whatsapp_connections")
+        else:
+            print(f"⚠️ [Credential Lookup] No business found for user")
+            
+    except Exception as e:
+        # PGRST116 means no rows found (expected for new users)
+        if 'PGRST116' not in str(e):
+            print(f"⚠️ [Credential Lookup] Error in whatsapp_connections lookup: {e}")
+    
+    print(f"❌ [Credential Lookup] No credentials found in any location for user {resolved_user_id[:8]}...")
+    return None
+
+
 def get_credentials_by_phone_number_id(phone_number_id: str) -> Optional[Dict[str, Any]]:
     """
     Fetch WhatsApp credentials for a given phone_number_id.

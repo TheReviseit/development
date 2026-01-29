@@ -397,7 +397,15 @@ def check_whatsapp_status():
 
 @app.route('/api/whatsapp/send', methods=['POST'])
 def send_message():
-    """Send a WhatsApp message."""
+    """
+    Send a WhatsApp message.
+    
+    Supports multi-tenant operation via dynamic credentials:
+    - phone_number_id: WhatsApp Business Phone Number ID
+    - access_token: WhatsApp API access token
+    
+    If credentials are not provided, falls back to environment variables.
+    """
     try:
         data = request.get_json()
         
@@ -406,6 +414,10 @@ def send_message():
         
         to = data.get('to', '').strip()
         message = data.get('message', '').strip()
+        
+        # Dynamic credentials for multi-tenant support
+        phone_number_id = data.get('phone_number_id') or os.getenv('WHATSAPP_PHONE_NUMBER_ID')
+        access_token = data.get('access_token') or os.getenv('WHATSAPP_ACCESS_TOKEN')
         
         if not to:
             return jsonify({'success': False, 'error': 'Recipient phone number is required'}), 400
@@ -431,8 +443,8 @@ def send_message():
         if len(message) > 1500:
             from tasks.messaging import split_and_send_long_message
             result = split_and_send_long_message.delay(
-                phone_number_id=os.getenv('WHATSAPP_PHONE_NUMBER_ID'),
-                access_token=os.getenv('WHATSAPP_ACCESS_TOKEN'),
+                phone_number_id=phone_number_id,
+                access_token=access_token,
                 to=to,
                 message=message
             )
@@ -442,7 +454,16 @@ def send_message():
                 'task_id': result.id
             }), 202
         
-        result = whatsapp_service.send_text_message(to, message)
+        # Use dynamic credentials if provided, otherwise use default service
+        if phone_number_id and access_token:
+            result = whatsapp_service.send_message_with_credentials(
+                phone_number_id=phone_number_id,
+                access_token=access_token,
+                to=to,
+                message=message
+            )
+        else:
+            result = whatsapp_service.send_text_message(to, message)
         
         if result['success']:
             return jsonify(result), 200
@@ -452,6 +473,180 @@ def send_message():
     except Exception as e:
         logger.error(f"Send message error: {e}")
         return jsonify({'success': False, 'error': f'Server error: {str(e)}'}), 500
+
+
+@app.route('/api/whatsapp/send-notification', methods=['POST'])
+def send_notification_message():
+    """
+    Send a WhatsApp notification message for order status updates.
+    
+    This is a PRODUCTION-GRADE endpoint with:
+    - Unified credential lookup (checks Facebook Embedded + whatsapp_connections)
+    - Detailed logging with correlation IDs
+    - Proper error handling and response codes
+    - Request validation
+    
+    Request body:
+        {
+            "user_id": "firebase-uid",  // Firebase UID of the business owner
+            "to": "919876543210",       // Recipient phone number
+            "message": "Your order..."   // Message text
+        }
+        
+    Response:
+        Success: 200 {"success": true, "message_id": "...", "source": "..."}
+        Queued:  202 {"success": true, "message": "Long notification queued", "task_id": "..."}
+        Error:   4xx/5xx {"success": false, "error": "...", "error_code": "..."}
+    """
+    import uuid
+    correlation_id = str(uuid.uuid4())[:8]
+    
+    try:
+        data = request.get_json()
+        
+        if not data:
+            logger.warning(f"📱 [{correlation_id}] No request body provided")
+            return jsonify({
+                'success': False, 
+                'error': 'No data provided',
+                'error_code': 'NO_DATA'
+            }), 400
+        
+        # Extract and validate parameters
+        user_id = data.get('user_id', '').strip()
+        to = data.get('to', '').strip()
+        message = data.get('message', '').strip()
+        
+        if not user_id:
+            return jsonify({
+                'success': False, 
+                'error': 'user_id is required',
+                'error_code': 'MISSING_USER_ID'
+            }), 400
+        
+        if not to:
+            return jsonify({
+                'success': False, 
+                'error': 'Recipient phone number is required',
+                'error_code': 'MISSING_PHONE'
+            }), 400
+        
+        if not message:
+            return jsonify({
+                'success': False, 
+                'error': 'Message text is required',
+                'error_code': 'MISSING_MESSAGE'
+            }), 400
+        
+        # Normalize phone number
+        to = to.replace('+', '').replace(' ', '').replace('-', '')
+        
+        if not to.isdigit():
+            return jsonify({
+                'success': False,
+                'error': 'Invalid phone number format. Use digits only',
+                'error_code': 'INVALID_PHONE'
+            }), 400
+        
+        logger.info(f"📱 [{correlation_id}] Processing notification for user {user_id[:15]}... to {to}")
+        
+        # ========================================================================
+        # UNIFIED CREDENTIAL LOOKUP
+        # This checks BOTH Facebook Embedded Signup and whatsapp_connections tables
+        # ========================================================================
+        from supabase_client import get_whatsapp_credentials_unified
+        
+        credentials = get_whatsapp_credentials_unified(firebase_uid=user_id)
+        
+        if not credentials:
+            logger.error(f"📱 [{correlation_id}] No WhatsApp credentials found for user {user_id[:15]}...")
+            return jsonify({
+                'success': False,
+                'error': 'WhatsApp not configured for this business. Please complete WhatsApp setup.',
+                'error_code': 'NO_CREDENTIALS'
+            }), 404
+        
+        phone_number_id = credentials.get('phone_number_id')
+        access_token = credentials.get('access_token')
+        source = credentials.get('source', 'unknown')
+        business_name = credentials.get('business_name', 'Unknown')
+        
+        if not phone_number_id or not access_token:
+            logger.error(f"📱 [{correlation_id}] Incomplete credentials (source: {source})")
+            return jsonify({
+                'success': False,
+                'error': 'WhatsApp credentials incomplete. Please reconnect your WhatsApp account.',
+                'error_code': 'INCOMPLETE_CREDENTIALS'
+            }), 400
+        
+        logger.info(
+            f"📱 [{correlation_id}] Sending notification to {to} for {business_name} "
+            f"(source: {source}, phone_id: {phone_number_id[:8]}...)"
+        )
+        
+        # Handle long messages (WhatsApp 1600 char limit)
+        if len(message) > 1500:
+            try:
+                from tasks.messaging import split_and_send_long_message
+                result = split_and_send_long_message.delay(
+                    phone_number_id=phone_number_id,
+                    access_token=access_token,
+                    to=to,
+                    message=message
+                )
+                logger.info(f"📱 [{correlation_id}] Long notification queued (task: {result.id})")
+                return jsonify({
+                    'success': True,
+                    'message': 'Long notification queued for sending',
+                    'task_id': result.id,
+                    'source': source
+                }), 202
+            except ImportError:
+                # Celery not available, truncate message
+                message = message[:1500] + "..."
+                logger.warning(f"📱 [{correlation_id}] Celery unavailable, truncating long message")
+        
+        # Send the notification using WhatsApp service
+        result = whatsapp_service.send_message_with_credentials(
+            phone_number_id=phone_number_id,
+            access_token=access_token,
+            to=to,
+            message=message
+        )
+        
+        if result.get('success'):
+            logger.info(
+                f"✅ [{correlation_id}] Notification sent to {to} "
+                f"(message_id: {result.get('message_id', 'N/A')})"
+            )
+            return jsonify({
+                'success': True,
+                'message_id': result.get('message_id'),
+                'source': source,
+                'business_name': business_name
+            }), 200
+        else:
+            error = result.get('error', 'Unknown error')
+            error_code = result.get('error_code') or result.get('status_code', 'UNKNOWN')
+            logger.warning(f"❌ [{correlation_id}] Notification failed to {to}: {error}")
+            return jsonify({
+                'success': False,
+                'error': error,
+                'error_code': str(error_code),
+                'data': result.get('data')
+            }), 400
+            
+    except Exception as e:
+        logger.error(f"❌ [{correlation_id}] Send notification error: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({
+            'success': False, 
+            'error': f'Server error: {str(e)}',
+            'error_code': 'SERVER_ERROR'
+        }), 500
+
+
 
 
 # =============================================================================
