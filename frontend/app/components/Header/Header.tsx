@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import Image from "next/image";
+import { useAuthRedirect } from "@/app/hooks/useAuthRedirect";
 import "./header.css";
 
 interface HeaderProps {
@@ -12,6 +13,10 @@ export default function Header({ minimal = false }: HeaderProps) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const mobileMenuRef = useRef<HTMLDivElement>(null);
   const mobileMenuButtonRef = useRef<HTMLButtonElement>(null);
+
+  // Production-grade auth state with smart routing
+  const { handleLoginClick, handleGetStartedClick, isLoading } =
+    useAuthRedirect();
 
   // Close mobile menu when clicking outside
   useEffect(() => {
@@ -38,7 +43,7 @@ export default function Header({ minimal = false }: HeaderProps) {
 
   const handleNavClick = (
     e: React.MouseEvent<HTMLAnchorElement>,
-    targetId: string
+    targetId: string,
   ) => {
     e.preventDefault();
 
@@ -198,11 +203,21 @@ export default function Header({ minimal = false }: HeaderProps) {
 
           {/* Desktop CTAs */}
           <div className="nav-cta">
-            <a href="/login" className="btn-header-ghost">
-              Login
+            <a
+              href="/login"
+              onClick={handleLoginClick}
+              className="btn-header-ghost"
+              style={{ opacity: isLoading ? 0.7 : 1 }}
+            >
+              {isLoading ? "..." : "Login"}
             </a>
-            <a href="/signup" className="btn-header-primary">
-              Get Started
+            <a
+              href="/signup"
+              onClick={handleGetStartedClick}
+              className="btn-header-primary"
+              style={{ opacity: isLoading ? 0.7 : 1 }}
+            >
+              {isLoading ? "..." : "Get Started"}
             </a>
           </div>
 
@@ -358,11 +373,21 @@ export default function Header({ minimal = false }: HeaderProps) {
               </>
             )}
             <div className="mobile-cta-container">
-              <a href="/login" className="btn-header-ghost">
-                Login
+              <a
+                href="/login"
+                onClick={handleLoginClick}
+                className="btn-header-ghost"
+                style={{ opacity: isLoading ? 0.7 : 1 }}
+              >
+                {isLoading ? "..." : "Login"}
               </a>
-              <a href="/signup" className="btn-header-primary">
-                Get Started
+              <a
+                href="/signup"
+                onClick={handleGetStartedClick}
+                className="btn-header-primary"
+                style={{ opacity: isLoading ? 0.7 : 1 }}
+              >
+                {isLoading ? "..." : "Get Started"}
               </a>
             </div>
           </div>
