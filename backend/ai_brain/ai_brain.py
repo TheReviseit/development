@@ -266,13 +266,61 @@ class AIBrain:
                     return flow_response
         
         # =====================================================
-        # BOOKING INTENT DETECTION - Route to correct flow based on type
+        # EARLY STATE CHECK: Order ID Awaiting
+        # This MUST run BEFORE intent classification to catch Order ID responses
         # =====================================================
-        # Classify whether this is an order request or appointment request
-        booking_type = self._classify_booking_type(user_message, business)
-        logger.info(f"📦 Booking type classification: {booking_type} for message: '{user_message[:50]}...'")
+        if user_id:
+            state = self.conversation_manager.get_state(user_id)
+            if state and state.collected_fields.get("_awaiting_order_id"):
+                logger.info(f"📦 User is awaiting Order ID - processing as order tracking")
+                context_facts = self._gather_context_facts(user_id, business)
+                tracking_response = self._handle_order_tracking(user_id, context_facts, business, user_message)
+                
+                # Add to conversation history
+                self.conversation_manager.add_message(user_id, "user", user_message)
+                self.conversation_manager.add_message(user_id, "assistant", tracking_response["reply"])
+                
+                return tracking_response
+        
+        # =====================================================
+        # ENTERPRISE INTENT DETECTION - Route to correct flow based on type
+        # Uses 3-layer architecture: Context Facts → Raw Intent → Smart Router
+        # =====================================================
+        # Classify booking type with context awareness (passes user_id for order history check)
+        booking_type = self._classify_booking_type(user_message, business, user_id)
+        logger.info(f"📦 Enterprise booking classification: {booking_type} for message: '{user_message[:50]}...'")
         
         if booking_type and user_id and not self.conversation_manager.is_flow_active(user_id):
+            # =====================================================
+            # PRIORITY 1: Order Tracking (post-purchase query)
+            # =====================================================
+            if booking_type == "order_tracking":
+                # Gather context facts for the tracking handler
+                context_facts = self._gather_context_facts(user_id, business)
+                tracking_response = self._handle_order_tracking(user_id, context_facts, business, user_message)
+                
+                # Add to conversation history
+                self.conversation_manager.add_message(user_id, "user", user_message)
+                self.conversation_manager.add_message(user_id, "assistant", tracking_response["reply"])
+                
+                return tracking_response
+            
+            # =====================================================
+            # PRIORITY 2: Order Cancellation
+            # =====================================================
+            if booking_type == "order_cancellation":
+                context_facts = self._gather_context_facts(user_id, business)
+                cancel_response = self._handle_order_cancellation(user_id, context_facts, business)
+                
+                # Add to conversation history
+                self.conversation_manager.add_message(user_id, "user", user_message)
+                self.conversation_manager.add_message(user_id, "assistant", cancel_response["reply"])
+                
+                return cancel_response
+            
+            # =====================================================
+            # PRIORITY 3: New Order (pre-purchase)
+            # =====================================================
             if booking_type == "order":
                 # Check if order booking is enabled and start order flow
                 if self._is_order_booking_enabled(biz_id):
@@ -281,6 +329,10 @@ class AIBrain:
                         return flow_response
                 else:
                     logger.info(f"📦 Order booking not enabled for business: {biz_id}")
+            
+            # =====================================================
+            # PRIORITY 4: Appointment Booking
+            # =====================================================
             elif booking_type == "appointment":
                 # Check if appointment booking is enabled for this business
                 if self.appointment_handler:
@@ -290,6 +342,7 @@ class AIBrain:
                         flow_response = self._start_appointment_flow(user_id, biz_id, config, user_message)
                         if flow_response:
                             return flow_response
+
         
         
         # Get conversation history
@@ -497,18 +550,238 @@ class AIBrain:
             "clarification_question": intent_result.clarification_question
         }
     
-    def _classify_booking_type(self, message: str, business_data: Dict[str, Any]) -> Optional[str]:
+    def _classify_booking_type(self, message: str, business_data: Dict[str, Any], user_id: str = None) -> Optional[str]:
         """
-        Classify whether a booking request is for an order or an appointment.
+        ENTERPRISE-GRADE 3-LAYER INTENT CLASSIFICATION SYSTEM
+        
+        Layer 1: Context Facts (NO intent yet) - recent orders, conversation state
+        Layer 2: Raw Intent Classification (text-only) - keyword & pattern analysis
+        Layer 3: Final Decision (rules + facts) - smart routing with priority
         
         Returns:
-            "order" - Item/quantity based (t-shirt, pizza, etc.)
-            "appointment" - Time/date based (haircut tomorrow, slot at 3pm)
-            None - Not a booking request
+            "order" - New order request
+            "order_tracking" - Order status/tracking query
+            "order_cancellation" - Cancel order request
+            "appointment" - Appointment booking
+            None - Not a booking/order related request
         """
         msg_lower = message.lower()
         
-        # Order indicators (item-based)
+        # =====================================================
+        # LAYER 1: CONTEXT FACTS (No intent yet)
+        # Gather facts about user's current state
+        # =====================================================
+        context_facts = self._gather_context_facts(user_id, business_data)
+        logger.info(f"🧠 L1 Context Facts: has_recent_order={context_facts['has_recent_order']}, "
+                   f"order_age_minutes={context_facts['order_age_minutes']}, "
+                   f"has_active_flow={context_facts['has_active_flow']}")
+        
+        # =====================================================
+        # LAYER 2: RAW INTENT CLASSIFICATION (Text-only)
+        # Analyze message without context influence
+        # =====================================================
+        raw_intent = self._classify_raw_intent(msg_lower, business_data)
+        logger.info(f"🎯 L2 Raw Intent: {raw_intent['intent']} (confidence={raw_intent['confidence']:.2f})")
+        
+        # =====================================================
+        # LAYER 3: FINAL DECISION (Rules + Facts)
+        # Apply priority rules and context to make final routing decision
+        # =====================================================
+        final_decision = self._smart_intent_router(raw_intent, context_facts, msg_lower)
+        logger.info(f"🚀 L3 Final Decision: {final_decision} (from raw={raw_intent['intent']})")
+        
+        return final_decision
+    
+    def _gather_context_facts(self, user_id: str, business_data: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        LAYER 1: Gather context facts about the user's current state.
+        
+        Returns facts dictionary WITHOUT making any intent decisions.
+        This separation is critical for enterprise-grade routing.
+        """
+        facts = {
+            "has_recent_order": False,
+            "order_age_minutes": None,
+            "order_status": None,
+            "order_id": None,
+            "order_items": [],
+            "has_active_flow": False,
+            "active_flow_name": None,
+            "last_order_created_at": None,
+        }
+        
+        if not user_id:
+            return facts
+        
+        # Check for active flow
+        if self.conversation_manager.is_flow_active(user_id):
+            state = self.conversation_manager.get_state(user_id)
+            facts["has_active_flow"] = True
+            facts["active_flow_name"] = state.active_flow if state else None
+        
+        # Check for recent orders in conversation state
+        state = self.conversation_manager.get_state(user_id)
+        if state and state.collected_fields:
+            # Check if user has completed an order recently
+            last_order_time = state.collected_fields.get("_last_order_completed_at")
+            last_order_id = state.collected_fields.get("_last_order_id")
+            last_order_status = state.collected_fields.get("_last_order_status", "created")
+            last_order_items = state.collected_fields.get("_last_order_items", [])
+            
+            if last_order_time:
+                try:
+                    from datetime import datetime, timezone
+                    if isinstance(last_order_time, str):
+                        order_time = datetime.fromisoformat(last_order_time.replace('Z', '+00:00'))
+                    else:
+                        order_time = last_order_time
+                    
+                    now = datetime.now(timezone.utc)
+                    age_minutes = (now - order_time).total_seconds() / 60
+                    
+                    # Consider order "recent" if within 30 days (enterprise standard)
+                    if age_minutes <= 30 * 24 * 60:  # 30 days in minutes
+                        facts["has_recent_order"] = True
+                        facts["order_age_minutes"] = int(age_minutes)
+                        facts["order_id"] = last_order_id
+                        facts["order_status"] = last_order_status
+                        facts["order_items"] = last_order_items
+                        facts["last_order_created_at"] = last_order_time
+                except Exception as e:
+                    logger.warning(f"⚠️ Failed to parse order time: {e}")
+        
+        # Also check Supabase for persistent order history (optional enhancement)
+        if not facts["has_recent_order"] and self.supabase_client:
+            try:
+                business_id = business_data.get("business_id")
+                if business_id:
+                    # Query recent orders for this user/phone
+                    from datetime import datetime, timedelta
+                    thirty_days_ago = (datetime.utcnow() - timedelta(days=30)).isoformat()
+                    result = self.supabase_client.table("orders").select(
+                        "id, status, created_at, items"
+                    ).eq("customer_phone", user_id).gte(
+                        "created_at", thirty_days_ago
+                    ).order("created_at", desc=True).limit(1).execute()
+                    
+                    if result.data and len(result.data) > 0:
+                        order = result.data[0]
+                        facts["has_recent_order"] = True
+                        facts["order_id"] = order.get("id")
+                        facts["order_status"] = order.get("status", "created")
+                        facts["order_items"] = order.get("items", [])
+                        facts["last_order_created_at"] = order.get("created_at")
+            except Exception as e:
+                logger.debug(f"⚠️ Could not check order history: {e}")
+        
+        return facts
+    
+    def _classify_raw_intent(self, msg_lower: str, business_data: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        LAYER 2: Raw Intent Classification (text-only analysis).
+        
+        Returns raw intent classification WITHOUT considering context.
+        Uses keyword matching, patterns, and ownership tokens.
+        """
+        # =====================================================
+        # INTENT PRIORITY ORDER (CRITICAL for correct routing)
+        # Higher priority intents are checked first
+        # =====================================================
+        # 1. order_cancellation - "cancel my order"
+        # 2. order_tracking - "where is my order"
+        # 3. delivery_query - "delivery time"
+        # 4. new_order - "I want to order"
+        # 5. appointment - "book appointment"
+        # 6. general - everything else
+        
+        # Ownership tokens (required for tracking/cancel intents)
+        # Includes English, Hindi, Tamil, Kannada, Telugu, Malayalam
+        ownership_tokens = [
+            # English
+            "my", "mine", "i ordered", "i placed", "my order",
+            "i bought", "i purchased", "my purchase", "the order",
+            # Hindi
+            "mera", "meri", "maine", "mera order",
+            # Tamil
+            "en", "ennoda", "naan", "en order", "enathu",
+            # Kannada
+            "nanna", "naanu", "nanna order",
+            # Telugu
+            "naa", "naaku", "nenu", "na order",
+            # Malayalam
+            "ente", "enikku", "ente order",
+        ]
+        has_ownership = any(token in msg_lower for token in ownership_tokens)
+        
+        # =====================================================
+        # PRIORITY 1: Order Cancellation
+        # =====================================================
+        cancel_keywords = [
+            # English
+            "cancel order", "cancel my order", "cancel the order",
+            "want to cancel", "i want to cancel", "please cancel",
+            "order cancel", "cancellation", "refund",
+            # Hindi
+            "mera order cancel", "cancel krdo", "cancel karo",
+            # Tamil
+            "order cancel pannu", "cancel pannunga", "venda order",
+            # Kannada
+            "order cancel maadi", "beda order",
+            # Telugu
+            "order cancel cheyandi", "vaddu order",
+        ]
+        if any(kw in msg_lower for kw in cancel_keywords):
+            return {"intent": "order_cancellation", "confidence": 0.95}
+        
+        # =====================================================
+        # PRIORITY 2: Order Tracking / Status
+        # =====================================================
+        tracking_keywords = [
+            # English
+            "when will", "where is", "order status", "track order", "tracking",
+            "delivery status", "shipping status", "my order", "the order",
+            "order come", "order arrive", "order reach", "dispatch", "dispatched",
+            "status of my order", "update on my order", "did you ship",
+            "has my order", "is my order", "order update",
+            # Hindi
+            "kab aayega", "kab milega", "order kaha", "kab pahunchega",
+            "mera order kab", "order ka status", "kitna time",
+            # Tamil
+            "epo varum", "epdi irukku", "order eppo", "enna achu",
+            "varum", "vanthuduma", "dispatch achu", "ship achu",
+            # Kannada
+            "yavaga baruthe", "order yavaga", "yelli ide",
+            # Telugu
+            "eppudu vasthadi", "ekkada undi", "order eppudu",
+            # Malayalam
+            "eppol varum", "evide aanu", "order eppol",
+        ]
+        # Tracking requires ownership OR very explicit tracking phrases
+        tracking_explicit = [
+            "track order", "order status", "tracking", "where is my order",
+            "epo varum", "kab aayega", "when will my order", "order varum",
+        ]
+        
+        if any(kw in msg_lower for kw in tracking_keywords):
+            # Must have ownership token OR be very explicit
+            if has_ownership or any(kw in msg_lower for kw in tracking_explicit):
+                return {"intent": "order_tracking", "confidence": 0.90}
+        
+        # =====================================================
+        # PRIORITY 3: Delivery Query (pre-purchase)
+        # =====================================================
+        delivery_query_keywords = [
+            "delivery time", "delivery charges", "shipping cost", "how long to deliver",
+            "delivery available", "delivery area", "delivery fee", "free delivery",
+            "do you deliver", "can you deliver", "delivery options",
+        ]
+        # Delivery query WITHOUT ownership = pre-purchase question
+        if any(kw in msg_lower for kw in delivery_query_keywords) and not has_ownership:
+            return {"intent": "delivery_query", "confidence": 0.85}
+        
+        # =====================================================
+        # PRIORITY 4: New Order Intent
+        # =====================================================
         order_keywords = ["order", "buy", "purchase", "want to order", "want to buy", "get me"]
         order_patterns = [
             r"\b\d+\s*(x|nos?|pieces?|items?|qty)\b",  # "2 pieces", "3x"
@@ -520,7 +793,24 @@ class AIBrain:
         product_names = [p.get("name", "").lower() for p in products if isinstance(p, dict) and p.get("name")]
         has_product_mention = any(name in msg_lower for name in product_names if name and len(name) > 2)
         
-        # Appointment indicators (time-based)
+        has_order_keyword = any(kw in msg_lower for kw in order_keywords)
+        has_order_quantity = any(re.search(p, msg_lower) for p in order_patterns)
+        
+        # CRITICAL: Don't trigger new order if this looks like tracking
+        # "my order" should NOT trigger new order
+        if has_ownership and "order" in msg_lower and not has_order_quantity:
+            # This is likely tracking, not new order
+            pass
+        elif has_order_keyword or has_order_quantity:
+            return {"intent": "new_order", "confidence": 0.85}
+        
+        # Product mention without ownership = likely new order
+        if has_product_mention and not has_ownership:
+            return {"intent": "new_order", "confidence": 0.75}
+        
+        # =====================================================
+        # PRIORITY 5: Appointment Booking
+        # =====================================================
         appointment_keywords = ["appointment", "schedule", "slot", "time slot", "appoint"]
         time_patterns = [
             r"\b(today|tomorrow|monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b",
@@ -529,33 +819,632 @@ class AIBrain:
             r"\b\d{1,2}[-/]\d{1,2}[-/]\d{2,4}\b",  # Date patterns
         ]
         
-        has_order_keyword = any(kw in msg_lower for kw in order_keywords)
         has_appointment_keyword = any(kw in msg_lower for kw in appointment_keywords)
         has_time_indicator = any(re.search(p, msg_lower) for p in time_patterns)
-        has_order_quantity = any(re.search(p, msg_lower) for p in order_patterns)
         
-        # Log classification factors
-        logger.info(f"📦 Classification factors: order_kw={has_order_keyword}, appt_kw={has_appointment_keyword}, "
-                   f"time={has_time_indicator}, qty={has_order_quantity}, product={has_product_mention}")
-        
-        # Decision logic (order takes precedence when clear signals)
-        if has_order_keyword or has_order_quantity:
-            return "order"
         if has_appointment_keyword:
-            return "appointment"
-        if has_time_indicator:
-            return "appointment"
-        if has_product_mention and not has_time_indicator:
-            # Product mentioned without time = likely order
-            return "order"
+            return {"intent": "appointment", "confidence": 0.90}
+        if has_time_indicator and not has_order_keyword:
+            return {"intent": "appointment", "confidence": 0.75}
+        
+        # Generic "book" handling
         if "book" in msg_lower:
-            # Generic "book" - check context
             if has_product_mention:
-                return "order"
-            # Default "book" to appointment (traditional semantics)
+                return {"intent": "new_order", "confidence": 0.70}
+            return {"intent": "appointment", "confidence": 0.70}
+        
+        # =====================================================
+        # DEFAULT: General query (not booking related)
+        # =====================================================
+        return {"intent": "general", "confidence": 0.50}
+    
+    def _smart_intent_router(
+        self, 
+        raw_intent: Dict[str, Any], 
+        context_facts: Dict[str, Any],
+        msg_lower: str
+    ) -> Optional[str]:
+        """
+        LAYER 3: Smart Intent Router (Rules + Facts).
+        
+        Apply context-aware rules to make final routing decision.
+        This is where enterprise-grade intelligence happens.
+        """
+        intent = raw_intent["intent"]
+        confidence = raw_intent["confidence"]
+        has_recent_order = context_facts["has_recent_order"]
+        has_active_flow = context_facts["has_active_flow"]
+        
+        # =====================================================
+        # RULE 1: Order cancellation always takes priority
+        # =====================================================
+        if intent == "order_cancellation":
+            if has_recent_order:
+                return "order_cancellation"
+            # No order to cancel - might be confusion, route to general
+            logger.info("⚠️ Cancel intent but no recent order found")
+            return None
+        
+        # =====================================================
+        # RULE 2: Order tracking with recent order
+        # =====================================================
+        if intent == "order_tracking":
+            if has_recent_order:
+                return "order_tracking"
+            # No order found - could be confusion
+            logger.info("⚠️ Tracking intent but no recent order found")
+            # Don't return "order" here - let it fall through to general
+            return "order_tracking"  # Still handle gracefully with "no order found"
+        
+        # =====================================================
+        # RULE 3: Delivery query - pre-purchase question
+        # =====================================================
+        if intent == "delivery_query":
+            return None  # Let general AI handle this
+        
+        # =====================================================
+        # RULE 4: New order - but check for false positives
+        # =====================================================
+        if intent == "new_order":
+            # CRITICAL CHECK: If user just completed an order and says "order",
+            # they might be asking about THAT order, not placing a new one
+            order_age = context_facts.get("order_age_minutes")
+            
+            # If order was placed < 30 minutes ago and message is ambiguous,
+            # check for tracking indicators
+            if has_recent_order and order_age and order_age < 30:
+                ambiguous_phrases = ["my order", "the order", "order status", "order come"]
+                if any(phrase in msg_lower for phrase in ambiguous_phrases):
+                    logger.info(f"🔄 Recent order ({order_age}m ago) + ambiguous phrase → routing to tracking")
+                    return "order_tracking"
+            
+            return "order"
+        
+        # =====================================================
+        # RULE 5: Appointment booking
+        # =====================================================
+        if intent == "appointment":
             return "appointment"
+        
+        # =====================================================
+        # DEFAULT: Not a booking/order request
+        # =====================================================
+        return None
+    
+    def _handle_order_tracking(
+        self, 
+        user_id: str, 
+        context_facts: Dict[str, Any],
+        business_data: Dict[str, Any],
+        user_message: str = ""
+    ) -> Dict[str, Any]:
+        """
+        ENTERPRISE-GRADE ORDER TRACKING SYSTEM
+        
+        Flow:
+        1. Check if user provided Order ID in message → Look up by ID
+        2. Check if user is in "awaiting_order_id" state → Parse ID from message
+        3. No ID provided → Query recent orders by phone number
+        4. Found orders → Show status with professional formatting
+        5. No orders → Ask for Order ID or offer to place new order
+        
+        Inspired by Amazon, Swiggy, Flipkart tracking systems.
+        """
+        # Status mapping for human-friendly messages with timeline
+        STATUS_MAP = {
+            "created": ("Order Placed", "is being processed ⏳", 1),
+            "confirmed": ("Confirmed", "has been confirmed ✅", 2),
+            "paid": ("Payment Received", "payment received, preparing your order 📦", 3),
+            "processing": ("Preparing", "is being prepared 🔄", 4),
+            "shipped": ("Shipped", "is on the way 🚚", 5),
+            "out_for_delivery": ("Out for Delivery", "is out for delivery 🏃", 6),
+            "delivered": ("Delivered", "was delivered 🎉", 7),
+            "cancelled": ("Cancelled", "was cancelled ❌", 0),
+        }
+        
+        state = self.conversation_manager.get_state(user_id)
+        msg_lower = user_message.lower().strip() if user_message else ""
+        
+        # =====================================================
+        # STEP 1: Check if user is providing Order ID (awaiting state)
+        # =====================================================
+        if state and state.collected_fields.get("_awaiting_order_id"):
+            # User should be providing order ID now
+            order_id_input = msg_lower.replace("#", "").strip()
+            
+            # Clear the waiting state
+            if "_awaiting_order_id" in state.collected_fields:
+                del state.collected_fields["_awaiting_order_id"]
+            
+            # Look up order by ID
+            order_data = self._lookup_order_by_id(order_id_input, user_id, business_data)
+            
+            if order_data:
+                return self._format_order_status_response(order_data, STATUS_MAP)
+            else:
+                # ID not found - try phone lookup
+                orders = self._lookup_orders_by_phone(user_id, business_data)
+                if orders:
+                    return self._format_multi_order_response(orders, STATUS_MAP, order_id_input)
+                
+                return {
+                    "reply": (
+                        f"❌ *Order Not Found*\n\n"
+                        f"I couldn't find order *{order_id_input.upper()}*.\n\n"
+                        f"Please check:\n"
+                        f"• The Order ID is correct (check your confirmation message)\n"
+                        f"• You're messaging from the registered phone number\n\n"
+                        f"Need help? Contact our support team."
+                    ),
+                    "intent": "order_tracking",
+                    "confidence": 1.0,
+                    "needs_human": False,
+                    "suggested_actions": ["Contact Support", "Place New Order"],
+                    "metadata": {"generation_method": "order_tracking_id_not_found"}
+                }
+        
+        # =====================================================
+        # STEP 2: Try to extract Order ID from current message
+        # =====================================================
+        extracted_order_id = self._extract_order_id_from_message(msg_lower)
+        
+        if extracted_order_id:
+            logger.info(f"🔍 Extracted order ID from message: {extracted_order_id}")
+            order_data = self._lookup_order_by_id(extracted_order_id, user_id, business_data)
+            
+            if order_data:
+                return self._format_order_status_response(order_data, STATUS_MAP)
+        
+        # =====================================================
+        # STEP 3: Check for recent orders by phone number
+        # =====================================================
+        orders = self._lookup_orders_by_phone(user_id, business_data)
+        
+        if orders and len(orders) == 1:
+            # Single order found - show status directly
+            return self._format_order_status_response(orders[0], STATUS_MAP)
+        
+        elif orders and len(orders) > 1:
+            # Multiple orders found - show list and ask which one
+            return self._format_multi_order_response(orders, STATUS_MAP)
+        
+        # =====================================================
+        # STEP 4: No orders found - Ask for Order ID
+        # =====================================================
+        if state:
+            state.collect_field("_awaiting_order_id", True)
+        
+        return {
+            "reply": (
+                f"🔍 *Track Your Order*\n\n"
+                f"To check your order status, please share your *Order ID*.\n\n"
+                f"You can find it in your order confirmation message.\n"
+                f"Example: *ABC123* or *#ABC123*\n\n"
+                f"💡 If you don't have your Order ID, reply with your *phone number* "
+                f"and I'll look up your recent orders."
+            ),
+            "intent": "order_tracking",
+            "confidence": 1.0,
+            "needs_human": False,
+            "suggested_actions": ["I don't have Order ID", "Contact Support"],
+            "metadata": {"generation_method": "order_tracking_ask_id", "awaiting_order_id": True}
+        }
+    
+    def _extract_order_id_from_message(self, message: str) -> Optional[str]:
+        """
+        Extract Order ID from user message using multiple patterns.
+        
+        Patterns recognized:
+        - #ABC123 or #C3B68564
+        - order id ABC123
+        - STANDALONE alphanumeric like C3B68564 (must contain digit)
+        
+        Does NOT extract common words like 'come', 'order', etc.
+        """
+        import re
+        
+        # Common words to ignore (these are NOT order IDs)
+        ignore_words = {
+            'come', 'order', 'track', 'when', 'will', 'what', 'where', 
+            'status', 'cancel', 'help', 'hello', 'please', 'thank', 'thanks',
+            'varum', 'enna', 'eppo', 'achu'
+        }
+        
+        # Pattern 1: #ORDER_ID (e.g., #C3B68564)
+        match = re.search(r'#([A-Za-z0-9]{4,12})', message)
+        if match:
+            candidate = match.group(1).upper()
+            if candidate.lower() not in ignore_words:
+                return candidate
+        
+        # Pattern 2: "order id XYZ" - only if followed by alphanumeric with digits
+        match = re.search(r'order\s*id\s*[:\s]*([A-Za-z0-9]{4,12})', message, re.IGNORECASE)
+        if match:
+            candidate = match.group(1).upper()
+            if candidate.lower() not in ignore_words and any(c.isdigit() for c in candidate):
+                return candidate
+        
+        # Pattern 3: Standalone alphanumeric that MUST contain at least one digit
+        # (Real order IDs like C3B68564 always have digits)
+        # Only if message is short (user is likely just providing the ID)
+        if len(message) <= 20:
+            match = re.search(r'\b([A-Za-z0-9]{6,12})\b', message)
+            if match:
+                candidate = match.group(1).upper()
+                # Must contain at least one digit and not be a common word
+                if (candidate.lower() not in ignore_words and 
+                    any(c.isdigit() for c in candidate)):
+                    return candidate
         
         return None
+    
+    def _lookup_order_by_id(
+        self, 
+        order_id: str, 
+        user_id: str, 
+        business_data: Dict[str, Any]
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Look up order by Order ID from Supabase.
+        Searches both 'id' (UUID) and 'order_id' (short human-readable ID) columns.
+        """
+        if not self.supabase_client or not order_id:
+            logger.warning(f"⚠️ Cannot lookup order: supabase={bool(self.supabase_client)}, order_id={order_id}")
+            return None
+        
+        try:
+            # Normalize order ID (remove # prefix, uppercase for consistency)
+            search_id = order_id.replace("#", "").strip().upper()
+            logger.info(f"🔍 Searching for order ID: '{search_id}' in Supabase orders table")
+            
+            # Priority 1: Try exact match on 'order_id' column (human-readable short ID like C3B68564)
+            try:
+                result = self.supabase_client.table("orders").select(
+                    "id, order_id, status, created_at, items, customer_name, customer_phone"
+                ).eq("order_id", search_id).limit(1).execute()
+                
+                logger.info(f"🔍 Query 1 (order_id exact): found {len(result.data) if result.data else 0} results")
+                
+                if result.data and len(result.data) > 0:
+                    order = result.data[0]
+                    logger.info(f"✅ Found order by order_id column: {order.get('order_id')}")
+                    return order
+            except Exception as e1:
+                logger.warning(f"⚠️ Query 1 failed: {e1}")
+            
+            # Priority 2: Try case-insensitive match on 'order_id'
+            try:
+                result = self.supabase_client.table("orders").select(
+                    "id, order_id, status, created_at, items, customer_name, customer_phone"
+                ).ilike("order_id", search_id).limit(1).execute()
+                
+                logger.info(f"🔍 Query 2 (order_id ilike): found {len(result.data) if result.data else 0} results")
+                
+                if result.data and len(result.data) > 0:
+                    order = result.data[0]
+                    logger.info(f"✅ Found order by order_id (ilike): {order.get('order_id')}")
+                    return order
+            except Exception as e2:
+                logger.warning(f"⚠️ Query 2 failed: {e2}")
+            
+            # Priority 3: Try partial match on 'id' column (UUID contains this string)
+            try:
+                result = self.supabase_client.table("orders").select(
+                    "id, order_id, status, created_at, items, customer_name, customer_phone"
+                ).ilike("id", f"%{search_id.lower()}%").limit(1).execute()
+                
+                logger.info(f"🔍 Query 3 (id ilike): found {len(result.data) if result.data else 0} results")
+                
+                if result.data and len(result.data) > 0:
+                    order = result.data[0]
+                    logger.info(f"✅ Found order by UUID partial match: {order.get('id')}")
+                    return order
+            except Exception as e3:
+                logger.warning(f"⚠️ Query 3 failed: {e3}")
+            
+            logger.info(f"❌ Order not found for ID: {search_id}")
+                
+        except Exception as e:
+            logger.error(f"❌ Failed to lookup order by ID: {e}", exc_info=True)
+        
+        return None
+    
+    def _lookup_orders_by_phone(
+        self, 
+        phone: str, 
+        business_data: Dict[str, Any]
+    ) -> List[Dict[str, Any]]:
+        """
+        Look up recent orders by phone number from Supabase.
+        Returns up to 5 most recent orders from last 30 days.
+        """
+        if not self.supabase_client or not phone:
+            return []
+        
+        try:
+            from datetime import datetime, timedelta
+            thirty_days_ago = (datetime.utcnow() - timedelta(days=30)).isoformat()
+            
+            # Normalize phone number (remove + and spaces)
+            normalized_phone = phone.replace("+", "").replace(" ", "").replace("-", "")
+            
+            # Try multiple phone formats - use the last 10 digits for matching
+            phone_last10 = normalized_phone[-10:] if len(normalized_phone) >= 10 else normalized_phone
+            
+            result = self.supabase_client.table("orders").select(
+                "id, order_id, status, created_at, items, customer_name, customer_phone"
+            ).ilike(
+                "customer_phone", f"%{phone_last10}%"
+            ).gte(
+                "created_at", thirty_days_ago
+            ).order("created_at", desc=True).limit(5).execute()
+            
+            if result.data:
+                logger.info(f"✅ Found {len(result.data)} orders by phone: {normalized_phone[-4:]}")
+                return result.data
+                
+        except Exception as e:
+            logger.warning(f"⚠️ Failed to lookup orders by phone: {e}")
+        
+        return []
+    
+    def _format_order_status_response(
+        self, 
+        order: Dict[str, Any], 
+        status_map: Dict[str, tuple]
+    ) -> Dict[str, Any]:
+        """
+        Format a single order's status with professional styling.
+        Amazon/Google-level presentation.
+        """
+        # Get order ID - prefer 'order_id' (human-readable) over 'id' (UUID)
+        order_id = order.get("order_id") or order.get("id", "")
+        order_status = order.get("status", "created")
+        items = order.get("items", [])
+        created_at = order.get("created_at", "")
+        total_amount = order.get("total_amount")
+        
+        # Format order ID for display
+        # If it's a short order_id (e.g., C3B68564), use as-is
+        # If it's a UUID, show last 8 chars
+        if len(order_id) <= 12:
+            order_id_display = order_id.upper()
+        else:
+            order_id_display = order_id[-8:].upper()
+        
+        # Get status info
+        status_info = status_map.get(order_status, ("Processing", "is being processed ⏳", 1))
+        status_label, status_message, status_level = status_info
+        
+        # Format items
+        if items and isinstance(items, list):
+            items_lines = []
+            for item in items[:4]:
+                if isinstance(item, dict):
+                    qty = item.get("quantity", 1)
+                    name = item.get("name", "Item")
+                    variant = item.get("variant_display", "")
+                    if variant:
+                        items_lines.append(f"  • {qty}x {name} ({variant})")
+                    else:
+                        items_lines.append(f"  • {qty}x {name}")
+                else:
+                    items_lines.append(f"  • {item}")
+            items_text = "\n".join(items_lines)
+            if len(items) > 4:
+                items_text += f"\n  (+{len(items) - 4} more items)"
+        else:
+            items_text = "  • Your items"
+        
+        # Format date
+        try:
+            from datetime import datetime
+            if isinstance(created_at, str):
+                order_date = datetime.fromisoformat(created_at.replace('Z', '+00:00'))
+                date_display = order_date.strftime("%d %b %Y, %I:%M %p")
+            else:
+                date_display = "Recently"
+        except:
+            date_display = "Recently"
+        
+        # Build status timeline visual
+        timeline = self._build_status_timeline(status_level)
+        
+        # Build professional response
+        response_text = (
+            f"📦 *Order Status*\n"
+            f"━━━━━━━━━━━━━━━━━\n\n"
+            f"🆔 Order ID: *#{order_id_display}*\n"
+            f"📅 Placed: {date_display}\n"
+        )
+        
+        if total_amount:
+            response_text += f"💰 Total: ₹{int(float(total_amount))}\n"
+        
+        response_text += (
+            f"\n*Items:*\n{items_text}\n\n"
+            f"━━━━━━━━━━━━━━━━━\n"
+            f"*Status: {status_label}*\n\n"
+            f"{timeline}\n\n"
+            f"Your order {status_message}\n\n"
+            f"📱 You'll receive updates on WhatsApp."
+        )
+        
+        suggested_actions = ["Track Another Order", "Place New Order"]
+        if order_status not in ["delivered", "cancelled", "shipped"]:
+            suggested_actions = ["Cancel Order", "Contact Support", "Place Another Order"]
+        
+        return {
+            "reply": response_text,
+            "intent": "order_tracking",
+            "confidence": 1.0,
+            "needs_human": False,
+            "suggested_actions": suggested_actions,
+            "metadata": {
+                "generation_method": "order_tracking_status",
+                "order_id": order_id,
+                "order_status": order_status,
+            }
+        }
+    
+    def _format_multi_order_response(
+        self, 
+        orders: List[Dict[str, Any]], 
+        status_map: Dict[str, tuple],
+        searched_id: str = None
+    ) -> Dict[str, Any]:
+        """
+        Format multiple orders list for user to select.
+        """
+        state = self.conversation_manager.get_state(orders[0].get("customer_phone", ""))
+        
+        response_lines = [
+            f"📋 *Your Recent Orders*\n",
+            f"━━━━━━━━━━━━━━━━━\n",
+        ]
+        
+        if searched_id:
+            response_lines.insert(1, f"⚠️ Order *{searched_id}* not found, but I found these:\n\n")
+        
+        for i, order in enumerate(orders[:5], 1):
+            # Prefer order_id (human-readable) over UUID
+            order_id_raw = order.get("order_id") or order.get("id", "")
+            if len(order_id_raw) <= 12:
+                order_id = order_id_raw.upper()
+            else:
+                order_id = order_id_raw[-8:].upper()
+            status = order.get("status", "created")
+            items = order.get("items", [])
+            
+            status_info = status_map.get(status, ("Processing", "", 1))
+            status_label = status_info[0]
+            
+            # Get first item name
+            first_item = "Items"
+            if items and isinstance(items, list) and len(items) > 0:
+                first = items[0]
+                if isinstance(first, dict):
+                    first_item = first.get("name", "Items")[:20]
+            
+            response_lines.append(
+                f"{i}️⃣ *#{order_id}*\n"
+                f"   {first_item}{'...' if len(items) > 1 else ''}\n"
+                f"   Status: {status_label}\n"
+            )
+        
+        # Get example order ID for instructions
+        example_order_id_raw = orders[0].get("order_id") or orders[0].get("id", "")
+        if len(example_order_id_raw) <= 12:
+            example_order_id = example_order_id_raw.upper()
+        else:
+            example_order_id = example_order_id_raw[-8:].upper()
+        
+        response_lines.append(
+            f"\n━━━━━━━━━━━━━━━━━\n"
+            f"Reply with the *Order ID* (e.g., #{example_order_id}) "
+            f"for detailed status."
+        )
+        
+        return {
+            "reply": "\n".join(response_lines),
+            "intent": "order_tracking",
+            "confidence": 1.0,
+            "needs_human": False,
+            "suggested_actions": [
+                f"#{(orders[i].get('order_id') or orders[i].get('id', ''))[:12].upper() if len(orders[i].get('order_id') or orders[i].get('id', '')) <= 12 else (orders[i].get('order_id') or orders[i].get('id', ''))[-8:].upper()}"
+                for i in range(min(3, len(orders)))
+            ],
+            "metadata": {"generation_method": "order_tracking_multi", "order_count": len(orders)}
+        }
+    
+    def _build_status_timeline(self, current_level: int) -> str:
+        """
+        Build a visual status timeline like Amazon/Flipkart.
+        """
+        stages = [
+            ("Placed", 1),
+            ("Confirmed", 2),
+            ("Preparing", 4),
+            ("Shipped", 5),
+            ("Delivered", 7),
+        ]
+        
+        timeline_parts = []
+        for stage_name, stage_level in stages:
+            if current_level >= stage_level:
+                timeline_parts.append(f"✅ {stage_name}")
+            elif current_level == 0:  # Cancelled
+                if stage_level == 1:
+                    timeline_parts.append(f"❌ Cancelled")
+                break
+            else:
+                timeline_parts.append(f"⬜ {stage_name}")
+        
+        return " → ".join(timeline_parts)
+    
+    def _handle_order_cancellation(
+        self,
+        user_id: str,
+        context_facts: Dict[str, Any],
+        business_data: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """
+        Handle order cancellation requests.
+        """
+        order_id = context_facts.get("order_id", "")
+        order_status = context_facts.get("order_status", "created")
+        
+        # Check if order can be cancelled
+        non_cancellable_statuses = ["shipped", "out_for_delivery", "delivered", "cancelled"]
+        
+        if order_status in non_cancellable_statuses:
+            if order_status == "cancelled":
+                response_text = (
+                    f"This order has already been cancelled.\n\n"
+                    f"Would you like to place a new order? 🛒"
+                )
+            elif order_status == "delivered":
+                response_text = (
+                    f"This order has already been delivered.\n\n"
+                    f"If you have any issues with your order, please contact our support team."
+                )
+            else:
+                response_text = (
+                    f"Your order has already been shipped and cannot be cancelled automatically.\n\n"
+                    f"Please contact our support team for assistance with returns."
+                )
+            
+            return {
+                "reply": response_text,
+                "intent": "order_cancellation",
+                "confidence": 1.0,
+                "needs_human": order_status in ["shipped", "out_for_delivery"],
+                "suggested_actions": ["Contact Support", "Place New Order"],
+                "metadata": {"generation_method": "order_cancellation_handler", "cancellable": False}
+            }
+        
+        # Order can be cancelled - confirm with user
+        order_id_display = f"#{order_id[-6:]}" if order_id and len(order_id) >= 6 else "your order"
+        response_text = (
+            f"I can help you cancel {order_id_display}.\n\n"
+            f"Are you sure you want to cancel this order?\n\n"
+            f"Reply *Yes* to confirm cancellation, or *No* to keep your order."
+        )
+        
+        # Store cancellation pending state
+        state = self.conversation_manager.get_state(user_id)
+        if state:
+            state.collect_field("_pending_cancellation", True)
+            state.collect_field("_cancel_order_id", order_id)
+        
+        return {
+            "reply": response_text,
+            "intent": "order_cancellation",
+            "confidence": 1.0,
+            "needs_human": False,
+            "suggested_actions": ["Yes, Cancel", "No, Keep Order"],
+            "metadata": {"generation_method": "order_cancellation_handler", "cancellable": True}
+        }
     
     def _is_order_booking_enabled(self, user_id: str) -> bool:
         """Check if order booking is enabled for this business."""
@@ -810,12 +1699,18 @@ class AIBrain:
         product_meta = {}
         
         if mentioned_product:
-            # Product mentioned - check for variants
+            # Product mentioned in initial message - check for variants
             product_name = mentioned_product.get("name", "item")
             product_id = mentioned_product.get("id") or mentioned_product.get("sku") or product_name
             product_price = mentioned_product.get("price", "")
             sizes = mentioned_product.get("sizes", [])
-            colors = self._get_available_colors_for_product(mentioned_product)
+            # For initial message, use BASE product colors (not variant-derived)
+            # since there's no card selection yet. This is the correct behavior.
+            colors = mentioned_product.get("colors", [])
+            if isinstance(colors, list):
+                colors = [str(c).strip() for c in colors if str(c).strip()][:10]
+            else:
+                colors = []
             
             price_str = f" (₹{product_price})" if product_price else ""
             
@@ -1018,6 +1913,8 @@ class AIBrain:
         product_map = {}
         product_cards = []  # For WhatsApp image rendering
         card_index_map = {}  # Maps card index (0, 1, 2, ...) → full product_id for unique button IDs
+        card_colors_map = {}  # CRITICAL: Maps card index → colors for that specific card (enterprise fix)
+        card_sizes_map = {}  # CRITICAL: Maps card index → sizes for that specific card (enterprise fix)
         card_index_counter = 0  # Global counter for all cards (base + variants)
         
         for i, p in enumerate(page_products):
@@ -1132,11 +2029,13 @@ class AIBrain:
                     'is_variant': False,  # Mark as base product
                 })
                 
-                # Store mapping: card_index → full product_id
+                # Store mappings: card_index → product_id, colors, sizes (CRITICAL for enterprise-grade selection)
                 card_index_map[card_index_counter] = product_id
-                card_index_counter += 1
+                card_colors_map[card_index_counter] = base_colors  # Store BASE product colors for this card
+                card_sizes_map[card_index_counter] = base_sizes  # Store BASE product sizes for this card
                 
-                logger.info(f"   📋 Base product card created: {name} (colors={base_colors}, sizes={base_sizes}, has_variants={has_variants}, card_index={card_index_counter-1})")
+                logger.info(f"   📋 Base product card created: {name} (colors={base_colors}, sizes={base_sizes}, has_variants={has_variants}, card_index={card_index_counter})")
+                card_index_counter += 1
             else:
                 logger.info(f"   ⏭️ Skipping base product card (no colors/sizes, only variants): {name}")
             
@@ -1239,8 +2138,23 @@ class AIBrain:
                     'base_product_id': product_id,  # Reference to base product
                 })
                 
-                # Store mapping: card_index → full variant product_id
+                # Store mappings: card_index → variant product_id, colors, sizes (CRITICAL for enterprise-grade selection)
                 card_index_map[card_index_counter] = variant_product_id
+                # CRITICAL FIX: Store variant-specific colors and sizes
+                variant_card_colors = [variant_color] if variant_color else []
+                # Parse variant sizes (can be comma-separated string or list)
+                variant_card_sizes = []
+                if variant_size:
+                    if isinstance(variant_size, str) and ',' in variant_size:
+                        variant_card_sizes = [s.strip() for s in variant_size.split(',') if s.strip()]
+                    elif isinstance(variant_size, str):
+                        variant_card_sizes = [variant_size.strip()]
+                    elif isinstance(variant_size, list):
+                        variant_card_sizes = variant_size
+                card_colors_map[card_index_counter] = variant_card_colors
+                card_sizes_map[card_index_counter] = variant_card_sizes
+                
+                logger.info(f"   📏 Variant card {card_index_counter}: color={variant_color}, sizes={variant_card_sizes}")
                 card_index_counter += 1
             
             # Build text entry with comprehensive price formatting
@@ -1315,8 +2229,13 @@ class AIBrain:
             logger.info(f"🖼️ [{card_type}] Product: {card.get('name')} - {img_status} - Price: {price_info}")
         
         # Return with product_cards for image rendering
+        # CRITICAL: Store all card maps for enterprise-grade selection
         state.collect_field("_card_index_map", card_index_map)
+        state.collect_field("_card_colors_map", card_colors_map)  # Enterprise fix: per-card colors
+        state.collect_field("_card_sizes_map", card_sizes_map)  # Enterprise fix: per-card sizes
         logger.info(f"🗺️ Stored card_index_map with {len(card_index_map)} entries")
+        logger.info(f"🎨 Stored card_colors_map with {len(card_colors_map)} entries")
+        logger.info(f"📏 Stored card_sizes_map with {len(card_sizes_map)} entries")
         
         return response_text, suggested_actions, {'product_cards': product_cards}
     
@@ -1463,12 +2382,21 @@ class AIBrain:
             # Search term comes from button ID: sanitized (underscores) or spaces
             raw_term = msg_lower.replace("order ", "").strip()
             
+            # ENTERPRISE FIX: Track selected card index and its colors/sizes
+            selected_card_index = None
+            selected_card_colors = None  # Colors specific to this card (from _card_colors_map)
+            selected_card_sizes = None   # Sizes specific to this card (from _card_sizes_map)
+            
             # CRITICAL FIX: Check if this is the new card_index format (order_card_0, order_card_1, etc.)
             if raw_term.startswith("card_"):
                 try:
                     # Extract card index from "card_0", "card_1", etc.
                     card_index = int(raw_term.replace("card_", ""))
+                    selected_card_index = card_index  # Store for later use
+                    
                     card_index_map = state.collected_fields.get("_card_index_map", {})
+                    card_colors_map = state.collected_fields.get("_card_colors_map", {})  # Enterprise fix
+                    card_sizes_map = state.collected_fields.get("_card_sizes_map", {})   # Enterprise fix
                     
                     logger.info(f"🗺️ Card-based button detected: {raw_term}, card_index={card_index}")
                     logger.info(f"🗺️ Card index map has {len(card_index_map)} entries")
@@ -1476,38 +2404,19 @@ class AIBrain:
                     # Look up the full product_id using the card_index
                     # Convert string keys to int if needed
                     card_index_map_int = {int(k) if isinstance(k, str) else k: v for k, v in card_index_map.items()}
-                    
-                    if card_index in card_index_map_int:
-                        full_product_id = card_index_map_int[card_index]
-                        logger.info(f"OK Mapped card_index {card_index} → product_id: {full_product_id}")
-                        
-                        # Override raw_term to use the full product ID
-                        raw_term = full_product_id.lower()
-                        logger.info(f"🔄 Using mapped product_id for matching: raw='{raw_term}'")
-                    else:
-                        logger.warning(f"⚠️ Card index {card_index} not found in map! Available: {list(card_index_map_int.keys())}")
-                except (ValueError, TypeError) as e:
-                    logger.error(f"❌ Failed to parse card index from '{raw_term}': {e}")
-            
-            
-            # CRITICAL FIX: Check if this is the new card_index format (order_card_0, order_card_1, etc.)
-            if raw_term.startswith("card_"):
-                try:
-                    # Extract card index from "card_0", "card_1", etc.
-                    card_index = int(raw_term.replace("card_", ""))
-                    card_index_map = state.collected_fields.get("_card_index_map", {})
-                    
-                    logger.info(f"🗺️ Card-based button detected: {raw_term}, card_index={card_index}")
-                    logger.info(f"🗺️ Card index map has {len(card_index_map)} entries")
-                    
-                    # Look up the full product_id using the card_index
-                    # Convert string keys to int if needed
-                    card_index_map_int = {int(k) if isinstance(k, str) else k: v for k, v in card_index_map.items()}
+                    card_colors_map_int = {int(k) if isinstance(k, str) else k: v for k, v in card_colors_map.items()}
+                    card_sizes_map_int = {int(k) if isinstance(k, str) else k: v for k, v in card_sizes_map.items()}
                     
                     if card_index in card_index_map_int:
                         full_product_id = card_index_map_int[card_index]
                         logger.info(f"✅ Mapped card_index {card_index} → product_id: {full_product_id}")
                         
+                        # ENTERPRISE FIX: Get card-specific colors and sizes
+                        selected_card_colors = card_colors_map_int.get(card_index, [])
+                        selected_card_sizes = card_sizes_map_int.get(card_index, [])
+                        logger.info(f"🎨 Card {card_index} colors: {selected_card_colors}")
+                        logger.info(f"📏 Card {card_index} sizes: {selected_card_sizes}")
+                        
                         # Override raw_term to use the full product ID
                         raw_term = full_product_id.lower()
                         logger.info(f"🔄 Using mapped product_id for matching: raw='{raw_term}'")
@@ -1516,6 +2425,13 @@ class AIBrain:
                 except (ValueError, TypeError) as e:
                     logger.error(f"❌ Failed to parse card index from '{raw_term}': {e}")
             
+            # Store selected card info in state for color selection step
+            if selected_card_index is not None:
+                state.collect_field("_selected_card_index", selected_card_index)
+                if selected_card_colors is not None:
+                    state.collect_field("_selected_card_colors", selected_card_colors)
+                if selected_card_sizes is not None:
+                    state.collect_field("_selected_card_sizes", selected_card_sizes)
             
             # Create a "clean" search term for robust matching (no spaces, dashes, underscores)
             clean_search_term = re.sub(r'[\s\-_]', '', raw_term)
@@ -1532,6 +2448,7 @@ class AIBrain:
             # First, check if this is a variant product ID (contains "_variant_" OR matches a variant ID directly)
             is_variant_id = "_variant_" in raw_term or "_variant_" in clean_search_term
             logger.info(f"🔍 Variant detection: is_variant_id={is_variant_id}, raw_term='{raw_term}', clean_search_term='{clean_search_term}'")
+
             
             for product in products:
                 if isinstance(product, dict):
@@ -1851,8 +2768,17 @@ class AIBrain:
                         suggested_actions = ["1", "2", "3", "Cancel"]
                 else:
                     # Base product selected - determine next step based on product attributes
-                    sizes = mentioned_product.get("sizes", [])
-                    colors = self._get_available_colors_for_product(mentioned_product)
+                    # ENTERPRISE FIX: Use stored card-specific sizes and colors FIRST
+                    # This ensures we use the exact colors/sizes from the card the user clicked,
+                    # NOT colors derived from variants (which was causing the bug)
+                    sizes = state.collected_fields.get("_selected_card_sizes") or mentioned_product.get("sizes", [])
+                    colors = state.collected_fields.get("_selected_card_colors")
+                    
+                    # Only fallback to _get_available_colors_for_product if no card colors stored
+                    if not colors:
+                        colors = self._get_available_colors_for_product(mentioned_product)
+                    
+                    logger.info(f"🎨 Base product color selection - card_colors={state.collected_fields.get('_selected_card_colors')}, final_colors={colors}")
                     
                     if sizes:
                         state.collect_field("_needs_size", True)
@@ -2188,11 +3114,14 @@ class AIBrain:
                     logger.info(f"🎨 ✅ Priority 2: Using variant color after size selection: {variant_color}")
                     response_text = f"Size: {matched_size} selected\n\nColor: *{variant_color}*\n\nHow many would you like to order?"
                     suggested_actions = ["1", "2", "3", "Cancel"]
-                # Priority 3: Use variant-derived colors when product has variants, else base (no variant selected)
+                # Priority 3: Use stored card colors first, then variant-derived colors
                 else:
-                    colors = self._get_available_colors_for_product(
-                        product_data, selected_size=matched_size
-                    )
+                    # ENTERPRISE FIX: Check for stored card colors first
+                    colors = state.collected_fields.get("_selected_card_colors")
+                    if not colors:
+                        colors = self._get_available_colors_for_product(
+                            product_data, selected_size=matched_size
+                        )
                     if colors:
                         if len(colors) == 1:
                             state.collect_field("selected_color", colors[0])
@@ -2465,9 +3394,12 @@ class AIBrain:
                     state.collect_field("pending_product_id", product_id)
                     state.collect_field("pending_product_data", matched_product_data)
                     
-                    # Check for variants / sizes / colors (use variant-derived colors when product has variants)
-                    sizes = matched_product_data.get("sizes", [])
-                    colors = self._get_available_colors_for_product(matched_product_data)
+                    # Check for variants / sizes / colors
+                    # ENTERPRISE FIX: Use stored card colors first, then variant-derived colors
+                    sizes = state.collected_fields.get("_selected_card_sizes") or matched_product_data.get("sizes", [])
+                    colors = state.collected_fields.get("_selected_card_colors")
+                    if not colors:
+                        colors = self._get_available_colors_for_product(matched_product_data)
                     
                     if sizes:
                         state.collect_field("_needs_size", True)
@@ -3173,7 +4105,7 @@ class AIBrain:
                         # Send Link Response - Professional format with CTA URL button
                         body_text = (
                             f"Your total payable amount is ₹{int(total_amount)}.\n\n"
-                            f"Click the btn to make payment\n\n"
+                            f"Click the Button Below to make payment\n\n"
                             f"Reply with paid to confirm"
                         )
                         
@@ -3479,6 +4411,22 @@ class AIBrain:
                         "request_hash": request_hash,
                     }
                 )
+                
+                # =====================================================
+                # ENTERPRISE: Store order info for context-aware tracking
+                # This enables the 3-layer intent system to recognize
+                # future "where is my order" queries
+                # =====================================================
+                from datetime import datetime, timezone
+                state.collect_field("_last_order_completed_at", datetime.now(timezone.utc).isoformat())
+                state.collect_field("_last_order_id", created_order.id)
+                state.collect_field("_last_order_status", "created")
+                state.collect_field("_last_order_items", [
+                    {"name": item.get("name", "Item"), "quantity": item.get("quantity", 1)}
+                    for item in created_order.items
+                ])
+                logger.info(f"🧠 Stored order context for tracking: order_id={created_order.id}")
+
                 
             except DuplicateOrderError as dup_error:
                 # =============================================================
