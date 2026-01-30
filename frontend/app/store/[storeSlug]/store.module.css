@@ -593,6 +593,78 @@
   color: #999;
 }
 
+/* ============================================
+   SOLD OUT & LOW STOCK BADGES - Enterprise Level
+   ============================================ */
+
+/* Sold Out Badge - Premium Design */
+.soldOutBadge {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  padding: 6px 12px;
+  background: rgba(0, 0, 0, 0.85);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  color: #ffffff;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.8px;
+  text-transform: uppercase;
+  border-radius: 6px;
+  z-index: 15;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
+  animation: soldOutPulse 2s ease-in-out infinite;
+}
+
+@keyframes soldOutPulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.85;
+  }
+}
+
+/* Low Stock Badge - Urgency Indicator */
+.lowStockBadge {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  padding: 5px 10px;
+  background: linear-gradient(135deg, #f97316 0%, #ea580c 100%);
+  color: #ffffff;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.3px;
+  border-radius: 6px;
+  z-index: 15;
+  box-shadow: 0 3px 10px rgba(249, 115, 22, 0.35);
+  animation: lowStockBounce 1.5s ease-in-out infinite;
+}
+
+@keyframes lowStockBounce {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-2px);
+  }
+}
+
+/* Sold Out Image Effect - Grayscale + Dim */
+.novaImageSoldOut {
+  filter: grayscale(80%) brightness(0.85);
+  opacity: 0.7;
+}
+
+.novaCard:hover .novaImageSoldOut {
+  filter: grayscale(60%) brightness(0.9);
+  opacity: 0.8;
+}
+
 /* Content Section */
 .novaContent {
   padding: 0 16px 16px;
@@ -782,6 +854,35 @@
 .novaBuyNowBtnLoading:hover {
   transform: none;
   box-shadow: none;
+}
+
+/* Buy Now Button - Sold Out/Disabled State */
+.novaBuyNowBtnDisabled {
+  background: #cccccc;
+  color: #666666;
+  cursor: not-allowed;
+  pointer-events: none;
+  opacity: 0.8;
+}
+
+.novaBuyNowBtnDisabled:hover {
+  background: #cccccc;
+  transform: none;
+  box-shadow: none;
+}
+
+/* Cart Icon Button - Disabled State */
+.novaCartIconBtnDisabled {
+  background: #f0f0f0;
+  border-color: #e0e0e0;
+  cursor: not-allowed;
+  pointer-events: none;
+  opacity: 0.5;
+}
+
+.novaCartIconBtnDisabled:hover {
+  background: #f0f0f0;
+  border-color: #e0e0e0;
 }
 
 .buyNowSpinner {
@@ -2530,6 +2631,33 @@
   color: #ffffff !important;
 }
 
+/* Out of Stock Size Button */
+.modalOptionBtnOutOfStock {
+  position: relative;
+  background: #f5f5f5;
+  color: #aaaaaa;
+  border-color: #e0e0e0;
+  cursor: not-allowed;
+  pointer-events: none;
+  opacity: 0.7;
+}
+
+.modalOptionBtnOutOfStock:hover {
+  background: #f5f5f5;
+  border-color: #e0e0e0;
+}
+
+/* Strikethrough line for out of stock sizes */
+.sizeStrikethrough {
+  position: absolute;
+  top: 50%;
+  left: 10%;
+  right: 10%;
+  height: 1px;
+  background: #999999;
+  transform: rotate(-5deg);
+}
+
 .modalQuantity {
   display: flex;
   align-items: center;
@@ -2540,6 +2668,19 @@
 .modalQuantityLabel {
   font-size: 14px;
   color: #888888;
+}
+
+/* Quantity Disabled State (when out of stock) */
+.modalQuantityDisabled {
+  opacity: 0.5;
+  pointer-events: none;
+}
+
+.quantityBtnDisabled {
+  background: #f0f0f0 !important;
+  color: #cccccc !important;
+  cursor: not-allowed !important;
+  pointer-events: none;
 }
 
 .modalAddBtn {
@@ -2560,6 +2701,21 @@
   background: #333333;
   transform: translateY(-2px);
   box-shadow: 0 6px 20px rgba(0, 0, 0, 0.2);
+}
+
+/* Modal Add Button - Disabled/Out of Stock State */
+.modalAddBtnDisabled {
+  background: #cccccc;
+  color: #666666;
+  cursor: not-allowed;
+  pointer-events: none;
+  box-shadow: none;
+}
+
+.modalAddBtnDisabled:hover {
+  background: #cccccc;
+  transform: none;
+  box-shadow: none;
 }
 
 /* ============================================
@@ -3207,10 +3363,62 @@
   object-position: center;
   transform: scale(1);
   transition: transform 8s cubic-bezier(0.25, 0.1, 0.25, 1);
+  opacity: 0;
+}
+
+.carouselImageLoaded {
+  opacity: 1;
+  animation: carouselImageFadeIn 0.6s ease-out forwards;
+}
+
+@keyframes carouselImageFadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
 }
 
 .carouselSlideActive .carouselImage {
   transform: scale(1.08);
+}
+
+/* Skeleton Loading for Carousel Images */
+.carouselImageSkeleton {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    135deg,
+    #e0e0e0 0%,
+    #f0f0f0 25%,
+    #e0e0e0 50%,
+    #f0f0f0 75%,
+    #e0e0e0 100%
+  );
+  background-size: 400% 400%;
+  z-index: 1;
+}
+
+.carouselSkeletonShimmer {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(255, 255, 255, 0.4) 50%,
+    transparent 100%
+  );
+  animation: carouselSkeletonShimmer 2s ease-in-out infinite;
+}
+
+@keyframes carouselSkeletonShimmer {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(100%);
+  }
 }
 
 .carouselImageOverlay {

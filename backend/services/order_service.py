@@ -26,6 +26,10 @@ from domain import (
     OrderNotFoundError,
     SystemError,
     ErrorCode,
+    # Inventory
+    StockItem,
+    InsufficientStockError,
+    ReservationResult,
 )
 from repository import OrderRepository, get_order_repository, OrderFilter
 
@@ -77,6 +81,8 @@ class OrderService:
     def create_order(
         self,
         order_data: OrderCreate,
+        reservation_ids: Optional[List[str]] = None,
+        skip_stock_check: bool = False,
         correlation_id: Optional[str] = None,
     ) -> Order:
         """
@@ -86,8 +92,16 @@ class OrderService:
         1. Validate business rules
         2. Check capability enabled
         3. Check order limits
-        4. Create order via repository (idempotent)
-        5. Emit event for background jobs
+        4. Validate/reserve stock (if not pre-reserved)
+        5. Create order via repository (idempotent)
+        6. Confirm stock reservations
+        7. Emit event for background jobs
+        
+        Args:
+            order_data: Order creation data
+            reservation_ids: Pre-created reservation IDs (from checkout flow)
+            skip_stock_check: Skip stock validation (for admin/manual orders)
+            correlation_id: For tracing
         
         Returns:
             Created Order
@@ -95,6 +109,7 @@ class OrderService:
         Raises:
             ValidationError: Invalid input
             BusinessRuleError: Business rule violated
+            InsufficientStockError: Not enough stock
             DuplicateOrderError: Order already exists
         """
         correlation_id = correlation_id or str(uuid.uuid4())[:8]
@@ -124,7 +139,18 @@ class OrderService:
         # 3. Check order limits
         self._check_order_limits(order_data, correlation_id)
         
-        # 4. Build domain entity
+        # 4. Stock validation and reservation
+        local_reservation_ids = reservation_ids or []
+        if not skip_stock_check and not reservation_ids:
+            # No pre-reservation - validate and reserve now
+            reservation_result = self._reserve_stock_for_order(
+                order_data, 
+                correlation_id
+            )
+            if reservation_result:
+                local_reservation_ids = reservation_result.reservation_ids
+        
+        # 5. Build domain entity
         order = Order.create(
             user_id=order_data.user_id,
             customer_name=order_data.customer_name,
@@ -136,14 +162,32 @@ class OrderService:
             idempotency_key=order_data.get_idempotency_key().key,
         )
         
-        # 5. Create via repository (handles idempotency)
-        created_order = self.repository.create(
-            order=order,
-            idempotency_key=order.idempotency_key,
-            correlation_id=correlation_id,
-        )
+        # 6. Create via repository (handles idempotency)
+        try:
+            created_order = self.repository.create(
+                order=order,
+                idempotency_key=order.idempotency_key,
+                correlation_id=correlation_id,
+            )
+        except Exception as e:
+            # Release reservations on order creation failure
+            if local_reservation_ids:
+                self._release_reservations(
+                    local_reservation_ids, 
+                    reason="order_creation_failed",
+                    correlation_id=correlation_id
+                )
+            raise
         
-        # 6. Emit event for background processing
+        # 7. Confirm stock reservations (actual deduction)
+        if local_reservation_ids:
+            self._confirm_reservations(
+                reservation_ids=local_reservation_ids,
+                order_id=created_order.id,
+                correlation_id=correlation_id
+            )
+        
+        # 8. Emit event for background processing
         self._emit_event(OrderEvent(
             event_type="order_created",
             order_id=created_order.id,
@@ -156,6 +200,7 @@ class OrderService:
             f"Order created successfully: {created_order.id}",
             extra={
                 "order_id": created_order.id,
+                "reservation_ids": local_reservation_ids,
                 "correlation_id": correlation_id,
             }
         )
@@ -427,6 +472,214 @@ class OrderService:
                 },
                 exc_info=True
             )
+    
+    # =========================================================================
+    # INVENTORY HELPERS
+    # =========================================================================
+    
+    def _reserve_stock_for_order(
+        self,
+        order_data: OrderCreate,
+        correlation_id: Optional[str] = None
+    ) -> Optional[ReservationResult]:
+        """
+        Reserve stock for order items.
+        
+        Returns:
+            ReservationResult with reservation_ids on success
+            
+        Raises:
+            InsufficientStockError if stock unavailable
+        """
+        try:
+            from .inventory_service import get_inventory_service
+            inventory = get_inventory_service()
+            
+            # Convert order items to StockItems with variant lookup
+            stock_items = []
+            for item in order_data.items:
+                variant_id = item.variant_id if hasattr(item, 'variant_id') else None
+                product_id = item.product_id
+                color = item.color if hasattr(item, 'color') else None
+                size = item.size if hasattr(item, 'size') else None
+                
+                # CRITICAL: If we have product_id and color but no variant_id,
+                # we need to look up the variant_id from the database
+                if product_id and color and not variant_id:
+                    variant_id = self._lookup_variant_id(
+                        user_id=order_data.user_id,
+                        product_id=product_id,
+                        color=color,
+                        correlation_id=correlation_id
+                    )
+                    if variant_id:
+                        logger.debug(
+                            f"Resolved variant_id={variant_id} for product={product_id}, color={color}"
+                        )
+                
+                stock_items.append(StockItem(
+                    product_id=product_id,
+                    name=item.name,
+                    quantity=item.quantity,
+                    variant_id=variant_id,
+                    size=size,
+                    color=color,
+                    price=item.price if hasattr(item, 'price') else None,
+                ))
+            
+            if not stock_items:
+                return None
+            
+            # Determine source for TTL
+            # Map order sources to valid reservation sources
+            # The DB constraint allows: 'website', 'whatsapp', 'admin', 'api'
+            raw_source = order_data.source.value if order_data.source else 'website'
+            source_mapping = {
+                'cod': 'website',       # COD = website checkout
+                'online': 'website',    # Online payment = website checkout  
+                'manual': 'admin',      # Manual orders = admin
+                'ai': 'whatsapp',       # AI chatbot = WhatsApp
+                'webhook': 'whatsapp',  # Webhooks = WhatsApp integration
+            }
+            source = source_mapping.get(raw_source, raw_source)
+            
+            # Fallback to 'website' if source is still not valid
+            if source not in ('website', 'whatsapp', 'admin', 'api'):
+                source = 'website'
+            
+            # Generate session ID for reservation
+            session_id = order_data.idempotency_key or f"order_{order_data.customer_phone}"
+            
+            result = inventory.validate_and_reserve(
+                user_id=order_data.user_id,
+                items=stock_items,
+                source=source,
+                session_id=session_id,
+                correlation_id=correlation_id
+            )
+            
+            if not result.success:
+                raise InsufficientStockError(
+                    message=inventory.format_stock_error(result),
+                    insufficient_items=result.insufficient_items,
+                    correlation_id=correlation_id
+                )
+            
+            logger.info(
+                f"Reserved stock for order: {len(result.reservation_ids)} items",
+                extra={
+                    "reservation_ids": result.reservation_ids,
+                    "correlation_id": correlation_id
+                }
+            )
+            
+            return result
+            
+        except InsufficientStockError:
+            raise
+        except ImportError as e:
+            logger.warning(f"Inventory service not available: {e}")
+            return None
+        except Exception as e:
+            logger.error(f"Error reserving stock: {e}", exc_info=True)
+            # Don't fail order if inventory service has issues
+            return None
+    
+    def _lookup_variant_id(
+        self,
+        user_id: str,
+        product_id: str,
+        color: str,
+        correlation_id: Optional[str] = None
+    ) -> Optional[str]:
+        """
+        Look up variant_id from product_id and color.
+        This is needed because frontend sends color but not variant_id.
+        """
+        try:
+            result = self.repository.db.table("product_variants").select("id").eq(
+                "product_id", product_id
+            ).eq("user_id", user_id).eq("is_deleted", False).ilike(
+                "color", color
+            ).limit(1).execute()
+            
+            if result.data and len(result.data) > 0:
+                return result.data[0].get("id")
+            return None
+        except Exception as e:
+            logger.warning(f"Error looking up variant_id: {e}")
+            return None
+    
+    def _confirm_reservations(
+        self,
+        reservation_ids: List[str],
+        order_id: str,
+        correlation_id: Optional[str] = None
+    ) -> bool:
+        """Confirm stock reservations (deduct actual stock)."""
+        try:
+            from .inventory_service import get_inventory_service
+            inventory = get_inventory_service()
+            
+            result = inventory.confirm_reservation(
+                reservation_ids=reservation_ids,
+                order_id=order_id,
+                idempotency_key=f"order:{order_id}:confirm",
+                correlation_id=correlation_id
+            )
+            
+            logger.info(
+                f"Confirmed stock reservations for order {order_id}",
+                extra={
+                    "order_id": order_id,
+                    "reservation_ids": reservation_ids,
+                    "correlation_id": correlation_id
+                }
+            )
+            
+            return result
+            
+        except ImportError as e:
+            logger.warning(f"Inventory service not available: {e}")
+            return True
+        except Exception as e:
+            logger.error(f"Error confirming reservations: {e}", exc_info=True)
+            return False
+    
+    def _release_reservations(
+        self,
+        reservation_ids: List[str],
+        reason: str = "order_failed",
+        correlation_id: Optional[str] = None
+    ) -> bool:
+        """Release stock reservations (no stock deduction)."""
+        try:
+            from .inventory_service import get_inventory_service
+            inventory = get_inventory_service()
+            
+            result = inventory.release_reservation(
+                reservation_ids=reservation_ids,
+                reason=reason,
+                correlation_id=correlation_id
+            )
+            
+            logger.info(
+                f"Released stock reservations: {len(reservation_ids)} items (reason: {reason})",
+                extra={
+                    "reservation_ids": reservation_ids,
+                    "reason": reason,
+                    "correlation_id": correlation_id
+                }
+            )
+            
+            return result
+            
+        except ImportError as e:
+            logger.warning(f"Inventory service not available: {e}")
+            return True
+        except Exception as e:
+            logger.error(f"Error releasing reservations: {e}", exc_info=True)
+            return False
 
 
 
@@ -448,4 +701,5 @@ def get_order_service(supabase_client=None) -> OrderService:
     _order_service = OrderService(repository=repository)
     
     return _order_service
+
 

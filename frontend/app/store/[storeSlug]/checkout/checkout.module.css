@@ -65,6 +65,7 @@
   font-size: 24px;
   font-weight: 700;
   background: black;
+  background-clip: text;
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
 }
@@ -262,8 +263,58 @@
 .itemMeta {
   display: flex;
   justify-content: space-between;
+  align-items: center;
   margin-top: 8px;
   font-size: 14px;
+}
+
+.quantityControls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: #f5f5f7;
+  border-radius: 8px;
+  padding: 4px;
+}
+
+.quantityButton {
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  background: white;
+  color: var(--text-primary);
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.2s;
+  flex-shrink: 0;
+}
+
+.quantityButton:hover:not(:disabled) {
+  background: var(--accent-primary);
+  color: white;
+  transform: scale(1.05);
+}
+
+.quantityButton:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.quantityValue {
+  min-width: 24px;
+  text-align: center;
+  font-weight: 600;
+  font-size: 14px;
+  color: var(--text-primary);
+  user-select: none;
+}
+
+.itemPrice {
+  font-weight: 600;
+  color: var(--text-primary);
 }
 
 .removeButton {
@@ -597,5 +648,253 @@
     opacity: 1;
     max-height: 200px;
     transform: translateY(0);
+  }
+}
+
+/* Stock Error Modal - World-Class Design */
+.stockErrorOverlay {
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  background: rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(8px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  animation: fadeIn 0.2s ease;
+}
+
+.stockErrorModal {
+  background: white;
+  border-radius: 24px;
+  max-width: 440px;
+  width: 100%;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.2);
+  overflow: hidden;
+  animation: modalSlideUp 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.stockErrorHeader {
+  background: red;
+  padding: 32px 28px;
+  text-align: center;
+  position: relative;
+}
+
+.stockErrorIconWrapper {
+  width: 72px;
+  height: 72px;
+  background: rgba(255, 255, 255, 0.25);
+  backdrop-filter: blur(10px);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 auto 16px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
+  animation: iconPulse 0.5s ease;
+}
+
+.stockErrorIconWrapper svg {
+  color: white;
+  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.1));
+}
+
+.stockErrorTitle {
+  font-size: 24px;
+  font-weight: 700;
+  color: white;
+  margin: 0;
+  text-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.stockErrorBody {
+  padding: 32px 28px;
+}
+
+.stockErrorMessage {
+  text-align: center;
+  margin-bottom: 24px;
+}
+
+.stockErrorText {
+  font-size: 16px;
+  color: #4a5568;
+  line-height: 1.6;
+  margin: 0 0 8px 0;
+}
+
+.stockErrorHighlight {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  margin-top: 20px;
+  padding: 16px 20px;
+  background: linear-gradient(135deg, #fff5f5 0%, #ffe5e5 100%);
+  border-radius: 16px;
+  border: 1px solid rgba(255, 107, 107, 0.2);
+}
+
+.stockErrorNumbers {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 700;
+  font-size: 18px;
+}
+
+.stockAvailable {
+  color: #22c15a;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.stockRequested {
+  color: #ff6b6b;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.stockErrorDivider {
+  width: 1px;
+  height: 24px;
+  background: rgba(0, 0, 0, 0.1);
+}
+
+.stockErrorActions {
+  display: flex;
+  gap: 12px;
+  margin-top: 24px;
+}
+
+.stockErrorButton {
+  flex: 1;
+  padding: 14px 20px;
+  border: none;
+  border-radius: 12px;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.stockErrorButtonPrimary {
+  background: black;
+  color: white;
+  box-shadow: 0 4px 12px rgba(34, 193, 90, 0.3);
+}
+
+.stockErrorButtonPrimary:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 16px rgba(34, 193, 90, 0.4);
+}
+
+.stockErrorButtonSecondary {
+  background: #f7f7f8;
+  color: #3c4047;
+  border: 1px solid #000000;
+}
+
+.stockErrorButtonSecondary:hover {
+  background: #edf2f7;
+  border-color: #cbd5e0;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes modalSlideUp {
+  from {
+    opacity: 0;
+    transform: translateY(40px) scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes iconPulse {
+  0% {
+    transform: scale(0.8);
+    opacity: 0;
+  }
+  50% {
+    transform: scale(1.05);
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+@media (max-width: 480px) {
+  .stockErrorModal {
+    max-width: calc(100% - 24px);
+    margin: 0 12px;
+  }
+
+  .stockErrorHeader {
+    padding: 24px 18px;
+  }
+
+  .stockErrorIconWrapper {
+    width: 64px;
+    height: 64px;
+    margin-bottom: 14px;
+  }
+
+  .stockErrorIconWrapper svg {
+    width: 32px;
+    height: 32px;
+  }
+
+  .stockErrorTitle {
+    font-size: 21px;
+  }
+
+  .stockErrorBody {
+    padding: 22px 18px;
+  }
+
+  .stockErrorText {
+    font-size: 14px;
+  }
+
+  .stockErrorHighlight {
+    padding: 14px 16px;
+    margin-top: 18px;
+  }
+
+  .stockErrorNumbers {
+    font-size: 16px;
+    gap: 10px;
+  }
+
+  .stockErrorActions {
+    flex-direction: column;
+    gap: 10px;
+    margin-top: 22px;
+  }
+
+  .stockErrorButton {
+    flex: none;
+    width: 100%;
+    padding: 15px 18px;
+    font-size: 15px;
   }
 }

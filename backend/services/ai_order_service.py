@@ -25,6 +25,9 @@ from domain import (
     ValidationError,
     BusinessRuleError,
     ErrorCode,
+    # Inventory
+    StockItem,
+    InsufficientStockError,
 )
 from .order_service import OrderService, get_order_service
 
@@ -59,6 +62,14 @@ class AIOrderContext:
     items: List[Dict[str, Any]] = field(default_factory=list)
     customer_name: Optional[str] = None
     notes: Optional[str] = None
+    
+    # Product references (for inventory)
+    product_ids: Dict[str, str] = field(default_factory=dict)  # item_name -> product_id
+    variant_ids: Dict[str, str] = field(default_factory=dict)  # item_name -> variant_id
+    sizes: Dict[str, str] = field(default_factory=dict)        # item_name -> size
+    
+    # Reservation tracking
+    reservation_ids: List[str] = field(default_factory=list)
     
     # Safety tracking
     items_confirmed: bool = False
@@ -434,6 +445,25 @@ class AIOrderService:
         # Mark final confirmation
         context.final_confirmation = True
         
+        # Generate idempotency key for WhatsApp retries
+        idempotency_key = self._generate_idempotency_key(context)
+        
+        # Validate and reserve stock BEFORE creating order
+        reservation_result = self._validate_and_reserve_stock(
+            context=context,
+            idempotency_key=idempotency_key,
+            correlation_id=correlation_id
+        )
+        
+        if reservation_result and not reservation_result.get('success', True):
+            return AIOrderResult(
+                success=False,
+                message=reservation_result.get('message', 'Insufficient stock'),
+                context=context,
+                suggested_response=reservation_result.get('suggested_response'),
+                next_action="adjust_quantity"
+            )
+        
         # All checks passed - create order
         try:
             items = [
@@ -441,6 +471,9 @@ class AIOrderService:
                     name=item["name"],
                     quantity=item.get("quantity", 1),
                     price=item.get("price"),
+                    product_id=context.product_ids.get(item["name"]),
+                    variant_id=context.variant_ids.get(item["name"]),
+                    size=context.sizes.get(item["name"]),
                 )
                 for item in context.items
             ]
@@ -454,8 +487,11 @@ class AIOrderService:
                 notes=context.notes,
             )
             
+            # Pass reservation IDs to skip re-validation
             order = self.order_service.create_order(
                 order_data=order_data,
+                reservation_ids=context.reservation_ids,
+                skip_stock_check=bool(context.reservation_ids),
                 correlation_id=correlation_id,
             )
             
@@ -469,6 +505,7 @@ class AIOrderService:
                     "order_id": order.id,
                     "session_id": session_id,
                     "user_id": context.user_id,
+                    "reservation_ids": context.reservation_ids,
                     "correlation_id": correlation_id,
                 }
             )
@@ -480,6 +517,15 @@ class AIOrderService:
                 suggested_response=f"✅ *Order Confirmed!*\n\nOrder ID: {order.id[:8]}...\n\nThank you, {context.customer_name}! Your order has been received and will be processed shortly. 🎉",
             )
             
+        except InsufficientStockError as e:
+            # Deterministic stock error message for WhatsApp
+            return AIOrderResult(
+                success=False,
+                message=e.message,
+                context=context,
+                suggested_response=self._format_whatsapp_stock_error(e),
+                next_action="adjust_quantity",
+            )
         except ValidationError as e:
             return AIOrderResult(
                 success=False,
@@ -494,6 +540,9 @@ class AIOrderService:
             )
         except Exception as e:
             logger.error(f"Error creating AI order: {e}")
+            # Release reservations on failure
+            if context.reservation_ids:
+                self._release_reservations(context.reservation_ids, "order_creation_failed")
             return AIOrderResult(
                 success=False,
                 message="An error occurred. Please try again.",
@@ -538,6 +587,131 @@ class AIOrderService:
         """Check if order booking is enabled for business."""
         # This would query the ai_capabilities table
         return True
+    
+    # =========================================================================
+    # Inventory Helpers (Stock Validation for WhatsApp)
+    # =========================================================================
+    
+    def _generate_idempotency_key(self, context: AIOrderContext) -> str:
+        """
+        Generate idempotency key for WhatsApp retries.
+        Format: {session_id}:{product_ids}:{quantities}
+        """
+        item_keys = []
+        for item in context.items:
+            product_id = context.product_ids.get(item['name'], 'unknown')
+            variant_id = context.variant_ids.get(item['name'], '')
+            size = context.sizes.get(item['name'], '')
+            qty = item.get('quantity', 1)
+            item_keys.append(f"{product_id}:{variant_id}:{size}:{qty}")
+        
+        return f"{context.session_id}:{':'.join(item_keys)}"
+    
+    def _validate_and_reserve_stock(
+        self,
+        context: AIOrderContext,
+        idempotency_key: str,
+        correlation_id: Optional[str] = None
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Validate and reserve stock for WhatsApp order.
+        Uses idempotency to handle message retries.
+        """
+        try:
+            from .inventory_service import get_inventory_service
+            inventory = get_inventory_service()
+            
+            # Build stock items from context
+            stock_items = []
+            for item in context.items:
+                product_id = context.product_ids.get(item['name'])
+                if not product_id:
+                    continue  # Skip items without product mapping
+                
+                stock_items.append(StockItem(
+                    product_id=product_id,
+                    name=item['name'],
+                    quantity=item.get('quantity', 1),
+                    variant_id=context.variant_ids.get(item['name']),
+                    size=context.sizes.get(item['name']),
+                ))
+            
+            if not stock_items:
+                # No product mappings - skip stock validation
+                return {'success': True}
+            
+            # Reserve stock with WhatsApp TTL (5 minutes)
+            result = inventory.validate_and_reserve(
+                user_id=context.user_id,
+                items=stock_items,
+                source='whatsapp',
+                session_id=context.session_id,
+                correlation_id=correlation_id
+            )
+            
+            if not result.success:
+                return {
+                    'success': False,
+                    'message': result.message,
+                    'suggested_response': inventory.format_stock_error(result, for_whatsapp=True)
+                }
+            
+            # Store reservation IDs in context
+            context.reservation_ids = result.reservation_ids
+            
+            logger.info(
+                f"Stock reserved for WhatsApp order: {len(result.reservation_ids)} items",
+                extra={
+                    "session_id": context.session_id,
+                    "reservation_ids": result.reservation_ids,
+                    "correlation_id": correlation_id
+                }
+            )
+            
+            return {'success': True, 'reservation_ids': result.reservation_ids}
+            
+        except ImportError as e:
+            logger.warning(f"Inventory service not available: {e}")
+            return {'success': True}  # Don't block if inventory service unavailable
+        except Exception as e:
+            logger.error(f"Error validating stock: {e}", exc_info=True)
+            return {'success': True}  # Don't block orders on inventory errors
+    
+    def _release_reservations(
+        self,
+        reservation_ids: List[str],
+        reason: str = "cancelled"
+    ) -> None:
+        """Release stock reservations on cancellation/failure."""
+        try:
+            from .inventory_service import get_inventory_service
+            inventory = get_inventory_service()
+            inventory.release_reservation(
+                reservation_ids=reservation_ids,
+                reason=reason
+            )
+        except Exception as e:
+            logger.warning(f"Error releasing reservations: {e}")
+    
+    def _format_whatsapp_stock_error(self, error: InsufficientStockError) -> str:
+        """Format stock error for WhatsApp user."""
+        if not error.insufficient_items:
+            return "Sorry, some items are out of stock. Please adjust your order."
+        
+        item = error.insufficient_items[0]
+        variant_info = ""
+        if item.color and item.size:
+            variant_info = f" in {item.color} / {item.size}"
+        elif item.color:
+            variant_info = f" in {item.color}"
+        elif item.size:
+            variant_info = f" in Size {item.size}"
+        
+        return (
+            f"Sorry! Only {item.available} units of *{item.name}*{variant_info} "
+            f"are available. You requested {item.requested}.\n\n"
+            f"Would you like to order {item.available} instead? Reply YES or adjust your quantity."
+        )
 
 
 # =============================================================================
@@ -555,4 +729,5 @@ def get_ai_order_service() -> AIOrderService:
         _ai_order_service = AIOrderService()
     
     return _ai_order_service
+
 

@@ -43,7 +43,7 @@ const DEFAULT_SLIDES: BannerSlide[] = [
     buttonText: "Explore Deals",
     buttonLink: "#",
     imageUrl:
-      "https://images.unsplash.com/photo-1583391733975-dae3a71ef3cc?w=1200",
+      "https://images.pexels.com/photos/1926769/pexels-photo-1926769.jpeg?auto=compress&cs=tinysrgb&w=1200",
     gradientFrom: "#f97316",
     gradientTo: "#facc15",
   },
@@ -71,7 +71,13 @@ export default function CarouselBanner({
   const [isPaused, setIsPaused] = useState(false);
   const [touchStart, setTouchStart] = useState(0);
   const [touchEnd, setTouchEnd] = useState(0);
+  const [loadedImages, setLoadedImages] = useState<Set<string>>(new Set());
   const carouselRef = useRef<HTMLDivElement>(null);
+
+  // Track image loading
+  const handleImageLoad = (imageUrl: string) => {
+    setLoadedImages((prev) => new Set(prev).add(imageUrl));
+  };
 
   const goToSlide = useCallback(
     (index: number) => {
@@ -80,7 +86,7 @@ export default function CarouselBanner({
       setCurrentIndex(index);
       setTimeout(() => setIsAnimating(false), 600);
     },
-    [isAnimating]
+    [isAnimating],
   );
 
   const goToNext = useCallback(() => {
@@ -171,11 +177,23 @@ export default function CarouselBanner({
             >
               {/* Background Image with Overlay */}
               <div className={styles.carouselImageWrapper}>
+                {/* Skeleton Loading */}
+                {!loadedImages.has(slide.imageUrl) && (
+                  <div className={styles.carouselImageSkeleton}>
+                    <div className={styles.carouselSkeletonShimmer} />
+                  </div>
+                )}
+
                 <img
                   src={slide.imageUrl}
                   alt={slide.title}
-                  className={styles.carouselImage}
+                  className={`${styles.carouselImage} ${
+                    loadedImages.has(slide.imageUrl)
+                      ? styles.carouselImageLoaded
+                      : ""
+                  }`}
                   loading={index === 0 ? "eager" : "lazy"}
+                  onLoad={() => handleImageLoad(slide.imageUrl)}
                 />
                 <div className={styles.carouselImageOverlay} />
               </div>

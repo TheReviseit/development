@@ -161,6 +161,86 @@ export default function ProductDetailModal({
   const availableColors = getAvailableColors();
   console.log("Available colors to display:", availableColors);
 
+  // Helper: Parse sizeStocks - handles both string JSON and object
+  const parseSizeStocks = (
+    sizeStocks: Record<string, number> | string | undefined | null,
+  ): Record<string, number> => {
+    if (!sizeStocks) return {};
+    if (typeof sizeStocks === "object" && sizeStocks !== null) {
+      return sizeStocks as Record<string, number>;
+    }
+    if (typeof sizeStocks === "string") {
+      try {
+        const parsed = JSON.parse(sizeStocks);
+        if (typeof parsed === "object" && parsed !== null) {
+          return parsed as Record<string, number>;
+        }
+      } catch (e) {
+        console.warn("Failed to parse sizeStocks:", sizeStocks);
+      }
+    }
+    return {};
+  };
+
+  // Get stock for a specific size (checks variant first, then product)
+  const getStockForSize = (size: string): number => {
+    // If we have variants and a selected color, check variant sizeStocks
+    if (selectedColor && product?.variants && product.variants.length > 0) {
+      const matchingVariant = product.variants.find(
+        (v) => v.color === selectedColor,
+      );
+      if (matchingVariant) {
+        const variantSizeStocks = parseSizeStocks(matchingVariant.sizeStocks);
+        if (Object.keys(variantSizeStocks).length > 0) {
+          return variantSizeStocks[size] ?? 0;
+        }
+        // If variant has no sizeStocks, check variant stock directly
+        return matchingVariant.stock ?? 0;
+      }
+    }
+
+    // Fall back to product-level sizeStocks
+    if (product?.sizeStocks) {
+      const productSizeStocks = parseSizeStocks(product.sizeStocks);
+      return productSizeStocks[size] ?? 0;
+    }
+
+    // Default: assume in stock if no stock data
+    return 1;
+  };
+
+  // Check if a size is out of stock
+  const isSizeOutOfStock = (size: string): boolean => {
+    return getStockForSize(size) === 0;
+  };
+
+  // Check if the currently selected size is out of stock (for Add to Cart button)
+  const isSelectedSizeOutOfStock = selectedSize
+    ? isSizeOutOfStock(selectedSize)
+    : false;
+
+  // Auto-select first IN-STOCK size when modal opens or color changes
+  useEffect(() => {
+    if (availableSizes.length > 0 && product) {
+      // Find first in-stock size
+      const firstInStockSize = availableSizes.find((size) => {
+        const stock = getStockForSize(size);
+        return stock > 0;
+      });
+
+      // If current selection is out of stock, switch to first in-stock
+      if (selectedSize && isSizeOutOfStock(selectedSize) && firstInStockSize) {
+        setSelectedSize(firstInStockSize);
+      } else if (!selectedSize && firstInStockSize) {
+        // If no size selected, select first in-stock
+        setSelectedSize(firstInStockSize);
+      } else if (!firstInStockSize && availableSizes.length > 0) {
+        // All sizes are out of stock, select first one to show the disabled state
+        setSelectedSize(availableSizes[0]);
+      }
+    }
+  }, [availableSizes.join(","), product?.id, selectedColor]);
+
   const formatPrice = (price: number) => {
     return new Intl.NumberFormat("en-IN", {
       style: "currency",
@@ -170,7 +250,10 @@ export default function ProductDetailModal({
   };
 
   // Calculate discount percentage
-  const calculateDiscount = (originalPrice: number, offerPrice: number): number => {
+  const calculateDiscount = (
+    originalPrice: number,
+    offerPrice: number,
+  ): number => {
     if (originalPrice <= 0 || offerPrice >= originalPrice) return 0;
     return Math.round(((originalPrice - offerPrice) / originalPrice) * 100);
   };
@@ -293,7 +376,10 @@ export default function ProductDetailModal({
         }
 
         // Otherwise use variant's offer price if available, then base price
-        if (matchingVariant.compareAtPrice && matchingVariant.compareAtPrice > 0) {
+        if (
+          matchingVariant.compareAtPrice &&
+          matchingVariant.compareAtPrice > 0
+        ) {
           console.log(
             `[VariantOfferPrice] Offer price for ${selectedColor}${selectedSize ? ` / ${selectedSize}` : ""}:`,
             matchingVariant.compareAtPrice,
@@ -314,17 +400,17 @@ export default function ProductDetailModal({
     if (product.hasSizePricing && product.sizePrices && selectedSize) {
       // Try exact match first
       let sizePrice = product.sizePrices[selectedSize];
-      
+
       // If not found, try case-insensitive match
       if (sizePrice === undefined) {
         const sizeKey = Object.keys(product.sizePrices).find(
-          (key) => key.toLowerCase() === selectedSize.toLowerCase()
+          (key) => key.toLowerCase() === selectedSize.toLowerCase(),
         );
         if (sizeKey) {
           sizePrice = product.sizePrices[sizeKey];
         }
       }
-      
+
       if (sizePrice !== undefined && sizePrice > 0) {
         console.log(
           `[ProductSizePricing] Price for size "${selectedSize}":`,
@@ -342,7 +428,11 @@ export default function ProductDetailModal({
 
     // Fallback: Use compareAtPrice as selling price if available (Offer Price), otherwise base price
     // Only use compareAtPrice if size pricing is NOT enabled
-    if (!product.hasSizePricing && product.compareAtPrice && product.compareAtPrice > 0) {
+    if (
+      !product.hasSizePricing &&
+      product.compareAtPrice &&
+      product.compareAtPrice > 0
+    ) {
       return product.compareAtPrice;
     }
     return product.price;
@@ -436,14 +526,28 @@ export default function ProductDetailModal({
                 style={{ marginBottom: "16px" }}
               >
                 {product.compareAtPrice && product.compareAtPrice > 0 ? (
-                  <div style={{ display: "flex", alignItems: "center", gap: "12px", flexWrap: "wrap" }}>
+                  <div
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "12px",
+                      flexWrap: "wrap",
+                    }}
+                  >
                     <span
                       className={styles.novaOriginalPrice}
                       style={{ fontSize: "18px", order: 1 }}
                     >
                       {formatPrice(product.price)}
                     </span>
-                    <div style={{ display: "flex", alignItems: "center", gap: "8px", order: 2 }}>
+                    <div
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "8px",
+                        order: 2,
+                      }}
+                    >
                       <span
                         className={styles.modalPrice}
                         style={{ margin: 0, fontSize: "24px" }}
@@ -451,7 +555,10 @@ export default function ProductDetailModal({
                         {formatPrice(displayPrice)}
                       </span>
                       {(() => {
-                        const discount = calculateDiscount(product.price, displayPrice);
+                        const discount = calculateDiscount(
+                          product.price,
+                          displayPrice,
+                        );
                         return discount > 0 ? (
                           <span
                             style={{
@@ -547,47 +654,80 @@ export default function ProductDetailModal({
                 <div className={styles.modalOptions}>
                   <p className={styles.modalOptionLabel}>Size</p>
                   <div className={styles.modalOptionList}>
-                    {availableSizes.map((size) => (
-                      <button
-                        key={size}
-                        className={`${styles.modalOptionBtn} ${
-                          selectedSize === size
-                            ? styles.modalOptionBtnActive
-                            : ""
-                        }`}
-                        onClick={() => setSelectedSize(size)}
-                      >
-                        {size}
-                      </button>
-                    ))}
+                    {availableSizes.map((size) => {
+                      const outOfStock = isSizeOutOfStock(size);
+                      const stockCount = getStockForSize(size);
+                      return (
+                        <button
+                          key={size}
+                          className={`${styles.modalOptionBtn} ${
+                            selectedSize === size
+                              ? styles.modalOptionBtnActive
+                              : ""
+                          } ${outOfStock ? styles.modalOptionBtnOutOfStock : ""}`}
+                          onClick={() => !outOfStock && setSelectedSize(size)}
+                          disabled={outOfStock}
+                          title={
+                            outOfStock
+                              ? "Out of Stock"
+                              : `${stockCount} in stock`
+                          }
+                          aria-label={
+                            outOfStock
+                              ? `${size} - Out of Stock`
+                              : `Select size ${size}`
+                          }
+                        >
+                          {size}
+                          {outOfStock && (
+                            <span className={styles.sizeStrikethrough}></span>
+                          )}
+                        </button>
+                      );
+                    })}
                   </div>
                 </div>
               )}
 
-              {/* Quantity */}
-              <div className={styles.modalQuantity}>
+              {/* Quantity - Hidden/Disabled when out of stock */}
+              <div
+                className={`${styles.modalQuantity} ${isSelectedSizeOutOfStock ? styles.modalQuantityDisabled : ""}`}
+              >
                 <span className={styles.modalQuantityLabel}>Quantity</span>
                 <div className={styles.quantityControl}>
                   <button
-                    className={styles.quantityBtn}
-                    onClick={() => setQuantity(Math.max(1, quantity - 1))}
+                    className={`${styles.quantityBtn} ${isSelectedSizeOutOfStock ? styles.quantityBtnDisabled : ""}`}
+                    onClick={() =>
+                      !isSelectedSizeOutOfStock &&
+                      setQuantity(Math.max(1, quantity - 1))
+                    }
                     aria-label="Decrease quantity"
+                    disabled={isSelectedSizeOutOfStock}
                   >
                     −
                   </button>
                   <span className={styles.quantityValue}>{quantity}</span>
                   <button
-                    className={styles.quantityBtn}
-                    onClick={() => setQuantity(quantity + 1)}
+                    className={`${styles.quantityBtn} ${isSelectedSizeOutOfStock ? styles.quantityBtnDisabled : ""}`}
+                    onClick={() =>
+                      !isSelectedSizeOutOfStock && setQuantity(quantity + 1)
+                    }
                     aria-label="Increase quantity"
+                    disabled={isSelectedSizeOutOfStock}
                   >
                     +
                   </button>
                 </div>
               </div>
 
-              <button className={styles.modalAddBtn} onClick={handleAddToCart}>
-                Add to Cart — {formatPrice(displayPrice * quantity)}
+              <button
+                className={`${styles.modalAddBtn} ${isSelectedSizeOutOfStock ? styles.modalAddBtnDisabled : ""}`}
+                onClick={isSelectedSizeOutOfStock ? undefined : handleAddToCart}
+                disabled={isSelectedSizeOutOfStock}
+              >
+                {isSelectedSizeOutOfStock
+                  ? "Out of Stock"
+                  : `Add to Cart — ${formatPrice(displayPrice * quantity)}`}
               </button>
             </div>
           </motion.div>

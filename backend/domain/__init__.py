@@ -28,6 +28,25 @@ from .schemas import (
 
 from .entities import Order, OrderFingerprint
 
+from .inventory import (
+    ReservationStatus,
+    ReservationSource,
+    InventoryAction,
+    StockItem,
+    StockAvailability,
+    InsufficientStockItem,
+    ValidationResult,
+    Reservation,
+    ReservationResult,
+    InsufficientStockError,
+    ReservationError,
+    ReservationExpiredError,
+    DuplicateReservationError,
+    get_ttl_for_source,
+    calculate_expiry,
+    RESERVATION_TTL_BY_SOURCE,
+)
+
 __all__ = [
     # Error Codes
     "ErrorCode",
@@ -41,6 +60,11 @@ __all__ = [
     "OrderNotFoundError",
     "InvalidOrderStateError",
     "SlotUnavailableError",
+    # Inventory Exceptions
+    "InsufficientStockError",
+    "ReservationError",
+    "ReservationExpiredError",
+    "DuplicateReservationError",
     # Schemas
     "OrderItem",
     "OrderCreate",
@@ -52,5 +76,19 @@ __all__ = [
     # Entities
     "Order",
     "OrderFingerprint",
+    # Inventory
+    "ReservationStatus",
+    "ReservationSource",
+    "InventoryAction",
+    "StockItem",
+    "StockAvailability",
+    "InsufficientStockItem",
+    "ValidationResult",
+    "Reservation",
+    "ReservationResult",
+    "get_ttl_for_source",
+    "calculate_expiry",
+    "RESERVATION_TTL_BY_SOURCE",
 ]
+
 

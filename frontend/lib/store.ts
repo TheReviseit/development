@@ -303,6 +303,7 @@ export async function getStoreBySlug(
           imagePublicId: v.image_public_id || "",
           hasSizePricing: v.has_size_pricing || false,
           sizePrices: v.size_prices || {},
+          sizeStocks: v.size_stocks || {}, // CRITICAL FIX: was missing!
         };
       }),
       variantImages: {},

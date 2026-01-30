@@ -235,6 +235,10 @@ def create_order():
             quantity=item.get('quantity', 1),
             price=item.get('price'),
             notes=item.get('notes'),
+            product_id=item.get('product_id'),
+            variant_id=item.get('variant_id'),
+            size=item.get('size'),
+            color=item.get('color'),
         )
         for item in items_data
     ]

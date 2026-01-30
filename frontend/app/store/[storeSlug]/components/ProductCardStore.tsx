@@ -103,7 +103,148 @@ export default function ProductCardStore({
   const description = product.description || "";
   const colors = product.colors || [];
 
-  // Calculate display price based on size pricing and variants
+  // =========================================================================
+  // ENTERPRISE-GRADE STOCK STATUS CALCULATION
+  // Handles ALL inventory scenarios like Amazon/Flipkart
+  // =========================================================================
+  type StockStatus = {
+    isSoldOut: boolean; // TRUE if completely sold out
+    isLowStock: boolean; // TRUE if low stock warning needed
+    totalStock: number; // Total available stock
+    hasPartialStock: boolean; // TRUE if some sizes/colors are out
+    outOfStockSizes: string[]; // List of sizes that are sold out
+    outOfStockColors: string[]; // List of colors that are sold out
+    stockByVariant: Record<string, { stock: number; soldOut: boolean }>;
+  };
+
+  // Helper: Parse sizeStocks - handles both string JSON and object
+  const parseSizeStocks = (
+    sizeStocks: Record<string, number> | string | undefined | null,
+  ): Record<string, number> => {
+    if (!sizeStocks) return {};
+
+    // If it's already an object, return it
+    if (typeof sizeStocks === "object" && sizeStocks !== null) {
+      return sizeStocks as Record<string, number>;
+    }
+
+    // If it's a string, try to parse it as JSON
+    if (typeof sizeStocks === "string") {
+      try {
+        const parsed = JSON.parse(sizeStocks);
+        if (typeof parsed === "object" && parsed !== null) {
+          return parsed as Record<string, number>;
+        }
+      } catch (e) {
+        console.warn("Failed to parse sizeStocks:", sizeStocks);
+      }
+    }
+
+    return {};
+  };
+
+  const getStockStatus = (): StockStatus => {
+    const status: StockStatus = {
+      isSoldOut: false,
+      isLowStock: false,
+      totalStock: 0,
+      hasPartialStock: false,
+      outOfStockSizes: [],
+      outOfStockColors: [],
+      stockByVariant: {},
+    };
+
+    // CASE 1: Product with variants - check variant stock
+    if (product.variants && product.variants.length > 0) {
+      let totalVariantStock = 0;
+      const allSizesStock: Record<string, number> = {};
+      const allColorsStock: Record<string, number> = {};
+
+      product.variants.forEach((variant) => {
+        let variantTotalStock = 0;
+
+        // Parse sizeStocks (handles JSON string from DB)
+        const variantSizeStocks = parseSizeStocks(variant.sizeStocks);
+
+        // Check if variant has size-level stock
+        if (Object.keys(variantSizeStocks).length > 0) {
+          // CASE 4: Variant with size_stocks
+          Object.entries(variantSizeStocks).forEach(([size, stock]) => {
+            const stockNum =
+              typeof stock === "number" ? stock : parseInt(String(stock)) || 0;
+            variantTotalStock += stockNum;
+            allSizesStock[size] = (allSizesStock[size] || 0) + stockNum;
+          });
+        } else {
+          // CASE 3: Variant with stock_quantity only
+          variantTotalStock = variant.stock || 0;
+        }
+
+        // Track by color
+        if (variant.color) {
+          allColorsStock[variant.color] =
+            (allColorsStock[variant.color] || 0) + variantTotalStock;
+          status.stockByVariant[variant.color] = {
+            stock: variantTotalStock,
+            soldOut: variantTotalStock === 0,
+          };
+        }
+
+        totalVariantStock += variantTotalStock;
+      });
+
+      status.totalStock = totalVariantStock;
+
+      // Detect out of stock sizes
+      Object.entries(allSizesStock).forEach(([size, stock]) => {
+        if (stock === 0) status.outOfStockSizes.push(size);
+      });
+
+      // Detect out of stock colors
+      Object.entries(allColorsStock).forEach(([color, stock]) => {
+        if (stock === 0) status.outOfStockColors.push(color);
+      });
+
+      status.hasPartialStock =
+        status.outOfStockSizes.length > 0 || status.outOfStockColors.length > 0;
+    }
+    // CASE 2: Product with size_stocks (no variants)
+    else {
+      // Parse product sizeStocks (handles JSON string from DB)
+      const productSizeStocks = parseSizeStocks(product.sizeStocks);
+
+      if (Object.keys(productSizeStocks).length > 0) {
+        let totalSizeStock = 0;
+        Object.entries(productSizeStocks).forEach(([size, stock]) => {
+          const stockNum =
+            typeof stock === "number" ? stock : parseInt(String(stock)) || 0;
+          totalSizeStock += stockNum;
+          if (stockNum === 0) {
+            status.outOfStockSizes.push(size);
+          }
+        });
+        status.totalStock = totalSizeStock;
+        status.hasPartialStock = status.outOfStockSizes.length > 0;
+      }
+      // CASE 1: Simple product - check available or stock_quantity
+      else if (product.available === false) {
+        status.totalStock = 0;
+      } else {
+        // Default: assume in stock if no stock data provided
+        status.totalStock = 1;
+      }
+    }
+
+    // Determine final status
+    status.isSoldOut = status.totalStock === 0;
+
+    status.isLowStock =
+      !status.isSoldOut && status.totalStock > 0 && status.totalStock <= 15;
+
+    return status;
+  };
+
+  const stockStatus = getStockStatus();
   const getDisplayPriceInfo = (): {
     price: number;
     hasRange: boolean;
@@ -779,7 +920,7 @@ export default function ProductCardStore({
             alt={product.name}
             className={`${styles.novaImage} ${
               isImageLoaded ? styles.novaImageLoaded : ""
-            }`}
+            } ${stockStatus.isSoldOut ? styles.novaImageSoldOut : ""}`}
             loading="lazy"
             onLoad={() => setIsImageLoaded(true)}
             onError={() => setIsImageLoaded(true)}
@@ -796,6 +937,24 @@ export default function ProductCardStore({
               <circle cx="8.5" cy="8.5" r="1.5" />
               <path d="M21 15l-5-5L5 21" />
             </svg>
+          </div>
+        )}
+
+        {/* SOLD OUT Badge - Top Right Corner */}
+        {stockStatus.isSoldOut && (
+          <div className={styles.soldOutBadge}>
+            <span>SOLD OUT</span>
+          </div>
+        )}
+
+        {/* LOW STOCK Warning Badge */}
+        {stockStatus.isLowStock && !stockStatus.isSoldOut && (
+          <div className={styles.lowStockBadge}>
+            <span>
+              {stockStatus.totalStock <= 5
+                ? `Only ${stockStatus.totalStock} left!`
+                : "Only few left!"}
+            </span>
           </div>
         )}
       </div>
@@ -872,11 +1031,14 @@ export default function ProductCardStore({
         >
           {quantityInCart === 0 ? (
             <motion.button
-              className={styles.novaCartIconBtn}
-              onClick={handleAddToCart}
-              whileHover={{ scale: 1.05 }}
-              whileTap={{ scale: 0.95 }}
-              aria-label="Add to cart"
+              className={`${styles.novaCartIconBtn} ${stockStatus.isSoldOut ? styles.novaCartIconBtnDisabled : ""}`}
+              onClick={stockStatus.isSoldOut ? undefined : handleAddToCart}
+              whileHover={stockStatus.isSoldOut ? {} : { scale: 1.05 }}
+              whileTap={stockStatus.isSoldOut ? {} : { scale: 0.95 }}
+              aria-label={
+                stockStatus.isSoldOut ? "Out of stock" : "Add to cart"
+              }
+              disabled={stockStatus.isSoldOut}
             >
               <img
                 src="/icons/cart.svg"
@@ -909,14 +1071,20 @@ export default function ProductCardStore({
           )}
 
           <motion.button
-            className={`${styles.novaBuyNowBtn} ${isBuyNowLoading ? styles.novaBuyNowBtnLoading : ""}`}
-            onClick={handleBuyNow}
-            whileHover={{ scale: isBuyNowLoading ? 1 : 1.02 }}
-            whileTap={{ scale: isBuyNowLoading ? 1 : 0.98 }}
-            disabled={isBuyNowLoading}
+            className={`${styles.novaBuyNowBtn} ${isBuyNowLoading ? styles.novaBuyNowBtnLoading : ""} ${stockStatus.isSoldOut ? styles.novaBuyNowBtnDisabled : ""}`}
+            onClick={stockStatus.isSoldOut ? undefined : handleBuyNow}
+            whileHover={
+              stockStatus.isSoldOut ? {} : { scale: isBuyNowLoading ? 1 : 1.02 }
+            }
+            whileTap={
+              stockStatus.isSoldOut ? {} : { scale: isBuyNowLoading ? 1 : 0.98 }
+            }
+            disabled={isBuyNowLoading || stockStatus.isSoldOut}
           >
             {isBuyNowLoading ? (
               <span className={styles.buyNowSpinner}></span>
+            ) : stockStatus.isSoldOut ? (
+              "Sold Out"
             ) : (
               "Buy Now"
             )}

@@ -14,6 +14,11 @@ import {
   ShieldCheck,
   Trash2,
   Check,
+  AlertTriangle,
+  Package,
+  X,
+  Plus,
+  Minus,
 } from "lucide-react";
 import { AnimatePresence, motion } from "framer-motion";
 
@@ -52,6 +57,7 @@ export default function CheckoutPage() {
     isHydrated,
     removeFromCart,
     updateItemOptions,
+    updateQuantity,
   } = useCart();
 
   const [formData, setFormData] = useState({
@@ -74,6 +80,13 @@ export default function CheckoutPage() {
   const [loadingSettings, setLoadingSettings] = useState(true);
   const [shippingCost, setShippingCost] = useState(0);
   const [wantInvoice, setWantInvoice] = useState(false);
+  const [stockError, setStockError] = useState<{
+    show: boolean;
+    productName: string;
+    available: number;
+    requested: number;
+    variantInfo?: string;
+  } | null>(null);
 
   // Fetch payment settings
   useEffect(() => {
@@ -159,10 +172,67 @@ export default function CheckoutPage() {
     }).format(price);
   };
 
+  // Validate stock availability before placing order
+  const validateStock = async (): Promise<{
+    valid: boolean;
+    error?: string;
+  }> => {
+    try {
+      // Build items for validation - include product_id if available
+      const validationItems = cartItems.map((item) => ({
+        product_id: item.productId || item.id, // Use productId or id
+        variant_id: null, // Variant determined by color/size in backend
+        name: item.name,
+        quantity: item.quantity,
+        size: item.options?.size || null,
+        color: item.options?.color || null,
+      }));
+
+      const response = await fetch(`/api/store/${storeSlug}/validate-stock`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          user_id: storeSlug,
+          items: validationItems,
+        }),
+      });
+
+      const result = await response.json();
+
+      if (!result.valid) {
+        // Format error message for user
+        const insufficientItems = result.insufficient_items || [];
+        if (insufficientItems.length > 0) {
+          const item = insufficientItems[0];
+          const variantInfo = [item.color, item.size]
+            .filter(Boolean)
+            .join(" / ");
+          const errorMsg = `Only ${item.available} units of ${item.name}${variantInfo ? ` (${variantInfo})` : ""} available. You requested ${item.requested}.`;
+          return { valid: false, error: errorMsg };
+        }
+        return {
+          valid: false,
+          error: result.message || "Some items are out of stock",
+        };
+      }
+
+      return { valid: true };
+    } catch (error) {
+      console.error("Error validating stock:", error);
+      // If validation fails due to network error, allow order (graceful degradation)
+      // Backend will still validate
+      return { valid: true };
+    }
+  };
+
   const createBackendOrder = async (
     paymentId?: string,
     source: "manual" | "api" | "cod" = "manual",
-  ) => {
+  ): Promise<{
+    orderId: string | null;
+    error?: string;
+    stockError?: boolean;
+  }> => {
     try {
       const fullAddress = `${formData.address}, ${formData.city} - ${formData.pincode}`;
 
@@ -182,6 +252,7 @@ export default function CheckoutPage() {
           imageUrl: item.imageUrl,
           size: item.options?.size || null,
           color: item.options?.color || null,
+          product_id: item.productId || item.id, // Include product ID for stock validation
           notes: `${item.options?.size ? `Size: ${item.options.size}` : ""}${
             item.options?.color ? `, Color: ${item.options.color}` : ""
           }`,
@@ -201,15 +272,25 @@ export default function CheckoutPage() {
       });
 
       const result = await response.json();
-      if (!result.success) {
-        console.error("Failed to create order:", result.error);
-        // We continue even if API fails, to ensure user experience (WhatsApp opens)
-        // But ideally we should show an error or retry logic
+
+      // Check for stock validation error (HTTP 422)
+      if (response.status === 422 && result.insufficient_items) {
+        console.error("Stock validation failed:", result.error);
+        return { orderId: null, error: result.error, stockError: true };
       }
-      return result.data?.id;
+
+      if (!result.success && !result.data?.id) {
+        console.error("Failed to create order:", result.error);
+        return {
+          orderId: null,
+          error: result.error || "Failed to create order",
+        };
+      }
+
+      return { orderId: result.data?.id };
     } catch (error) {
       console.error("Error creating order:", error);
-      return null;
+      return { orderId: null, error: "Network error. Please try again." };
     }
   };
 
@@ -223,8 +304,50 @@ export default function CheckoutPage() {
     setLoading(true);
 
     try {
-      // 1. Create order in backend first (for tracking)
-      const orderId = await createBackendOrder(undefined, "manual");
+      // 1. Validate stock BEFORE placing order (enterprise-grade check)
+      const stockCheck = await validateStock();
+      if (!stockCheck.valid) {
+        // Show custom modal instead of alert
+        const errorMatch = stockCheck.error?.match(
+          /Only (\d+) units of (.+?) available\. You requested (\d+)/,
+        );
+        if (errorMatch) {
+          const variantMatch = stockCheck.error?.match(/\(([^)]+)\)/);
+          setStockError({
+            show: true,
+            available: parseInt(errorMatch[1]),
+            productName: errorMatch[2].replace(/\s*\([^)]*\)/, ""),
+            requested: parseInt(errorMatch[3]),
+            variantInfo: variantMatch ? variantMatch[1] : undefined,
+          });
+        }
+        setLoading(false);
+        return;
+      }
+
+      // 2. Create order in backend (for tracking) - backend also validates stock
+      const result = await createBackendOrder(undefined, "manual");
+
+      // Handle stock error from backend (double protection)
+      if (result.stockError) {
+        const errorMatch = result.error?.match(
+          /Only (\d+) units of (.+?) available\. You requested (\d+)/,
+        );
+        if (errorMatch) {
+          const variantMatch = result.error?.match(/\(([^)]+)\)/);
+          setStockError({
+            show: true,
+            available: parseInt(errorMatch[1]),
+            productName: errorMatch[2].replace(/\s*\([^)]*\)/, ""),
+            requested: parseInt(errorMatch[3]),
+            variantInfo: variantMatch ? variantMatch[1] : undefined,
+          });
+        }
+        setLoading(false);
+        return;
+      }
+
+      const orderId = result.orderId;
 
       // 2. Construct WhatsApp message
       const orderNum = orderId ? `#${orderId.slice(0, 8).toUpperCase()}` : "";
@@ -278,21 +401,70 @@ export default function CheckoutPage() {
 
     setLoading(true);
 
-    // 1. Create Order in Backend with source 'cod'
-    // We pass "COD" as paymentId just to mark it clearer in notes if needed, or rely on source
-    // But duplicate "COD" in notes might be redundant if source is 'cod'.
-    // Let's rely on source='cod' in backend.
-    await createBackendOrder("COD", "cod");
+    try {
+      // 1. Validate stock BEFORE placing order (frontend check)
+      const stockCheck = await validateStock();
+      if (!stockCheck.valid) {
+        const errorMatch = stockCheck.error?.match(
+          /Only (\d+) units of (.+?) available\. You requested (\d+)/,
+        );
+        if (errorMatch) {
+          const variantMatch = stockCheck.error?.match(/\(([^)]+)\)/);
+          setStockError({
+            show: true,
+            available: parseInt(errorMatch[1]),
+            productName: errorMatch[2].replace(/\s*\([^)]*\)/, ""),
+            requested: parseInt(errorMatch[3]),
+            variantInfo: variantMatch ? variantMatch[1] : undefined,
+          });
+        }
+        setLoading(false);
+        return;
+      }
 
-    // Show success animation
-    setShowSuccess(true);
-    setLoading(false);
-    clearCart();
+      // 2. Create Order in Backend with source 'cod'
+      // Backend also validates stock as safety net
+      const result = await createBackendOrder("COD", "cod");
 
-    // Redirect after delay
-    setTimeout(() => {
-      router.push(`/store/${storeSlug}`);
-    }, 3500);
+      // Handle stock error from backend
+      if (result.stockError) {
+        const errorMatch = result.error?.match(
+          /Only (\d+) units of (.+?) available\. You requested (\d+)/,
+        );
+        if (errorMatch) {
+          const variantMatch = result.error?.match(/\(([^)]+)\)/);
+          setStockError({
+            show: true,
+            available: parseInt(errorMatch[1]),
+            productName: errorMatch[2].replace(/\s*\([^)]*\)/, ""),
+            requested: parseInt(errorMatch[3]),
+            variantInfo: variantMatch ? variantMatch[1] : undefined,
+          });
+        }
+        setLoading(false);
+        return;
+      }
+
+      if (!result.orderId) {
+        alert(result.error || "Failed to place order. Please try again.");
+        setLoading(false);
+        return;
+      }
+
+      // Show success animation
+      setShowSuccess(true);
+      setLoading(false);
+      clearCart();
+
+      // Redirect after delay
+      setTimeout(() => {
+        router.push(`/store/${storeSlug}`);
+      }, 3500);
+    } catch (error) {
+      console.error("Error placing COD order:", error);
+      alert("Something went wrong. Please try again.");
+      setLoading(false);
+    }
   };
 
   const handleOnlinePayment = async () => {
@@ -310,6 +482,26 @@ export default function CheckoutPage() {
     setLoading(true);
 
     try {
+      // 1. Validate stock BEFORE processing payment (enterprise-grade check)
+      const stockCheck = await validateStock();
+      if (!stockCheck.valid) {
+        const errorMatch = stockCheck.error?.match(
+          /Only (\d+) units of (.+?) available\. You requested (\d+)/,
+        );
+        if (errorMatch) {
+          const variantMatch = stockCheck.error?.match(/\(([^)]+)\)/);
+          setStockError({
+            show: true,
+            available: parseInt(errorMatch[1]),
+            productName: errorMatch[2].replace(/\s*\([^)]*\)/, ""),
+            requested: parseInt(errorMatch[3]),
+            variantInfo: variantMatch ? variantMatch[1] : undefined,
+          });
+        }
+        setLoading(false);
+        return;
+      }
+
       const scriptLoaded = await loadRazorpayScript();
       if (!scriptLoaded) {
         alert("Failed to load payment gateway. Please try again.");
@@ -341,8 +533,26 @@ export default function CheckoutPage() {
           // Payment Successful
           const paymentId = response.razorpay_payment_id;
 
-          // Create Order in Backend with API source
-          await createBackendOrder(paymentId, "api");
+          // Create Order in Backend with API source - also validates stock
+          const orderResult = await createBackendOrder(paymentId, "api");
+
+          // Handle rare case of stock issue after payment
+          // This can happen if someone else bought the item between validation and payment
+          if (orderResult.stockError) {
+            alert(
+              `⚠️ Order Issue\n\nPayment received (ID: ${paymentId}), but ${orderResult.error}\n\nPlease contact the store for a refund or alternative products.`,
+            );
+            setLoading(false);
+            return;
+          }
+
+          if (!orderResult.orderId) {
+            alert(
+              `Payment received (ID: ${paymentId}), but order creation failed. Please contact the store with your payment ID.`,
+            );
+            setLoading(false);
+            return;
+          }
 
           // Show success animation
           setShowSuccess(true);
@@ -411,6 +621,90 @@ export default function CheckoutPage() {
                 Your order has been successfully placed. <br />
                 Redirecting you to the store...
               </p>
+            </motion.div>
+          </motion.div>
+        )}
+
+        {/* Stock Error Modal */}
+        {stockError?.show && (
+          <motion.div
+            className={styles.stockErrorOverlay}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            onClick={() => setStockError(null)}
+          >
+            <motion.div
+              className={styles.stockErrorModal}
+              initial={{ scale: 0.9, opacity: 0, y: 20 }}
+              animate={{ scale: 1, opacity: 1, y: 0 }}
+              exit={{ scale: 0.9, opacity: 0, y: 20 }}
+              transition={{ type: "spring", damping: 20 }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className={styles.stockErrorHeader}>
+                <div className={styles.stockErrorIconWrapper}>
+                  <AlertTriangle size={36} strokeWidth={2.5} />
+                </div>
+                <h2 className={styles.stockErrorTitle}>
+                  Limited Stock Available
+                </h2>
+              </div>
+
+              <div className={styles.stockErrorBody}>
+                <div className={styles.stockErrorMessage}>
+                  <p className={styles.stockErrorText}>
+                    Sorry, we only have limited stock for
+                  </p>
+                  <p className={styles.stockErrorText}>
+                    <strong>{stockError.productName}</strong>
+                    {stockError.variantInfo && (
+                      <span style={{ color: "#718096", marginLeft: "6px" }}>
+                        ({stockError.variantInfo})
+                      </span>
+                    )}
+                  </p>
+
+                  <div className={styles.stockErrorHighlight}>
+                    <div className={styles.stockErrorNumbers}>
+                      <div className={styles.stockAvailable}>
+                        <Package size={20} />
+                        <span>{stockError.available}</span>
+                        <span style={{ fontSize: "14px", fontWeight: 500 }}>
+                          available
+                        </span>
+                      </div>
+                      <div className={styles.stockErrorDivider} />
+                      <div className={styles.stockRequested}>
+                        <ShoppingBag size={20} />
+                        <span>{stockError.requested}</span>
+                        <span style={{ fontSize: "14px", fontWeight: 500 }}>
+                          requested
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div className={styles.stockErrorActions}>
+                  <button
+                    className={`${styles.stockErrorButton} ${styles.stockErrorButtonSecondary}`}
+                    onClick={() => {
+                      setStockError(null);
+                      router.push(`/store/${storeSlug}`);
+                    }}
+                  >
+                    <ArrowLeft size={18} />
+                    Back to Store
+                  </button>
+                  <button
+                    className={`${styles.stockErrorButton} ${styles.stockErrorButtonPrimary}`}
+                    onClick={() => setStockError(null)}
+                  >
+                    Adjust Cart ❤️
+                  </button>
+                </div>
+              </div>
             </motion.div>
           </motion.div>
         )}
@@ -576,8 +870,38 @@ export default function CheckoutPage() {
                       )}
 
                       <div className={styles.itemMeta}>
-                        <span>Qty: {item.quantity}</span>
-                        <span>{formatPrice(item.price * item.quantity)}</span>
+                        <div className={styles.quantityControls}>
+                          <button
+                            type="button"
+                            className={styles.quantityButton}
+                            onClick={() =>
+                              updateQuantity(
+                                item.id,
+                                Math.max(1, item.quantity - 1),
+                              )
+                            }
+                            disabled={item.quantity <= 1}
+                            aria-label="Decrease quantity"
+                          >
+                            <Minus size={14} />
+                          </button>
+                          <span className={styles.quantityValue}>
+                            {item.quantity}
+                          </span>
+                          <button
+                            type="button"
+                            className={styles.quantityButton}
+                            onClick={() =>
+                              updateQuantity(item.id, item.quantity + 1)
+                            }
+                            aria-label="Increase quantity"
+                          >
+                            <Plus size={14} />
+                          </button>
+                        </div>
+                        <span className={styles.itemPrice}>
+                          {formatPrice(item.price * item.quantity)}
+                        </span>
                       </div>
                     </div>
                     <button

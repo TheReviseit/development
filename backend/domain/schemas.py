@@ -43,6 +43,7 @@ class OrderSource(str, Enum):
     AI = "ai"              # AI chatbot
     API = "api"            # External API
     WEBHOOK = "webhook"    # WhatsApp/integration
+    COD = "cod"            # Cash on Delivery orders
 
 
 class OrderItem(BaseModel):

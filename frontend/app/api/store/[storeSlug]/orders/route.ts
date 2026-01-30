@@ -23,6 +23,156 @@ interface OrderItem {
   size?: string;
   color?: string;
   notes?: string;
+  product_id?: string;
+  variant_id?: string;
+}
+
+interface InsufficientItem {
+  name: string;
+  requested: number;
+  available: number;
+  size?: string;
+  color?: string;
+}
+
+// Validate stock availability for all items
+// Based on schema:
+// - Products have size_stocks JSONB like {"XXL": 2, "Free Size": 2}
+// - Product variants have size_stocks JSONB like {"L": 30, "M": 30}
+// - products.stock_quantity is often 0 when size_stocks is used
+async function validateStockForOrder(
+  supabase: ReturnType<typeof getSupabase>,
+  storeSlug: string,
+  items: OrderItem[],
+): Promise<{ valid: boolean; insufficient?: InsufficientItem[] }> {
+  const insufficient: InsufficientItem[] = [];
+
+  for (const item of items) {
+    // Try to find product by name if no product_id provided
+    let productId = item.product_id;
+    let product: any = null;
+
+    if (!productId) {
+      // Look up product by name
+      const { data } = await supabase
+        .from("products")
+        .select("id, stock_quantity, size_stocks, has_size_pricing")
+        .eq("user_id", storeSlug)
+        .ilike("name", item.name)
+        .single();
+
+      if (data) {
+        product = data;
+        productId = data.id;
+      }
+    } else {
+      // Fetch product by ID
+      const { data } = await supabase
+        .from("products")
+        .select("id, stock_quantity, size_stocks, has_size_pricing")
+        .eq("id", productId)
+        .single();
+      product = data;
+    }
+
+    if (!productId || !product) continue; // Can't validate without product
+
+    let availableStock = 0;
+
+    // Check if product has variants with matching color
+    if (item.color) {
+      const { data: variants } = await supabase
+        .from("product_variants")
+        .select("id, color, size_stocks, stock_quantity, has_size_pricing")
+        .eq("product_id", productId)
+        .eq("user_id", storeSlug)
+        .eq("is_deleted", false);
+
+      if (variants && variants.length > 0) {
+        // Find matching variant by color (case-insensitive)
+        const matchingVariant = variants.find(
+          (v) => v.color?.toLowerCase() === item.color?.toLowerCase(),
+        );
+
+        if (matchingVariant) {
+          // Parse size_stocks if it's a string
+          let sizeStocks = matchingVariant.size_stocks;
+          if (typeof sizeStocks === "string") {
+            try {
+              sizeStocks = JSON.parse(sizeStocks);
+            } catch {
+              sizeStocks = {};
+            }
+          }
+
+          // Check size_stocks JSONB for specific size
+          if (item.size && sizeStocks && typeof sizeStocks === "object") {
+            // Try exact match first, then case-insensitive
+            availableStock = sizeStocks[item.size] ?? 0;
+            if (availableStock === 0) {
+              const sizeKey = Object.keys(sizeStocks).find(
+                (k) => k.toLowerCase() === item.size?.toLowerCase(),
+              );
+              if (sizeKey) availableStock = sizeStocks[sizeKey] ?? 0;
+            }
+          } else {
+            // No size specified, use variant stock_quantity
+            availableStock = matchingVariant.stock_quantity || 0;
+          }
+        }
+      }
+    }
+
+    // If no variant stock found, check product-level size_stocks
+    if (availableStock === 0 && item.size) {
+      // Parse size_stocks if it's a string
+      let sizeStocks = product.size_stocks;
+      if (typeof sizeStocks === "string") {
+        try {
+          sizeStocks = JSON.parse(sizeStocks);
+        } catch {
+          sizeStocks = {};
+        }
+      }
+
+      if (sizeStocks && typeof sizeStocks === "object") {
+        // Try exact match first
+        availableStock = sizeStocks[item.size] ?? 0;
+        // Try case-insensitive match
+        if (availableStock === 0) {
+          const sizeKey = Object.keys(sizeStocks).find(
+            (k) => k.toLowerCase() === item.size?.toLowerCase(),
+          );
+          if (sizeKey) availableStock = sizeStocks[sizeKey] ?? 0;
+        }
+      }
+    }
+
+    // Final fallback to product stock_quantity (if no size-based stock)
+    if (availableStock === 0 && !item.size) {
+      availableStock = product.stock_quantity || 0;
+    }
+
+    console.log(
+      `📦 Stock check for "${item.name}" (size: ${item.size}, color: ${item.color}): ${availableStock} available, ${item.quantity} requested`,
+    );
+
+    // Check if sufficient stock
+    if (availableStock < item.quantity) {
+      insufficient.push({
+        name: item.name,
+        requested: item.quantity,
+        available: Math.max(0, availableStock),
+        size: item.size,
+        color: item.color,
+      });
+    }
+  }
+
+  return {
+    valid: insufficient.length === 0,
+    insufficient: insufficient.length > 0 ? insufficient : undefined,
+  };
 }
 
 // POST - Create a new order from public store (no auth required)
@@ -50,6 +200,7 @@ export async function POST(
       status = "pending",
       source = "manual",
       notes,
+      skip_stock_check = false, // Allow bypassing for special cases
     } = body;
 
     // Validate required fields
@@ -83,55 +234,105 @@ export async function POST(
       }
     }
 
-    // Calculate total quantity
-    const total_quantity = items.reduce(
-      (sum: number, item: OrderItem) => sum + item.quantity,
-      0,
+    // =========================================================================
+    // CRITICAL FIX: Route through Flask backend for proper inventory management
+    // The Flask backend handles: reserve → create order → confirm (deduct stock)
+    // =========================================================================
+    const BACKEND_URL =
+      process.env.NODE_ENV === "development"
+        ? "http://localhost:5000"
+        : process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
+
+    // Prepare order data for Flask backend
+    const flaskOrderData = {
+      user_id: storeSlug,
+      customer_name,
+      customer_phone,
+      customer_address,
+      items: items.map((item: OrderItem) => ({
+        name: item.name,
+        quantity: item.quantity,
+        price: item.price,
+        product_id: item.product_id,
+        variant_id: item.variant_id,
+        size: item.size,
+        color: item.color,
+        notes: item.notes,
+      })),
+      source,
+      notes,
+    };
+
+    console.log(
+      `📦 Store Orders API: Routing order to Flask backend for store ${storeSlug}`,
     );
 
-    const supabase = getSupabase();
+    // Call Flask backend - this handles full inventory flow
+    const backendResponse = await fetch(`${BACKEND_URL}/api/orders`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-User-Id": storeSlug,
+      },
+      body: JSON.stringify(flaskOrderData),
+    });
 
-    // Generate unique ID and order_id with consistent format
-    // Format: order_id = First 8 chars of UUID, UPPERCASE (e.g., "28C2CF22")
-    // This matches the backend Python format and DB trigger format
-    const orderId = randomUUID();
-    const shortOrderId = generateOrderId(orderId);
+    const backendResult = await backendResponse.json();
 
-    // Create order with pre-generated IDs
-    const { data: orderData, error: orderError } = await supabase
-      .from("orders")
-      .insert({
-        id: orderId,
-        order_id: shortOrderId,
-        user_id: storeSlug, // storeSlug is the user_id
-        customer_name,
-        customer_phone,
-        customer_address,
-        customer_email,
-        items,
-        total_quantity,
-        status,
-        source,
-        notes,
-      })
-      .select()
-      .single();
+    // Handle insufficient stock error from Flask backend
+    if (!backendResponse.ok) {
+      // Check for stock validation errors
+      if (
+        backendResult.error?.code === "INSUFFICIENT_STOCK" ||
+        backendResult.error?.message?.includes("stock") ||
+        backendResult.error?.message?.includes("available")
+      ) {
+        console.log(
+          `⚠️ Stock validation failed for store ${storeSlug}:`,
+          backendResult.error,
+        );
+        return NextResponse.json(
+          {
+            success: false,
+            error: backendResult.error?.message || "Insufficient stock",
+            insufficient_items: backendResult.error?.insufficient_items || [],
+          },
+          { status: 422 },
+        );
+      }
 
-    if (orderError) {
-      console.error("Error creating order:", orderError);
+      // Handle other errors
+      console.error("Flask backend error:", backendResult);
       return NextResponse.json(
-        { error: "Failed to create order" },
+        {
+          success: false,
+          error: backendResult.error?.message || "Failed to create order",
+        },
+        { status: backendResponse.status },
+      );
+    }
+
+    // Extract order data from Flask response
+    const orderData = backendResult.data;
+
+    if (!orderData || !orderData.id) {
+      console.error("Flask backend returned no order data:", backendResult);
+      return NextResponse.json(
+        { error: "Failed to create order - no order ID returned" },
         { status: 500 },
       );
     }
 
     console.log(
-      `📦 Store Orders API: Created order ${orderData.id} for store ${storeSlug}`,
+      `✅ Store Orders API: Order ${orderData.id} created with stock deducted for store ${storeSlug}`,
     );
 
     // ------------------------------------------------------------------
     // AUTO-SEND INVOICE EMAIL (Non-blocking, fire-and-forget)
+    // Need supabase client for business details and email tracking
     // ------------------------------------------------------------------
+    const supabase = getSupabase();
+
     if (customer_email) {
       // Fire-and-forget: Don't await this - it runs in background
       (async () => {

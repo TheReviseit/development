@@ -88,11 +88,15 @@ class OrderError(Exception):
         return response
     
     def to_log_dict(self) -> Dict[str, Any]:
-        """Convert to logging dict (includes all context)."""
+        """Convert to logging dict (includes all context).
+        
+        Note: Uses 'error_message' instead of 'message' to avoid
+        conflict with Python logging's reserved LogRecord keys.
+        """
         return {
             "error_type": self.__class__.__name__,
             "code": self.code.value,
-            "message": self.message,
+            "error_message": self.message,  # Renamed to avoid LogRecord conflict
             "details": self.details,
             "correlation_id": self.correlation_id,
             "http_status": self.http_status,
