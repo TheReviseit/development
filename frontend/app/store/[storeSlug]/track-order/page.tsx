@@ -48,7 +48,7 @@ export default function TrackOrderPage() {
   const router = useRouter();
   const storeSlug = params.storeSlug as string;
 
-  const [phoneNumber, setPhoneNumber] = useState("");
+  const [orderId, setOrderId] = useState("");
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -162,8 +162,8 @@ export default function TrackOrderPage() {
 
   const handleSearch = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!phoneNumber.trim()) {
-      setError("Please enter a phone number");
+    if (!orderId.trim()) {
+      setError("Please enter an order ID");
       return;
     }
 
@@ -173,22 +173,22 @@ export default function TrackOrderPage() {
 
     try {
       const response = await fetch(
-        `/api/orders/track?phone=${encodeURIComponent(phoneNumber)}&storeSlug=${storeSlug}`,
+        `/api/orders/track?orderId=${encodeURIComponent(orderId)}&storeSlug=${storeSlug}`,
       );
 
       const data = await response.json();
 
       if (!response.ok) {
-        throw new Error(data.error || "Failed to fetch orders");
+        throw new Error(data.error || "Failed to fetch order");
       }
 
       if (data.success) {
         setOrders(data.data || []);
         if (data.data.length === 0) {
-          setError("No orders found for this phone number");
+          setError("No order found with this ID");
         }
       } else {
-        throw new Error(data.error || "Failed to fetch orders");
+        throw new Error(data.error || "Failed to fetch order");
       }
     } catch (err) {
       setError(
@@ -222,7 +222,7 @@ export default function TrackOrderPage() {
           </button>
           <h1 className={styles.title}>Track Your Order</h1>
           <p className={styles.subtitle}>
-            Enter your phone number to view all your orders
+            Enter your order ID to view your order details
           </p>
         </div>
 
@@ -235,13 +235,13 @@ export default function TrackOrderPage() {
           transition={{ duration: 0.4 }}
         >
           <div className={styles.inputWrapper}>
-            <Phone className={styles.inputIcon} size={20} />
+            <Package className={styles.inputIcon} size={20} />
             <input
-              type="tel"
+              type="text"
               className={styles.input}
-              placeholder="Enter your phone number"
-              value={phoneNumber}
-              onChange={(e) => setPhoneNumber(e.target.value)}
+              placeholder="Enter your order ID (e.g., ABC12345)"
+              value={orderId}
+              onChange={(e) => setOrderId(e.target.value)}
               disabled={loading}
             />
           </div>
@@ -459,8 +459,8 @@ export default function TrackOrderPage() {
               <Package size={64} className={styles.emptyIcon} />
               <h3 className={styles.emptyTitle}>No Orders Found</h3>
               <p className={styles.emptyText}>
-                We couldn't find any orders for this phone number. Please check
-                the number and try again.
+                We couldn't find any orders with this ID. Please check the order
+                ID and try again.
               </p>
             </motion.div>
           )}

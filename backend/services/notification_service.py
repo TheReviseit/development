@@ -386,7 +386,7 @@ class WhatsAppNotificationSender:
 
 {description}
 
-Order ID: #{request.order_id}
+Order ID:{request.order_id}
 Status: {request.status.capitalize()}
 {items_text}
 

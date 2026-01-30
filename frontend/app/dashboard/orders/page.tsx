@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import Image from "next/image";
 import styles from "./orders.module.css";
 import { useRealtimeOrders } from "@/lib/hooks/useRealtimeOrders";
+import ImageModal from "../components/ImageModal";
 
 interface OrderItem {
   name: string;
@@ -22,6 +23,7 @@ interface OrderItem {
 
 interface Order {
   id: string;
+  order_id?: string;
   user_id: string;
   customer_name: string;
   customer_phone: string;
@@ -72,6 +74,7 @@ export default function OrdersPage() {
     {},
   ); // Cache for product images
   const [updatingStatus, setUpdatingStatus] = useState<Set<string>>(new Set()); // Track orders being updated
+  const [selectedImageUrl, setSelectedImageUrl] = useState<string | null>(null); // For image zoom modal
 
   // Google Sheets integration state
   const [showSheetModal, setShowSheetModal] = useState(false);
@@ -901,6 +904,7 @@ export default function OrdersPage() {
             <table className={styles.ordersTable}>
               <thead>
                 <tr>
+                  <th>Order ID</th>
                   <th>Customer</th>
                   <th>Items</th>
                   <th>Status</th>
@@ -912,6 +916,11 @@ export default function OrdersPage() {
               <tbody>
                 {filteredOrders.map((order) => (
                   <tr key={order.id} onClick={() => handleOpenModal(order)}>
+                    <td>
+                      <span className={styles.orderId}>
+                        {order.order_id || order.id.slice(0, 8).toUpperCase()}
+                      </span>
+                    </td>
                     <td>
                       <span className={styles.customerName}>
                         {order.customer_name}
@@ -1145,13 +1154,22 @@ export default function OrdersPage() {
             aria-labelledby="order-modal-title"
           >
             <div className={styles.modalHeader}>
-              <h3 id="order-modal-title" className={styles.modalTitle}>
-                {isViewMode
-                  ? "Order Details"
-                  : editingOrder
-                    ? "Edit Order"
-                    : "Create New Order"}
-              </h3>
+              <div className={styles.modalTitleWrapper}>
+                <h3 id="order-modal-title" className={styles.modalTitle}>
+                  {isViewMode
+                    ? "Order Details"
+                    : editingOrder
+                      ? "Edit Order"
+                      : "Create New Order"}
+                </h3>
+                {isViewMode && editingOrder && (
+                  <span className={styles.modalOrderId}>
+                    #
+                    {editingOrder.order_id ||
+                      editingOrder.id.slice(0, 8).toUpperCase()}
+                  </span>
+                )}
+              </div>
               {isViewMode && (
                 <button
                   className={styles.secondaryBtn}
@@ -1229,6 +1247,9 @@ export default function OrdersPage() {
                                 src={imageUrl}
                                 alt={item.name}
                                 className={styles.viewItemImage}
+                                onClick={() => setSelectedImageUrl(imageUrl)}
+                                style={{ cursor: "zoom-in" }}
+                                title="Click to enlarge"
                                 onError={(e) => {
                                   // Fallback to placeholder if image fails to load
                                   e.currentTarget.style.display = "none";
@@ -1647,6 +1668,15 @@ export default function OrdersPage() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Image Modal for Zoom */}
+      {selectedImageUrl && (
+        <ImageModal
+          isOpen={!!selectedImageUrl}
+          onClose={() => setSelectedImageUrl(null)}
+          imageUrl={selectedImageUrl}
+        />
       )}
     </div>
   );
