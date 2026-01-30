@@ -68,11 +68,15 @@ export async function GET(request: NextRequest) {
     const endDate = searchParams.get("endDate");
     const limit = searchParams.get("limit");
 
+    // Default limit for performance - prevent loading thousands of orders
+    const maxLimit = limit ? parseInt(limit) : 500;
+
     let query = supabase
       .from("orders")
       .select("*")
       .eq("user_id", userId)
-      .order("created_at", { ascending: false });
+      .order("created_at", { ascending: false })
+      .limit(maxLimit); // Always limit for performance
 
     // Apply filters
     if (status && status !== "all") {
@@ -83,9 +87,6 @@ export async function GET(request: NextRequest) {
     }
     if (endDate) {
       query = query.lte("created_at", endDate);
-    }
-    if (limit) {
-      query = query.limit(parseInt(limit));
     }
 
     const { data, error } = await query;
@@ -102,10 +103,19 @@ export async function GET(request: NextRequest) {
       `📦 Orders API: Found ${data?.length || 0} orders for user ${userId}`,
     );
 
-    return NextResponse.json({
+    // Add cache headers for better performance
+    // Cache for 10 seconds, allow stale while revalidating
+    const response = NextResponse.json({
       success: true,
       data: data || [],
     });
+
+    response.headers.set(
+      "Cache-Control",
+      "private, max-age=10, stale-while-revalidate=30",
+    );
+
+    return response;
   } catch (error) {
     console.error("Error in GET /api/orders:", error);
     return NextResponse.json(

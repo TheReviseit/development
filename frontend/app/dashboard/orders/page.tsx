@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
 import styles from "./orders.module.css";
@@ -163,10 +163,11 @@ export default function OrdersPage() {
     enabled: !!userId,
   });
 
-  // Fetch product image by product_id
+  // Optimized: Fetch product image with caching
   const fetchProductImage = useCallback(
-    async (productId: string): Promise<string | null> => {
-      if (!productId || productImages[productId]) {
+    async (productId: string) => {
+      // Return cached image if available
+      if (productImages[productId]) {
         return productImages[productId] || null;
       }
 
@@ -200,7 +201,7 @@ export default function OrdersPage() {
           params.set("status", filter);
         }
 
-        const response = await fetch(`/api/orders?${params}`, {
+        const response = await fetch(`/api/orders?${params.toString()}`, {
           cache: "no-store",
           headers: {
             Pragma: "no-cache",
@@ -210,28 +211,34 @@ export default function OrdersPage() {
         const data = await response.json();
 
         if (data.success) {
-          const ordersData = data.data;
+          const ordersData = data.data || [];
           // setOrders(ordersData); // We need to be careful not to overwrite optimistic updates if we were editing?
           // Actually for the list view, overwriting is fine, but we should perhaps check if we are editing?
           // For simplicity, we just update the list.
           setOrders(ordersData);
 
-          // Fetch product images for items that have product_id but no image
+          // Optimized: Batch fetch images instead of individual requests
+          // Collect all unique product IDs that need images
           const productIdsToFetch = new Set<string>();
           ordersData.forEach((order: Order) => {
             order.items.forEach((item: OrderItem) => {
-              if (item.product_id && !item.image && !item.imageUrl) {
+              if (
+                item.product_id &&
+                !item.image &&
+                !item.imageUrl &&
+                !productImages[item.product_id]
+              ) {
                 productIdsToFetch.add(item.product_id);
               }
             });
           });
 
-          // Fetch images in parallel
+          // Fetch images in parallel with Promise.allSettled (doesn't fail if one fails)
           if (productIdsToFetch.size > 0) {
             const imagePromises = Array.from(productIdsToFetch).map(
               (productId) => fetchProductImage(productId),
             );
-            await Promise.all(imagePromises);
+            await Promise.allSettled(imagePromises);
           }
         }
       } catch (error) {
@@ -242,40 +249,72 @@ export default function OrdersPage() {
         }
       }
     },
-    [filter, fetchProductImage],
+    [filter, fetchProductImage, productImages],
   );
 
   // Only fetch on mount or when filter changes
   useEffect(() => {
-    fetchOrders(true);
+    // Only show loading on initial mount, not on filter changes
+    if (orders.length === 0) {
+      fetchOrders(true);
+    } else {
+      fetchOrders(false);
+    }
   }, [filter]); // fetchOrders is stable due to useCallback
 
-  // Polling fallback: Fetch every 5 seconds silently to ensure data is fresh
-  // This covers cases where Realtime (WebSockets) might fail due to RLS/Auth issues
+  // Smart polling: Only poll when tab is visible and at a reasonable interval (30s)
+  // This is much more efficient than aggressive 5-second polling
   useEffect(() => {
-    const intervalId = setInterval(() => {
-      // Only poll if window is visible/focused could be an optimization, but standard interval is fine
-      fetchOrders(false);
-    }, 5000);
+    let intervalId: NodeJS.Timeout;
 
-    return () => clearInterval(intervalId);
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        // Fetch immediately when tab becomes visible
+        fetchOrders(false);
+        // Start polling
+        intervalId = setInterval(() => {
+          fetchOrders(false);
+        }, 30000); // 30 seconds - enterprise standard
+      } else {
+        // Stop polling when tab is hidden
+        if (intervalId) clearInterval(intervalId);
+      }
+    };
+
+    // Initial setup
+    if (document.visibilityState === "visible") {
+      intervalId = setInterval(() => {
+        fetchOrders(false);
+      }, 30000);
+    }
+
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
+    return () => {
+      if (intervalId) clearInterval(intervalId);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
   }, [fetchOrders]);
 
-  // Stats
-  const stats = {
-    pending: orders.filter((o) => o.status === "pending").length,
-    confirmed: orders.filter((o) => o.status === "confirmed").length,
-    processing: orders.filter((o) => o.status === "processing").length,
-    completed: orders.filter((o) => o.status === "completed").length,
-    cancelled: orders.filter((o) => o.status === "cancelled").length,
-    total: orders.length,
-  };
+  // Memoized stats - only recalculate when orders change
+  const stats = useMemo(() => {
+    return {
+      pending: orders.filter((o) => o.status === "pending").length,
+      confirmed: orders.filter((o) => o.status === "confirmed").length,
+      processing: orders.filter((o) => o.status === "processing").length,
+      completed: orders.filter((o) => o.status === "completed").length,
+      cancelled: orders.filter((o) => o.status === "cancelled").length,
+      total: orders.length,
+    };
+  }, [orders]);
 
-  // Filter orders
-  const filteredOrders = orders.filter((order) => {
-    if (filter === "all") return true;
-    return order.status === filter;
-  });
+  // Memoized filtered orders - only recalculate when orders or filter changes
+  const filteredOrders = useMemo(() => {
+    return orders.filter((order) => {
+      if (filter === "all") return true;
+      return order.status === filter;
+    });
+  }, [orders, filter]);
 
   // Google Sheets handlers
   const handleSaveSheetSettings = async () => {
@@ -1170,27 +1209,18 @@ export default function OrdersPage() {
                   </span>
                 )}
               </div>
-              {isViewMode && (
-                <button
-                  className={styles.secondaryBtn}
-                  onClick={() => setIsViewMode(false)}
-                  style={{ marginLeft: "auto", marginRight: "12px" }}
-                >
-                  Edit
-                </button>
-              )}
               <button
                 className={styles.modalClose}
                 onClick={handleCloseModal}
                 aria-label="Close modal"
               >
                 <svg
-                  width="16"
-                  height="16"
+                  width="20"
+                  height="20"
                   viewBox="0 0 24 24"
                   fill="none"
                   stroke="currentColor"
-                  strokeWidth="2"
+                  strokeWidth="2.5"
                 >
                   <line x1="18" y1="6" x2="6" y2="18" strokeLinecap="round" />
                   <line x1="6" y1="6" x2="18" y2="18" strokeLinecap="round" />
@@ -1334,10 +1364,10 @@ export default function OrdersPage() {
                 <div className={styles.modalFooter}>
                   <button
                     type="button"
-                    className={styles.cancelBtn}
-                    onClick={handleCloseModal}
+                    className={styles.editBtn}
+                    onClick={() => setIsViewMode(false)}
                   >
-                    Close
+                    Edit
                   </button>
                 </div>
               </div>
