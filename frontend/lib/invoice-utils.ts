@@ -79,15 +79,26 @@ export function generateInvoiceEmailHTML(
   };
 
   const getPaymentLabel = () => {
+    // Check payment method first (takes precedence over status)
+    if (invoice.paymentMethod === "cod") {
+      return "CASH ON DELIVERY";
+    }
+    if (
+      invoice.paymentMethod === "online" &&
+      invoice.paymentStatus === "paid"
+    ) {
+      return "PAID ONLINE";
+    }
+    // Fallback to status-based logic for backward compatibility
     switch (invoice.paymentStatus) {
       case "paid":
-        return "PAID";
+        return "PAID ONLINE";
       case "pending":
-        return "PENDING";
+        return "PAYMENT PENDING";
       case "cod":
         return "CASH ON DELIVERY";
       default:
-        return "PENDING";
+        return "PAYMENT PENDING";
     }
   };
 

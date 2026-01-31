@@ -179,13 +179,35 @@ class OrderService:
                 )
             raise
         
-        # 7. Confirm stock reservations (actual deduction)
+        # 7. Confirm stock reservations (actual deduction) - ATOMIC
+        # The confirm_reservations_atomic RPC verifies order exists before deducting
+        # If this fails, stock is guaranteed NOT deducted (atomic rollback)
         if local_reservation_ids:
-            self._confirm_reservations(
-                reservation_ids=local_reservation_ids,
-                order_id=created_order.id,
-                correlation_id=correlation_id
-            )
+            try:
+                self._confirm_reservations(
+                    reservation_ids=local_reservation_ids,
+                    order_id=created_order.id,
+                    correlation_id=correlation_id
+                )
+            except Exception as e:
+                # Atomic RPC guarantees: if exception, stock was NOT deducted
+                # Release reservations so they don't block future orders
+                logger.error(
+                    f"Stock confirmation failed for order {created_order.id}: {e}. "
+                    f"Stock NOT deducted (atomic guarantee). Releasing reservations.",
+                    extra={
+                        "order_id": created_order.id,
+                        "reservation_ids": local_reservation_ids,
+                        "correlation_id": correlation_id,
+                    }
+                )
+                self._release_reservations(
+                    local_reservation_ids,
+                    reason="confirmation_failed",
+                    correlation_id=correlation_id
+                )
+                # Re-raise to let caller know order exists but stock not confirmed
+                raise
         
         # 8. Emit event for background processing
         self._emit_event(OrderEvent(
@@ -202,6 +224,7 @@ class OrderService:
                 "order_id": created_order.id,
                 "reservation_ids": local_reservation_ids,
                 "correlation_id": correlation_id,
+                "stock_confirmed": bool(local_reservation_ids),
             }
         )
         

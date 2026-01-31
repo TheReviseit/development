@@ -277,23 +277,32 @@ class InventoryService:
         correlation_id: Optional[str] = None
     ) -> bool:
         """
-        Confirm reservations and deduct actual stock.
-        Called when payment succeeds.
+        Confirm reservations and deduct actual stock ATOMICALLY.
+        
+        CRITICAL INVARIANT:
+            Stock is ONLY deducted if order exists in database.
+            All operations (verify, deduct, update, log) happen in single transaction.
+            Any failure -> automatic rollback, stock unchanged.
         
         Args:
             reservation_ids: IDs from validate_and_reserve
-            order_id: The confirmed order ID
+            order_id: The confirmed order ID (MUST exist in orders table)
             idempotency_key: Payment reference for idempotency
             correlation_id: For tracing
             
         Returns:
             True if confirmed (including idempotent repeat calls)
+            
+        Raises:
+            ReservationError: If order doesn't exist or confirmation fails
         """
         if not reservation_ids:
             return True
         
         try:
-            result = self.db.rpc('confirm_reservations_batch', {
+            # Use atomic RPC that verifies order exists before deducting stock
+            # All operations in single PostgreSQL transaction
+            result = self.db.rpc('confirm_reservations_atomic', {
                 'p_reservation_ids': reservation_ids,
                 'p_order_id': order_id,
                 'p_idempotency_key': idempotency_key
@@ -301,7 +310,7 @@ class InventoryService:
             
             if not result.data:
                 raise ReservationError(
-                    message="Failed to confirm reservations",
+                    message="Failed to confirm reservations - no response from atomic RPC",
                     correlation_id=correlation_id
                 )
             
@@ -311,20 +320,45 @@ class InventoryService:
                 logger.info(f"Idempotent: Order {order_id} already confirmed")
             else:
                 logger.info(
-                    f"✅ Confirmed {len(reservation_ids)} reservations for order {order_id}",
+                    f"✅ ATOMIC: Confirmed {data.get('confirmed_count', len(reservation_ids))} "
+                    f"reservations for order {order_id}",
                     extra={
                         "order_id": order_id,
                         "reservation_ids": reservation_ids,
-                        "correlation_id": correlation_id
+                        "correlation_id": correlation_id,
+                        "atomic": True
                     }
                 )
             
             return True
             
         except Exception as e:
+            error_msg = str(e)
+            
+            # Check for atomic guard failure (order doesn't exist)
+            if 'ATOMIC_GUARD_VIOLATION' in error_msg or 'does not exist' in error_msg:
+                # CRITICAL: This indicates a serious upstream bug
+                # This should trigger an alert in your monitoring system
+                logger.critical(
+                    f"🚨 ATOMIC_GUARD_VIOLATION: Order {order_id} not found - stock deduction BLOCKED. "
+                    f"This is a CRITICAL bug that requires immediate investigation.",
+                    extra={
+                        "order_id": order_id,
+                        "reservation_ids": reservation_ids,
+                        "correlation_id": correlation_id,
+                        "guard_triggered": True,
+                        "alert": "ATOMIC_GUARD_VIOLATION",
+                        "severity": "critical"
+                    }
+                )
+                raise ReservationError(
+                    message=f"Order {order_id} does not exist - refusing to deduct stock",
+                    correlation_id=correlation_id
+                )
+            
             logger.error(f"Error confirming reservations: {e}", exc_info=True)
             raise ReservationError(
-                message=f"Failed to confirm reservations: {str(e)}",
+                message=f"Failed to confirm reservations: {error_msg}",
                 correlation_id=correlation_id
             )
     

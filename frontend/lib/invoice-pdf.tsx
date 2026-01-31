@@ -23,7 +23,11 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     marginBottom: 20,
     padding: 20,
-    borderRadius: 8,
+    marginLeft: -30,
+    marginRight: -30,
+    marginTop: -30,
+    paddingLeft: 50,
+    paddingRight: 50,
   },
   headerLeft: {
     flexGrow: 1,
@@ -143,11 +147,14 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   productImage: {
-    width: 30,
-    height: 30,
-    borderRadius: 4,
+    width: 36,
+    height: 36,
+    borderRadius: 6,
     marginRight: 8,
-    backgroundColor: "#f5f5f5",
+    backgroundColor: "#f1f1f1",
+    objectFit: "cover",
+    borderWidth: 1,
+    borderColor: "#e5e7eb",
   },
   productInfo: {
     justifyContent: "center",
@@ -276,6 +283,13 @@ const styles = StyleSheet.create({
     fontSize: 9,
     color: "#888",
     marginTop: 4,
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  flowauxiLogo: {
+    width: 60,
+    height: 20,
+    marginLeft: 4,
   },
 });
 
@@ -292,12 +306,10 @@ export const InvoiceDocument: React.FC<InvoicePDFProps> = ({
   const trackOrderUrl = `https://flowauxi.com/store/${business.storeSlug || "demo"}/track-order`;
   const qrCodeUrl = `https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(trackOrderUrl)}`;
 
-  const formatPrice = (price: number) =>
-    new Intl.NumberFormat("en-IN", {
-      style: "currency",
-      currency: "INR",
-      maximumFractionDigits: 0,
-    }).format(price);
+  const formatPrice = (price: number) => {
+    // Amazon India style - 100% reliable, no rendering bugs
+    return `Rs. ${price.toLocaleString("en-IN")}`;
+  };
 
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleDateString("en-IN", {
@@ -308,16 +320,23 @@ export const InvoiceDocument: React.FC<InvoicePDFProps> = ({
   };
 
   const getPaymentLabel = () => {
-    switch (invoice.paymentStatus) {
-      case "paid":
-        return "PAID";
-      case "pending":
-        return "PENDING";
-      case "cod":
-        return "CASH ON DELIVERY";
-      default:
-        return "PENDING";
+    // Correct business logic: payment method takes precedence
+    if (invoice.paymentMethod === "cod") {
+      return "CASH ON DELIVERY";
     }
+
+    if (invoice.paymentStatus === "paid") {
+      return "PAID ONLINE";
+    }
+
+    return "PAYMENT PENDING";
+  };
+
+  const getPaymentBadgeColor = () => {
+    if (invoice.paymentMethod === "cod") {
+      return "#f59e0b"; // amber for COD
+    }
+    return brandColor; // green for paid
   };
 
   return (
@@ -389,11 +408,19 @@ export const InvoiceDocument: React.FC<InvoicePDFProps> = ({
               <Text style={[styles.tableCell, styles.colNo]}>{index + 1}</Text>
               <View style={styles.colProduct}>
                 <View style={styles.productContainer}>
-                  {/* Image support in ReactPDF for external URLs can be tricky if not allowed, try simple fallback if fails 
-                        Note: React-PDF 2.0+ handles images better.
-                    */}
-                  {item.imageUrl && (
+                  {item.imageUrl ? (
                     <Image src={item.imageUrl} style={styles.productImage} />
+                  ) : (
+                    <View
+                      style={[
+                        styles.productImage,
+                        { justifyContent: "center", alignItems: "center" },
+                      ]}
+                    >
+                      <Text style={{ fontSize: 12, color: "#999" }}>
+                        {item.name.charAt(0)}
+                      </Text>
+                    </View>
                   )}
                   <View style={styles.productInfo}>
                     <Text style={styles.productName}>{item.name}</Text>
@@ -466,7 +493,10 @@ export const InvoiceDocument: React.FC<InvoicePDFProps> = ({
           <View>
             <Text style={styles.paymentLabel}>Mode of Payment</Text>
             <View
-              style={[styles.paymentBadge, { backgroundColor: brandColor }]}
+              style={[
+                styles.paymentBadge,
+                { backgroundColor: getPaymentBadgeColor() },
+              ]}
             >
               <Text>{getPaymentLabel()}</Text>
             </View>
@@ -474,7 +504,25 @@ export const InvoiceDocument: React.FC<InvoicePDFProps> = ({
           </View>
           <View style={styles.footerRight}>
             <Text style={styles.thankYou}>Thank you for your order!</Text>
-            <Text style={styles.poweredBy}>Powered by Flowauxi</Text>
+            <View
+              style={{
+                flexDirection: "column",
+                alignItems: "center",
+                marginTop: 8,
+                width: "100%",
+              }}
+            >
+              <Text style={{ fontSize: 10, color: "#888", marginBottom: 4 }}>
+                Powered by
+              </Text>
+              <View style={{ flexDirection: "row", alignItems: "center" }}>
+                <Text
+                  style={{ fontSize: 14, fontWeight: "bold", color: "#1a1a1a" }}
+                >
+                  Flowauxi
+                </Text>
+              </View>
+            </View>
           </View>
         </View>
       </Page>

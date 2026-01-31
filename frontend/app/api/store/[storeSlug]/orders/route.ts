@@ -35,6 +35,64 @@ interface InsufficientItem {
   color?: string;
 }
 
+// =============================================================================
+// Order Source Types (Normalized for future-proofing)
+// =============================================================================
+type OrderSource =
+  | "checkout_cod"
+  | "checkout_online"
+  | "whatsapp"
+  | "manual"
+  | "api"
+  | "cod";
+
+type PaymentMethod = "online" | "cod";
+type PaymentStatus = "paid" | "pending" | "cod";
+
+interface PaymentInfo {
+  method: PaymentMethod;
+  status: PaymentStatus;
+}
+
+/**
+ * Determines payment info based on order source and notes.
+ *
+ * Business Rules:
+ * - COD orders: method="cod", status="cod"
+ * - Online (Razorpay) orders: method="online", status="paid" (only if Payment ID present)
+ * - Manual/WhatsApp orders: treated as COD unless explicit payment proof
+ *
+ * @throws Error if invalid state detected (COD order with paid status)
+ */
+function getPaymentInfo(source: string, notes?: string): PaymentInfo {
+  // Normalize source to lowercase
+  const normalizedSource = source?.toLowerCase() || "manual";
+
+  // Check for online payment proof (Razorpay payment ID in notes)
+  const hasPaymentId =
+    notes?.includes("Payment ID") || notes?.includes("razorpay_payment_id");
+
+  // Determine if this is an online payment
+  // Only "api" source WITH payment ID = confirmed online payment
+  const isOnlinePayment = normalizedSource === "api" && hasPaymentId;
+
+  // COD sources: explicit "cod", "checkout_cod", or any non-API source without payment ID
+  const isCodOrder =
+    normalizedSource === "cod" ||
+    normalizedSource === "checkout_cod" ||
+    !isOnlinePayment;
+
+  const method: PaymentMethod = isOnlinePayment ? "online" : "cod";
+  const status: PaymentStatus = isOnlinePayment ? "paid" : "cod";
+
+  // Domain invariant: COD order can NEVER be marked as paid
+  if (method === "cod" && status === "paid") {
+    throw new Error("Invalid state: COD order cannot be marked as paid");
+  }
+
+  return { method, status };
+}
+
 // Validate stock availability for all items
 // Based on schema:
 // - Products have size_stocks JSONB like {"XXL": 2, "Free Size": 2}
@@ -354,12 +412,13 @@ export async function POST(
             const shipping = 0;
             const total = subtotal + shipping;
 
-            const isPaid =
-              source === "api" ||
-              notes?.includes("Payment ID") ||
-              status === "paid" ||
-              status === "completed";
-            const paymentStatus = isPaid ? "paid" : "cod";
+            // =====================================================================
+            // FIXED: Payment mode logic using explicit source-based determination
+            // This replaces the flawed logic that incorrectly marked COD as "paid"
+            // =====================================================================
+            const paymentInfo = getPaymentInfo(source, notes);
+            const paymentStatus = paymentInfo.status;
+            const paymentMethod = paymentInfo.method;
 
             // Parse JSON fields if they come as strings
             const contact =
@@ -393,6 +452,7 @@ export async function POST(
               shipping,
               total,
               paymentStatus: paymentStatus as "paid" | "cod",
+              paymentMethod: paymentMethod, // Correct payment method from getPaymentInfo
             };
 
             const businessName = businessData.business_name || "Store";
@@ -422,34 +482,100 @@ export async function POST(
 
             console.log(`📧 Auto-sending invoice PDF to ${customer_email}`);
 
-            // Professional email body
+            // Professional email body with track order button
+            const shortOrderId = orderData.id.slice(0, 8).toUpperCase();
+            const trackOrderUrl = `${process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"}/store/${storeSlug}/track-order`;
+
             const emailBody = `
               <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
-                <h2 style="color: #1a1a1a; margin-bottom: 20px;">Thank you for your order!</h2>
-                <p style="color: #666; font-size: 15px; line-height: 1.6;">
+                <p style="color: #666; font-size: 15px; line-height: 1.6; margin-bottom: 8px;">
                   Hi ${customer_name},
                 </p>
-                <p style="color: #666; font-size: 15px; line-height: 1.6;">
-                  Your order has been successfully placed with <strong>${businessName}</strong>. 
+                
+                <h2 style="color: #1a1a1a; margin: 0 0 20px 0; font-size: 22px;">
+                  Thank you for your order! 🎉
+                </h2>
+                
+                <p style="color: #666; font-size: 15px; line-height: 1.6; margin-bottom: 20px;">
+                  Your order has been successfully placed with <strong>${businessName}</strong>.
+                </p>
+                
+                <p style="color: #666; font-size: 15px; line-height: 1.6; margin-bottom: 20px;">
                   Please find your invoice attached to this email as a PDF document.
                 </p>
-                <div style="background: #f5f5f5; padding: 16px; border-radius: 8px; margin: 20px 0;">
-                  <p style="margin: 0; color: #333;"><strong>Order ID:</strong> ${orderData.id}</p>
-                  <p style="margin: 8px 0 0; color: #333;"><strong>Invoice:</strong> ${invoiceNumber}</p>
-                  <p style="margin: 8px 0 0; color: #333;"><strong>Total:</strong> ₹${total}</p>
+                
+                <div style="background: #f5f5f5; padding: 20px; border-radius: 8px; margin: 24px 0;">
+                  <h3 style="margin: 0 0 12px 0; color: #1a1a1a; font-size: 16px;">Order Details</h3>
+                  <div style="margin-bottom: 12px;">
+                    <strong style="color: #333;">Order ID:</strong> <span style="color: #666;">${shortOrderId}</span>
+                  </div>
+                  
+                  <h4 style="margin: 16px 0 8px 0; color: #1a1a1a; font-size: 14px;">Products:</h4>
+                  <ul style="list-style: none; padding: 0; margin: 0;">
+                    ${items
+                      .map((item: OrderItem) => {
+                        const itemPrice = (item.price || 0) * item.quantity;
+                        return `
+                        <li style="margin: 12px 0; padding: 12px; background: #fff; border-radius: 6px; border: 1px solid #e0e0e0;">
+                          <div style="font-weight: 600; color: #1a1a1a; margin-bottom: 4px;">${item.name}</div>
+                          <div style="color: #666; font-size: 13px;">
+                            ${item.size ? `Size: ${item.size}` : ""}${item.size && item.color ? " • " : ""}${item.color ? `Color: ${item.color}` : ""}
+                          </div>
+                          <div style="color: #333; font-size: 14px; margin-top: 4px;">
+                            Quantity: ${item.quantity} × ₹${item.price || 0} = <strong>₹${itemPrice}</strong>
+                          </div>
+                        </li>
+                      `;
+                      })
+                      .join("")}
+                  </ul>
+                  
+                  <div style="margin-top: 16px; padding-top: 16px; border-top: 2px solid #ddd;">
+                    <strong style="color: #1a1a1a; font-size: 16px;">Total Amount: ₹${total}</strong>
+                  </div>
                 </div>
-                <p style="color: #666; font-size: 15px; line-height: 1.6;">
-                  If you have any questions about your order, please don't hesitate to contact us.
+                
+                <p style="color: #666; font-size: 15px; line-height: 1.6; margin-bottom: 20px;">
+                  We're currently processing your order and will notify you as soon as it's on its way.
                 </p>
-                <p style="color: #888; font-size: 13px; margin-top: 30px;">
-                  — The ${businessName} Team
+                
+                <div style="text-align: center; margin: 30px 0;">
+                  <a href="${trackOrderUrl}" 
+                     style="display: inline-block; background-color: #000; color: #fff; padding: 14px 32px; text-decoration: none; border-radius: 6px; font-weight: 600; font-size: 15px;">
+                    Track Your Order
+                  </a>
+                </div>
+                
+                <p style="color: #666; font-size: 15px; line-height: 1.6; margin-bottom: 8px;">
+                  If you have any questions or need assistance, feel free to reply to this email—we're happy to help.
                 </p>
-              </div>
+              <div style="margin-top:40px;padding-top:20px;border-top:1px solid #e0e0e0;text-align:right;">
+  <table role="presentation" align="right" cellpadding="0" cellspacing="0" style="border-collapse:collapse;">
+    <tr>
+      <td style="color:#999;font-size:13px;padding-right:6px;white-space:nowrap;">
+        Powered by
+      </td>
+      <td style="color:#666;font-weight:600;font-size:14px;padding-right:6px;white-space:nowrap;">
+        Flowauxi
+      </td>
+      <td>
+        <img
+          src="https://flowauxi.com/logo.png"
+          alt="Flowauxi"
+          width="20"
+          height="20"
+          style="display:block;"
+        />
+      </td>
+    </tr>
+  </table>
+</div>
+
             `;
 
             const emailResult = await sendEmail({
               to: customer_email,
-              subject: `Your Order Receipt - ${invoiceNumber}`,
+              subject: `Order Confirmed! Thanks for shopping`,
               html: emailBody,
               attachments: [
                 {
