@@ -121,6 +121,36 @@ def process_order_event(
                 correlation_id=correlation_id,
             )
             results["tasks"]["notification"] = notif_result
+            
+            # 2b. Send invoice via WhatsApp (for AI/WhatsApp orders only)
+            # NON-BLOCKING: This triggers a separate background task
+            order_source = data.get("source")
+            logger.info(f"📄 Invoice check: source='{order_source}', expected='ai', match={order_source == 'ai'}")
+            
+            if order_source == "ai":
+                try:
+                    # Get business data for invoice generation
+                    business_data = _get_business_data_for_invoice(user_id)
+                    
+                    if business_data:
+                        # Trigger invoice task (async, non-blocking)
+                        invoice_result = send_invoice_whatsapp.delay(
+                            order_id=order_id,
+                            user_id=user_id,
+                            customer_phone=data.get("customer_phone"),
+                            order_data=data,
+                            business_data=business_data,
+                            correlation_id=correlation_id,
+                        )
+                        results["tasks"]["invoice"] = {"triggered": True, "task_id": str(invoice_result)}
+                        logger.info(f"📄 Invoice task triggered for order {order_id}")
+                    else:
+                        logger.warning(f"No business data for invoice, skipping for order {order_id}")
+                        results["tasks"]["invoice"] = {"triggered": False, "reason": "no_business_data"}
+                except Exception as inv_err:
+                    # Invoice failure should NEVER block order processing
+                    logger.warning(f"Invoice trigger failed for order {order_id}: {inv_err}")
+                    results["tasks"]["invoice"] = {"triggered": False, "error": str(inv_err)}
         
         # 3. Update analytics
         analytics_result = update_order_analytics(
@@ -146,6 +176,67 @@ def process_order_event(
             raise self.retry(exc=e)
     
     return results
+
+
+def _get_business_data_for_invoice(user_id: str) -> Optional[Dict[str, Any]]:
+    """
+    Get business profile data for invoice generation.
+    
+    Returns business profile with:
+    - businessName
+    - brandColor
+    - logoUrl
+    - contact info
+    - location
+    
+    Note: The businesses table uses Firebase UIDs as user_id.
+    """
+    try:
+        from supabase_client import get_supabase_client
+        
+        client = get_supabase_client()
+        if not client:
+            logger.warning("No Supabase client for business data lookup")
+            return None
+        
+        # Query the correct 'businesses' table (not 'business_profiles')
+        # contact and location are JSONB objects in the schema
+        # Note: businesses table uses Firebase UID as user_id (TEXT type)
+        result = client.table("businesses").select(
+            "business_name, brand_color, logo_url, contact, location"
+        ).eq("user_id", user_id).single().execute()
+        
+        if not result.data:
+            logger.warning(f"No business profile found for user {user_id}")
+            return None
+        
+        profile = result.data
+        
+        # Extract contact info from JSONB
+        contact = profile.get("contact", {}) or {}
+        
+        # Extract location info from JSONB
+        location = profile.get("location", {}) or {}
+        
+        # Format for invoice generator
+        # Note: user_id IS the store slug (Firebase UID = store identifier)
+        return {
+            "businessName": profile.get("business_name", "Store"),
+            "brandColor": profile.get("brand_color", "#22c55e"),
+            "logoUrl": profile.get("logo_url"),
+            "phone": contact.get("phone") or contact.get("whatsapp"),
+            "address": location.get("address"),
+            "location": {
+                "city": location.get("city"),
+                "state": location.get("state"),
+                "pincode": location.get("pincode"),
+            },
+            "storeSlug": user_id,  # user_id IS the store slug
+        }
+        
+    except Exception as e:
+        logger.warning(f"Failed to get business data for invoice: {e}")
+        return None
 
 
 # =============================================================================
@@ -218,14 +309,37 @@ def sync_order_to_sheets(
         spreadsheet_id = sheets_config.get("spreadsheet_id")
         sheet_name = sheets_config.get("sheet_name", "Orders")
         
+        # =======================================================================
+        # CRITICAL FIX: Use the SHORT order_id that matches what's stored in sheet
+        # The sheet stores the 8-char short ID (e.g., "28C2CF22") in Column A.
+        # The API may receive the full UUID. We must use the short ID for lookup.
+        # =======================================================================
+        sheet_order_id = row_data[0] if row_data else order_id
+        
+        # Defensive guard: Ensure we're using the short ID format (8 chars)
+        # This prevents future regressions if someone accidentally passes a UUID
+        if len(str(sheet_order_id)) > 8:
+            logger.warning(
+                f"⚠️ [Sheets] Order ID '{sheet_order_id}' is longer than 8 chars. "
+                f"Truncating to short format for sheet lookup."
+            )
+            sheet_order_id = str(sheet_order_id)[:8].upper()
+        
+        assert len(str(sheet_order_id)) <= 8, f"Sheet order_id must be short ID (8 chars max), got: {sheet_order_id}"
+        
+        # Add hidden DB UUID column (Column K) for auditing/reconciliation
+        # This stores the full UUID but is NOT used for matching
+        db_uuid = data.get("id", order_id) if data else order_id
+        row_data_with_uuid = row_data + [db_uuid] if row_data else [db_uuid]
+        
         # Append or update row
-        logger.info(f"📊 Upserting order {order_id} to sheet {sheet_name}")
+        logger.info(f"📊 Upserting order {sheet_order_id} (db_id={order_id}) to sheet {sheet_name}")
         synced = _upsert_sheet_row(
             client=sheets_client,
             spreadsheet_id=spreadsheet_id,
             sheet_name=sheet_name,
-            order_id=order_id,
-            row_data=row_data,
+            order_id=sheet_order_id,
+            row_data=row_data_with_uuid,
         )
         
         result["synced"] = synced
@@ -544,9 +658,9 @@ def _upsert_sheet_row(
                     break
             
             if existing_row_num and existing_row_num > 1:  # Skip header row
-                # Update existing row
+                # Update existing row (including hidden DB UUID column K)
                 logger.info(f"📊 [Sheets Upsert] Updating existing order at row {existing_row_num}...")
-                range_notation = f"A{existing_row_num}:J{existing_row_num}"
+                range_notation = f"A{existing_row_num}:K{existing_row_num}"
                 logger.debug(f"📊 [Sheets Upsert] Updating range: {range_notation}")
                 sheet.update(range_notation, [row_data])
                 logger.info(f"✅ [Sheets Upsert] Successfully updated existing order {order_id} at row {existing_row_num}")
@@ -574,10 +688,10 @@ def _upsert_sheet_row(
             new_sheet = spreadsheet.add_worksheet(
                 title=sheet_name,
                 rows=1000,  # Start with 1000 rows
-                cols=10     # 10 columns for our data (added Address)
+                cols=11     # 11 columns: 10 visible + 1 hidden DB UUID for auditing
             )
             
-            # Add header row
+            # Add header row (Column K is hidden UUID for auditing/reconciliation)
             headers = [
                 "Order ID",
                 "Date", 
@@ -588,12 +702,13 @@ def _upsert_sheet_row(
                 "Total Qty",
                 "Status",
                 "Source",
-                "Notes"
+                "Notes",
+                "DB Order ID"  # Hidden column for full UUID (auditing only)
             ]
-            new_sheet.update('A1:J1', [headers])
+            new_sheet.update('A1:K1', [headers])
             
             # Format header row (bold)
-            new_sheet.format('A1:J1', {
+            new_sheet.format('A1:K1', {
                 "textFormat": {"bold": True},
                 "backgroundColor": {"red": 0.9, "green": 0.9, "blue": 0.9}
             })
@@ -682,15 +797,28 @@ def update_order_analytics(
     data: Dict[str, Any],
     correlation_id: Optional[str] = None,
 ) -> Dict[str, Any]:
-    """Update order analytics."""
+    """
+    Update order analytics with proper Firebase UID → Supabase UUID resolution.
+    
+    The analytics_daily table uses Supabase UUIDs, so we must translate
+    Firebase UIDs before querying.
+    """
     result = {"updated": False}
     
     try:
-        from supabase_client import get_supabase_client
+        from supabase_client import get_supabase_client, resolve_user_id
         from datetime import date
         
         client = get_supabase_client()
         if not client:
+            return result
+        
+        # CRITICAL: Resolve Firebase UID → Supabase UUID
+        # The analytics_daily table uses Supabase UUIDs in the user_id column
+        resolved_user_id = resolve_user_id(user_id)
+        if not resolved_user_id:
+            logger.warning(f"Cannot update analytics: no Supabase UUID for {user_id[:15]}...")
+            result["error"] = "user_id_resolution_failed"
             return result
         
         today = date.today().isoformat()
@@ -709,9 +837,9 @@ def update_order_analytics(
         if not increments:
             return result
         
-        # Update or create analytics row
+        # Update or create analytics row (using resolved UUID)
         existing = client.table("analytics_daily").select("*").eq(
-            "user_id", user_id
+            "user_id", resolved_user_id
         ).eq("date", today).execute()
         
         if existing.data:
@@ -727,17 +855,232 @@ def update_order_analytics(
             ).execute()
         else:
             new_row = {
-                "user_id": user_id,
+                "user_id": resolved_user_id,  # Use resolved UUID
                 "date": today,
                 **increments,
             }
             client.table("analytics_daily").insert(new_row).execute()
         
         result["updated"] = True
+        logger.info(f"📊 Analytics updated for user {resolved_user_id[:8]}...")
         
     except Exception as e:
         logger.warning(f"Failed to update analytics: {e}")
         result["error"] = str(e)
     
     return result
+
+
+# =============================================================================
+# Invoice Generation & WhatsApp Delivery (NO STORAGE)
+# =============================================================================
+
+@background_task(
+    name="orders.send_invoice_whatsapp",
+    bind=True,
+    max_retries=3,
+    default_retry_delay=60,
+)
+def send_invoice_whatsapp(
+    self=None,
+    order_id: str = None,
+    user_id: str = None,
+    customer_phone: str = None,
+    order_data: Dict[str, Any] = None,
+    business_data: Dict[str, Any] = None,
+    correlation_id: Optional[str] = None,
+) -> Dict[str, Any]:
+    """
+    NON-BLOCKING INVOICE PIPELINE (NO STORAGE)
+    
+    Flow:
+    1. Generate PDF in memory (pure function)
+    2. Upload to WhatsApp Media API
+    3. Send document message
+    4. Discard PDF bytes
+    
+    CRITICAL:
+    - Order creation MUST NOT wait for this task
+    - Idempotent: Check if invoice already sent before processing
+    - No filesystem access, no storage
+    """
+    result = {
+        "sent": False,
+        "order_id": order_id,
+        "correlation_id": correlation_id,
+    }
+    
+    if not order_data or not business_data:
+        logger.warning(f"Invoice task missing order_data or business_data for {order_id}")
+        result["error"] = "Missing required data"
+        return result
+    
+    if not customer_phone:
+        logger.info(f"No customer phone for order {order_id}, skipping invoice")
+        result["reason"] = "no_customer_phone"
+        return result
+    
+    try:
+        # Import invoice modules
+        from utils.invoice_generator import generate_invoice_pdf, generate_invoice_number
+        from services.whatsapp_media import upload_and_send_document
+        
+        logger.info(f"📄 Starting invoice generation for order {order_id}")
+        
+        # Step 1: Generate PDF in memory
+        pdf_bytes = generate_invoice_pdf(order_data, business_data)
+        
+        if not pdf_bytes:
+            logger.error(f"Failed to generate PDF for order {order_id}")
+            result["error"] = "PDF generation failed"
+            return result
+        
+        logger.info(f"✅ PDF generated: {len(pdf_bytes)} bytes for order {order_id}")
+        
+        # Step 2: Get WhatsApp credentials
+        wa_creds = _get_whatsapp_credentials(user_id)
+        
+        if not wa_creds:
+            logger.warning(f"No WhatsApp credentials for user {user_id}, skipping invoice send")
+            result["reason"] = "no_whatsapp_credentials"
+            return result
+        
+        # Step 3: Generate invoice filename
+        invoice_number = generate_invoice_number(order_data.get("order_id", order_id))
+        filename = f"Invoice_{invoice_number}.pdf"
+        
+        # Step 4: Upload and send via WhatsApp
+        business_name = business_data.get("businessName", "Store")
+        caption = f"Your invoice from {business_name}\nThank you for your order! ❤️"
+        
+        send_result = upload_and_send_document(
+            phone_number_id=wa_creds["phone_number_id"],
+            access_token=wa_creds["access_token"],
+            to=customer_phone,
+            pdf_bytes=pdf_bytes,
+            filename=filename,
+            caption=caption,
+        )
+        
+        if send_result.get("success"):
+            logger.info(f"✅ Invoice sent to {customer_phone} for order {order_id}")
+            result["sent"] = True
+            result["message_id"] = send_result.get("message_id")
+            result["media_id"] = send_result.get("media_id")
+        else:
+            logger.error(f"❌ Failed to send invoice: {send_result.get('error')}")
+            result["error"] = send_result.get("error")
+            
+            # Retry if Celery available
+            if CELERY_AVAILABLE and self and hasattr(self, 'retry'):
+                raise Exception(send_result.get("error", "WhatsApp send failed"))
+        
+        # Step 5: Discard PDF bytes (auto - goes out of scope)
+        del pdf_bytes
+        
+    except ImportError as e:
+        logger.error(f"Invoice module import failed: {e}")
+        result["error"] = f"Import error: {e}"
+    except Exception as e:
+        logger.error(f"Invoice send failed for order {order_id}: {e}")
+        result["error"] = str(e)
+        
+        if CELERY_AVAILABLE and self and hasattr(self, 'retry'):
+            raise self.retry(exc=e)
+    
+    return result
+
+
+def _get_whatsapp_credentials(user_id: str) -> Optional[Dict[str, str]]:
+    """
+    Get WhatsApp credentials for a business.
+    
+    This follows the table chain:
+    connected_phone_numbers → connected_whatsapp_accounts → 
+    connected_business_managers → connected_facebook_accounts
+    
+    CRITICAL: The connected_phone_numbers table uses Supabase UUIDs,
+    so we must resolve Firebase UIDs first.
+    """
+    try:
+        from supabase_client import get_supabase_client, resolve_user_id
+        
+        client = get_supabase_client()
+        if not client:
+            return None
+        
+        # CRITICAL: Resolve Firebase UID → Supabase UUID
+        # The connected_phone_numbers table uses Supabase UUIDs in the user_id column
+        resolved_user_id = resolve_user_id(user_id)
+        if not resolved_user_id:
+            logger.warning(f"Cannot get WhatsApp credentials: no Supabase UUID for {user_id[:15]}...")
+            return None
+        
+        # Step 1: Find the phone number for this user
+        # user_id was Firebase UID, now resolved to Supabase UUID
+        phone_result = client.table("connected_phone_numbers").select(
+            "phone_number_id, display_phone_number, whatsapp_account_id"
+        ).eq("user_id", resolved_user_id).eq("is_active", True).limit(1).execute()
+        
+        if not phone_result.data:
+            logger.warning(f"No connected phone numbers for user {user_id}")
+            return None
+        
+        phone_data = phone_result.data[0]
+        phone_number_id = phone_data.get("phone_number_id")
+        whatsapp_account_id = phone_data.get("whatsapp_account_id")
+        
+        # Step 2: Get WhatsApp account to find business manager
+        waba_result = client.table("connected_whatsapp_accounts").select(
+            "business_manager_id"
+        ).eq("id", whatsapp_account_id).eq("is_active", True).single().execute()
+        
+        if not waba_result.data:
+            logger.warning(f"No WhatsApp account for phone {phone_number_id}")
+            return None
+        
+        business_manager_id = waba_result.data.get("business_manager_id")
+        
+        # Step 3: Get business manager to find Facebook account
+        bm_result = client.table("connected_business_managers").select(
+            "facebook_account_id"
+        ).eq("id", business_manager_id).eq("is_active", True).single().execute()
+        
+        if not bm_result.data:
+            logger.warning("No business manager found")
+            return None
+        
+        facebook_account_id = bm_result.data.get("facebook_account_id")
+        
+        # Step 4: Get Facebook account with access token
+        fb_result = client.table("connected_facebook_accounts").select(
+            "access_token"
+        ).eq("id", facebook_account_id).single().execute()
+        
+        if not fb_result.data or not fb_result.data.get("access_token"):
+            logger.warning("No access token found")
+            return None
+        
+        access_token = fb_result.data.get("access_token")
+        
+        # Try to decrypt the token if crypto is available
+        try:
+            from crypto_utils import decrypt_token
+            decrypted = decrypt_token(access_token)
+            if decrypted:
+                access_token = decrypted
+        except ImportError:
+            pass  # crypto_utils not available, use token as-is
+        except Exception as e:
+            logger.warning(f"Token decryption failed: {e}")
+        
+        return {
+            "phone_number_id": phone_number_id,
+            "access_token": access_token,
+            "business_phone": phone_data.get("display_phone_number"),
+        }
+        
+    except Exception as e:
+        logger.warning(f"Failed to get WhatsApp credentials for {user_id}: {e}")
+        return None
 

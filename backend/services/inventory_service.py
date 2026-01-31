@@ -253,12 +253,83 @@ class InventoryService:
             )
             
         except Exception as e:
+            # ═══════════════════════════════════════════════════════════════
+            # CRITICAL FIX: PostgREST IDEMPOTENT RESPONSE HANDLING
+            # ═══════════════════════════════════════════════════════════════
+            # PostgREST client misinterprets RPC responses with 'message' field
+            # as errors, even when success=True. This catches those cases.
+            # ═══════════════════════════════════════════════════════════════
+            
+            error_payload = None
+            
+            # Try to extract the payload from APIError
+            try:
+                from postgrest.exceptions import APIError
+                if isinstance(e, APIError) and e.args:
+                    error_payload = e.args[0] if isinstance(e.args[0], dict) else None
+            except ImportError:
+                pass
+            
+            # Also check if it's a dict-like error message
+            if error_payload is None:
+                try:
+                    import ast
+                    error_str = str(e)
+                    if error_str.startswith('{') and "'success': True" in error_str:
+                        error_payload = ast.literal_eval(error_str)
+                except:
+                    pass
+            
+            # ✅ IDEMPOTENT SUCCESS: PostgREST raised error but payload is success
+            if (
+                isinstance(error_payload, dict)
+                and error_payload.get("success") is True
+            ):
+                # This is actually a SUCCESS response that PostgREST misinterpreted
+                is_idempotent = error_payload.get("idempotent", False)
+                reused_count = error_payload.get("reused_count", 0)
+                
+                logger.info(
+                    f"♻️ Inventory RPC returned {'idempotent' if is_idempotent else 'normal'} success — normalizing response",
+                    extra={
+                        "reservations": error_payload.get("reservations"),
+                        "idempotent": is_idempotent,
+                        "reused_count": reused_count,
+                        "session_id": session_id
+                    }
+                )
+                
+                # Parse reservation IDs from the response
+                reservation_ids = [
+                    r['reservation_id'] 
+                    for r in error_payload.get('reservations', [])
+                ]
+                
+                # Parse expires_at
+                expires_at = None
+                if error_payload.get('expires_at'):
+                    try:
+                        expires_at = datetime.fromisoformat(
+                            error_payload['expires_at'].replace('Z', '+00:00')
+                        )
+                    except:
+                        pass
+                
+                return ReservationResult(
+                    success=True,
+                    reservation_ids=reservation_ids,
+                    message=error_payload.get('message', 'Stock reserved successfully'),
+                    expires_at=expires_at
+                )
+            
+            # ❌ REAL ERROR: Insufficient stock
             if "Insufficient stock" in str(e):
                 raise InsufficientStockError(
                     message=str(e),
                     correlation_id=correlation_id
                 )
             
+            # ❌ REAL ERROR: Unknown failure
             logger.error(f"Error reserving stock: {e}", exc_info=True)
             raise ReservationError(
                 message=f"Failed to reserve stock: {str(e)}",
@@ -279,10 +350,18 @@ class InventoryService:
         """
         Confirm reservations and deduct actual stock ATOMICALLY.
         
-        CRITICAL INVARIANT:
-            Stock is ONLY deducted if order exists in database.
-            All operations (verify, deduct, update, log) happen in single transaction.
-            Any failure -> automatic rollback, stock unchanged.
+        AMAZON-GRADE INVARIANT:
+            ┌─────────────────────────────────────────────────────────────────┐
+            │ STOCK IS A PROMISE. Once reserved, confirmation MUST succeed.  │
+            │ Confirmation NEVER fails due to insufficient stock.            │
+            │ Oversells are logged as anomalies, not blocked.                │
+            └─────────────────────────────────────────────────────────────────┘
+        
+        Allowed Failures:
+            - Order doesn't exist (ATOMIC_GUARD_VIOLATION)
+            - Reservation expired (RESERVATION_EXPIRED)
+            - Reservation released (RESERVATION_RELEASED)
+            - Reservation not found (RESERVATION_NOT_FOUND)
         
         Args:
             reservation_ids: IDs from validate_and_reserve
@@ -294,14 +373,14 @@ class InventoryService:
             True if confirmed (including idempotent repeat calls)
             
         Raises:
-            ReservationError: If order doesn't exist or confirmation fails
+            ReservationError: If reservation constraints violated (never stock)
+            ReservationExpiredError: If reservation has expired
         """
         if not reservation_ids:
             return True
         
         try:
-            # Use atomic RPC that verifies order exists before deducting stock
-            # All operations in single PostgreSQL transaction
+            # Use atomic RPC - trusts reservations, never re-validates stock
             result = self.db.rpc('confirm_reservations_atomic', {
                 'p_reservation_ids': reservation_ids,
                 'p_order_id': order_id,
@@ -316,12 +395,33 @@ class InventoryService:
             
             data = result.data
             
-            if data.get('idempotent'):
+            # Handle idempotent responses
+            if data.get('idempotent') or data.get('already_confirmed'):
                 logger.info(f"Idempotent: Order {order_id} already confirmed")
+                return True
+            
+            # Success path
+            confirmed_count = data.get('confirmed_count', len(reservation_ids))
+            anomalies_logged = data.get('anomalies_logged', 0)
+            
+            if anomalies_logged > 0:
+                # Oversell occurred but was handled - log for ops team
+                logger.warning(
+                    f"⚠️ OVERSELL DETECTED: Confirmed {confirmed_count} reservations for order {order_id} "
+                    f"with {anomalies_logged} stock anomalies logged",
+                    extra={
+                        "order_id": order_id,
+                        "reservation_ids": reservation_ids,
+                        "confirmed_count": confirmed_count,
+                        "anomalies_logged": anomalies_logged,
+                        "correlation_id": correlation_id,
+                        "alert": "INVENTORY_ANOMALY",
+                        "severity": "warning"
+                    }
+                )
             else:
                 logger.info(
-                    f"✅ ATOMIC: Confirmed {data.get('confirmed_count', len(reservation_ids))} "
-                    f"reservations for order {order_id}",
+                    f"✅ ATOMIC: Confirmed {confirmed_count} reservations for order {order_id}",
                     extra={
                         "order_id": order_id,
                         "reservation_ids": reservation_ids,
@@ -335,10 +435,12 @@ class InventoryService:
         except Exception as e:
             error_msg = str(e)
             
-            # Check for atomic guard failure (order doesn't exist)
-            if 'ATOMIC_GUARD_VIOLATION' in error_msg or 'does not exist' in error_msg:
-                # CRITICAL: This indicates a serious upstream bug
-                # This should trigger an alert in your monitoring system
+            # ═══════════════════════════════════════════════════════════════
+            # ERROR SEMANTICS (Enterprise-Grade)
+            # ═══════════════════════════════════════════════════════════════
+            
+            # 1. Order doesn't exist - CRITICAL upstream bug
+            if 'ATOMIC_GUARD_VIOLATION' in error_msg:
                 logger.critical(
                     f"🚨 ATOMIC_GUARD_VIOLATION: Order {order_id} not found - stock deduction BLOCKED. "
                     f"This is a CRITICAL bug that requires immediate investigation.",
@@ -356,6 +458,52 @@ class InventoryService:
                     correlation_id=correlation_id
                 )
             
+            # 2. Reservation expired - expected edge case (TTL exceeded)
+            if 'RESERVATION_EXPIRED' in error_msg:
+                logger.warning(
+                    f"⏰ Reservation expired for order {order_id} - user took too long",
+                    extra={
+                        "order_id": order_id,
+                        "reservation_ids": reservation_ids,
+                        "correlation_id": correlation_id
+                    }
+                )
+                raise ReservationExpiredError(
+                    message="Reservation expired - please restart checkout",
+                    correlation_id=correlation_id
+                )
+            
+            # 3. Reservation released - user abandoned or payment failed previously
+            if 'RESERVATION_RELEASED' in error_msg:
+                logger.warning(
+                    f"🔓 Reservation already released for order {order_id}",
+                    extra={
+                        "order_id": order_id,
+                        "reservation_ids": reservation_ids,
+                        "correlation_id": correlation_id
+                    }
+                )
+                raise ReservationError(
+                    message="Reservation was already released - please restart checkout",
+                    correlation_id=correlation_id
+                )
+            
+            # 4. Reservation not found - possibly wrong IDs passed
+            if 'RESERVATION_NOT_FOUND' in error_msg:
+                logger.error(
+                    f"❓ Reservation not found for order {order_id}",
+                    extra={
+                        "order_id": order_id,
+                        "reservation_ids": reservation_ids,
+                        "correlation_id": correlation_id
+                    }
+                )
+                raise ReservationError(
+                    message="Reservation not found - please restart checkout",
+                    correlation_id=correlation_id
+                )
+            
+            # 5. Unknown error - log and re-raise
             logger.error(f"Error confirming reservations: {e}", exc_info=True)
             raise ReservationError(
                 message=f"Failed to confirm reservations: {error_msg}",
@@ -512,3 +660,116 @@ def reset_inventory_service():
     """Reset singleton (for testing)."""
     global _inventory_service
     _inventory_service = None
+
+
+# =============================================================================
+# IDEMPOTENT HELPER (SEV-1 FIX)
+# =============================================================================
+
+def get_or_create_pre_payment_reservations(
+    state: 'ConversationState',
+    user_id: str,
+    business_owner_id: str,
+    stock_items: list,
+    session_id: str,
+    source: str = 'whatsapp_ai_prepayment',
+    logger: logging.Logger = None
+) -> tuple:
+    """
+    ╔══════════════════════════════════════════════════════════════════════════╗
+    ║  SEV-1 FIX: IDEMPOTENT RESERVATION HELPER                               ║
+    ║  This function MUST be used for all pre-payment reservations.           ║
+    ║  It enforces the EARLY-EXIT pattern - impossible to bypass.             ║
+    ╚══════════════════════════════════════════════════════════════════════════╝
+    
+    GUARANTEED BEHAVIOR:
+    - If reservations exist in state → returns them immediately (no DB call)
+    - If no reservations → creates them and stores in state
+    - NEVER creates duplicates, even under race conditions
+    
+    Args:
+        state: ConversationState containing collected_fields
+        user_id: Customer user ID (for session tracking)
+        business_owner_id: Business owner ID
+        stock_items: List of StockItem objects to reserve
+        session_id: Session ID for idempotency
+        source: Reservation source (default: whatsapp_ai_prepayment)
+        logger: Optional logger instance
+        
+    Returns:
+        tuple: (reservation_ids: List[str], is_new: bool)
+        - reservation_ids: The reservation IDs (existing or newly created)
+        - is_new: True if new reservations were created, False if reused
+    """
+    from utils import metrics
+    
+    _log = logger or logging.getLogger('reviseit.service.inventory')
+    
+    # ═══════════════════════════════════════════════════════════════════════
+    # EARLY-EXIT: Return existing reservations immediately
+    # ═══════════════════════════════════════════════════════════════════════
+    existing_ids = state.collected_fields.get("pre_payment_reservation_ids")
+    
+    if existing_ids and len(existing_ids) > 0:
+        # 📊 Track early exits for ops visibility
+        metrics.increment(metrics.RESERVATION_EARLY_EXIT)
+        
+        _log.info(
+            f"📦 ♻️ RESERVATION EARLY-EXIT: Reusing {len(existing_ids)} existing reservations",
+            extra={
+                "reservation_ids": existing_ids,
+                "user_id": user_id,
+                "session_id": session_id,
+                "early_exit": True
+            }
+        )
+        return (existing_ids, False)  # (ids, is_new=False)
+    
+    # ═══════════════════════════════════════════════════════════════════════
+    # FIRST TIME: Create new reservations
+    # ═══════════════════════════════════════════════════════════════════════
+    if not stock_items:
+        _log.debug("No stock items to reserve")
+        return ([], False)
+    
+    inventory = get_inventory_service()
+    
+    _log.info(
+        f"📦 🟡 RESERVATION: First-time creation for {len(stock_items)} items",
+        extra={
+            "user_id": user_id,
+            "session_id": session_id,
+            "item_count": len(stock_items)
+        }
+    )
+    
+    result = inventory.validate_and_reserve(
+        user_id=business_owner_id,
+        items=stock_items,
+        source=source,
+        session_id=session_id,
+    )
+    
+    if not result.success:
+        # Reservation failed (insufficient stock, etc.)
+        return ([], False)
+    
+    # Store in state for future idempotency
+    reservation_ids = result.reservation_ids
+    state.collect_field("pre_payment_reservation_ids", reservation_ids)
+    
+    # 📊 Track successful reservations
+    metrics.increment(metrics.RESERVATION_SUCCESS)
+    
+    _log.info(
+        f"📦 ✅ RESERVATION: Created {len(reservation_ids)} new reservations",
+        extra={
+            "reservation_ids": reservation_ids,
+            "user_id": user_id,
+            "session_id": session_id,
+            "expires_at": result.expires_at.isoformat() if result.expires_at else None
+        }
+    )
+    
+    return (reservation_ids, True)  # (ids, is_new=True)
+

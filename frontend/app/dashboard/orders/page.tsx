@@ -6,6 +6,7 @@ import Image from "next/image";
 import styles from "./orders.module.css";
 import { useRealtimeOrders } from "@/lib/hooks/useRealtimeOrders";
 import ImageModal from "../components/ImageModal";
+import Dropdown from "@/app/utils/ui/Dropdown";
 
 interface OrderItem {
   name: string;
@@ -75,6 +76,10 @@ export default function OrdersPage() {
   ); // Cache for product images
   const [updatingStatus, setUpdatingStatus] = useState<Set<string>>(new Set()); // Track orders being updated
   const [selectedImageUrl, setSelectedImageUrl] = useState<string | null>(null); // For image zoom modal
+  const [pendingStatusChange, setPendingStatusChange] = useState<{
+    order: Order;
+    newStatus: string;
+  } | null>(null); // For status change confirmation
 
   // Google Sheets integration state
   const [showSheetModal, setShowSheetModal] = useState(false);
@@ -166,22 +171,39 @@ export default function OrdersPage() {
   // Optimized: Fetch product image with caching
   const fetchProductImage = useCallback(
     async (productId: string) => {
-      // Return cached image if available
+      // Extract base product ID if it's in concatenated format (e.g., "uuid_variant_uuid")
+      let baseProductId = productId;
+      if (productId.includes("_variant_")) {
+        baseProductId = productId.split("_variant_")[0];
+      }
+
+      // Return cached image if available (check both original and base ID)
       if (productImages[productId]) {
         return productImages[productId] || null;
       }
+      if (productImages[baseProductId]) {
+        return productImages[baseProductId] || null;
+      }
 
       try {
-        const response = await fetch(`/api/products/${productId}`);
+        const response = await fetch(`/api/products/${baseProductId}`);
         const data = await response.json();
 
         if (data.product?.image_url) {
           const imageUrl = data.product.image_url;
-          setProductImages((prev) => ({ ...prev, [productId]: imageUrl }));
+          // Cache under both the original productId and baseProductId
+          setProductImages((prev) => ({
+            ...prev,
+            [productId]: imageUrl,
+            [baseProductId]: imageUrl,
+          }));
           return imageUrl;
         }
       } catch (error) {
-        console.error(`Error fetching product image for ${productId}:`, error);
+        console.error(
+          `Error fetching product image for ${baseProductId}:`,
+          error,
+        );
       }
 
       return null;
@@ -597,9 +619,29 @@ export default function OrdersPage() {
     }
   };
 
-  const handleStatusChange = async (order: Order, newStatus: string) => {
-    // Optimistic update - update UI immediately
+  // Show confirmation modal before changing status
+  const handleStatusChange = (order: Order, newStatus: string) => {
+    // Don't show confirmation if status is the same
+    if (order.status === newStatus) return;
+    setPendingStatusChange({ order, newStatus });
+  };
+
+  // Cancel status change
+  const cancelStatusChange = () => {
+    setPendingStatusChange(null);
+  };
+
+  // Confirm and execute status change
+  const confirmStatusChange = async () => {
+    if (!pendingStatusChange) return;
+
+    const { order, newStatus } = pendingStatusChange;
     const previousStatus = order.status;
+
+    // Close confirmation modal
+    setPendingStatusChange(null);
+
+    // Optimistic update - update UI immediately
     setUpdatingStatus((prev) => new Set(prev).add(order.id));
 
     setOrders((prev) =>
@@ -614,12 +656,19 @@ export default function OrdersPage() {
       ),
     );
 
+    // Create abort controller for timeout (10 seconds max)
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 10000);
+
     try {
       const response = await fetch(`/api/orders/${order.id}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ status: newStatus }),
+        signal: controller.signal,
       });
+
+      clearTimeout(timeoutId);
 
       if (!response.ok) {
         // Revert on error
@@ -630,12 +679,22 @@ export default function OrdersPage() {
               : o,
           ),
         );
+        console.error(`Failed to update order status: ${response.status}`);
         alert("Failed to update order status. Please try again.");
       }
-      // If successful, realtime subscription will confirm the update
-      // and remove from updatingStatus set via handleRealtimeUpdate
+      // Success! The optimistic update is already applied.
+      // Realtime subscription may send a confirmation, but we don't depend on it.
     } catch (error) {
+      clearTimeout(timeoutId);
+
+      // Check if this was a timeout abort
+      const isTimeout = error instanceof Error && error.name === "AbortError";
+      const errorMessage = isTimeout
+        ? "Request timed out. Please check your connection."
+        : "Failed to update order status. Please try again.";
+
       console.error("Error updating status:", error);
+
       // Revert on error
       setOrders((prev) =>
         prev.map((o) =>
@@ -644,7 +703,10 @@ export default function OrdersPage() {
             : o,
         ),
       );
-      alert("Failed to update order status. Please try again.");
+      alert(errorMessage);
+    } finally {
+      // CRITICAL: Always clear loading state regardless of success/failure
+      // This guarantees the UI never gets stuck in an infinite loading state
       setUpdatingStatus((prev) => {
         const next = new Set(prev);
         next.delete(order.id);
@@ -672,10 +734,17 @@ export default function OrdersPage() {
       ),
     );
 
+    // Create abort controller for timeout (10 seconds max)
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 10000);
+
     try {
       const response = await fetch(`/api/orders/${order.id}`, {
         method: "DELETE",
+        signal: controller.signal,
       });
+
+      clearTimeout(timeoutId);
 
       if (!response.ok) {
         // Revert on error
@@ -686,11 +755,21 @@ export default function OrdersPage() {
               : o,
           ),
         );
+        console.error(`Failed to cancel order: ${response.status}`);
         alert("Failed to cancel order. Please try again.");
       }
-      // Realtime subscription will confirm the update
+      // Success! Optimistic update already applied.
     } catch (error) {
+      clearTimeout(timeoutId);
+
+      // Check if this was a timeout abort
+      const isTimeout = error instanceof Error && error.name === "AbortError";
+      const errorMessage = isTimeout
+        ? "Request timed out. Please check your connection."
+        : "Failed to cancel order. Please try again.";
+
       console.error("Error cancelling order:", error);
+
       // Revert on error
       setOrders((prev) =>
         prev.map((o) =>
@@ -699,7 +778,9 @@ export default function OrdersPage() {
             : o,
         ),
       );
-      alert("Failed to cancel order. Please try again.");
+      alert(errorMessage);
+    } finally {
+      // CRITICAL: Always clear loading state regardless of success/failure
       setUpdatingStatus((prev) => {
         const next = new Set(prev);
         next.delete(order.id);
@@ -900,6 +981,25 @@ export default function OrdersPage() {
       <div className={styles.ordersSection}>
         <div className={styles.sectionHeader}>
           <h2 className={styles.sectionTitle}>All Orders</h2>
+
+          {/* Mobile Filter Dropdown - Hidden on Desktop */}
+          <div className={styles.mobileFilterDropdown}>
+            <Dropdown
+              options={[
+                { value: "all", label: "All Orders" },
+                { value: "pending", label: "Pending" },
+                { value: "confirmed", label: "Confirmed" },
+                { value: "processing", label: "Processing" },
+                { value: "completed", label: "Completed" },
+                { value: "cancelled", label: "Cancelled" },
+              ]}
+              value={filter}
+              onChange={(value) => setFilter(value)}
+              className={styles.filterDropdownBtn}
+            />
+          </div>
+
+          {/* Desktop Filter Tabs - Hidden on Mobile */}
           <div className={styles.filterTabs}>
             {[
               "all",
@@ -1007,27 +1107,17 @@ export default function OrdersPage() {
                     </td>
                     <td onClick={(e) => e.stopPropagation()}>
                       <div className={styles.actionButtons}>
-                        <select
-                          className={styles.statusSelect}
+                        <Dropdown
+                          options={STATUS_OPTIONS}
                           value={order.status}
-                          onChange={(e) =>
-                            handleStatusChange(order, e.target.value)
-                          }
+                          onChange={(value) => handleStatusChange(order, value)}
                           disabled={updatingStatus.has(order.id)}
-                          aria-label="Change order status"
-                          style={{
-                            opacity: updatingStatus.has(order.id) ? 0.6 : 1,
-                            cursor: updatingStatus.has(order.id)
-                              ? "wait"
-                              : "pointer",
-                          }}
-                        >
-                          {STATUS_OPTIONS.map((opt) => (
-                            <option key={opt.value} value={opt.value}>
-                              {opt.label}
-                            </option>
-                          ))}
-                        </select>
+                          className={`${styles.statusDropdown} ${
+                            updatingStatus.has(order.id)
+                              ? styles.dropdownUpdating
+                              : ""
+                          }`}
+                        />
                         <button
                           className={`${styles.actionBtn} ${styles.danger}`}
                           onClick={() => handleCancelOrder(order)}
@@ -1080,6 +1170,41 @@ export default function OrdersPage() {
                     }
                   }}
                 >
+                  {/* Cancel button - top right corner */}
+                  <button
+                    className={styles.orderCardCancelBtn}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleCancelOrder(order);
+                    }}
+                    aria-label="Cancel order"
+                  >
+                    <svg
+                      width="16"
+                      height="16"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                    >
+                      <line
+                        x1="18"
+                        y1="6"
+                        x2="6"
+                        y2="18"
+                        strokeLinecap="round"
+                      />
+                      <line
+                        x1="6"
+                        y1="6"
+                        x2="18"
+                        y2="18"
+                        strokeLinecap="round"
+                      />
+                    </svg>
+                  </button>
+
+                  {/* Header - customer name and date stacked */}
                   <div className={styles.orderCardHeader}>
                     <span className={styles.orderCardCustomer}>
                       {order.customer_name}
@@ -1088,6 +1213,8 @@ export default function OrdersPage() {
                       {formatDate(order.created_at)}
                     </span>
                   </div>
+
+                  {/* Items list */}
                   <div className={styles.orderCardItems}>
                     {order.items.map((item, idx) => (
                       <span key={idx}>
@@ -1098,9 +1225,12 @@ export default function OrdersPage() {
                       </span>
                     ))}
                   </div>
+
+                  {/* Footer - badges and full-width dropdown */}
                   <div
                     className={styles.orderCardFooter}
                     onClick={(e) => e.stopPropagation()}
+                    onTouchStart={(e) => e.stopPropagation()}
                   >
                     <div className={styles.orderCardBadges}>
                       <span
@@ -1119,56 +1249,17 @@ export default function OrdersPage() {
                       </span>
                     </div>
                     <div className={styles.orderCardActions}>
-                      <select
-                        className={styles.statusSelectMobile}
+                      <Dropdown
+                        options={STATUS_OPTIONS}
                         value={order.status}
-                        onChange={(e) =>
-                          handleStatusChange(order, e.target.value)
-                        }
+                        onChange={(value) => handleStatusChange(order, value)}
                         disabled={updatingStatus.has(order.id)}
-                        aria-label="Change order status"
-                        style={{
-                          opacity: updatingStatus.has(order.id) ? 0.6 : 1,
-                          cursor: updatingStatus.has(order.id)
-                            ? "wait"
-                            : "pointer",
-                        }}
-                      >
-                        {STATUS_OPTIONS.map((opt) => (
-                          <option key={opt.value} value={opt.value}>
-                            {opt.label}
-                          </option>
-                        ))}
-                      </select>
-                      <button
-                        className={`${styles.actionBtnMobile} ${styles.danger}`}
-                        onClick={() => handleCancelOrder(order)}
-                        aria-label="Cancel order"
-                      >
-                        <svg
-                          width="16"
-                          height="16"
-                          viewBox="0 0 24 24"
-                          fill="none"
-                          stroke="currentColor"
-                          strokeWidth="2"
-                        >
-                          <line
-                            x1="18"
-                            y1="6"
-                            x2="6"
-                            y2="18"
-                            strokeLinecap="round"
-                          />
-                          <line
-                            x1="6"
-                            y1="6"
-                            x2="18"
-                            y2="18"
-                            strokeLinecap="round"
-                          />
-                        </svg>
-                      </button>
+                        className={`${styles.statusDropdownMobile} ${
+                          updatingStatus.has(order.id)
+                            ? styles.dropdownUpdating
+                            : ""
+                        }`}
+                      />
                     </div>
                   </div>
                 </div>
@@ -1707,6 +1798,58 @@ export default function OrdersPage() {
           onClose={() => setSelectedImageUrl(null)}
           imageUrl={selectedImageUrl}
         />
+      )}
+
+      {/* Status Change Confirmation Modal */}
+      {pendingStatusChange && (
+        <div
+          className={styles.confirmationOverlay}
+          onClick={cancelStatusChange}
+          role="presentation"
+        >
+          <div
+            className={styles.confirmationModal}
+            onClick={(e) => e.stopPropagation()}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="confirm-status-title"
+          >
+            <h3 id="confirm-status-title" className={styles.confirmationTitle}>
+              Change Order Status?
+            </h3>
+            <p className={styles.confirmationText}>
+              Change status from{" "}
+              <span
+                className={`${styles.statusBadge} ${styles[pendingStatusChange.order.status]}`}
+              >
+                {pendingStatusChange.order.status}
+              </span>{" "}
+              to{" "}
+              <span
+                className={`${styles.statusBadge} ${styles[pendingStatusChange.newStatus]}`}
+              >
+                {pendingStatusChange.newStatus}
+              </span>
+              ?
+            </p>
+            <div className={styles.confirmationActions}>
+              <button
+                type="button"
+                className={styles.confirmationNoBtn}
+                onClick={cancelStatusChange}
+              >
+                No, Cancel
+              </button>
+              <button
+                type="button"
+                className={styles.confirmationYesBtn}
+                onClick={confirmStatusChange}
+              >
+                Yes, Change
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

@@ -34,7 +34,7 @@ export async function GET(request: NextRequest) {
 
     // Fetch order by order ID and store slug (user_id)
     // Using ilike for case-insensitive search
-    const { data, error } = await supabase
+    const { data: orders, error } = await supabase
       .from("orders")
       .select("*")
       .eq("user_id", storeSlug)
@@ -50,9 +50,54 @@ export async function GET(request: NextRequest) {
       );
     }
 
+    // Enrich order items with product images
+    if (orders && orders.length > 0) {
+      // Collect all unique product IDs from all orders
+      const productIds = new Set<string>();
+      orders.forEach((order) => {
+        const items = order.items || [];
+        items.forEach((item: { product_id?: string }) => {
+          if (item.product_id) {
+            productIds.add(item.product_id);
+          }
+        });
+      });
+
+      // Fetch product images if we have product IDs
+      let productImages: Record<string, string> = {};
+      if (productIds.size > 0) {
+        const { data: products } = await supabase
+          .from("products")
+          .select("id, image_url")
+          .in("id", Array.from(productIds));
+
+        if (products) {
+          products.forEach((product) => {
+            if (product.image_url) {
+              productImages[product.id] = product.image_url;
+            }
+          });
+        }
+      }
+
+      // Enrich items with imageUrl
+      orders.forEach((order) => {
+        if (order.items && Array.isArray(order.items)) {
+          order.items = order.items.map(
+            (item: { product_id?: string; imageUrl?: string }) => ({
+              ...item,
+              imageUrl:
+                item.imageUrl ||
+                (item.product_id ? productImages[item.product_id] : undefined),
+            }),
+          );
+        }
+      });
+    }
+
     return NextResponse.json({
       success: true,
-      data: data || [],
+      data: orders || [],
     });
   } catch (error) {
     console.error("Error in GET /api/orders/track:", error);

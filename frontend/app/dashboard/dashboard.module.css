@@ -1765,7 +1765,7 @@
 .mobileContent {
   flex: 1;
   overflow-y: auto;
-  padding: 1rem;
+  padding: 0.5rem;
   margin-top: 70px; /* Height of mobile header */
 }
 

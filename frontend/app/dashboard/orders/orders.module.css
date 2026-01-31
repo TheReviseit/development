@@ -189,6 +189,23 @@
   color: #ffffff;
 }
 
+/* Mobile Filter Dropdown - Hidden by default on desktop */
+.mobileFilterDropdown {
+  display: none;
+}
+
+.filterDropdownBtn {
+  min-width: 160px;
+}
+
+.filterDropdownBtn button {
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 10px;
+  font-weight: 600;
+  color: #ffffff;
+}
+
 /* Orders Table */
 .ordersTable {
   width: 100%;
@@ -812,6 +829,60 @@
   color: #ffffff;
 }
 
+/* Custom Status Dropdown - Desktop */
+.statusDropdown {
+  min-width: 120px;
+}
+
+.statusDropdown button {
+  padding: 0.5rem 0.75rem;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 8px;
+  color: #ffffff;
+  transition: all 0.2s ease;
+}
+
+.statusDropdown button:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.25);
+}
+
+/* Custom Status Dropdown - Mobile */
+.statusDropdownMobile {
+  min-width: 130px;
+}
+
+.statusDropdownMobile button {
+  padding: 0.625rem 0.875rem;
+  font-size: 0.9375rem;
+  font-weight: 600;
+  min-height: 48px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 10px;
+  color: #ffffff;
+  backdrop-filter: blur(10px);
+  transition: all 0.2s ease;
+}
+
+.statusDropdownMobile button:active:not(:disabled) {
+  background: rgba(255, 255, 255, 0.08);
+  transform: scale(0.98);
+}
+
+/* Dropdown Updating State */
+.dropdownUpdating {
+  opacity: 0.6;
+  pointer-events: none;
+}
+
+.dropdownUpdating button {
+  cursor: wait !important;
+}
+
 /* ============================================
    Mobile-First Responsive Design
    Breakpoints:
@@ -833,11 +904,12 @@
   border: 1px solid rgba(255, 255, 255, 0.15);
   border-radius: 16px;
   padding: 1.25rem;
+  padding-top: 1.5rem;
   margin-bottom: 1rem;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   position: relative;
-  overflow: hidden;
+  /* overflow: hidden; Removed to allow dropdowns to overflow */
 }
 
 .orderCard::before {
@@ -850,6 +922,7 @@
   /* background: white; */
   opacity: 0;
   transition: opacity 0.3s ease;
+  border-radius: 16px 16px 0 0;
 }
 
 .orderCard:active {
@@ -861,12 +934,43 @@
   opacity: 1;
 }
 
+/* Cancel button - top right corner */
+.orderCardCancelBtn {
+  position: absolute;
+  top: 0.75rem;
+  right: 0.75rem;
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 10px;
+  color: #888;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+
+.orderCardCancelBtn:hover {
+  background: rgba(239, 68, 68, 0.15);
+  border-color: rgba(239, 68, 68, 0.3);
+  color: #ef4444;
+}
+
+.orderCardCancelBtn:active {
+  transform: scale(0.9);
+}
+
+/* Header - stacked layout for mobile */
 .orderCardHeader {
   display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  margin-bottom: 1rem;
-  gap: 1rem;
+  flex-direction: column;
+  gap: 0.375rem;
+  margin-bottom: 0.875rem;
+  padding-right: 3rem; /* Space for cancel button */
 }
 
 .orderCardCustomer {
@@ -880,7 +984,6 @@
 .orderCardDate {
   font-size: 0.8125rem;
   color: #808080;
-  white-space: nowrap;
   font-weight: 500;
 }
 
@@ -892,11 +995,11 @@
   font-weight: 400;
 }
 
+/* Footer - full width actions */
 .orderCardFooter {
   display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 0.75rem;
+  flex-direction: column;
+  gap: 0.875rem;
   padding-top: 1rem;
   border-top: 1px solid rgba(255, 255, 255, 0.1);
 }
@@ -905,13 +1008,11 @@
   display: flex;
   gap: 0.625rem;
   flex-wrap: wrap;
-  flex: 1;
 }
 
 .orderCardActions {
   display: flex;
-  gap: 0.625rem;
-  align-items: center;
+  width: 100%;
 }
 
 /* Status Select Mobile */
@@ -1010,53 +1111,37 @@
     grid-template-columns: 1fr;
   }
 
+  /* Hide tabs on mobile, show dropdown instead */
   .filterTabs {
-    display: flex;
-    overflow-x: auto;
-    -webkit-overflow-scrolling: touch;
-    scrollbar-width: none;
-    -ms-overflow-style: none;
-    gap: 0.5rem;
-    padding: 0.5rem;
-    padding-bottom: 0.75rem;
-    flex-wrap: nowrap;
-    background: rgba(255, 255, 255, 0.02);
-    border-radius: 12px;
-    margin-bottom: 1rem;
-  }
-
-  .filterTabs::-webkit-scrollbar {
     display: none;
   }
 
-  .filterTab {
-    flex-shrink: 0;
-    min-height: 48px;
-    padding: 0.75rem 1.25rem;
-    font-weight: 600;
-    font-size: 0.9375rem;
-    border-radius: 10px;
-    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-    backdrop-filter: blur(10px);
+  .mobileFilterDropdown {
+    display: block;
+    width: 100%;
   }
 
-  .filterTab.active {
-    background: linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%);
-    box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
-    transform: translateY(-2px);
+  .filterDropdownBtn {
+    width: 100%;
+    min-width: 100%;
   }
 
-  .filterTab:active {
-    transform: scale(0.96);
+  .filterDropdownBtn button {
+    width: 100%;
+    min-height: 52px;
+    font-size: 1rem;
+    padding: 0.875rem 1.25rem;
+    justify-content: space-between;
   }
 
   .sectionHeader {
     flex-direction: column;
     align-items: stretch;
+    gap: 1rem;
   }
 
   .sectionTitle {
-    margin-bottom: 0.5rem;
+    margin-bottom: 0;
   }
 
   /* Modal becomes slide-in drawer */
@@ -1737,4 +1822,195 @@
   color: #ffffff;
   font-weight: 600;
   font-size: 0.9375rem;
+}
+
+/* ============================================
+   Status Change Confirmation Modal
+   ============================================ */
+.confirmationOverlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.75);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1.5rem;
+  z-index: 999999;
+  animation: fadeIn 0.2s ease;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.confirmationModal {
+  background: linear-gradient(135deg, #1a1a1a 0%, #0f0f0f 100%);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 20px;
+  padding: 2rem;
+  max-width: 400px;
+  width: 100%;
+  box-shadow:
+    0 20px 50px rgba(0, 0, 0, 0.5),
+    0 0 0 1px rgba(255, 255, 255, 0.05);
+  animation: slideUp 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+@keyframes slideUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.confirmationTitle {
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: #ffffff;
+  margin: 0 0 1rem 0;
+  text-align: center;
+}
+
+.confirmationText {
+  font-size: 0.9375rem;
+  color: #b0b0b0;
+  text-align: center;
+  margin: 0 0 1.5rem 0;
+  line-height: 2;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+}
+
+.confirmationText .statusBadge {
+  display: inline-flex;
+  vertical-align: middle;
+}
+
+.confirmationActions {
+  display: flex;
+  gap: 1rem;
+}
+
+.confirmationNoBtn,
+.confirmationYesBtn {
+  flex: 1;
+  padding: 1rem 1.5rem;
+  border-radius: 12px;
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  min-height: 52px;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+
+.confirmationNoBtn {
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  color: #b0b0b0;
+}
+
+.confirmationNoBtn:hover {
+  background: rgba(255, 255, 255, 0.12);
+  color: #ffffff;
+}
+
+.confirmationNoBtn:active {
+  transform: scale(0.98);
+}
+
+.confirmationYesBtn {
+  background: #ffffff;
+  border: none;
+  color: #000000;
+  box-shadow: 0 4px 12px rgba(255, 255, 255, 0.2);
+}
+
+.confirmationYesBtn:hover {
+  background: #e5e5e5;
+  box-shadow: 0 6px 20px rgba(255, 255, 255, 0.3);
+  transform: translateY(-2px);
+}
+
+.confirmationYesBtn:active {
+  transform: scale(0.98);
+}
+
+/* ============================================
+   Mobile Dropdown Full Width
+   ============================================ */
+.statusDropdownMobile {
+  width: 100%;
+}
+
+/* ============================================
+   Mobile Responsive Confirmation Modal
+   ============================================ */
+@media (max-width: 767px) {
+  .confirmationOverlay {
+    padding: 1rem;
+    align-items: center;
+  }
+
+  .confirmationModal {
+    max-width: 100%;
+    width: calc(100% - 2rem);
+    padding: 1.5rem;
+    border-radius: 16px;
+    margin: auto;
+  }
+
+  .confirmationTitle {
+    font-size: 1.125rem;
+    margin-bottom: 0.875rem;
+  }
+
+  .confirmationText {
+    font-size: 0.875rem;
+    margin-bottom: 1.25rem;
+    line-height: 1.8;
+    gap: 0.375rem;
+  }
+
+  .confirmationActions {
+    flex-direction: column;
+    gap: 0.75rem;
+  }
+
+  .confirmationNoBtn,
+  .confirmationYesBtn {
+    width: 100%;
+    min-height: 56px;
+    font-size: 1.0625rem;
+    padding: 1rem;
+  }
+}
+
+@media (max-width: 429px) {
+  .confirmationModal {
+    padding: 1.25rem;
+  }
+
+  .confirmationTitle {
+    font-size: 1rem;
+  }
+
+  .confirmationText {
+    font-size: 0.8125rem;
+  }
 }

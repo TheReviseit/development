@@ -210,6 +210,12 @@ def create_order():
             status_code=400,
         )
     
+    # Log customer contact info for debugging
+    logger.info(
+        f"📦 [Order Create] Received: address={data.get('customer_address', 'N/A')[:30] if data.get('customer_address') else 'N/A'}..., "
+        f"email={data.get('customer_email', 'N/A')}"
+    )
+    
     # Import schema and create order data
     from domain import OrderCreate, OrderItem, OrderSource
     
@@ -248,6 +254,8 @@ def create_order():
         user_id=user_id,
         customer_name=data.get('customer_name', ''),
         customer_phone=data.get('customer_phone', ''),
+        customer_address=data.get('customer_address'),  # FIX: Include address from request
+        customer_email=data.get('customer_email'),  # FIX: Include email from request
         items=items,
         source=source,
         notes=data.get('notes'),
@@ -709,7 +717,7 @@ def initialize_order_sheet():
         spreadsheet_id = sheets_config.get("spreadsheet_id")
         sheet_name = sheets_config.get("sheet_name", "Orders")
         
-        # Headers for the order sheet
+        # Headers for the order sheet (Column K is hidden UUID for auditing)
         headers = [
             "Order ID",
             "Date",
@@ -720,7 +728,8 @@ def initialize_order_sheet():
             "Total Qty",
             "Status",
             "Source",
-            "Notes"
+            "Notes",
+            "DB Order ID"  # Hidden column for full UUID (auditing only)
         ]
         
         try:
@@ -733,11 +742,11 @@ def initialize_order_sheet():
                 sheet = spreadsheet.worksheet(sheet_name)
                 logger.info(f"📊 Found existing worksheet '{sheet_name}', updating headers...")
                 
-                # Update headers in first row
-                sheet.update('A1:J1', [headers])
+                # Update headers in first row (including hidden DB UUID column)
+                sheet.update('A1:K1', [headers])
                 
                 # Format header row
-                sheet.format('A1:J1', {
+                sheet.format('A1:K1', {
                     "textFormat": {"bold": True},
                     "backgroundColor": {"red": 0.9, "green": 0.9, "blue": 0.9}
                 })
@@ -750,7 +759,7 @@ def initialize_order_sheet():
                     sheet = spreadsheet.add_worksheet(
                         title=sheet_name,
                         rows=1000,
-                        cols=10
+                        cols=11  # 11 columns: 10 visible + 1 hidden DB UUID
                     )
                 except gspread.exceptions.APIError as e:
                     # Handle race condition where sheet might have been created concurrently
@@ -761,10 +770,10 @@ def initialize_order_sheet():
                         raise e
                 
                 # Add headers
-                sheet.update('A1:J1', [headers])
+                sheet.update('A1:K1', [headers])
                 
                 # Format header row
-                sheet.format('A1:J1', {
+                sheet.format('A1:K1', {
                     "textFormat": {"bold": True},
                     "backgroundColor": {"red": 0.9, "green": 0.9, "blue": 0.9}
                 })

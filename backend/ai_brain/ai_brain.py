@@ -1720,6 +1720,13 @@ class AIBrain:
             state.collect_field("pending_product_data", mentioned_product)
             
             # Check if we need variant selection
+            # AMAZON-GRADE: Use get_sellable_sizes to filter OOS sizes
+            try:
+                from utils.availability import get_sellable_sizes, get_stock_for_selection
+                sizes = get_sellable_sizes(mentioned_product)
+            except ImportError:
+                sizes = mentioned_product.get("sizes", [])
+            
             if sizes:
                 state.collect_field("_needs_size", True)
                 state.collect_field("_available_sizes", sizes)
@@ -1735,10 +1742,18 @@ class AIBrain:
                 if len(colors) == 1:
                     # Auto-select the single color
                     state.collect_field("selected_color", colors[0])
+                    # Get max available stock for quantity prompt
+                    try:
+                        from utils.availability import get_stock_for_selection
+                        max_qty = get_stock_for_selection(mentioned_product)
+                        state.collect_field("_stock_snapshot", max_qty)
+                        qty_text = ""  # Don't show max to user, validation happens server-side
+                    except ImportError:
+                        qty_text = ""
                     response_text = (
                         f"Great choice! 🎉\n*{product_name}*\n\n"
                         f"Color: *{colors[0]}*\n\n"
-                        f"How many would you like to order?"
+                        f"How many would you like to order?{qty_text}"
                     )
                     suggested_actions = ["1", "2", "3", "Cancel"]
                 else:
@@ -1753,9 +1768,17 @@ class AIBrain:
                     )
                     suggested_actions = colors[:4] + ["Cancel"]
             else:
+                # No size/color selection needed - get max stock for quantity prompt
+                try:
+                    from utils.availability import get_stock_for_selection
+                    max_qty = get_stock_for_selection(mentioned_product)
+                    state.collect_field("_stock_snapshot", max_qty)
+                    qty_text = ""  # Don't show max to user, validation happens server-side
+                except ImportError:
+                    qty_text = ""
                 response_text = (
                     f"Great choice! 🎉\n*{product_name}*\n\n"
-                    f"How many would you like to order?"
+                    f"How many would you like to order?{qty_text}"
                 )
                 suggested_actions = ["1", "2", "3", "Cancel"]
         
@@ -1891,31 +1914,79 @@ class AIBrain:
         Returns:
             tuple: (response_text, suggested_actions, metadata_with_product_cards)
         """
-        total_products = len(products)
+        # =====================================================================
+        # AMAZON-GRADE: Filter products to only those with sellable options
+        # ⚠️ DO NOT implement stock logic here - use centralized availability
+        # =====================================================================
+        try:
+            from utils.availability import filter_sellable_products, is_product_sellable
+            # Filter to sellable products BEFORE pagination
+            sellable_products = filter_sellable_products(products, max_count=50)  # Pre-filter large list
+            logger.info(f"📦 Stock filter: {len(products)} → {len(sellable_products)} sellable")
+        except ImportError:
+            logger.warning("⚠️ Availability module not found, showing all products")
+            sellable_products = products
+        
+        total_products = len(sellable_products)
         total_pages = (total_products + page_size - 1) // page_size  # Ceiling division
         
         # Ensure page is within bounds
-        page = max(0, min(page, total_pages - 1))
+        page = max(0, min(page, total_pages - 1)) if total_pages > 0 else 0
         
         # Get products for current page
         start_idx = page * page_size
         end_idx = min(start_idx + page_size, total_products)
-        page_products = products[start_idx:end_idx]
+        page_products = sellable_products[start_idx:end_idx]
         
         # Store pagination state
         state.collect_field("_pagination_page", page)
         state.collect_field("_pagination_total_pages", total_pages)
         state.collect_field("_pagination_total_products", total_products)
         state.collect_field("_pagination_page_size", page_size)
-        state.collect_field("_all_products", products)  # Store full product list for pagination
+        state.collect_field("_all_products", sellable_products)  # Store filtered list
         
         product_lines = []
         product_map = {}
         product_cards = []  # For WhatsApp image rendering
-        card_index_map = {}  # Maps card index (0, 1, 2, ...) → full product_id for unique button IDs
-        card_colors_map = {}  # CRITICAL: Maps card index → colors for that specific card (enterprise fix)
-        card_sizes_map = {}  # CRITICAL: Maps card index → sizes for that specific card (enterprise fix)
-        card_index_counter = 0  # Global counter for all cards (base + variants)
+        
+        # CRITICAL FIX: Load existing maps and MERGE new entries to preserve mappings from previous pages
+        # This prevents the bug where clicking a page 1 button after viewing page 2 maps to wrong product
+        existing_card_index_map = state.collected_fields.get("_card_index_map", {}) or {}
+        existing_card_colors_map = state.collected_fields.get("_card_colors_map", {}) or {}
+        existing_card_sizes_map = state.collected_fields.get("_card_sizes_map", {}) or {}
+        
+        # Start with copies of existing maps to merge into
+        card_index_map = dict(existing_card_index_map)
+        card_colors_map = dict(existing_card_colors_map)
+        card_sizes_map = dict(existing_card_sizes_map)
+        
+        # Calculate global offset: start new card indices after highest existing key
+        # This ensures unique indices across all pages
+        existing_keys = [int(k) for k in existing_card_index_map.keys() if str(k).isdigit()] if existing_card_index_map else []
+        card_index_offset = (max(existing_keys) + 1) if existing_keys else 0
+        
+        # If this is page 0 (first page), reset maps to start fresh
+        if page == 0:
+            card_index_map = {}
+            card_colors_map = {}
+            card_sizes_map = {}
+            card_index_offset = 0
+        
+        card_index_counter = card_index_offset  # Global counter for all cards (base + variants)
+        
+        # AMAZON-GRADE: Maximum 5 product cards total (base + variants combined)
+        MAX_PRODUCT_CARDS = 5
+        
+        # Import availability functions for OOS filtering
+        try:
+            from utils.availability import get_sellable_sizes, is_product_sellable, compute_sellable_options
+            has_availability_module = True
+        except ImportError:
+            has_availability_module = False
+            logger.warning("⚠️ Availability module not available for size filtering")
+        
+        # Track how many BASE products are actually displayed (not just cards)
+        products_actually_displayed = 0
         
         for i, p in enumerate(page_products):
             if not isinstance(p, dict):
@@ -1923,6 +1994,9 @@ class AIBrain:
             
             # Use global index for numbering
             global_index = start_idx + i + 1
+            
+            # Track product index for pagination recalculation
+            last_product_index = i
             
             name = p.get('name', 'Item')
             base_price = p.get('price', 0)
@@ -2004,10 +2078,52 @@ class AIBrain:
             # Only skip base product card if it has NO colors/sizes (pure template with only variants)
             base_colors = p.get('colors', []) or []
             base_sizes = p.get('sizes', []) or []
+            
+            # AMAZON-GRADE: Filter sizes to only those with BASE PRODUCT stock
+            if has_availability_module and base_sizes:
+                try:
+                    sellable_sizes = get_sellable_sizes(p, base_only=True)  # CRITICAL: base_only=True
+                    if sellable_sizes:
+                        base_sizes = sellable_sizes
+                        logger.info(f"   📏 Filtered BASE sizes for {name}: {len(p.get('sizes', []))} → {len(sellable_sizes)} sellable")
+                    else:
+                        # No sellable sizes - skip this base product card
+                        logger.info(f"   ⏭️ Skipping {name} - no sellable sizes")
+                        base_sizes = []
+                except Exception as e:
+                    logger.warning(f"   ⚠️ Error filtering sizes for {name}: {e}")
+            
             has_base_attributes = len(base_colors) > 0 or len(base_sizes) > 0
+            
+            # AMAZON-GRADE: Enforce 5-card limit
+            if len(product_cards) >= MAX_PRODUCT_CARDS:
+                logger.info(f"   🛑 MAX_PRODUCT_CARDS ({MAX_PRODUCT_CARDS}) reached, stopping card generation")
+                # Don't increment products_actually_displayed for products not shown
+                break
+            
+            # This product will be displayed - increment counter
+            products_actually_displayed += 1
             
             # Create base product card if it has displayable attributes
             if has_base_attributes:
+                # ENTERPRISE-GRADE: Register opaque button ID with product snapshot
+                # This replaces fragile card_index-based mapping
+                from utils.button_registry import register_button
+                
+                # Get stock for base product (for revalidation on click)
+                base_stock = p.get('stock', 0) or 0
+                
+                btn_id = register_button(
+                    product_id=str(product_id),
+                    variant_id=None,
+                    size=None,  # User will select
+                    color=None,  # User will select
+                    product_name=name,
+                    available_sizes=base_sizes[:6],
+                    available_colors=base_colors[:5],
+                    stock=base_stock
+                )
+                
                 # Build product card for WhatsApp image messages (BASE PRODUCT)
                 # CRITICAL: Always include compare_at_price if it exists, even if has_offer is False
                 # The display logic in app.py will handle the comparison
@@ -2018,10 +2134,11 @@ class AIBrain:
                     'compare_at_price': original_price,  # Always include if exists, let app.py decide display
                     'discount_percent': discount_percent,
                     'product_id': product_id,
-                    'card_index': card_index_counter,  # CRITICAL FIX: Unique card index for button ID
+                    'card_index': card_index_counter,  # Keep for backwards compatibility
+                    'btn_id': btn_id,  # ENTERPRISE-GRADE: Opaque button ID
                     'image_url': image_url if image_url and not image_url.startswith('data:') else '',
                     'colors': base_colors[:5],
-                    'sizes': base_sizes[:6],
+                    'sizes': base_sizes[:6],  # Now filtered to only sellable sizes
                     # Size-based pricing info for product card
                     'has_size_pricing': has_size_pricing,
                     'size_prices': size_prices,
@@ -2029,12 +2146,12 @@ class AIBrain:
                     'is_variant': False,  # Mark as base product
                 })
                 
-                # Store mappings: card_index → product_id, colors, sizes (CRITICAL for enterprise-grade selection)
+                # Store mappings: card_index → product_id, colors, sizes (KEEP for backwards compatibility)
                 card_index_map[card_index_counter] = product_id
                 card_colors_map[card_index_counter] = base_colors  # Store BASE product colors for this card
                 card_sizes_map[card_index_counter] = base_sizes  # Store BASE product sizes for this card
                 
-                logger.info(f"   📋 Base product card created: {name} (colors={base_colors}, sizes={base_sizes}, has_variants={has_variants}, card_index={card_index_counter})")
+                logger.info(f"   📋 Base product card created: {name} (btn_id={btn_id}, colors={base_colors}, sizes={base_sizes}, has_variants={has_variants})")
                 card_index_counter += 1
             else:
                 logger.info(f"   ⏭️ Skipping base product card (no colors/sizes, only variants): {name}")
@@ -2045,9 +2162,27 @@ class AIBrain:
                 if not isinstance(variant, dict):
                     continue
                 
+                # AMAZON-GRADE: Enforce 5-card limit (count includes both base + variants)
+                if len(product_cards) >= MAX_PRODUCT_CARDS:
+                    logger.info(f"   🛑 MAX_PRODUCT_CARDS ({MAX_PRODUCT_CARDS}) reached, stopping variant generation")
+                    break
+                
                 # Skip unavailable variants
                 if not variant.get('is_available', True):
                     continue
+                
+                # AMAZON-GRADE: Check if variant has stock
+                if has_availability_module:
+                    try:
+                        variant_stock = variant.get('stock', 0)
+                        if variant_stock <= 0:
+                            # Also check size_stocks for variants with multiple sizes
+                            variant_size_stocks = variant.get('size_stocks', {})
+                            if not variant_size_stocks or all(s <= 0 for s in variant_size_stocks.values()):
+                                logger.info(f"   ⏭️ Skipping OOS variant: {name} - {variant.get('color', 'N/A')}")
+                                continue
+                    except Exception as e:
+                        logger.warning(f"   ⚠️ Error checking variant stock: {e}")
                 
                 variant_counter += 1
                 # Use base product name for variants (color/size shown separately in card body)
@@ -2120,6 +2255,25 @@ class AIBrain:
                 
                 # Create variant product card
                 variant_product_id = f"{product_id}_variant_{variant.get('id', variant_counter)}"
+                
+                # ENTERPRISE-GRADE: Register opaque button ID for variant with snapshot
+                from utils.button_registry import register_button
+                
+                variant_card_colors = [variant_color] if variant_color else []
+                variant_card_sizes = variant_sizes_parsed
+                variant_stock = variant.get('stock', 0) or 0
+                
+                variant_btn_id = register_button(
+                    product_id=str(product_id),
+                    variant_id=str(variant.get('id', variant_counter)),
+                    size=None,  # User will select if multiple sizes
+                    color=variant_color,  # Pre-selected for variant
+                    product_name=variant_name,
+                    available_sizes=variant_card_sizes,
+                    available_colors=variant_card_colors,
+                    stock=variant_stock
+                )
+                
                 product_cards.append({
                     'index': f"{global_index}.{variant_counter}",  # e.g., "1.1", "1.2" for variants
                     'name': variant_name,
@@ -2127,9 +2281,10 @@ class AIBrain:
                     'compare_at_price': variant_compare_at_price if variant_has_offer else None,
                     'discount_percent': variant_discount_percent,
                     'product_id': variant_product_id,
-                    'card_index': card_index_counter,  # CRITICAL FIX: Unique card index for button ID
+                    'card_index': card_index_counter,  # Keep for backwards compatibility
+                    'btn_id': variant_btn_id,  # ENTERPRISE-GRADE: Opaque button ID
                     'image_url': variant_image_url,
-                    'colors': [variant_color] if variant_color else [],
+                    'colors': variant_card_colors,
                     'sizes': variant_sizes_parsed,  # FIXED: Use properly parsed sizes
                     'has_size_pricing': variant_has_size_pricing,
                     'size_prices': variant_size_prices,
@@ -2138,23 +2293,12 @@ class AIBrain:
                     'base_product_id': product_id,  # Reference to base product
                 })
                 
-                # Store mappings: card_index → variant product_id, colors, sizes (CRITICAL for enterprise-grade selection)
+                # Store mappings: card_index → variant product_id, colors, sizes (KEEP for backwards compatibility)
                 card_index_map[card_index_counter] = variant_product_id
-                # CRITICAL FIX: Store variant-specific colors and sizes
-                variant_card_colors = [variant_color] if variant_color else []
-                # Parse variant sizes (can be comma-separated string or list)
-                variant_card_sizes = []
-                if variant_size:
-                    if isinstance(variant_size, str) and ',' in variant_size:
-                        variant_card_sizes = [s.strip() for s in variant_size.split(',') if s.strip()]
-                    elif isinstance(variant_size, str):
-                        variant_card_sizes = [variant_size.strip()]
-                    elif isinstance(variant_size, list):
-                        variant_card_sizes = variant_size
                 card_colors_map[card_index_counter] = variant_card_colors
                 card_sizes_map[card_index_counter] = variant_card_sizes
                 
-                logger.info(f"   📏 Variant card {card_index_counter}: color={variant_color}, sizes={variant_card_sizes}")
+                logger.info(f"   📏 Variant card created: btn_id={variant_btn_id}, color={variant_color}, sizes={variant_card_sizes}")
                 card_index_counter += 1
             
             # Build text entry with comprehensive price formatting
@@ -2199,8 +2343,26 @@ class AIBrain:
         
         product_list = "\n".join(product_lines)
         
-        # Build pagination footer
-        pagination_info = f"\n\n📄 Page {page + 1} of {total_pages} ({start_idx + 1}-{end_idx} of {total_products} products)"
+        # CRITICAL FIX: Recalculate pagination based on ACTUAL products displayed
+        # If MAX_PRODUCT_CARDS was hit before all page_products were shown, we need more pages
+        actual_products_on_page = products_actually_displayed
+        actual_end_idx = start_idx + actual_products_on_page
+        
+        # Recalculate total pages based on how many products we can actually show per page
+        if actual_products_on_page > 0 and actual_products_on_page < len(page_products):
+            # We didn't show all products - need to adjust pagination
+            effective_page_size = actual_products_on_page  # How many we actually fit
+            recalculated_total_pages = (total_products + effective_page_size - 1) // effective_page_size
+            if recalculated_total_pages > total_pages:
+                total_pages = recalculated_total_pages
+                # Update pagination state with correct values
+                state.collect_field("_pagination_total_pages", total_pages)
+                state.collect_field("_pagination_products_per_page", effective_page_size)
+                logger.info(f"📄 PAGINATION RECALC: adjusted to {total_pages} pages (showing {actual_products_on_page} of {len(page_products)} products)")
+        
+        # Build pagination footer with accurate counts
+        shown_end = min(actual_end_idx, total_products) if actual_products_on_page > 0 else end_idx
+        pagination_info = f"\n\n📄 Page {page + 1} of {total_pages} ({start_idx + 1}-{shown_end} of {total_products} products)"
         
         response_text = (
             f"📦 I'd be happy to help you place an order!\n\n"
@@ -2382,23 +2544,86 @@ class AIBrain:
             # Search term comes from button ID: sanitized (underscores) or spaces
             raw_term = msg_lower.replace("order ", "").strip()
             
-            # ENTERPRISE FIX: Track selected card index and its colors/sizes
+            # ENTERPRISE FIX: Track selected card info
             selected_card_index = None
-            selected_card_colors = None  # Colors specific to this card (from _card_colors_map)
-            selected_card_sizes = None   # Sizes specific to this card (from _card_sizes_map)
+            selected_card_colors = None  # Colors specific to this card
+            selected_card_sizes = None   # Sizes specific to this card
+            selected_variant_id = None   # Variant ID from opaque button
             
-            # CRITICAL FIX: Check if this is the new card_index format (order_card_0, order_card_1, etc.)
-            if raw_term.startswith("card_"):
+            # ========================================================
+            # AMAZON-GRADE: Check for opaque button ID format FIRST
+            # Format: "btn_xxxxxxxx" - resolves via button_registry
+            # This is resilient to pagination, retries, and state changes
+            # ========================================================
+            from utils.validators import is_opaque_button_id
+            from utils.button_registry import resolve_button
+            
+            if is_opaque_button_id(raw_term):
+                logger.info(f"🔐 Opaque button detected: {raw_term}")
+                
+                snapshot = resolve_button(raw_term)
+                
+                if not snapshot:
+                    # Button expired or not found - show friendly message
+                    logger.warning(f"⚠️ Button not found or expired: {raw_term}")
+                    self.conversation_manager.add_message(user_id, "user", message)
+                    expired_msg = "This product selection has expired. Please browse products again to see current availability. 🔄"
+                    self.conversation_manager.add_message(user_id, "assistant", expired_msg)
+                    return {
+                        "reply": expired_msg,
+                        "intent": "product_expired",
+                        "confidence": 1.0,
+                        "needs_human": False,
+                        "suggested_actions": ["Browse Products", "View Categories"],
+                        "metadata": {"generation_method": "opaque_button_expired"}
+                    }
+                
+                # Successfully resolved opaque button
+                product_id_from_snapshot = snapshot.get('product_id')
+                selected_variant_id = snapshot.get('variant_id')
+                selected_card_colors = snapshot.get('colors', [])
+                selected_card_sizes = snapshot.get('sizes', [])
+                product_name = snapshot.get('product_name', '')
+                
+                logger.info(f"✅ Resolved opaque button: product_id={product_id_from_snapshot}, variant_id={selected_variant_id}")
+                logger.info(f"   Snapshot colors: {selected_card_colors}, sizes: {selected_card_sizes}")
+                
+                # ================================================================
+                # AMAZON-GRADE: Store CANONICAL resolved_sku IMMEDIATELY
+                # This is IMMUTABLE once set - all downstream logic MUST use this
+                # ================================================================
+                resolved_sku = {
+                    "product_id": product_id_from_snapshot,
+                    "variant_id": selected_variant_id,
+                    "scope": snapshot.get('scope') or ("VARIANT" if selected_variant_id else "BASE"),
+                }
+                state.collect_field("_resolved_sku", resolved_sku)
+                logger.info(f"🔐 Stored CANONICAL resolved_sku: {resolved_sku}")
+                
+                # Override raw_term to use the product ID for matching
+                raw_term = str(product_id_from_snapshot).lower()
+                
+                # Store snapshot info in state for selection flow
+                state.collect_field("_selected_card_colors", selected_card_colors)
+                state.collect_field("_selected_card_sizes", selected_card_sizes)
+                if selected_variant_id:
+                    state.collect_field("_selected_variant_id", selected_variant_id)
+            
+            # ========================================================
+            # LEGACY: Check for card_index format (backwards compatible)
+            # Format: "card_0", "card_1", etc.
+            # ========================================================
+            elif raw_term.startswith("card_"):
                 try:
                     # Extract card index from "card_0", "card_1", etc.
                     card_index = int(raw_term.replace("card_", ""))
                     selected_card_index = card_index  # Store for later use
                     
                     card_index_map = state.collected_fields.get("_card_index_map", {})
-                    card_colors_map = state.collected_fields.get("_card_colors_map", {})  # Enterprise fix
-                    card_sizes_map = state.collected_fields.get("_card_sizes_map", {})   # Enterprise fix
+                    card_colors_map = state.collected_fields.get("_card_colors_map", {})
+                    card_sizes_map = state.collected_fields.get("_card_sizes_map", {})
                     
-                    logger.info(f"🗺️ Card-based button detected: {raw_term}, card_index={card_index}")
+                    logger.info(f"🗺️ [LEGACY] Card-based button detected: {raw_term}, card_index={card_index}")
                     logger.info(f"🗺️ Card index map has {len(card_index_map)} entries")
                     
                     # Look up the full product_id using the card_index
@@ -2411,7 +2636,7 @@ class AIBrain:
                         full_product_id = card_index_map_int[card_index]
                         logger.info(f"✅ Mapped card_index {card_index} → product_id: {full_product_id}")
                         
-                        # ENTERPRISE FIX: Get card-specific colors and sizes
+                        # Get card-specific colors and sizes
                         selected_card_colors = card_colors_map_int.get(card_index, [])
                         selected_card_sizes = card_sizes_map_int.get(card_index, [])
                         logger.info(f"🎨 Card {card_index} colors: {selected_card_colors}")
@@ -2425,13 +2650,13 @@ class AIBrain:
                 except (ValueError, TypeError) as e:
                     logger.error(f"❌ Failed to parse card index from '{raw_term}': {e}")
             
-            # Store selected card info in state for color selection step
+            # Store selected card info in state for color/size selection steps
             if selected_card_index is not None:
                 state.collect_field("_selected_card_index", selected_card_index)
-                if selected_card_colors is not None:
-                    state.collect_field("_selected_card_colors", selected_card_colors)
-                if selected_card_sizes is not None:
-                    state.collect_field("_selected_card_sizes", selected_card_sizes)
+            if selected_card_colors is not None:
+                state.collect_field("_selected_card_colors", selected_card_colors)
+            if selected_card_sizes is not None:
+                state.collect_field("_selected_card_sizes", selected_card_sizes)
             
             # Create a "clean" search term for robust matching (no spaces, dashes, underscores)
             clean_search_term = re.sub(r'[\s\-_]', '', raw_term)
@@ -2449,114 +2674,144 @@ class AIBrain:
             is_variant_id = "_variant_" in raw_term or "_variant_" in clean_search_term
             logger.info(f"🔍 Variant detection: is_variant_id={is_variant_id}, raw_term='{raw_term}', clean_search_term='{clean_search_term}'")
 
+            # ========== SEV-1 FIX: DIRECT VARIANT LOOKUP FROM AUTHORITATIVE resolved_sku ==========
+            # When we have resolved_sku with scope='VARIANT', use the variant_id DIRECTLY
+            # This bypasses the buggy string-matching that was incorrectly matching base products
+            resolved_sku = state.collected_fields.get("_resolved_sku", {})
+            auth_scope = resolved_sku.get("scope")
+            auth_variant_id = resolved_sku.get("variant_id")
+            auth_product_id = resolved_sku.get("product_id")
             
-            for product in products:
-                if isinstance(product, dict):
-                    name = product.get("name", "").lower()
-                    product_id = str(product.get("id", "")).lower()
-                    sku = str(product.get("sku", "")).lower()
-                    
-                    # Create clean versions of product fields
-                    clean_name = re.sub(r'[\s\-_]', '', name)
-                    clean_id = re.sub(r'[\s\-_]', '', product_id)
-                    clean_sku = re.sub(r'[\s\-_]', '', sku)
-                    
-                    # CRITICAL: Always check variants FIRST (button IDs are truncated, so _variant_ might be missing)
-                    # Check variants for ALL products, not just when is_variant_id=True
-                    variants = product.get('variants', []) or []
-                    if variants:
-                        logger.info(f"🔍 Checking variants for product: {name}, search_term: {clean_search_term}")
+            if auth_scope == "VARIANT" and auth_variant_id and auth_product_id:
+                logger.info(f"🔐 AUTHORITATIVE variant lookup: product_id={auth_product_id}, variant_id={auth_variant_id}")
+                # Find product by authoritative product_id
+                for product in products:
+                    if isinstance(product, dict) and str(product.get("id", "")).lower() == auth_product_id.lower():
+                        mentioned_product = product
+                        # Find variant by authoritative variant_id
+                        variants = product.get("variants", []) or []
                         for variant in variants:
-                            if not isinstance(variant, dict):
-                                continue
-                            
-                            variant_id = str(variant.get('id', '')).lower()
-                            variant_product_id = f"{product_id}_variant_{variant_id}".lower()
-                            clean_variant_id = re.sub(r'[\s\-_]', '', variant_product_id)
-                            
-                            # Also check variant ID directly (for truncated button IDs)
-                            clean_variant_id_only = re.sub(r'[\s\-_]', '', variant_id)
-                            
-                            logger.info(f"   Comparing: clean_variant_id={clean_variant_id[:30]}..., clean_variant_id_only={clean_variant_id_only}, vs clean_search_term={clean_search_term}")
-                            
-                            # Match variant ID - handle truncated button IDs (WhatsApp buttons are limited to 20 chars)
-                            # Check multiple matching strategies:
-                            # 1. Exact match with full variant_product_id
-                            # 2. clean_variant_id starts with clean_search_term (search_term is prefix) - BUT NOT if search_term is exactly the base product ID
-                            # 3. clean_search_term starts with first 20 chars of clean_variant_id (truncated button ID)
-                            # 4. Both start with same prefix (for very long IDs)
-                            # 5. NEW: Match variant ID directly (for truncated IDs that lost _variant_ part)
-                            
-                            # CRITICAL FIX: Don't match variant if search_term is exactly the base product ID
-                            # (variant IDs are "base_id_variant_variant_id", so they start with base_id)
-                            is_base_product_id = (clean_search_term == clean_id)
-                            
-                            # CRITICAL FIX: Apply is_base_product_id check to ALL prefix-based matching conditions
-                            # If search_term is exactly the base product ID, we should NOT match any variant
-                            matches = (
-                                clean_variant_id == clean_search_term or 
-                                # Only match prefix if search_term is NOT the base product ID
-                                (not is_base_product_id and clean_variant_id.startswith(clean_search_term)) or
-                                (not is_base_product_id and len(clean_search_term) >= 15 and clean_variant_id.startswith(clean_search_term[:20])) or
-                                (not is_base_product_id and len(clean_variant_id) >= 20 and clean_search_term.startswith(clean_variant_id[:20])) or
-                                # NEW: Match variant ID directly (button ID might be just the variant ID)
-                                clean_variant_id_only == clean_search_term or
-                                (not is_base_product_id and clean_variant_id_only.startswith(clean_search_term)) or
-                                (not is_base_product_id and clean_search_term.startswith(clean_variant_id_only[:20]))
-                            )
-                            
-                            if matches:
-                                mentioned_product = product
+                            if isinstance(variant, dict) and str(variant.get("id", "")).lower() == auth_variant_id.lower():
                                 mentioned_variant = variant
-                                variant_color = variant.get("color", "")
-                                logger.info(f"📦 ✅ Variant match found: {name} - Variant ID: {variant_id}, Color: {variant_color}")
-                                logger.info(f"   Match type: variant_id_match={clean_variant_id_only == clean_search_term or clean_variant_id_only.startswith(clean_search_term)}")
+                                logger.info(f"📦 ✅ AUTHORITATIVE variant match: {product.get('name')} - variant_id={auth_variant_id}, color={variant.get('color')}")
                                 break
+                        break
+                
+                if mentioned_variant:
+                    logger.info(f"🔐 Using AUTHORITATIVE variant (SEV-1 FIX) - bypassed string matching")
+                else:
+                    logger.warning(f"⚠️ AUTHORITATIVE variant lookup failed! product_id={auth_product_id}, variant_id={auth_variant_id}")
+            # ========== END SEV-1 FIX ==========
+            
+            # Fallback to string matching only if authoritative lookup didn't find anything
+            if not mentioned_product:
+                for product in products:
+                    if isinstance(product, dict):
+                        name = product.get("name", "").lower()
+                        product_id = str(product.get("id", "")).lower()
+                        sku = str(product.get("sku", "")).lower()
                         
-                        if mentioned_variant:
-                            break
-                    
-                    # Only check base product if no variant was matched
-                    if not mentioned_variant:
-                        # CRITICAL: Don't match base product if search_term could be a truncated variant ID
-                        # If search_term starts with base product ID prefix, it might be a variant (skip base match)
-                        skip_base_match = False
-                        if clean_id and len(clean_search_term) >= 10:
-                            # Check if search_term starts with base product ID (could be truncated variant)
-                            if clean_search_term.startswith(clean_id[:15]) and clean_search_term != clean_id:
-                                # Search term starts with base ID but isn't exact match - likely truncated variant
-                                logger.info(f"   ⚠️ Search term '{clean_search_term}' starts with base product ID '{clean_id[:15]}...' - likely truncated variant, skipping base match")
-                                skip_base_match = True
+                        # Create clean versions of product fields
+                        clean_name = re.sub(r'[\s\-_]', '', name)
+                        clean_id = re.sub(r'[\s\-_]', '', product_id)
+                        clean_sku = re.sub(r'[\s\-_]', '', sku)
                         
-                        if not skip_base_match:
-                            # 1. Exact Name/ID/SKU match (Highest Priority)
-                            if clean_name == clean_search_term or clean_id == clean_search_term or clean_sku == clean_search_term:
-                                mentioned_product = product
-                                logger.info(f"📦 Exact match found: {name}")
-                                break
+                        # CRITICAL: Always check variants FIRST (button IDs are truncated, so _variant_ might be missing)
+                        # Check variants for ALL products, not just when is_variant_id=True
+                        variants = product.get('variants', []) or []
+                        if variants:
+                            logger.info(f"🔍 Checking variants for product: {name}, search_term: {clean_search_term}")
+                            for variant in variants:
+                                if not isinstance(variant, dict):
+                                    continue
                                 
-                            # 2. Prefix match (for truncated IDs in buttons)
-                            # If the button ID was truncated, clean_search_term will be a prefix of clean_id/name
-                            if len(clean_search_term) >= 5:  # Only for reasonable length terms
-                                if clean_name.startswith(clean_search_term) or clean_id.startswith(clean_search_term) or clean_sku.startswith(clean_search_term):
+                                variant_id = str(variant.get('id', '')).lower()
+                                variant_product_id = f"{product_id}_variant_{variant_id}".lower()
+                                clean_variant_id = re.sub(r'[\s\-_]', '', variant_product_id)
+                                
+                                # Also check variant ID directly (for truncated button IDs)
+                                clean_variant_id_only = re.sub(r'[\s\-_]', '', variant_id)
+                                
+                                logger.info(f"   Comparing: clean_variant_id={clean_variant_id[:30]}..., clean_variant_id_only={clean_variant_id_only}, vs clean_search_term={clean_search_term}")
+                                
+                                # Match variant ID - handle truncated button IDs (WhatsApp buttons are limited to 20 chars)
+                                # Check multiple matching strategies:
+                                # 1. Exact match with full variant_product_id
+                                # 2. clean_variant_id starts with clean_search_term (search_term is prefix) - BUT NOT if search_term is exactly the base product ID
+                                # 3. clean_search_term starts with first 20 chars of clean_variant_id (truncated button ID)
+                                # 4. Both start with same prefix (for very long IDs)
+                                # 5. NEW: Match variant ID directly (for truncated IDs that lost _variant_ part)
+                                
+                                # CRITICAL FIX: Don't match variant if search_term is exactly the base product ID
+                                # (variant IDs are "base_id_variant_variant_id", so they start with base_id)
+                                is_base_product_id = (clean_search_term == clean_id)
+                                
+                                # CRITICAL FIX: Apply is_base_product_id check to ALL prefix-based matching conditions
+                                # If search_term is exactly the base product ID, we should NOT match any variant
+                                matches = (
+                                    clean_variant_id == clean_search_term or 
+                                    # Only match prefix if search_term is NOT the base product ID
+                                    (not is_base_product_id and clean_variant_id.startswith(clean_search_term)) or
+                                    (not is_base_product_id and len(clean_search_term) >= 15 and clean_variant_id.startswith(clean_search_term[:20])) or
+                                    (not is_base_product_id and len(clean_variant_id) >= 20 and clean_search_term.startswith(clean_variant_id[:20])) or
+                                    # NEW: Match variant ID directly (button ID might be just the variant ID)
+                                    clean_variant_id_only == clean_search_term or
+                                    (not is_base_product_id and clean_variant_id_only.startswith(clean_search_term)) or
+                                    (not is_base_product_id and clean_search_term.startswith(clean_variant_id_only[:20]))
+                                )
+                                
+                                if matches:
                                     mentioned_product = product
-                                    logger.info(f"📦 Prefix match found: {name}")
+                                    mentioned_variant = variant
+                                    variant_color = variant.get("color", "")
+                                    logger.info(f"📦 ✅ Variant match found: {name} - Variant ID: {variant_id}, Color: {variant_color}")
+                                    logger.info(f"   Match type: variant_id_match={clean_variant_id_only == clean_search_term or clean_variant_id_only.startswith(clean_search_term)}")
+                                    break
+                            
+                            if mentioned_variant:
+                                break
+                        
+                        # Only check base product if no variant was matched
+                        if not mentioned_variant:
+                            # CRITICAL: Don't match base product if search_term could be a truncated variant ID
+                            # If search_term starts with base product ID prefix, it might be a variant (skip base match)
+                            skip_base_match = False
+                            if clean_id and len(clean_search_term) >= 10:
+                                # Check if search_term starts with base product ID (could be truncated variant)
+                                if clean_search_term.startswith(clean_id[:15]) and clean_search_term != clean_id:
+                                    # Search term starts with base ID but isn't exact match - likely truncated variant
+                                    logger.info(f"   ⚠️ Search term '{clean_search_term}' starts with base product ID '{clean_id[:15]}...' - likely truncated variant, skipping base match")
+                                    skip_base_match = True
+                            
+                            if not skip_base_match:
+                                # 1. Exact Name/ID/SKU match (Highest Priority)
+                                if clean_name == clean_search_term or clean_id == clean_search_term or clean_sku == clean_search_term:
+                                    mentioned_product = product
+                                    logger.info(f"📦 Exact match found: {name}")
                                     break
                                     
-                            # 3. Flexible substring match (original logic fallback)
-                            if name and (name in search_term_spaces or search_term_spaces in name):
-                                mentioned_product = product
-                                logger.info(f"📦 Substring match found (name): {name}")
-                                break
-                            
-                            # 4. ID match with flexible separators
-                            if product_id and product_id != "none":
-                                # Compare normalizing separators
-                                norm_id = product_id.replace("-", " ").replace("_", " ")
-                                if norm_id == search_term_spaces or norm_id in search_term_spaces or search_term_spaces in norm_id:
+                                # 2. Prefix match (for truncated IDs in buttons)
+                                # If the button ID was truncated, clean_search_term will be a prefix of clean_id/name
+                                if len(clean_search_term) >= 5:  # Only for reasonable length terms
+                                    if clean_name.startswith(clean_search_term) or clean_id.startswith(clean_search_term) or clean_sku.startswith(clean_search_term):
+                                        mentioned_product = product
+                                        logger.info(f"📦 Prefix match found: {name}")
+                                        break
+                                        
+                                # 3. Flexible substring match (original logic fallback)
+                                if name and (name in search_term_spaces or search_term_spaces in name):
                                     mentioned_product = product
-                                    logger.info(f"📦 ID match found: {product_id}")
+                                    logger.info(f"📦 Substring match found (name): {name}")
                                     break
+                                
+                                # 4. ID match with flexible separators
+                                if product_id and product_id != "none":
+                                    # Compare normalizing separators
+                                    norm_id = product_id.replace("-", " ").replace("_", " ")
+                                    if norm_id == search_term_spaces or norm_id in search_term_spaces or search_term_spaces in norm_id:
+                                        mentioned_product = product
+                                        logger.info(f"📦 ID match found: {product_id}")
+                                        break
             
             if mentioned_product:
                 # Clear any category selection state - we're directly ordering a product
@@ -2699,8 +2954,10 @@ class AIBrain:
                     
                     logger.info(f"📦 Variant selected: {product_name}, color={variant_color}, sizes={available_sizes}, has_size_pricing={variant_has_size_pricing}")
                     
-                    # If variant has size-based pricing with multiple sizes, ask for size selection
-                    if variant_has_size_pricing and variant_size_prices and len(variant_size_prices) > 1:
+                    # If variant has size_prices with multiple sizes, ask for size selection
+                    # CRITICAL FIX: Use DATA-DRIVEN check (size_prices has data) not FLAG-DRIVEN (has_size_pricing)
+                    # This ensures pricing works even if has_size_pricing flag is incorrectly False
+                    if variant_size_prices and len(variant_size_prices) > 1:
                         # Use variant's size_prices for selection
                         available_sizes_from_pricing = list(variant_size_prices.keys())
                         state.collect_field("_needs_size", True)
@@ -2781,22 +3038,54 @@ class AIBrain:
                     logger.info(f"🎨 Base product color selection - card_colors={state.collected_fields.get('_selected_card_colors')}, final_colors={colors}")
                     
                     if sizes:
-                        state.collect_field("_needs_size", True)
-                        state.collect_field("_available_sizes", sizes)
-                        size_list = ", ".join(sizes[:6])
-                        # Show size-specific prices if available
-                        if has_size_pricing and size_prices:
-                            size_price_info = []
-                            for s in sizes[:6]:
-                                if s in size_prices:
-                                    size_price_info.append(f"{s}: ₹{int(float(size_prices[s]))}")
-                                else:
-                                    size_price_info.append(s)
-                            size_display = ", ".join(size_price_info)
-                            response_text = f"Great choice! 🎉\n*{product_name}*\n\nAvailable sizes:\n{size_display}\n\nWhich size would you like?"
+                        # AUTO-SELECT: If only 1 size, skip to quantity prompt
+                        if len(sizes) == 1:
+                            single_size = sizes[0]
+                            state.collect_field("selected_size", single_size)
+                            logger.info(f"📏 AUTO-SELECTED single size: {single_size}")
+                            
+                            # Get price for the single size - CRITICAL: Use data-driven check
+                            # and STORE the price in state for order item building
+                            size_price = size_prices.get(single_size, base_price) if size_prices else base_price
+                            # CRITICAL FIX: Store the size-specific price so order builder uses it
+                            state.collect_field("selected_size_price", float(size_price) if size_price else None)
+                            logger.info(f"💰 AUTO-SELECTED size price for {single_size}: ₹{size_price}")
+                            price_display = f" (₹{int(float(size_price))})" if size_price else ""
+                            
+                            # Check if we also need color selection
+                            if colors and len(colors) > 1:
+                                state.collect_field("_needs_color", True)
+                                state.collect_field("_available_colors", colors)
+                                color_list = ", ".join(colors[:6])
+                                response_text = f"Great choice! 🎉\n*{product_name}*\n\nSize: *{single_size}*{price_display}\n\nAvailable colors: {color_list}\n\nWhich color would you like?"
+                                suggested_actions = colors[:4] + ["Cancel"]
+                            elif colors and len(colors) == 1:
+                                # Auto-select single color too
+                                state.collect_field("selected_color", colors[0])
+                                logger.info(f"🎨 AUTO-SELECTED single color: {colors[0]}")
+                                response_text = f"Great choice! 🎉\n*{product_name}*\n\nSize: *{single_size}*{price_display}\nColor: *{colors[0]}*\n\nHow many would you like to order?"
+                                suggested_actions = ["1", "2", "3", "Cancel"]
+                            else:
+                                response_text = f"Great choice! 🎉\n*{product_name}*\n\nSize: *{single_size}*{price_display}\n\nHow many would you like to order?"
+                                suggested_actions = ["1", "2", "3", "Cancel"]
                         else:
-                            response_text = f"Great choice! 🎉\n*{product_name}*\n\nAvailable sizes: {size_list}\n\nWhich size would you like?"
-                        suggested_actions = sizes[:4] + ["Cancel"]
+                            # Multiple sizes - ask user to select
+                            state.collect_field("_needs_size", True)
+                            state.collect_field("_available_sizes", sizes)
+                            size_list = ", ".join(sizes[:6])
+                            # Show size-specific prices if available
+                            if has_size_pricing and size_prices:
+                                size_price_info = []
+                                for s in sizes[:6]:
+                                    if s in size_prices:
+                                        size_price_info.append(f"{s}: ₹{int(float(size_prices[s]))}")
+                                    else:
+                                        size_price_info.append(s)
+                                size_display = ", ".join(size_price_info)
+                                response_text = f"Great choice! 🎉\n*{product_name}*\n\nAvailable sizes:\n{size_display}\n\nWhich size would you like?"
+                            else:
+                                response_text = f"Great choice! 🎉\n*{product_name}*\n\nAvailable sizes: {size_list}\n\nWhich size would you like?"
+                            suggested_actions = sizes[:4] + ["Cancel"]
                     elif colors:
                         # If only one color, automatically select it
                         if len(colors) == 1:
@@ -3066,7 +3355,9 @@ class AIBrain:
                     size_prices = product_data.get("size_prices", {}) or {}
                     base_price = product_data.get("price", 0)
                     original_price = product_data.get("compare_at_price")
-                    if has_size_pricing and size_prices and matched_size in size_prices:
+                    # CRITICAL FIX: Use DATA-DRIVEN check (size_prices has data for this size)
+                    # instead of requiring has_size_pricing flag to be True
+                    if size_prices and matched_size in size_prices:
                         selected_price = float(size_prices[matched_size])
                     else:
                         selected_price = float(base_price) if base_price else 0
@@ -3095,9 +3386,31 @@ class AIBrain:
                 selected_color_already = state.collected_fields.get("selected_color")  # Check if color was already set
                 variant_color = None
                 
+                # AMAZON-GRADE: Cache stock snapshot for consistent UX
+                # CRITICAL FIX: Use authoritative resolved_sku scope, NOT locally derived variant_id
+                try:
+                    from utils.availability import get_stock_for_selection
+                    
+                    # SEV-1 FIX: Use resolved_sku for authoritative scope
+                    resolved_sku = state.collected_fields.get("_resolved_sku", {})
+                    scope = resolved_sku.get("scope", "BASE")
+                    variant_id = resolved_sku.get("variant_id") if scope == "VARIANT" else None
+                    
+                    # CRITICAL: Never use base_only when scope is VARIANT
+                    max_qty = get_stock_for_selection(product_data, variant_id=variant_id, size=matched_size, base_only=(scope == "BASE"))
+                    state.collect_field("_stock_snapshot", max_qty)
+                    qty_text = ""  # Don't show max to user, validation happens server-side
+                    
+                    logger.info(f"📦 SKU-AWARE stock check: scope={scope}, variant_id={variant_id}, size={matched_size}, stock={max_qty}")
+                except (ImportError, Exception) as e:
+                    logger.warning(f"⚠️ Stock lookup failed: {e}")
+                    qty_text = ""
+                    max_qty = 0
+                
                 logger.info(f"🎨 Size selection - checking for variant color")
                 logger.info(f"   selected_variant exists: {selected_variant is not None}")
                 logger.info(f"   selected_color_already: {selected_color_already}")
+                logger.info(f"   max_qty for size {matched_size}: {max_qty}")
                 
                 if selected_variant:
                     variant_color = selected_variant.get("color", "")
@@ -3106,13 +3419,13 @@ class AIBrain:
                 # Priority 1: Use already selected color (from variant selection) - CHECK THIS FIRST
                 if selected_color_already:
                     logger.info(f"🎨 ✅ Priority 1: Using already selected color: {selected_color_already}")
-                    response_text = f"Size: {matched_size} selected\n\nColor: *{selected_color_already}*\n\nHow many would you like to order?"
+                    response_text = f"Size: {matched_size} selected\n\nColor: *{selected_color_already}*\n\nHow many would you like to order?{qty_text}"
                     suggested_actions = ["1", "2", "3", "Cancel"]
                 # Priority 2: Use variant color if variant exists
                 elif selected_variant and variant_color:
                     state.collect_field("selected_color", variant_color)
                     logger.info(f"🎨 ✅ Priority 2: Using variant color after size selection: {variant_color}")
-                    response_text = f"Size: {matched_size} selected\n\nColor: *{variant_color}*\n\nHow many would you like to order?"
+                    response_text = f"Size: {matched_size} selected\n\nColor: *{variant_color}*\n\nHow many would you like to order?{qty_text}"
                     suggested_actions = ["1", "2", "3", "Cancel"]
                 # Priority 3: Use stored card colors first, then variant-derived colors
                 else:
@@ -3126,7 +3439,7 @@ class AIBrain:
                         if len(colors) == 1:
                             state.collect_field("selected_color", colors[0])
                             logger.info(f"🎨 Priority 3: Auto-selecting single color: {colors[0]}")
-                            response_text = f"Size: {matched_size} selected\n\nColor: *{colors[0]}*\n\nHow many would you like to order?"
+                            response_text = f"Size: {matched_size} selected\n\nColor: *{colors[0]}*\n\nHow many would you like to order?{qty_text}"
                             suggested_actions = ["1", "2", "3", "Cancel"]
                         else:
                             state.collect_field("_needs_color", True)
@@ -3137,7 +3450,7 @@ class AIBrain:
                             suggested_actions = colors[:4] + ["Cancel"]
                     else:
                         logger.info(f"🎨 No colors available")
-                        response_text = f"Size: {matched_size} selected\n\nHow many would you like to order?"
+                        response_text = f"Size: {matched_size} selected\n\nHow many would you like to order?{qty_text}"
                         suggested_actions = ["1", "2", "3", "Cancel"]
                 
                 # Persist state after size selection
@@ -3241,10 +3554,11 @@ class AIBrain:
                 all_products = state.collected_fields.get("_all_products", business_data.get("products_services", []))
                 
                 if current_page < total_pages - 1:
-                    # Show next page
+                    # Show next page using effective page size (may differ from default if MAX_PRODUCT_CARDS limited display)
+                    effective_page_size = state.collected_fields.get("_pagination_products_per_page") or state.collected_fields.get("_pagination_page_size", 5)
                     next_page = current_page + 1
                     response_text, suggested_actions, product_meta = self._format_product_list(
-                        all_products, state, page=next_page
+                        all_products, state, page=next_page, page_size=effective_page_size
                     )
                     
                     # Persist state after pagination
@@ -3459,6 +3773,7 @@ class AIBrain:
         
         # =====================================================
         # STEP 2: Handle quantity response
+        # AMAZON-GRADE: Validate quantity against cached stock snapshot
         # =====================================================
         pending_item = state.collected_fields.get("pending_item")
         if pending_item and not state.collected_fields.get("quantity"):
@@ -3466,7 +3781,95 @@ class AIBrain:
             qty_match = re.search(r'\b(\d+)\b', message)
             if qty_match:
                 quantity = int(qty_match.group(1))
-                if quantity > 0 and quantity <= 100:
+                
+                # AMAZON-GRADE: ALWAYS fetch LIVE stock from DB at quantity validation
+                # Never trust cached value - stock can change between size selection and quantity entry
+                # SEV-1 FIX: Use authoritative resolved_sku scope, NOT locally derived variant_id
+                try:
+                    from utils.availability import get_stock_for_selection
+                    product_data = state.collected_fields.get("pending_product_data", {})
+                    selected_size = state.collected_fields.get("selected_size")
+                    
+                    # SEV-1 FIX: Use resolved_sku for authoritative scope
+                    resolved_sku = state.collected_fields.get("_resolved_sku", {})
+                    scope = resolved_sku.get("scope", "BASE")
+                    variant_id = resolved_sku.get("variant_id") if scope == "VARIANT" else None
+                    
+                    # CRITICAL: Never use base_only when scope is VARIANT
+                    max_qty = get_stock_for_selection(product_data, variant_id=variant_id, size=selected_size, base_only=(scope == "BASE"))
+                    logger.info(f"📦 REAL-TIME SKU-AWARE STOCK: scope={scope}, product={product_data.get('name')}, size={selected_size}, variant={variant_id}, available={max_qty}")
+                    state.collect_field("_stock_snapshot", max_qty)  # Update cache with fresh value
+                except (ImportError, Exception) as e:
+                    logger.warning(f"⚠️ Live stock lookup failed: {e}, using cached value")
+                    max_qty = state.collected_fields.get("_stock_snapshot", 100)  # Fallback to cache, then 100
+                
+                # BOUNDED VALIDATION: Reject invalid quantities BEFORE proceeding
+                if quantity < 1:
+                    self.conversation_manager.add_message(user_id, "user", message)
+                    response_text = "Please enter a valid quantity (1 or more)."
+                    self.conversation_manager.add_message(user_id, "assistant", response_text)
+                    return {
+                        "reply": response_text,
+                        "intent": "order_quantity_invalid",
+                        "confidence": 1.0,
+                        "needs_human": False,
+                        "suggested_actions": ["1", "2", "3", "Cancel"],
+                        "metadata": {"generation_method": "order_flow", "error": "quantity_too_low"}
+                    }
+                
+                if quantity > max_qty and max_qty > 0:
+                    # Quantity exceeds available stock - reject BEFORE proceeding
+                    # ENTERPRISE LOGGING: Structured invariant violation log
+                    product_data = state.collected_fields.get("pending_product_data", {})
+                    selected_variant = state.collected_fields.get("selected_variant")
+                    selected_size = state.collected_fields.get("selected_size")
+                    logger.warning(
+                        "INVENTORY_INVARIANT_BLOCKED",
+                        extra={
+                            "product_id": product_data.get("id"),
+                            "variant_id": selected_variant.get("id") if selected_variant else None,
+                            "size": selected_size,
+                            "requested": quantity,
+                            "available": max_qty,
+                            "channel": "whatsapp"
+                        }
+                    )
+                    
+                    self.conversation_manager.add_message(user_id, "user", message)
+                    if max_qty == 1:
+                        response_text = f"Sorry, only 1 unit is available. Would you like to order 1?"
+                    else:
+                        response_text = f"Sorry, only {max_qty} units are available.\n\nPlease enter a quantity up to {max_qty}."
+                    self.conversation_manager.add_message(user_id, "assistant", response_text)
+                    return {
+                        "reply": response_text,
+                        "intent": "order_quantity_exceeds_stock",
+                        "confidence": 1.0,
+                        "needs_human": False,
+                        "suggested_actions": [str(max_qty), "1", "Cancel"],
+                        "metadata": {"generation_method": "order_flow", "max_available": max_qty, "requested": quantity}
+                    }
+                
+                # Per-product max order quantity (enables wholesale limits, per-SKU controls)
+                product_data = state.collected_fields.get("pending_product_data", {})
+                product_max_qty = product_data.get("max_order_qty", 100)
+                
+                if quantity > product_max_qty:
+                    # Exceeds product-specific max - reject
+                    self.conversation_manager.add_message(user_id, "user", message)
+                    response_text = f"Maximum quantity for this item is {product_max_qty}. Please enter a smaller number."
+                    self.conversation_manager.add_message(user_id, "assistant", response_text)
+                    return {
+                        "reply": response_text,
+                        "intent": "order_quantity_invalid",
+                        "confidence": 1.0,
+                        "needs_human": False,
+                        "suggested_actions": [str(min(product_max_qty, max_qty)), "1", "Cancel"],
+                        "metadata": {"generation_method": "order_flow", "error": "quantity_exceeds_product_max", "max": product_max_qty}
+                    }
+                
+                # Valid quantity - proceed
+                if quantity > 0 and quantity <= min(max_qty if max_qty > 0 else product_max_qty, product_max_qty):
                     state.collect_field("quantity", quantity)
                     
                     # Build complete item with stable product references
@@ -3483,6 +3886,7 @@ class AIBrain:
                     item_original_price = None
                     
                     logger.info(f"💰 DEBUG: Building order item - selected_variant={selected_variant is not None}, selected_size={selected_size}, selected_color={selected_color}")
+                    logger.info(f"💰 DEBUG: selected_size_price={selected_size_price}, type={type(selected_size_price)}, base_price={base_price}")
                     if selected_variant:
                         logger.info(f"💰 DEBUG: Variant details - id={selected_variant.get('id')}, price={selected_variant.get('price')}, size_prices={selected_variant.get('size_prices')}")
                         logger.info(f"💰 DEBUG: State - selected_size_price={selected_size_price}, selected_variant_price={state.collected_fields.get('selected_variant_price')}")
@@ -3553,19 +3957,35 @@ class AIBrain:
                         "color": selected_color,
                     }
                     
-                    # Build variant_id from size/color
+                    # Build variant_id from actual variant UUID (NOT semantic size_color!)
                     size = state.collected_fields.get("selected_size")
                     color = state.collected_fields.get("selected_color")
+                    
+                    # CRITICAL FIX: Use actual variant UUID, not semantic ID
+                    if selected_variant and selected_variant.get("id"):
+                        item["variant_id"] = selected_variant.get("id")
+                        logger.info(f"📦 Using actual variant UUID: {item['variant_id']}")
+                    else:
+                        # Try to resolve variant from product data
+                        resolved = self._resolve_variant_for_product(
+                            product_data, selected_size=size, selected_color=color
+                        )
+                        if resolved and resolved.get("id"):
+                            item["variant_id"] = resolved.get("id")
+                            logger.info(f"📦 Using resolved variant UUID: {item['variant_id']}")
+                        else:
+                            # No variant UUID available - leave as None
+                            item["variant_id"] = None
+                            logger.warning(f"📦 No variant UUID found for size={size}, color={color}")
+                    
+                    # Build display string (separate from variant_id)
                     if size and color:
-                        item["variant_id"] = f"{size}_{color}"
                         if not item["variant_display"]:
                             item["variant_display"] = f"Size: {size}, Color: {color}"
                     elif size:
-                        item["variant_id"] = size
                         if not item["variant_display"]:
                             item["variant_display"] = f"Size: {size}"
                     elif color:
-                        item["variant_id"] = color
                         if not item["variant_display"]:
                             item["variant_display"] = f"Color: {color}"
                     
@@ -4045,7 +4465,160 @@ class AIBrain:
                         total_amount += float(price) * quantity
                     
                     if total_amount > 0:
-                        # Generate Payment Link
+                        # =================================================================
+                        # CRITICAL: RESERVE STOCK BEFORE PAYMENT LINK
+                        # This is a HARD GATE - no payment link without reservation
+                        # =================================================================
+                        
+                        # ═══════════════════════════════════════════════════════════════
+                        # SEV-1 FIX: EARLY-EXIT GUARD (BEFORE any processing)
+                        # Check FIRST before any expensive setup or logging
+                        # ═══════════════════════════════════════════════════════════════
+                        pre_payment_reservation_ids = state.collected_fields.get("pre_payment_reservation_ids")
+                        
+                        if pre_payment_reservation_ids and len(pre_payment_reservation_ids) > 0:
+                            # ♻️ EARLY-EXIT: Skip entire reservation block
+                            logger.info(
+                                f"📦 ♻️ PRE-PAYMENT EARLY-EXIT: Reservation already exists ({len(pre_payment_reservation_ids)} items), skipping entire block",
+                                extra={"reservation_ids": pre_payment_reservation_ids, "user_id": user_id}
+                            )
+                            # Jump directly to payment link generation below (stock already reserved)
+                        else:
+                            # 🟡 FIRST TIME: Proceed with reservation
+                            try:
+                                from services.inventory_service import get_inventory_service, StockItem
+                                import uuid
+                                import traceback
+                                
+                                inventory = get_inventory_service()
+                                stock_items = []
+                                
+                                for item in items:
+                                    product_id = item.get("product_id")
+                                    if not product_id:
+                                        continue
+                                    
+                                    # SEV-1 FIX: Extract base product_id if concatenated format is used
+                                    # The format could be: "base_uuid_variant_variant_uuid" 
+                                    # We need: product_id = "base_uuid", variant_id = "variant_uuid"
+                                    if "_variant_" in str(product_id):
+                                        parts = str(product_id).split("_variant_")
+                                        product_id = parts[0]  # Base product UUID
+                                        # Extract variant_id from concatenated format
+                                        extracted_variant_id = parts[1] if len(parts) > 1 else None
+                                        logger.info(f"📦 Extracted from concatenated ID: product_id={product_id}, variant_id={extracted_variant_id}")
+                                    else:
+                                        extracted_variant_id = None
+                                    
+                                    # Validate base product_id UUID
+                                    try:
+                                        uuid.UUID(str(product_id))
+                                    except (ValueError, TypeError):
+                                        logger.warning(f"📦 Invalid product_id UUID: {product_id}, skipping")
+                                        continue
+                                    
+                                    # Determine variant_id: prefer item's variant_id, fallback to extracted
+                                    raw_variant_id = item.get("variant_id") or extracted_variant_id
+                                    sanitized_variant_id = None
+                                    if raw_variant_id:
+                                        try:
+                                            uuid.UUID(str(raw_variant_id))
+                                            sanitized_variant_id = raw_variant_id
+                                        except (ValueError, TypeError):
+                                            logger.warning(f"📦 Invalid variant_id UUID: {raw_variant_id}, ignoring")
+                                            sanitized_variant_id = None
+                                    
+                                    stock_items.append(StockItem(
+                                        product_id=product_id,
+                                        name=item.get("name", "Item"),
+                                        quantity=item.get("quantity", 1),
+                                        variant_id=sanitized_variant_id,
+                                        size=item.get("size"),
+                                    ))
+                                
+                                if stock_items:
+                                    # Get business owner ID - CRITICAL: Use flow_config FIRST for consistency
+                                    # flow_config.business_owner_id = products.user_id (auth user ID)
+                                    # businesses.user_id can be missing, businesses.id is business row ID (WRONG!)
+                                    business_owner_id = (
+                                        state.flow_config.get("business_owner_id") or
+                                        business_data.get("user_id") or 
+                                        state.collected_fields.get("business_manager_id")
+                                    )
+                                    
+                                    # HARD FAIL if still no business_owner_id
+                                    if not business_owner_id:
+                                        logger.error(f"📦 PRE-PAYMENT: No business_owner_id found! flow_config={state.flow_config.get('business_owner_id')}, business_data.user_id={business_data.get('user_id')}")
+                                        raise ValueError("Missing business_owner_id for stock reservation")
+                                        
+                                    logger.info(f"📦 PRE-PAYMENT: Using business_owner_id={business_owner_id} (flow_config={state.flow_config.get('business_owner_id')}, business_data.user_id={business_data.get('user_id')})")
+                                    
+                                    # DEBUG: Log the exact stock items being reserved
+                                    for idx, si in enumerate(stock_items):
+                                        logger.info(f"📦 PRE-PAYMENT DEBUG [{idx}]: product_id={si.product_id}, variant_id={si.variant_id}, size={si.size}, qty={si.quantity}, name={si.name}")
+                                    
+                                    # ═══════════════════════════════════════════════════════════════
+                                    # SAFETY ASSERTION: Double-check guard wasn't bypassed
+                                    # ═══════════════════════════════════════════════════════════════
+                                    assert not state.collected_fields.get("pre_payment_reservation_ids"), \
+                                        "BUG: Reached PRE-PAYMENT reservation code after pre_payment_reservation_ids already exists"
+                                    
+                                    # 🚨 CALL PATH DEBUG LOGGING (remove after bug is confirmed fixed)
+                                    logger.info(
+                                        "🚨 PRE-PAYMENT_RESERVATION_CALL_PATH",
+                                        extra={
+                                            "user_id": user_id,
+                                            "flow_status": str(state.flow_status) if state else "no_state",
+                                            "has_pre_payment": bool(state.collected_fields.get("pre_payment_reservation_ids")),
+                                            "stack": "\n".join(traceback.format_stack()[-6:])
+                                        }
+                                    )
+                                    
+                                    # 🟡 FIRST & ONLY TIME we touch inventory
+                                    logger.info(f"📦 🟡 PRE-PAYMENT: First-time reservation starting...")
+                                    reservation_result = inventory.validate_and_reserve(
+                                        user_id=business_owner_id,
+                                        items=stock_items,
+                                        source='whatsapp_ai_prepayment',
+                                        session_id=f"ai_brain_{user_id}",
+                                    )
+                                    
+                                    if not reservation_result.success:
+                                        logger.error(
+                                            f"📦 PRE-PAYMENT_RESERVATION_BLOCKED: Cannot generate payment link without stock reservation",
+                                            extra={"user_id": user_id, "items": [i.name for i in stock_items]}
+                                        )
+                                        return {
+                                            "reply": f"Sorry, {reservation_result.message or 'some items are no longer available'}.\n\nPlease restart your order to continue.",
+                                            "intent": "stock_unavailable",
+                                            "confidence": 1.0,
+                                            "needs_human": False,
+                                            "suggested_actions": ["Browse Products", "Cancel"],
+                                            "metadata": {
+                                                "generation_method": "pre_payment_reservation_blocked",
+                                                "error": "stock_unavailable_before_payment"
+                                            }
+                                        }
+                                    
+                                    # Store reservation IDs for later use (IMMUTABLE)
+                                    state.collect_field("pre_payment_reservation_ids", reservation_result.reservation_ids)
+                                    logger.info(f"📦 🟡 PRE-PAYMENT: Stock reserved successfully: {len(reservation_result.reservation_ids)} items")
+                            
+                            except ImportError as e:
+                                logger.warning(f"📦 Inventory service not available for pre-payment check: {e}")
+                                # Allow flow to continue for backwards compatibility
+                            except Exception as e:
+                                logger.error(f"📦 PRE-PAYMENT_RESERVATION_ERROR: {e}", exc_info=True)
+                                return {
+                                    "reply": "Sorry, we could not verify stock availability. Please try again.",
+                                    "intent": "stock_error",
+                                    "confidence": 1.0,
+                                    "needs_human": False,
+                                    "suggested_actions": ["Try again", "Cancel"],
+                                    "metadata": {"error": str(e)}
+                                }
+                        
+                        # Generate Payment Link (only if stock is reserved)
                         import razorpay
                         import time
                         
@@ -4304,6 +4877,154 @@ class AIBrain:
             notes = " | ".join(notes_parts) if notes_parts else None
             
             # =================================================================
+            # AMAZON-GRADE: RESERVATION GATE (HARD GATE)
+            # Order creation MUST be blocked if reservation fails
+            # =================================================================
+            
+            # ═══════════════════════════════════════════════════════════════
+            # SEV-1 FIX: EARLY-EXIT GUARD (BEFORE any processing)
+            # Check FIRST before any expensive setup or try block
+            # ═══════════════════════════════════════════════════════════════
+            pre_payment_reservation_ids = state.collected_fields.get("pre_payment_reservation_ids")
+            local_reservation_ids = []
+            
+            if pre_payment_reservation_ids and len(pre_payment_reservation_ids) > 0:
+                # ♻️ EARLY-EXIT: Skip entire reservation try block
+                logger.info(
+                    f"📦 ♻️ ORDER_CONFIRM EARLY-EXIT: Reusing pre-payment reservations ({len(pre_payment_reservation_ids)} items), skipping reservation block",
+                    extra={"reservation_ids": pre_payment_reservation_ids, "user_id": user_id}
+                )
+                local_reservation_ids = pre_payment_reservation_ids
+                # Do NOT enter the try block below - go straight to order persistence
+            else:
+                # 🟡 COD/LEGACY FLOW: No pre-payment reservation exists, reserve now
+                reservation_result = None
+                
+                try:
+                    from services.inventory_service import get_inventory_service
+                    from domain.inventory import StockItem
+                    import traceback
+                    
+                    inventory = get_inventory_service()
+                    
+                    # Build stock items from collected items
+                    stock_items = []
+                    for item in items:
+                        product_id = item.get("product_id")
+                        if product_id:
+                            import uuid
+                            
+                            # SEV-1 FIX: Extract base product_id if concatenated format is used
+                            # The format could be: "base_uuid_variant_variant_uuid" 
+                            # We need: product_id = "base_uuid", variant_id = "variant_uuid"
+                            if "_variant_" in str(product_id):
+                                parts = str(product_id).split("_variant_")
+                                product_id = parts[0]  # Base product UUID
+                                # Extract variant_id from concatenated format
+                                extracted_variant_id = parts[1] if len(parts) > 1 else None
+                                logger.info(f"📦 ORDER_CONFIRM: Extracted from concatenated ID: product_id={product_id}, variant_id={extracted_variant_id}")
+                            else:
+                                extracted_variant_id = None
+                            
+                            # Validate base product_id UUID
+                            try:
+                                uuid.UUID(str(product_id))
+                            except (ValueError, TypeError):
+                                logger.warning(f"📦 ORDER_CONFIRM: Invalid product_id UUID: {product_id}, skipping")
+                                continue
+                            
+                            # CRITICAL: Sanitize variant_id - must be valid UUID or None
+                            # Prefer item's variant_id, fallback to extracted
+                            raw_variant_id = item.get("variant_id") or extracted_variant_id
+                            sanitized_variant_id = None
+                            if raw_variant_id:
+                                # Check if it's a valid UUID (not semantic like "Free Size_Blue")
+                                try:
+                                    uuid.UUID(str(raw_variant_id))
+                                    sanitized_variant_id = raw_variant_id
+                                except (ValueError, TypeError):
+                                    # Invalid UUID - likely semantic ID from legacy state
+                                    logger.warning(f"📦 ORDER_CONFIRM: Invalid variant_id '{raw_variant_id}' - ignoring (not UUID)")
+                                    sanitized_variant_id = None
+                            
+                            stock_items.append(StockItem(
+                                product_id=product_id,
+                                name=item.get("name", "Item"),
+                                quantity=item.get("quantity", 1),
+                                variant_id=sanitized_variant_id,
+                                size=item.get("size"),
+                            ))
+                    
+                    if stock_items:
+                        # DEBUG: Log the business_owner_id and stock items for order confirmation
+                        logger.info(f"📦 ORDER_CONFIRM: Using business_owner_id={business_owner_id}")
+                        for idx, si in enumerate(stock_items):
+                            logger.info(f"📦 ORDER_CONFIRM DEBUG [{idx}]: product_id={si.product_id}, variant_id={si.variant_id}, size={si.size}, qty={si.quantity}, name={si.name}")
+                        
+                        # ═══════════════════════════════════════════════════════════════
+                        # SAFETY ASSERTION: Double-check guard wasn't bypassed
+                        # ═══════════════════════════════════════════════════════════════
+                        assert not state.collected_fields.get("pre_payment_reservation_ids"), \
+                            "BUG: Reached ORDER_CONFIRM reservation code after pre_payment_reservation_ids already exists"
+                        
+                        # 🚨 CALL PATH DEBUG LOGGING (remove after bug is confirmed fixed)
+                        logger.info(
+                            "🚨 ORDER_CONFIRM_RESERVATION_CALL_PATH",
+                            extra={
+                                "user_id": user_id,
+                                "flow_status": str(state.flow_status) if state else "no_state",
+                                "has_pre_payment": bool(state.collected_fields.get("pre_payment_reservation_ids")),
+                                "stack": "\n".join(traceback.format_stack()[-6:])
+                            }
+                        )
+                        
+                        # 🟡 COD/LEGACY: First and only time we touch inventory
+                        logger.info(f"📦 🟡 ORDER_CONFIRM: COD/legacy flow - reserving now")
+                        
+                        reservation_result = inventory.validate_and_reserve(
+                            user_id=business_owner_id,
+                            items=stock_items,
+                            source='whatsapp_ai',
+                            session_id=f"ai_brain_{user_id}",
+                        )
+                        
+                        # INVARIANT ASSERTION: Order MUST NOT be created without reservation
+                        if not reservation_result.success:
+                            logger.error(
+                                f"📦 RESERVATION_GATE_BLOCKED: Cannot create order without reservation",
+                                extra={"user_id": user_id, "items": [i.name for i in stock_items]}
+                            )
+                            return {
+                                "reply": reservation_result.message or "Sorry, some items are out of stock.",
+                                "intent": "stock_unavailable",
+                                "confidence": 1.0,
+                                "needs_human": False,
+                                "suggested_actions": ["Browse products", "Contact us"],
+                                "metadata": {
+                                    "generation_method": "reservation_gate_blocked",
+                                    "error": "stock_reservation_failed"
+                                }
+                            }
+                        
+                        local_reservation_ids = reservation_result.reservation_ids
+                        logger.info(f"📦 🟡 RESERVED (new): {len(local_reservation_ids)} items reserved")
+                    
+                except ImportError as e:
+                    logger.warning(f"📦 Inventory service not available: {e}")
+                    # Continue without reservation for backwards compatibility
+                    # TODO: Make this a hard gate once inventory service is always available
+                except Exception as e:
+                    logger.error(f"📦 RESERVATION_ERROR: {e}", exc_info=True)
+                    return {
+                        "reply": "Sorry, we could not verify stock availability. Please try again.",
+                        "intent": "stock_error",
+                        "confidence": 1.0,
+                        "needs_human": False,
+                        "suggested_actions": ["Try again", "Contact us"],
+                        "metadata": {"error": str(e)}
+                    }
+            
+            # =================================================================
             # PERSIST ORDER VIA ORDER SERVICE
             # =================================================================
             try:
@@ -4374,7 +5095,11 @@ class AIBrain:
                 )
                 
                 order_service = get_order_service(self.supabase_client)
-                created_order = order_service.create_order(order_data)
+                # Pass reservation IDs to confirm stock atomically with order
+                created_order = order_service.create_order(
+                    order_data,
+                    reservation_ids=local_reservation_ids if local_reservation_ids else None
+                )
                 
                 # SUCCESS: Build response from PERSISTED record
                 order_id = created_order.id[:8].upper()

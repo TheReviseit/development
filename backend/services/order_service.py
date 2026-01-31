@@ -150,12 +150,21 @@ class OrderService:
             if reservation_result:
                 local_reservation_ids = reservation_result.reservation_ids
         
+        # =================================================================
+        # AMAZON-GRADE INVARIANT: AI orders MUST have reservation
+        # This is a self-defending assertion
+        # =================================================================
+        if order_data.source == OrderSource.AI and not skip_stock_check:
+            assert local_reservation_ids or not order_data.items, \
+                f"FATAL: Order creation without reservation_ids is forbidden for AI orders (correlation_id={correlation_id})"
+        
         # 5. Build domain entity
         order = Order.create(
             user_id=order_data.user_id,
             customer_name=order_data.customer_name,
             customer_phone=order_data.customer_phone,
             customer_address=order_data.customer_address,
+            customer_email=order_data.customer_email,
             items=order_data.items,
             source=order_data.source,
             notes=order_data.notes,

@@ -44,6 +44,154 @@ def get_supabase_client() -> Optional[Client]:
 
 
 # =============================================================================
+# FIREBASE UID → SUPABASE UUID TRANSLATION (Enterprise-Grade)
+# =============================================================================
+
+import time
+from functools import lru_cache
+from threading import Lock
+
+# Thread-safe cache for user ID translations
+_uid_cache: Dict[str, tuple] = {}  # {firebase_uid: (supabase_uuid, timestamp)}
+_uid_cache_lock = Lock()
+_UID_CACHE_TTL = 3600  # 1 hour cache TTL
+
+
+def resolve_user_id(
+    firebase_uid: str,
+    allow_firebase_fallback: bool = False
+) -> Optional[str]:
+    """
+    Enterprise-grade Firebase UID → Supabase UUID translation.
+    
+    This is the SINGLE SOURCE OF TRUTH for user ID resolution across the platform.
+    All modules should use this function when they need to interact with tables
+    that use Supabase UUIDs (like analytics_daily, push_subscriptions).
+    
+    Features:
+    - TTL-based in-memory caching (1 hour)
+    - Thread-safe operations
+    - Graceful fallback options
+    - Debug logging
+    
+    Args:
+        firebase_uid: The Firebase Authentication UID
+        allow_firebase_fallback: If True, returns firebase_uid when no mapping exists
+                                 (useful for tables that accept both formats)
+    
+    Returns:
+        Supabase UUID string, or None if translation fails
+        (or firebase_uid if allow_firebase_fallback=True)
+    
+    Usage:
+        >>> from supabase_client import resolve_user_id
+        >>> supabase_uuid = resolve_user_id("PUlB2mAo6AaFmQ0WfqpSFgS7dDo1")
+        >>> if supabase_uuid:
+        ...     client.table("analytics_daily").eq("user_id", supabase_uuid)...
+    """
+    if not firebase_uid:
+        return None
+    
+    # Check if already a valid UUID format (36 chars with hyphens)
+    if _is_valid_uuid(firebase_uid):
+        return firebase_uid
+    
+    # Check cache first (thread-safe)
+    cached = _get_cached_user_id(firebase_uid)
+    if cached is not None:
+        return cached
+    
+    # Fetch from database
+    resolved_id = _fetch_supabase_user_id(firebase_uid)
+    
+    if resolved_id:
+        _cache_user_id(firebase_uid, resolved_id)
+        return resolved_id
+    
+    # Fallback behavior
+    if allow_firebase_fallback:
+        print(f"⚠️ [UserID] No mapping found for {firebase_uid[:15]}..., using as-is (fallback enabled)")
+        return firebase_uid
+    
+    print(f"⚠️ [UserID] No Supabase UUID found for Firebase UID: {firebase_uid[:15]}...")
+    return None
+
+
+def _is_valid_uuid(value: str) -> bool:
+    """Check if a string is a valid UUID format."""
+    if not value or len(value) != 36:
+        return False
+    # UUID format: 8-4-4-4-12 with hyphens at positions 8, 13, 18, 23
+    return (
+        value[8] == '-' and 
+        value[13] == '-' and 
+        value[18] == '-' and 
+        value[23] == '-'
+    )
+
+
+def _get_cached_user_id(firebase_uid: str) -> Optional[str]:
+    """Get user ID from cache if valid."""
+    with _uid_cache_lock:
+        if firebase_uid in _uid_cache:
+            supabase_uuid, timestamp = _uid_cache[firebase_uid]
+            if time.time() - timestamp < _UID_CACHE_TTL:
+                return supabase_uuid
+            # Expired - remove from cache
+            del _uid_cache[firebase_uid]
+    return None
+
+
+def _cache_user_id(firebase_uid: str, supabase_uuid: str):
+    """Cache user ID translation."""
+    with _uid_cache_lock:
+        # Limit cache size (LRU-style cleanup)
+        if len(_uid_cache) > 10000:
+            # Remove oldest 20% of entries
+            sorted_entries = sorted(_uid_cache.items(), key=lambda x: x[1][1])
+            for key, _ in sorted_entries[:2000]:
+                del _uid_cache[key]
+        
+        _uid_cache[firebase_uid] = (supabase_uuid, time.time())
+
+
+def _fetch_supabase_user_id(firebase_uid: str) -> Optional[str]:
+    """Fetch Supabase user ID from database."""
+    client = get_supabase_client()
+    if not client:
+        return None
+    
+    try:
+        result = client.table('users').select('id').eq(
+            'firebase_uid', firebase_uid
+        ).single().execute()
+        
+        if result.data and result.data.get('id'):
+            supabase_uuid = result.data['id']
+            print(f"🔗 [UserID] Resolved: {firebase_uid[:10]}... → {supabase_uuid[:8]}...")
+            return supabase_uuid
+            
+    except Exception as e:
+        # Log but don't crash - this is a non-critical operation
+        error_msg = str(e)
+        if 'PGRST116' in error_msg:  # Single row not found
+            print(f"⚠️ [UserID] No user record for Firebase UID: {firebase_uid[:15]}...")
+        else:
+            print(f"⚠️ [UserID] Error fetching user ID: {e}")
+    
+    return None
+
+
+def invalidate_user_cache(firebase_uid: str = None):
+    """Invalidate cached user ID translations."""
+    with _uid_cache_lock:
+        if firebase_uid:
+            _uid_cache.pop(firebase_uid, None)
+        else:
+            _uid_cache.clear()
+
+
+# =============================================================================
 # UNIFIED WHATSAPP CREDENTIAL LOOKUP
 # Production-grade multi-source credential resolution
 # =============================================================================

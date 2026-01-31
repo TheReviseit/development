@@ -170,6 +170,7 @@ class OrderCreate(BaseModel):
     customer_name: str = Field(..., min_length=1, max_length=255)
     customer_phone: str = Field(..., min_length=10, max_length=20)
     customer_address: Optional[str] = Field(None, max_length=500)
+    customer_email: Optional[str] = Field(None, max_length=255)  # Customer email for notifications
     items: List[OrderItem] = Field(..., min_length=1, max_length=100)
     status: OrderStatus = OrderStatus.PENDING
     source: OrderSource = OrderSource.MANUAL
@@ -222,6 +223,7 @@ class OrderUpdate(BaseModel):
     customer_name: Optional[str] = Field(None, min_length=1, max_length=255)
     customer_phone: Optional[str] = Field(None, min_length=10, max_length=20)
     customer_address: Optional[str] = Field(None, max_length=500)
+    customer_email: Optional[str] = Field(None, max_length=255)
     items: Optional[List[OrderItem]] = Field(None, min_length=1, max_length=100)
     notes: Optional[str] = Field(None, max_length=2000)
     status: Optional[OrderStatus] = None
@@ -244,6 +246,7 @@ class OrderResponse(BaseModel):
     customer_name: str
     customer_phone: str
     customer_address: Optional[str] = None
+    customer_email: Optional[str] = None
     items: List[Dict[str, Any]]
     total_quantity: int
     status: OrderStatus

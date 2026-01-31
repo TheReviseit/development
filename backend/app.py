@@ -749,11 +749,12 @@ def webhook():
                 button_title = button_reply.get('title', '')
                 
                 # Handle "Order This" button - triggers order flow with product
-                if button_id.startswith('order_'):
+                # Supports both opaque (order_btn_XXXXXXXX) and legacy (order_card_N) formats
+                if button_id.startswith('order_btn_') or button_id.startswith('order_card_') or button_id.startswith('order_'):
                     # Extract product identifier from button id
                     product_identifier = button_id.replace('order_', '')
                     message_text = f"order {product_identifier}"
-                    logger.info(f"🛒 Order button clicked for product: {product_identifier}")
+                    logger.info(f"🛒 Order button clicked: {button_id} → '{message_text}'")
                 # Map button clicks to text responses for the AI
                 elif button_id in ['confirm_yes', 'yes'] or 'yes' in button_title.lower():
                     message_text = 'yes'
@@ -1115,15 +1116,19 @@ def webhook():
                         
                         body_text = "\n".join(body_parts)
                         
-                        # Single "Order This" button with product ID for direct selection
-                        # CRITICAL FIX: Use card_index instead of truncated product_id to avoid collisions
-                        card_index = card.get("card_index", 0)
-                        button_id = f"order_card_{card_index}"
+                        # ENTERPRISE-GRADE: Use opaque button ID if available, fallback to legacy card_index
+                        btn_id = card.get("btn_id")
+                        if btn_id:
+                            # New opaque format: order_btn_xxxxxxxx
+                            button_id = f"order_{btn_id}"
+                        else:
+                            # Legacy format: order_card_N (backwards compatibility)
+                            card_index = card.get("card_index", 0)
+                            button_id = f"order_card_{card_index}"
                         
                         logger.info(f"🔘 Creating button for: {name}")
                         logger.info(f"   Full product_id: {product_id}")
-                        logger.info(f"   Card index: {card_index}")
-                        logger.info(f"   Button ID: {button_id}")
+                        logger.info(f"   Button ID: {button_id} ({'opaque' if btn_id else 'legacy'})")
                         logger.info(f"   Card colors: {card.get('colors')}")
                         logger.info(f"   Card sizes: {card.get('sizes')}")
                         logger.info(f"   Card is_variant: {card.get('is_variant', False)}")

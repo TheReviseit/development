@@ -96,6 +96,7 @@ class Order:
     customer_name: str
     customer_phone: str
     customer_address: Optional[str]
+    customer_email: Optional[str]
     items: List[Dict[str, Any]]
     total_quantity: int
     status: OrderStatus
@@ -123,6 +124,7 @@ class Order:
         customer_phone: str,
         items: List[OrderItem],
         customer_address: Optional[str] = None,
+        customer_email: Optional[str] = None,
         source: OrderSource = OrderSource.MANUAL,
         notes: Optional[str] = None,
         idempotency_key: Optional[str] = None,
@@ -153,6 +155,7 @@ class Order:
             customer_name=customer_name,
             customer_phone=customer_phone,
             customer_address=customer_address,
+            customer_email=customer_email,
             items=items_data,
             total_quantity=total_qty,
             status=OrderStatus.PENDING,
@@ -192,6 +195,7 @@ class Order:
         customer_name: Optional[str] = None,
         customer_phone: Optional[str] = None,
         customer_address: Optional[str] = None,
+        customer_email: Optional[str] = None,
         items: Optional[List[OrderItem]] = None,
         notes: Optional[str] = None,
     ) -> None:
@@ -202,6 +206,8 @@ class Order:
             self.customer_phone = customer_phone
         if customer_address is not None:
             self.customer_address = customer_address
+        if customer_email is not None:
+            self.customer_email = customer_email
         if items is not None:
             self.items = [item.to_dict() for item in items]
             self.total_quantity = sum(item.quantity for item in items)
@@ -232,6 +238,7 @@ class Order:
             "customer_name": self.customer_name,
             "customer_phone": self.customer_phone,
             "customer_address": self.customer_address,
+            "customer_email": self.customer_email,
             "items": self.items,
             "total_quantity": self.total_quantity,
             "status": self.status.value,
@@ -258,6 +265,7 @@ class Order:
             customer_name=data["customer_name"],
             customer_phone=data["customer_phone"],
             customer_address=data.get("customer_address"),
+            customer_email=data.get("customer_email"),
             items=data.get("items", []),
             total_quantity=data.get("total_quantity", 0),
             status=OrderStatus(data.get("status", "pending")),

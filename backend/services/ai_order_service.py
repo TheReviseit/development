@@ -539,6 +539,21 @@ class AIOrderService:
                 context=context,
             )
         except Exception as e:
+            error_str = str(e).lower()
+            
+            # RESERVATION TTL EXPIRY: Explicit messaging
+            if 'expired' in error_str or 'ttl' in error_str:
+                logger.warning(f"RESERVATION_EXPIRED: {e}")
+                if context.reservation_ids:
+                    self._release_reservations(context.reservation_ids, "reservation_expired")
+                return AIOrderResult(
+                    success=False,
+                    message="Reservation expired",
+                    context=context,
+                    suggested_response="⏰ Your item was reserved temporarily and is no longer available.\n\nPlease restart your order to continue.",
+                    next_action="restart_order",
+                )
+            
             logger.error(f"Error creating AI order: {e}")
             # Release reservations on failure
             if context.reservation_ids:
@@ -671,11 +686,21 @@ class AIOrderService:
             return {'success': True, 'reservation_ids': result.reservation_ids}
             
         except ImportError as e:
-            logger.warning(f"Inventory service not available: {e}")
-            return {'success': True}  # Don't block if inventory service unavailable
+            # AMAZON-GRADE: Inventory service MUST be available for orders
+            logger.error(f"RESERVATION_BLOCKED: Inventory service unavailable: {e}")
+            return {
+                'success': False,
+                'message': 'Inventory service unavailable',
+                'suggested_response': 'Sorry, we cannot verify stock availability right now. Please try again in a moment.'
+            }
         except Exception as e:
-            logger.error(f"Error validating stock: {e}", exc_info=True)
-            return {'success': True}  # Don't block orders on inventory errors
+            # AMAZON-GRADE: NEVER silently bypass reservation failures
+            logger.error(f"RESERVATION_BLOCKED: Stock validation error: {e}", exc_info=True)
+            return {
+                'success': False,
+                'message': 'Stock validation failed',
+                'suggested_response': 'Sorry, we could not verify stock availability. Please try again or contact us.'
+            }
     
     def _release_reservations(
         self,

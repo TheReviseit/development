@@ -87,7 +87,20 @@ class ConversationState:
         """
         Collect a field value and return the next field to ask.
         Returns None if all fields are collected.
+        
+        AMAZON-GRADE: _resolved_sku is IMMUTABLE once set.
+        This prevents silent corruption from downstream code.
         """
+        # IMMUTABLE FIELDS: Once set, these can never be overwritten
+        # This is a critical safety net for SKU identity and reservation integrity
+        IMMUTABLE_FIELDS = {"_resolved_sku", "pre_payment_reservation_ids"}
+        
+        if field_name in IMMUTABLE_FIELDS and field_name in self.collected_fields:
+            import logging
+            logger = logging.getLogger('reviseit.conversation')
+            logger.warning(f"⚠️ BLOCKED: Attempted to overwrite immutable field '{field_name}' - SKU identity is protected")
+            return self.missing_fields[0] if self.missing_fields else None
+        
         self.collected_fields[field_name] = value
         if field_name in self.missing_fields:
             self.missing_fields.remove(field_name)

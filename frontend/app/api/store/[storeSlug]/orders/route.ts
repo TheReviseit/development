@@ -307,6 +307,7 @@ export async function POST(
       customer_name,
       customer_phone,
       customer_address,
+      customer_email, // FIX: Include email in Flask payload
       items: items.map((item: OrderItem) => ({
         name: item.name,
         quantity: item.quantity,

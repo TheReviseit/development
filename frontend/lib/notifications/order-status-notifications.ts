@@ -1,15 +1,16 @@
 /**
  * Order Status Notification Service
  *
- * Enterprise-grade notification system for order status updates.
+ * ENTERPRISE-GRADE notification system for order status updates.
  * Supports Email (via Resend) and WhatsApp (via Flask backend).
  *
  * Features:
- * - Intelligent fallback: Email first, WhatsApp if no email
- * - Professional branded message templates
- * - Non-blocking async execution
- * - Comprehensive error handling and logging
- * - Idempotency support
+ * - PARALLEL DISPATCH: Both channels sent simultaneously for faster delivery
+ * - RETRY LOGIC: Exponential backoff (2 retries, 500ms → 1s → 2s delays)
+ * - GRACEFUL DEGRADATION: Success if ANY channel succeeds
+ * - COMPREHENSIVE LOGGING: Full traceability for production debugging
+ * - FIRE-AND-FORGET: Safe async execution, never blocks the caller
+ * - IDEMPOTENCY: Skips duplicate status changes automatically
  */
 
 import { sendEmail } from "@/lib/email/resend";
@@ -447,10 +448,11 @@ async function sendWhatsAppNotification(
 /**
  * Send order status notification to customer.
  *
- * Priority: Email (if available) → WhatsApp (fallback)
- *
- * This function is designed to be fire-and-forget - it handles all errors
- * internally and never throws. Safe to call without await.
+ * ENTERPRISE-GRADE IMPLEMENTATION:
+ * - Sends to BOTH Email AND WhatsApp in PARALLEL (not sequential)
+ * - Retry logic with exponential backoff for transient failures
+ * - Comprehensive logging for production debugging
+ * - Graceful degradation - partial success is still success
  *
  * @param order - Order details
  * @param newStatus - The new status being set
@@ -465,6 +467,7 @@ export async function sendOrderStatusNotification(
   business: BusinessDetails,
 ): Promise<NotificationResult> {
   const shortOrderId = order.order_id || order.id.slice(0, 8).toUpperCase();
+  const startTime = Date.now();
 
   // Skip if status hasn't actually changed
   if (previousStatus === newStatus) {
@@ -483,81 +486,127 @@ export async function sendOrderStatusNotification(
   }
 
   console.log(
-    `🔔 [Notification] Processing status change for order #${shortOrderId}: ${previousStatus} → ${newStatus}`,
+    `🔔 [Notification] Processing status change for order #${shortOrderId}: ${previousStatus || "new"} → ${newStatus}`,
+  );
+  console.log(
+    `📋 [Notification] Contact info: email=${order.customer_email || "N/A"}, phone=${order.customer_phone || "N/A"}`,
   );
 
   try {
-    // Strategy: Send to BOTH email AND WhatsApp if available
-    // - Always send WhatsApp if phone number exists
-    // - Also send email if email address exists
-    const results: NotificationResult[] = [];
-    let whatsappResult: NotificationResult | null = null;
-    let emailResult: NotificationResult | null = null;
+    // =======================================================================
+    // PARALLEL DISPATCH: Send to both channels simultaneously
+    // This ensures faster delivery and prevents one channel blocking another
+    // =======================================================================
+    const notificationPromises: Promise<{
+      channel: "email" | "whatsapp";
+      result: NotificationResult;
+    }>[] = [];
 
-    // Send WhatsApp notification (primary channel - always send if phone exists)
+    // Add WhatsApp notification promise (if phone exists)
     if (order.customer_phone) {
       console.log(
-        `📱 [Notification] Sending WhatsApp to ${order.customer_phone} for order #${shortOrderId}`,
+        `📱 [Notification] Queuing WhatsApp to ${order.customer_phone}`,
       );
-      whatsappResult = await sendWhatsAppNotification(
-        order,
-        newStatus,
-        business,
+      notificationPromises.push(
+        sendWhatsAppWithRetry(order, newStatus, business, shortOrderId).then(
+          (result) => ({ channel: "whatsapp" as const, result }),
+        ),
       );
-      results.push(whatsappResult);
+    } else {
+      console.log(`⚠️ [Notification] No phone number - skipping WhatsApp`);
     }
 
-    // Send email notification (secondary channel - send if email exists)
+    // Add Email notification promise (if email exists)
     if (order.customer_email) {
-      console.log(
-        `📧 [Notification] Sending email to ${order.customer_email} for order #${shortOrderId}`,
+      console.log(`📧 [Notification] Queuing Email to ${order.customer_email}`);
+      notificationPromises.push(
+        sendEmailWithRetry(order, newStatus, business, shortOrderId).then(
+          (result) => ({ channel: "email" as const, result }),
+        ),
       );
-      emailResult = await sendEmailNotification(order, newStatus, business);
-      results.push(emailResult);
+    } else {
+      console.log(`⚠️ [Notification] No email address - skipping Email`);
     }
 
     // No contact methods available
-    if (results.length === 0) {
+    if (notificationPromises.length === 0) {
       console.warn(
-        `⚠️ [Notification] No contact method available for order #${shortOrderId}`,
+        `❌ [Notification] No contact method available for order #${shortOrderId}`,
       );
       return {
         success: false,
         channel: "none",
-        error: "No contact method available",
+        error: "No contact method available (no email or phone)",
       };
     }
 
-    // Log results
-    const successCount = results.filter((r) => r.success).length;
-    const totalCount = results.length;
+    // Wait for all notifications to complete (parallel execution)
+    const results = await Promise.allSettled(notificationPromises);
+
+    // Process results
+    const successfulChannels: string[] = [];
+    const failedChannels: { channel: string; error: string }[] = [];
+    let messageId: string | undefined;
+
+    for (const result of results) {
+      if (result.status === "fulfilled") {
+        const { channel, result: notifResult } = result.value;
+        if (notifResult.success) {
+          successfulChannels.push(channel);
+          if (notifResult.messageId) {
+            messageId = notifResult.messageId;
+          }
+          console.log(
+            `✅ [Notification] ${channel.toUpperCase()} sent successfully for order #${shortOrderId}`,
+          );
+        } else {
+          failedChannels.push({
+            channel,
+            error: notifResult.error || "Unknown error",
+          });
+          console.error(
+            `❌ [Notification] ${channel.toUpperCase()} failed for order #${shortOrderId}: ${notifResult.error}`,
+          );
+        }
+      } else {
+        // Promise rejected (unexpected error)
+        console.error(`❌ [Notification] Unexpected error:`, result.reason);
+        failedChannels.push({
+          channel: "unknown",
+          error: result.reason?.message || "Unexpected error",
+        });
+      }
+    }
+
+    const elapsed = Date.now() - startTime;
     console.log(
-      `📊 [Notification] Results for order #${shortOrderId}: ${successCount}/${totalCount} channels succeeded`,
+      `📊 [Notification] Summary for order #${shortOrderId}: ` +
+        `${successfulChannels.length} succeeded, ${failedChannels.length} failed ` +
+        `(${elapsed}ms)`,
     );
 
     // Return combined result
-    // Success if at least one channel succeeded
-    if (successCount > 0) {
-      const channels: string[] = [];
-      if (whatsappResult?.success) channels.push("whatsapp");
-      if (emailResult?.success) channels.push("email");
-
+    if (successfulChannels.length > 0) {
       return {
         success: true,
-        channel: channels.join("+") as "whatsapp" | "email" | "none",
-        messageId: whatsappResult?.messageId || emailResult?.messageId,
+        channel: successfulChannels.join("+") as "whatsapp" | "email" | "none",
+        messageId,
       };
     }
 
-    // Both failed
+    // All channels failed
+    const errorMessages = failedChannels
+      .map((f) => `${f.channel}: ${f.error}`)
+      .join("; ");
     return {
       success: false,
       channel: "none",
-      error: `All channels failed: WhatsApp: ${whatsappResult?.error || "N/A"}, Email: ${emailResult?.error || "N/A"}`,
+      error: `All channels failed: ${errorMessages}`,
     };
   } catch (error: any) {
+    const elapsed = Date.now() - startTime;
     console.error(
-      `❌ [Notification] Unexpected error for order #${shortOrderId}:`,
+      `❌ [Notification] Unexpected error for order #${shortOrderId} (${elapsed}ms):`,
       error,
     );
     return {
@@ -566,6 +615,133 @@ export async function sendOrderStatusNotification(
       error: error.message || "Unexpected error",
     };
   }
+}
+
+/**
+ * Send WhatsApp notification with retry logic.
+ * Retries up to 2 times with exponential backoff for transient failures.
+ */
+async function sendWhatsAppWithRetry(
+  order: OrderDetails,
+  status: OrderStatus,
+  business: BusinessDetails,
+  shortOrderId: string,
+  maxRetries: number = 2,
+): Promise<NotificationResult> {
+  let lastError: string | undefined;
+
+  for (let attempt = 1; attempt <= maxRetries + 1; attempt++) {
+    try {
+      const result = await sendWhatsAppNotification(order, status, business);
+
+      if (result.success) {
+        if (attempt > 1) {
+          console.log(
+            `✅ [WhatsApp] Succeeded on attempt ${attempt} for order #${shortOrderId}`,
+          );
+        }
+        return result;
+      }
+
+      // Don't retry if WhatsApp is not configured (permanent failure)
+      if (
+        result.error?.includes("not configured") ||
+        result.error?.includes("not found")
+      ) {
+        return result;
+      }
+
+      lastError = result.error;
+
+      if (attempt <= maxRetries) {
+        const delay = Math.pow(2, attempt - 1) * 500; // 500ms, 1s, 2s
+        console.log(
+          `⚠️ [WhatsApp] Attempt ${attempt} failed for order #${shortOrderId}, retrying in ${delay}ms...`,
+        );
+        await new Promise((resolve) => setTimeout(resolve, delay));
+      }
+    } catch (error: any) {
+      lastError = error.message || "Unexpected error";
+      if (attempt <= maxRetries) {
+        const delay = Math.pow(2, attempt - 1) * 500;
+        console.log(
+          `⚠️ [WhatsApp] Attempt ${attempt} threw error for order #${shortOrderId}, retrying in ${delay}ms...`,
+        );
+        await new Promise((resolve) => setTimeout(resolve, delay));
+      }
+    }
+  }
+
+  return {
+    success: false,
+    channel: "whatsapp",
+    error: lastError || "All retry attempts failed",
+  };
+}
+
+/**
+ * Send Email notification with retry logic.
+ * Retries up to 2 times with exponential backoff for transient failures.
+ */
+async function sendEmailWithRetry(
+  order: OrderDetails,
+  status: OrderStatus,
+  business: BusinessDetails,
+  shortOrderId: string,
+  maxRetries: number = 2,
+): Promise<NotificationResult> {
+  let lastError: string | undefined;
+
+  for (let attempt = 1; attempt <= maxRetries + 1; attempt++) {
+    try {
+      const result = await sendEmailNotification(order, status, business);
+
+      if (result.success) {
+        if (attempt > 1) {
+          console.log(
+            `✅ [Email] Succeeded on attempt ${attempt} for order #${shortOrderId}`,
+          );
+        }
+        return result;
+      }
+
+      // Don't retry if email service is not configured (permanent failure)
+      if (
+        result.error?.includes("not configured") ||
+        result.error?.includes("RESEND_API_KEY")
+      ) {
+        console.error(
+          `❌ [Email] Service not configured - RESEND_API_KEY may be missing`,
+        );
+        return result;
+      }
+
+      lastError = result.error;
+
+      if (attempt <= maxRetries) {
+        const delay = Math.pow(2, attempt - 1) * 500; // 500ms, 1s, 2s
+        console.log(
+          `⚠️ [Email] Attempt ${attempt} failed for order #${shortOrderId}, retrying in ${delay}ms...`,
+        );
+        await new Promise((resolve) => setTimeout(resolve, delay));
+      }
+    } catch (error: any) {
+      lastError = error.message || "Unexpected error";
+      if (attempt <= maxRetries) {
+        const delay = Math.pow(2, attempt - 1) * 500;
+        console.log(
+          `⚠️ [Email] Attempt ${attempt} threw error for order #${shortOrderId}, retrying in ${delay}ms...`,
+        );
+        await new Promise((resolve) => setTimeout(resolve, delay));
+      }
+    }
+  }
+
+  return {
+    success: false,
+    channel: "email",
+    error: lastError || "All retry attempts failed",
+  };
 }
 
 /**
