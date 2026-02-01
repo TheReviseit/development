@@ -333,11 +333,23 @@ const ImageZoomViewer = memo(function ImageZoomViewer({
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
   const containerRef = useRef<HTMLDivElement>(null);
   const imageRef = useRef<HTMLImageElement>(null);
+
+  // World-class gesture tracking refs
   const lastTouchDistance = useRef<number | null>(null);
   const lastTapTime = useRef(0);
+  const tapCount = useRef(0);
+  const tapTimeout = useRef<NodeJS.Timeout | null>(null);
+  const isDoubleTapZooming = useRef(false); // Prevents immediate un-zoom
+  const gestureState = useRef<"idle" | "pinch" | "pan" | "doubletap">("idle");
+  const animationFrame = useRef<number | null>(null);
+  const velocityRef = useRef({ x: 0, y: 0 });
+  const lastMoveTime = useRef(0);
+  const lastMovePos = useRef({ x: 0, y: 0 });
 
   const MIN_SCALE = 0.5;
   const MAX_SCALE = 5;
+  const DOUBLE_TAP_DELAY = 300; // ms
+  const DOUBLE_TAP_COOLDOWN = 400; // Cooldown after double-tap zoom
 
   // Reset position when scale changes to 1
   useEffect(() => {
@@ -345,6 +357,14 @@ const ImageZoomViewer = memo(function ImageZoomViewer({
       setPosition({ x: 0, y: 0 });
     }
   }, [scale]);
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      if (tapTimeout.current) clearTimeout(tapTimeout.current);
+      if (animationFrame.current) cancelAnimationFrame(animationFrame.current);
+    };
+  }, []);
 
   // Handle keyboard events
   useEffect(() => {
@@ -364,7 +384,7 @@ const ImageZoomViewer = memo(function ImageZoomViewer({
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [onClose]);
 
-  // Zoom functions
+  // Zoom functions with smooth animation
   const handleZoomIn = useCallback(() => {
     setScale((s) => Math.min(s * 1.3, MAX_SCALE));
   }, []);
@@ -385,50 +405,104 @@ const ImageZoomViewer = memo(function ImageZoomViewer({
     setScale((s) => Math.max(MIN_SCALE, Math.min(MAX_SCALE, s * delta)));
   }, []);
 
-  // Double-click/tap to toggle zoom
-  const handleDoubleClick = useCallback(() => {
-    if (scale > 1) {
-      handleResetZoom();
+  // BULLETPROOF double-tap handler with extended cooldown
+  const handleDoubleTap = useCallback(() => {
+    // CRITICAL: Lock everything immediately
+    gestureState.current = "doubletap";
+    isDoubleTapZooming.current = true;
+
+    // Clear any pending timeouts
+    if (tapTimeout.current) {
+      clearTimeout(tapTimeout.current);
+      tapTimeout.current = null;
+    }
+
+    if (scale > 1.2) {
+      // Zoom out to normal
+      setScale(1);
+      setPosition({ x: 0, y: 0 });
     } else {
+      // Zoom in to 2.5x
       setScale(2.5);
     }
-  }, [scale, handleResetZoom]);
 
-  // Touch handlers for pinch-to-zoom
+    // EXTENDED cooldown - 600ms to prevent ANY accidental re-trigger
+    setTimeout(() => {
+      isDoubleTapZooming.current = false;
+      gestureState.current = "idle";
+      tapCount.current = 0;
+      lastTapTime.current = 0;
+    }, 600);
+  }, [scale]);
+
+  // Touch start - only track, don't trigger
   const handleTouchStart = useCallback(
     (e: React.TouchEvent) => {
+      // Cancel any ongoing animations
+      if (animationFrame.current) {
+        cancelAnimationFrame(animationFrame.current);
+        animationFrame.current = null;
+      }
+
+      // CRITICAL: If in cooldown, block EVERYTHING
+      if (isDoubleTapZooming.current) {
+        e.preventDefault();
+        e.stopPropagation();
+        return;
+      }
+
       if (e.touches.length === 2) {
-        // Pinch start
+        // PINCH GESTURE START
+        gestureState.current = "pinch";
         const distance = Math.hypot(
           e.touches[0].clientX - e.touches[1].clientX,
           e.touches[0].clientY - e.touches[1].clientY,
         );
         lastTouchDistance.current = distance;
-      } else if (e.touches.length === 1) {
-        // Check for double-tap
-        const now = Date.now();
-        if (now - lastTapTime.current < 300) {
-          handleDoubleClick();
-        }
-        lastTapTime.current = now;
 
-        // Start drag if zoomed
-        if (scale > 1) {
-          setIsDragging(true);
+        // Clear tap tracking - pinch cancels any tap sequence
+        tapCount.current = 0;
+        lastTapTime.current = 0;
+        if (tapTimeout.current) {
+          clearTimeout(tapTimeout.current);
+          tapTimeout.current = null;
+        }
+      } else if (e.touches.length === 1) {
+        // SINGLE TOUCH START - just record position and time, don't trigger yet
+        const touch = e.touches[0];
+
+        // Store touch start position for movement detection
+        lastMovePos.current = { x: touch.clientX, y: touch.clientY };
+        lastMoveTime.current = Date.now();
+
+        // Only start pan if already zoomed and NOT in a potential tap sequence
+        if (scale > 1 && gestureState.current === "idle") {
+          // Don't set pan immediately - wait for movement
           setDragStart({
-            x: e.touches[0].clientX - position.x,
-            y: e.touches[0].clientY - position.y,
+            x: touch.clientX - position.x,
+            y: touch.clientY - position.y,
           });
+          velocityRef.current = { x: 0, y: 0 };
         }
       }
     },
-    [scale, position, handleDoubleClick],
+    [scale, position],
   );
 
   const handleTouchMove = useCallback(
     (e: React.TouchEvent) => {
-      if (e.touches.length === 2 && lastTouchDistance.current) {
-        // Pinch zoom
+      // CRITICAL: Block during cooldown
+      if (isDoubleTapZooming.current) {
+        e.preventDefault();
+        return;
+      }
+
+      if (
+        e.touches.length === 2 &&
+        lastTouchDistance.current &&
+        gestureState.current === "pinch"
+      ) {
+        // PINCH ZOOM
         e.preventDefault();
         const distance = Math.hypot(
           e.touches[0].clientX - e.touches[1].clientX,
@@ -437,22 +511,148 @@ const ImageZoomViewer = memo(function ImageZoomViewer({
         const delta = distance / lastTouchDistance.current;
         lastTouchDistance.current = distance;
         setScale((s) => Math.max(MIN_SCALE, Math.min(MAX_SCALE, s * delta)));
-      } else if (e.touches.length === 1 && isDragging && scale > 1) {
-        // Pan while zoomed
-        e.preventDefault();
-        setPosition({
-          x: e.touches[0].clientX - dragStart.x,
-          y: e.touches[0].clientY - dragStart.y,
-        });
+
+        // Movement detected - not a tap
+        tapCount.current = 0;
+      } else if (e.touches.length === 1 && scale > 1) {
+        // Check if this is significant movement (> 10px = it's a pan, not tap)
+        const touch = e.touches[0];
+        const moveDistance = Math.hypot(
+          touch.clientX - lastMovePos.current.x,
+          touch.clientY - lastMovePos.current.y,
+        );
+
+        if (moveDistance > 10) {
+          // This is a pan gesture, not a tap
+          gestureState.current = "pan";
+          setIsDragging(true);
+          tapCount.current = 0; // Cancel tap detection
+
+          e.preventDefault();
+          const now = Date.now();
+          const dt = now - lastMoveTime.current;
+
+          // Calculate velocity for momentum
+          if (dt > 0) {
+            velocityRef.current = {
+              x: ((touch.clientX - lastMovePos.current.x) / dt) * 16,
+              y: ((touch.clientY - lastMovePos.current.y) / dt) * 16,
+            };
+          }
+
+          lastMoveTime.current = now;
+          lastMovePos.current = { x: touch.clientX, y: touch.clientY };
+
+          setPosition({
+            x: touch.clientX - dragStart.x,
+            y: touch.clientY - dragStart.y,
+          });
+        }
+      } else if (e.touches.length === 1) {
+        // Check for movement even when not zoomed (for tap detection)
+        const touch = e.touches[0];
+        const moveDistance = Math.hypot(
+          touch.clientX - lastMovePos.current.x,
+          touch.clientY - lastMovePos.current.y,
+        );
+
+        if (moveDistance > 15) {
+          // Too much movement - not a tap
+          tapCount.current = 0;
+        }
       }
     },
     [isDragging, dragStart, scale],
   );
 
-  const handleTouchEnd = useCallback(() => {
-    lastTouchDistance.current = null;
-    setIsDragging(false);
-  }, []);
+  // BULLETPROOF: Tap detection on touchEnd
+  const handleTouchEnd = useCallback(
+    (e: React.TouchEvent) => {
+      // CRITICAL: Block during cooldown
+      if (isDoubleTapZooming.current) {
+        e.preventDefault();
+        e.stopPropagation();
+        lastTouchDistance.current = null;
+        setIsDragging(false);
+        return;
+      }
+
+      const wasPanning = gestureState.current === "pan";
+      const wasPinching = gestureState.current === "pinch";
+
+      lastTouchDistance.current = null;
+      setIsDragging(false);
+
+      // If was panning, apply momentum
+      if (wasPanning && scale > 1) {
+        const velocity = velocityRef.current;
+        if (Math.abs(velocity.x) > 0.5 || Math.abs(velocity.y) > 0.5) {
+          const animateMomentum = () => {
+            velocityRef.current = {
+              x: velocityRef.current.x * 0.92,
+              y: velocityRef.current.y * 0.92,
+            };
+
+            setPosition((prev) => ({
+              x: prev.x + velocityRef.current.x,
+              y: prev.y + velocityRef.current.y,
+            }));
+
+            if (
+              Math.abs(velocityRef.current.x) > 0.1 ||
+              Math.abs(velocityRef.current.y) > 0.1
+            ) {
+              animationFrame.current = requestAnimationFrame(animateMomentum);
+            } else {
+              animationFrame.current = null;
+            }
+          };
+          animationFrame.current = requestAnimationFrame(animateMomentum);
+        }
+        gestureState.current = "idle";
+        return;
+      }
+
+      // If was pinching, just reset
+      if (wasPinching) {
+        gestureState.current = "idle";
+        return;
+      }
+
+      // TAP DETECTION - only if no significant movement occurred
+      const now = Date.now();
+      const touchDuration = now - lastMoveTime.current;
+
+      // Only count as tap if touch was short (< 300ms) and state is idle
+      if (touchDuration < 300 && gestureState.current === "idle") {
+        const timeSinceLastTap = now - lastTapTime.current;
+
+        if (timeSinceLastTap < DOUBLE_TAP_DELAY && tapCount.current === 1) {
+          // DOUBLE TAP DETECTED!
+          e.preventDefault();
+          e.stopPropagation();
+          tapCount.current = 0;
+          lastTapTime.current = 0;
+          handleDoubleTap();
+          return;
+        }
+
+        // First tap - record it
+        lastTapTime.current = now;
+        tapCount.current = 1;
+
+        // Reset after delay if no second tap
+        if (tapTimeout.current) clearTimeout(tapTimeout.current);
+        tapTimeout.current = setTimeout(() => {
+          tapCount.current = 0;
+          tapTimeout.current = null;
+        }, DOUBLE_TAP_DELAY);
+      }
+
+      gestureState.current = "idle";
+    },
+    [scale, handleDoubleTap],
+  );
 
   // Mouse drag handlers for desktop
   const handleMouseDown = useCallback(
@@ -596,7 +796,7 @@ const ImageZoomViewer = memo(function ImageZoomViewer({
           transform: `translate(${position.x}px, ${position.y}px) scale(${scale})`,
           cursor: scale > 1 ? (isDragging ? "grabbing" : "grab") : "zoom-in",
         }}
-        onDoubleClick={handleDoubleClick}
+        onDoubleClick={handleDoubleTap}
         draggable={false}
       />
 
@@ -1386,9 +1586,20 @@ export default function MessagesView() {
 
   // Callback for when images finish loading - scroll to show them if user is near bottom
   const handleImageLoad = useCallback(() => {
-    // Only auto-scroll if user is near the bottom of the chat
-    if (isNearBottomRef.current) {
-      messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    // On initial load or if user is near the bottom of the chat, scroll to bottom
+    // This fixes mobile issue where images load but don't trigger scroll
+    if (isInitialLoadRef.current || isNearBottomRef.current) {
+      // Use requestAnimationFrame to ensure DOM has updated
+      requestAnimationFrame(() => {
+        // Method 1: scrollIntoView (preferred)
+        messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+
+        // Method 2: Fallback for mobile - directly set scroll position
+        if (messagesContainerRef.current) {
+          const container = messagesContainerRef.current;
+          container.scrollTop = container.scrollHeight;
+        }
+      });
     }
   }, []);
 
@@ -2171,6 +2382,10 @@ export default function MessagesView() {
           </div>
           <div
             style={{
+              flex: 1,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
               padding: "2rem",
               textAlign: "center",
               color: "var(--dash-text-secondary)",
@@ -2346,7 +2561,66 @@ export default function MessagesView() {
                   </div>
                   <div className={styles.conversationBottom}>
                     <span className={styles.conversationPreview}>
-                      {conv.lastMessage}
+                      {conv.lastMessage === "[image]" ? (
+                        <span
+                          style={{
+                            display: "flex",
+                            alignItems: "center",
+                            gap: "4px",
+                          }}
+                        >
+                          <svg
+                            width="14"
+                            height="14"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="2"
+                          >
+                            <rect
+                              x="3"
+                              y="3"
+                              width="18"
+                              height="18"
+                              rx="2"
+                              ry="2"
+                            />
+                            <circle cx="8.5" cy="8.5" r="1.5" />
+                            <polyline points="21 15 16 10 5 21" />
+                          </svg>
+                          Photo
+                        </span>
+                      ) : conv.lastMessage === "[video]" ? (
+                        <span
+                          style={{
+                            display: "flex",
+                            alignItems: "center",
+                            gap: "4px",
+                          }}
+                        >
+                          <svg
+                            width="14"
+                            height="14"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="2"
+                          >
+                            <polygon points="23 7 16 12 23 17 23 7" />
+                            <rect
+                              x="1"
+                              y="5"
+                              width="15"
+                              height="14"
+                              rx="2"
+                              ry="2"
+                            />
+                          </svg>
+                          Video
+                        </span>
+                      ) : (
+                        conv.lastMessage
+                      )}
                     </span>
                     {/* {conv.unread > 0 && (
                       <span className={styles.unreadBadge}>{conv.unread}</span>
@@ -2799,6 +3073,9 @@ export default function MessagesView() {
                           styles={styles}
                           conversationId={selectedConversation.id}
                           onImageLoad={handleImageLoad}
+                          onImageClick={(imageUrl) =>
+                            setZoomedImageUrl(imageUrl)
+                          }
                         />
                       ))}
                     </div>
@@ -3122,34 +3399,6 @@ export default function MessagesView() {
                           <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48" />
                         </svg>
                       </button>
-                      {/* Emoji button - SECOND per WhatsApp order */}
-                      <button
-                        style={{
-                          background: "transparent",
-                          border: "none",
-                          cursor: "pointer",
-                          color: "rgba(255,255,255,0.7)",
-                          padding: "4px",
-                          display: "flex",
-                          alignItems: "center",
-                          justifyContent: "center",
-                        }}
-                        title="Emoji"
-                      >
-                        <svg
-                          width="20"
-                          height="20"
-                          viewBox="0 0 24 24"
-                          fill="none"
-                          stroke="currentColor"
-                          strokeWidth="2"
-                        >
-                          <circle cx="12" cy="12" r="10" />
-                          <path d="M8 14s1.5 2 4 2 4-2 4-2" />
-                          <line x1="9" y1="9" x2="9.01" y2="9" />
-                          <line x1="15" y1="9" x2="15.01" y2="9" />
-                        </svg>
-                      </button>
                     </div>
                     <button
                       onClick={handleSendMedia}
@@ -3225,22 +3474,6 @@ export default function MessagesView() {
                       strokeWidth="2"
                     >
                       <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48" />
-                    </svg>
-                  </button>
-                  {/* Emoji button (placeholder) */}
-                  <button className={styles.attachBtn} title="Emoji">
-                    <svg
-                      width="18"
-                      height="18"
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="2"
-                    >
-                      <circle cx="12" cy="12" r="10" />
-                      <path d="M8 14s1.5 2 4 2 4-2 4-2" />
-                      <line x1="9" y1="9" x2="9.01" y2="9" />
-                      <line x1="15" y1="9" x2="15.01" y2="9" />
                     </svg>
                   </button>
                   {/* CRITICAL: Hidden file input - this was completely missing! */}
@@ -3447,6 +3680,14 @@ export default function MessagesView() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Image Zoom Viewer - Full screen lightbox */}
+      {zoomedImageUrl && (
+        <ImageZoomViewer
+          imageUrl={zoomedImageUrl}
+          onClose={() => setZoomedImageUrl(null)}
+        />
       )}
     </div>
   );

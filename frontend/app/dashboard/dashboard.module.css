@@ -65,6 +65,8 @@
   background: var(--dash-bg-primary);
   color: var(--dash-text-primary);
   display: flex;
+  overflow-x: hidden; /* Prevent horizontal scroll */
+  max-width: 100vw;
 }
 
 /* ============================================
@@ -1796,8 +1798,11 @@
 .mobileContent {
   flex: 1;
   overflow-y: auto;
-  padding: 0.5rem;
+  overflow-x: hidden; /* Prevent horizontal scroll */
+  padding: 0;
   margin-top: 70px; /* Height of mobile header */
+  max-width: 100%;
+  width: 100%;
 }
 
 /* --- Messages View: Conversation Filters & Search --- */
@@ -1844,6 +1849,7 @@
 .conversationItems {
   flex: 1;
   overflow-y: auto;
+  overflow-x: hidden; /* Prevent horizontal scroll */
 }
 
 .conversationItem {
@@ -1963,7 +1969,33 @@
 .chatHeaderLeft {
   display: flex;
   align-items: center;
-  gap: 0.75rem;
+  gap: 0.5rem;
+}
+
+/* Mobile back button - compact styling */
+.mobileBackBtn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  background: transparent;
+  border: none;
+  border-radius: 50%;
+  color: var(--dash-text-primary);
+  cursor: pointer;
+  transition: background 0.2s ease;
+  margin-right: -4px; /* Reduce gap between back button and avatar */
+}
+
+.mobileBackBtn:hover {
+  background: var(--dash-bg-hover);
+}
+
+.mobileBackBtn svg {
+  width: 22px;
+  height: 22px;
 }
 
 .chatAvatar {
@@ -2069,7 +2101,7 @@
 /* --- Messages View: Message Bubbles --- */
 .messageWrapper {
   display: flex;
-  max-width: 70%;
+  max-width: 75%;
   width: fit-content;
 }
 
@@ -2084,43 +2116,44 @@
 }
 
 .messageBubble {
-  padding: 0.875rem 1.125rem;
-  border-radius: 16px;
+  padding: 0.75rem 1rem;
+  border-radius: 18px;
   position: relative;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
 }
 
-/* Inbound messages: Dark gray/charcoal bubbles with white text */
+/* Inbound messages: Modern dark bubbles with crisp white text */
 .messageIn .messageBubble {
-  background: #1f2c34;
-  border-bottom-left-radius: 4px;
+  background: #1f2937;
+  border-bottom-left-radius: 6px;
 }
 
-/* Outbound messages: White bubbles with dark text */
+/* Outbound messages: Clean white bubbles with dark text */
 .messageOut .messageBubble {
   background: #ffffff;
-  border-bottom-right-radius: 4px;
+  border-bottom-right-radius: 6px;
 }
 
 .messageText {
-  font-size: 14.2px;
-  line-height: 1.47;
+  font-size: 15.5px;
+  line-height: 1.5;
   margin: 0;
   white-space: pre-wrap;
   word-break: break-word;
   font-family:
     -apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto", "Helvetica Neue",
     Arial, sans-serif;
-  font-weight: 400;
+  font-weight: 500;
+  letter-spacing: -0.01em;
 }
 
 /* Text color based on message direction */
 .messageIn .messageText {
-  color: #e9edef;
+  color: #ffffff;
 }
 
 .messageOut .messageText {
-  color: #111b21;
+  color: #1a1a1a;
 }
 
 .messageTime {
@@ -2131,11 +2164,12 @@
   font-family:
     -apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto", "Helvetica Neue",
     Arial, sans-serif;
+  font-weight: 500;
 }
 
 /* Time color based on message direction */
 .messageIn .messageTime {
-  color: rgba(255, 255, 255, 0.6);
+  color: rgba(255, 255, 255, 0.7);
 }
 
 .messageOut .messageTime {
@@ -3592,9 +3626,12 @@
 
   .messagesView {
     flex-direction: column;
-    margin: -1rem;
+    margin: 0; /* Remove negative margin to prevent overflow */
     height: 100vh;
     position: relative;
+    overflow: hidden; /* Prevent both x and y overflow from this element */
+    max-width: 100vw;
+    width: 100%;
   }
 
   .conversationList {
@@ -3606,6 +3643,8 @@
     left: 0;
     z-index: 10;
     background: var(--dash-bg-secondary);
+    overflow-x: hidden; /* Prevent horizontal scroll */
+    max-width: 100vw;
   }
 
   .conversationListHidden {
@@ -3882,10 +3921,106 @@
     padding: 0.5rem 0.625rem;
   }
 
-  .primaryBtn,
-  .secondaryBtn {
-    padding: 0.5rem 0.875rem;
-    font-size: 0.8rem;
+  /* ============================================
+     MOBILE OVERFLOW FIX - Prevent Horizontal Scroll
+     ============================================ */
+
+  /* Force all elements to respect viewport width */
+  .messagesView,
+  .messagesView * {
+    box-sizing: border-box;
+  }
+
+  /* Conversation list header - hide on mobile (duplicate of mobile header) */
+  .conversationListHeader {
+    display: none; /* Hide since mobile header shows "Messages" */
+  }
+
+  .conversationTitleRow {
+    max-width: 100%;
+    overflow: hidden;
+  }
+
+  .logoWithTitle {
+    max-width: calc(100% - 60px);
+    overflow: hidden;
+  }
+
+  .panelTitle {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 200px;
+  }
+
+  /* Search input - proper styling for mobile */
+  .conversationSearch {
+    max-width: 100%;
+    padding: 0.75rem 1rem;
+    overflow: hidden;
+    margin: 0.5rem;
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 12px;
+    border: 1px solid var(--dash-border);
+  }
+
+  .searchInput {
+    max-width: calc(100% - 30px);
+    width: 100%;
+    min-width: 0;
+    padding: 0.25rem 0;
+    font-size: 0.9rem;
+  }
+
+  /* Conversation items - prevent overflow */
+  .conversationItems {
+    max-width: 100%;
+    padding: 0;
+  }
+
+  .conversationItem {
+    max-width: 100%;
+    margin: 0.25rem 0.5rem;
+    padding: 0.875rem;
+    overflow: hidden;
+  }
+
+  .conversationInfo {
+    max-width: calc(100% - 60px);
+    overflow: hidden;
+  }
+
+  .conversationTop,
+  .conversationBottom {
+    max-width: 100%;
+    overflow: hidden;
+  }
+
+  .conversationName {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: calc(100% - 60px);
+  }
+
+  .conversationPreview {
+    max-width: calc(100% - 40px);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  /* Filters - prevent overflow */
+  .conversationFilters {
+    max-width: 100%;
+    overflow: hidden;
+    flex-wrap: wrap;
+  }
+
+  .filterSelect,
+  .sortSelect {
+    max-width: calc(50% - 0.25rem);
+    min-width: 0;
   }
 }
 

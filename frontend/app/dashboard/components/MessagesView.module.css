@@ -201,11 +201,12 @@
 .imageMessageContainer {
   display: flex;
   flex-direction: column;
-  border-radius: 12px;
+  border-radius: 5%; /* User requested 5% */
   overflow: hidden;
   border: 1px solid rgba(0, 0, 0, 0.1);
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
   background: #fff;
+  padding: 8px; /* User requested 8px padding */
 }
 
 .imageCaption {
@@ -214,8 +215,8 @@
   line-height: 1.4;
   color: #111b21;
   background: #fff;
-  border-top: 1px solid rgba(0, 0, 0, 0.06);
   word-break: break-word;
+  margin-top: 6px; /* Add spacing between image and caption */
 }
 
 /* ============================================
