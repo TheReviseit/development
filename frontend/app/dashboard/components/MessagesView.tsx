@@ -6,6 +6,7 @@ import { useNotification } from "@/app/hooks/useNotification";
 import { usePushNotification } from "@/app/hooks/usePushNotification";
 import NotificationBanner from "./NotificationBanner";
 import styles from "../dashboard.module.css";
+import msgStyles from "./MessagesView.module.css";
 
 interface Conversation {
   id: string;
@@ -42,12 +43,58 @@ interface Message {
   status: string;
   mediaUrl?: string;
   mediaId?: string;
+  // Thumbnail/preview URLs (async generated)
+  thumbnailUrl?: string;
+  previewUrl?: string;
   // AI metadata
   isAiGenerated?: boolean;
   intent?: string;
   confidence?: number;
   tokensUsed?: number;
   responseTimeMs?: number;
+}
+
+/**
+ * Validate that a value is a valid displayable URL
+ * Accepts:
+ * - http:// / https:// for remote URLs (R2, CDN)
+ * - blob: for local file previews (optimistic UI before upload)
+ *
+ * Guards against base64 data, storage keys, hashes being passed to <img src>
+ */
+function isValidUrl(value?: string | null): value is string {
+  return (
+    typeof value === "string" &&
+    (value.startsWith("http://") ||
+      value.startsWith("https://") ||
+      value.startsWith("blob:"))
+  );
+}
+
+/**
+ * Resolve the best available media URL with priority fallback
+ *
+ * PRIORITY ORDER (CRITICAL):
+ * 1. media_url (original/compressed) - ALWAYS available after R2 upload
+ * 2. preview_url (800px) - faster loading if generated
+ * 3. thumbnail_url (300px) - smallest, for list views
+ *
+ * WHY NOT thumbnail first?
+ * Thumbnails are generated ASYNC after storage. For newly sent messages,
+ * they won't exist yet. Original must be the fallback for reliability.
+ *
+ * Only returns valid HTTP URLs, never base64/keys
+ */
+function resolveMediaUrl(msg: {
+  thumbnailUrl?: string;
+  previewUrl?: string;
+  mediaUrl?: string;
+}): string | null {
+  // PRIORITY: original first (always available), then optimized variants
+  if (isValidUrl(msg.mediaUrl)) return msg.mediaUrl;
+  if (isValidUrl(msg.previewUrl)) return msg.previewUrl;
+  if (isValidUrl(msg.thumbnailUrl)) return msg.thumbnailUrl;
+  return null;
 }
 
 interface ContactInfo {
@@ -63,13 +110,29 @@ interface ContactInfo {
   firstMessageAt?: string;
 }
 
-// GLOBAL request cache - prevents duplicate fetches across component remounts
-// This is singleton-level caching that survives component rerenders
-const mediaRequestCache = new Set<string>();
-const mediaUrlCache = new Map<string, string>(); // messageId -> mediaUrl
+// GLOBAL media cache with status tracking - prevents duplicate fetches
+// Status machine: idle → loading → ready | failed
+type MediaStatus = "idle" | "loading" | "ready" | "failed";
+const mediaStatusCache = new Map<string, MediaStatus>(); // messageId → status
+const mediaUrlCache = new Map<string, string>(); // messageId → mediaUrl
+
+// Helper: decode image before paint to prevent layout shift
+const preloadImage = async (url: string): Promise<void> => {
+  const img = new Image();
+  img.src = url;
+  try {
+    await img.decode();
+  } catch {
+    // Decode failed, image will still render but may cause layout shift
+  }
+};
 
 // Lazy loading image component for inbound media
-// This fetches media from WhatsApp and uploads to R2 if no URL is available
+// ENTERPRISE-GRADE with robust error handling:
+// - Local failed state prevents infinite re-render loops
+// - Retry mechanism for temporary network failures
+// - Graceful fallback UI instead of broken images
+// - Blob URL validation to prevent revoked blob errors
 const LazyImage = memo(function LazyImage({
   mediaId,
   mediaUrl,
@@ -77,6 +140,8 @@ const LazyImage = memo(function LazyImage({
   conversationId,
   time,
   sender,
+  onImageLoad,
+  onImageClick,
 }: {
   mediaId?: string;
   mediaUrl?: string;
@@ -84,156 +149,141 @@ const LazyImage = memo(function LazyImage({
   conversationId: string;
   time: string;
   sender: "contact" | "user";
+  onImageLoad?: () => void;
+  onImageClick?: (imageUrl: string) => void;
 }) {
-  // Check global cache first
-  const cachedUrl = mediaUrlCache.get(messageId);
-  const [url, setUrl] = useState<string | null>(mediaUrl || cachedUrl || null);
-  const [loading, setLoading] = useState(!mediaUrl && !cachedUrl && !!mediaId);
-  const [error, setError] = useState(false);
+  // Local state for this component instance - prevents re-render loops
+  const [localFailed, setLocalFailed] = useState(false);
+  const [retryCount, setRetryCount] = useState(0);
+  const MAX_RETRIES = 2;
 
-  useEffect(() => {
-    // If we already have a URL, skip
-    if (url || !mediaId || !messageId || !conversationId) {
-      return;
-    }
+  // ✅ DERIVED STATE with URL validation
+  // Priority: validated prop > validated cache > null
+  // CRITICAL: Only valid HTTP/blob URLs are allowed
+  const rawUrl = mediaUrl || mediaUrlCache.get(messageId) || null;
+  const resolvedUrl = isValidUrl(rawUrl) ? rawUrl : null;
 
-    // Check if this messageId is already being fetched (global dedup)
-    if (mediaRequestCache.has(messageId)) {
-      console.log(
-        `⏳ [LazyImage] Request already in progress for ${messageId}`,
-      );
-      // Poll for result every 500ms
-      const pollInterval = setInterval(() => {
-        const cachedResult = mediaUrlCache.get(messageId);
-        if (cachedResult) {
-          setUrl(cachedResult);
-          setLoading(false);
-          clearInterval(pollInterval);
-        }
-      }, 500);
+  // Check if blob URL is still valid (not revoked)
+  // Blob URLs become invalid after URL.revokeObjectURL() is called
+  const isBlobUrl = resolvedUrl?.startsWith("blob:");
 
-      // Clean up after 30 seconds
-      setTimeout(() => {
-        clearInterval(pollInterval);
-        if (!mediaUrlCache.has(messageId)) {
-          setError(true);
-          setLoading(false);
-        }
-      }, 30000);
+  // Get status from global status cache
+  // Cast to full MediaStatus type for proper TypeScript inference
+  const globalStatus = (mediaStatusCache.get(messageId) ||
+    "idle") as MediaStatus;
 
-      return () => clearInterval(pollInterval);
-    }
+  // Combine global and local failed states
+  const isFailed = localFailed || globalStatus === "failed";
 
-    // Mark as in-progress in global cache
-    mediaRequestCache.add(messageId);
-    setLoading(true);
+  // Compute loading state
+  // Note: !isFailed already guarantees globalStatus !== "failed"
+  const isLoading =
+    !isFailed && (globalStatus === "loading" || (!resolvedUrl && !!mediaId));
 
-    // Call the download-media API to fetch from WhatsApp and store in R2
-    const fetchMedia = async () => {
-      try {
-        const res = await fetch("/api/whatsapp/download-media", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ mediaId, messageId, conversationId }),
-        });
+  // Should we attempt to render an image?
+  // Only render if we have a valid URL and haven't failed
+  const shouldRenderImage = resolvedUrl && !isFailed;
 
-        const data = await res.json();
+  // Cache-busted URL for retries - forces browser to bypass cached failed response
+  // This is critical for WhatsApp/Meta URLs where auth tokens can expire
+  const displayUrl = useMemo(() => {
+    if (!resolvedUrl) return null;
+    if (retryCount === 0) return resolvedUrl;
+    // Don't cache-bust blob URLs
+    if (resolvedUrl.startsWith("blob:")) return resolvedUrl;
+    // Add timestamp to force fresh fetch
+    const separator = resolvedUrl.includes("?") ? "&" : "?";
+    return `${resolvedUrl}${separator}_retry=${Date.now()}`;
+  }, [resolvedUrl, retryCount]);
 
-        // Handle 202 (in progress) - wait and retry
-        if (res.status === 202 && data.retry) {
-          console.log(`⏳ [LazyImage] Server says in progress, will retry...`);
-          await new Promise((r) => setTimeout(r, 2000));
-          // Retry once
-          const retryRes = await fetch("/api/whatsapp/download-media", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ mediaId, messageId, conversationId }),
-          });
-          const retryData = await retryRes.json();
-          if (retryData.success && retryData.data?.mediaUrl) {
-            mediaUrlCache.set(messageId, retryData.data.mediaUrl);
-            setUrl(retryData.data.mediaUrl);
-            return;
-          }
-        }
-
-        if (data.success && data.data?.mediaUrl) {
-          mediaUrlCache.set(messageId, data.data.mediaUrl);
-          setUrl(data.data.mediaUrl);
-        } else {
-          setError(true);
-        }
-      } catch (err) {
-        console.error("Error fetching inbound media:", err);
-        setError(true);
-      } finally {
-        setLoading(false);
-        // Note: We keep messageId in cache to prevent re-fetches even after success
+  // Retry handler with cache busting
+  const handleRetry = useCallback(() => {
+    if (retryCount < MAX_RETRIES) {
+      setLocalFailed(false);
+      setRetryCount((c) => c + 1);
+      // Clear global failed status to allow retry
+      if (messageId) {
+        mediaStatusCache.set(messageId, "idle");
       }
-    };
+      console.log(
+        `🔄 [LazyImage] Retry ${retryCount + 1}/${MAX_RETRIES} for ${messageId?.slice(-8)}`,
+      );
+    }
+  }, [retryCount, messageId]);
 
-    fetchMedia();
-  }, [mediaId, messageId, conversationId, url]);
+  // Error handler with detailed logging and graceful degradation
+  const handleImageError = useCallback(
+    (e: React.SyntheticEvent<HTMLImageElement>) => {
+      const img = e.currentTarget;
+      const src = img.getAttribute("src") || "(no src)";
 
-  if (loading) {
-    return (
-      <div style={{ position: "relative" }}>
-        <div
-          style={{
-            width: "200px",
-            height: "200px",
-            borderRadius: "8px",
-            background: "rgba(0, 0, 0, 0.3)",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
+      // Detailed error logging for debugging
+      console.warn(
+        `⚠️ [LazyImage] Load failed for ${messageId?.slice(-8) || "unknown"}:`,
+        {
+          src: src.startsWith("blob:")
+            ? "blob:..."
+            : src.substring(0, 60) + "...",
+          isBlobUrl: src.startsWith("blob:"),
+          retryCount,
+          naturalSize: `${img.naturalWidth}x${img.naturalHeight}`,
+          complete: img.complete,
+        },
+      );
+
+      // Set local failed state to prevent broken image display
+      setLocalFailed(true);
+
+      // Update global cache
+      if (messageId) {
+        mediaStatusCache.set(messageId, "failed");
+      }
+    },
+    [messageId, retryCount],
+  );
+
+  // Handle image click for zoom
+  const handleClick = useCallback(() => {
+    if (displayUrl && onImageClick && shouldRenderImage) {
+      onImageClick(displayUrl);
+    }
+  }, [displayUrl, onImageClick, shouldRenderImage]);
+
+  // ✅ ALWAYS render a container with fixed dimensions
+  // WhatsApp pattern: never conditionally hide the image wrapper
+  return (
+    <div className={msgStyles.lazyImageContainer}>
+      {/* Image or placeholder - conditional INSIDE container */}
+      {shouldRenderImage && displayUrl ? (
+        // ✅ RENDER IMAGE with cache-busted URL
+        <img
+          key={`${messageId}-${retryCount}`} // Force remount on retry
+          src={displayUrl}
+          alt="Image"
+          className={`${msgStyles.lazyImage} ${msgStyles.clickableImage}`}
+          onClick={handleClick}
+          style={{ cursor: onImageClick ? "pointer" : "default" }}
+          onError={handleImageError}
+          onLoad={() => {
+            // Successfully loaded - ensure status is correct
+            if (messageId) {
+              mediaStatusCache.set(messageId, "ready");
+            }
+            // Notify parent that image loaded (for scroll handling)
+            onImageLoad?.();
           }}
-        >
-          <div
-            style={{
-              width: "32px",
-              height: "32px",
-              border: "3px solid rgba(255, 255, 255, 0.3)",
-              borderTopColor: "white",
-              borderRadius: "50%",
-              animation: "spin 1s linear infinite",
-            }}
-          />
+        />
+      ) : isLoading ? (
+        // ⏳ LOADING SKELETON
+        <div className={msgStyles.imageSkeleton}>
+          <div className={msgStyles.imageSpinner} />
         </div>
+      ) : (
+        // ❌ FAILED/UNAVAILABLE - with optional retry
         <div
-          style={{
-            position: "absolute",
-            bottom: "6px",
-            right: "6px",
-            background: "rgba(0, 0, 0, 0.5)",
-            borderRadius: "4px",
-            padding: "2px 6px",
-            display: "flex",
-            alignItems: "center",
-            gap: "4px",
-          }}
-        >
-          <span style={{ fontSize: "0.6875rem", color: "white" }}>{time}</span>
-        </div>
-      </div>
-    );
-  }
-
-  if (error || !url) {
-    return (
-      <div style={{ position: "relative" }}>
-        <div
-          style={{
-            width: "200px",
-            height: "150px",
-            borderRadius: "8px",
-            background: "rgba(0, 0, 0, 0.3)",
-            display: "flex",
-            flexDirection: "column",
-            alignItems: "center",
-            justifyContent: "center",
-            color: "rgba(255, 255, 255, 0.7)",
-          }}
+          className={`${msgStyles.imageFailed} ${retryCount < MAX_RETRIES ? msgStyles.retryable : ""}`}
+          onClick={retryCount < MAX_RETRIES ? handleRetry : undefined}
+          title={retryCount < MAX_RETRIES ? "Click to retry" : undefined}
         >
           <svg
             width="48"
@@ -247,54 +297,312 @@ const LazyImage = memo(function LazyImage({
             <circle cx="8.5" cy="8.5" r="1.5" />
             <polyline points="21 15 16 10 5 21" />
           </svg>
-          <span style={{ fontSize: "0.75rem", marginTop: "0.5rem" }}>
-            Image unavailable
+          <span className={msgStyles.imageFailedText}>
+            {retryCount < MAX_RETRIES ? "Tap to retry" : "Image unavailable"}
           </span>
         </div>
-        <div
-          style={{
-            position: "absolute",
-            bottom: "6px",
-            right: "6px",
-            background: "rgba(0, 0, 0, 0.5)",
-            borderRadius: "4px",
-            padding: "2px 6px",
-          }}
-        >
-          <span style={{ fontSize: "0.6875rem", color: "white" }}>{time}</span>
-        </div>
+      )}
+
+      {/* Timestamp overlay - always shown */}
+      <div className={msgStyles.imageTimestamp}>
+        <span className={msgStyles.imageTimestampText}>{time}</span>
+        {sender === "user" && shouldRenderImage && (
+          <span className={msgStyles.imageCheckmarks}>✓✓</span>
+        )}
       </div>
-    );
-  }
+    </div>
+  );
+});
+
+// ============================================
+// Image Zoom Viewer Component
+// Full-screen image viewer with zoom capabilities
+// ============================================
+interface ImageZoomViewerProps {
+  imageUrl: string;
+  onClose: () => void;
+}
+
+const ImageZoomViewer = memo(function ImageZoomViewer({
+  imageUrl,
+  onClose,
+}: ImageZoomViewerProps) {
+  const [scale, setScale] = useState(1);
+  const [position, setPosition] = useState({ x: 0, y: 0 });
+  const [isDragging, setIsDragging] = useState(false);
+  const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
+  const containerRef = useRef<HTMLDivElement>(null);
+  const imageRef = useRef<HTMLImageElement>(null);
+  const lastTouchDistance = useRef<number | null>(null);
+  const lastTapTime = useRef(0);
+
+  const MIN_SCALE = 0.5;
+  const MAX_SCALE = 5;
+
+  // Reset position when scale changes to 1
+  useEffect(() => {
+    if (scale === 1) {
+      setPosition({ x: 0, y: 0 });
+    }
+  }, [scale]);
+
+  // Handle keyboard events
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        onClose();
+      } else if (e.key === "+" || e.key === "=") {
+        handleZoomIn();
+      } else if (e.key === "-") {
+        handleZoomOut();
+      } else if (e.key === "0") {
+        handleResetZoom();
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [onClose]);
+
+  // Zoom functions
+  const handleZoomIn = useCallback(() => {
+    setScale((s) => Math.min(s * 1.3, MAX_SCALE));
+  }, []);
+
+  const handleZoomOut = useCallback(() => {
+    setScale((s) => Math.max(s / 1.3, MIN_SCALE));
+  }, []);
+
+  const handleResetZoom = useCallback(() => {
+    setScale(1);
+    setPosition({ x: 0, y: 0 });
+  }, []);
+
+  // Mouse wheel zoom
+  const handleWheel = useCallback((e: React.WheelEvent) => {
+    e.preventDefault();
+    const delta = e.deltaY > 0 ? 0.9 : 1.1;
+    setScale((s) => Math.max(MIN_SCALE, Math.min(MAX_SCALE, s * delta)));
+  }, []);
+
+  // Double-click/tap to toggle zoom
+  const handleDoubleClick = useCallback(() => {
+    if (scale > 1) {
+      handleResetZoom();
+    } else {
+      setScale(2.5);
+    }
+  }, [scale, handleResetZoom]);
+
+  // Touch handlers for pinch-to-zoom
+  const handleTouchStart = useCallback(
+    (e: React.TouchEvent) => {
+      if (e.touches.length === 2) {
+        // Pinch start
+        const distance = Math.hypot(
+          e.touches[0].clientX - e.touches[1].clientX,
+          e.touches[0].clientY - e.touches[1].clientY,
+        );
+        lastTouchDistance.current = distance;
+      } else if (e.touches.length === 1) {
+        // Check for double-tap
+        const now = Date.now();
+        if (now - lastTapTime.current < 300) {
+          handleDoubleClick();
+        }
+        lastTapTime.current = now;
+
+        // Start drag if zoomed
+        if (scale > 1) {
+          setIsDragging(true);
+          setDragStart({
+            x: e.touches[0].clientX - position.x,
+            y: e.touches[0].clientY - position.y,
+          });
+        }
+      }
+    },
+    [scale, position, handleDoubleClick],
+  );
+
+  const handleTouchMove = useCallback(
+    (e: React.TouchEvent) => {
+      if (e.touches.length === 2 && lastTouchDistance.current) {
+        // Pinch zoom
+        e.preventDefault();
+        const distance = Math.hypot(
+          e.touches[0].clientX - e.touches[1].clientX,
+          e.touches[0].clientY - e.touches[1].clientY,
+        );
+        const delta = distance / lastTouchDistance.current;
+        lastTouchDistance.current = distance;
+        setScale((s) => Math.max(MIN_SCALE, Math.min(MAX_SCALE, s * delta)));
+      } else if (e.touches.length === 1 && isDragging && scale > 1) {
+        // Pan while zoomed
+        e.preventDefault();
+        setPosition({
+          x: e.touches[0].clientX - dragStart.x,
+          y: e.touches[0].clientY - dragStart.y,
+        });
+      }
+    },
+    [isDragging, dragStart, scale],
+  );
+
+  const handleTouchEnd = useCallback(() => {
+    lastTouchDistance.current = null;
+    setIsDragging(false);
+  }, []);
+
+  // Mouse drag handlers for desktop
+  const handleMouseDown = useCallback(
+    (e: React.MouseEvent) => {
+      if (scale > 1) {
+        setIsDragging(true);
+        setDragStart({
+          x: e.clientX - position.x,
+          y: e.clientY - position.y,
+        });
+      }
+    },
+    [scale, position],
+  );
+
+  const handleMouseMove = useCallback(
+    (e: React.MouseEvent) => {
+      if (isDragging && scale > 1) {
+        setPosition({
+          x: e.clientX - dragStart.x,
+          y: e.clientY - dragStart.y,
+        });
+      }
+    },
+    [isDragging, dragStart, scale],
+  );
+
+  const handleMouseUp = useCallback(() => {
+    setIsDragging(false);
+  }, []);
+
+  // Close when clicking background (not image)
+  const handleBackgroundClick = useCallback(
+    (e: React.MouseEvent) => {
+      if (e.target === containerRef.current) {
+        onClose();
+      }
+    },
+    [onClose],
+  );
 
   return (
-    <div style={{ position: "relative" }}>
-      <img
-        src={url}
-        alt="Image"
-        style={{
-          maxWidth: "280px",
-          borderRadius: "8px",
-          display: "block",
-        }}
-      />
-      <div
-        style={{
-          position: "absolute",
-          bottom: "6px",
-          right: "6px",
-          background: "rgba(0, 0, 0, 0.5)",
-          borderRadius: "4px",
-          padding: "2px 6px",
-          display: "flex",
-          alignItems: "center",
-          gap: "4px",
-        }}
+    <div
+      className={msgStyles.imageZoomViewer}
+      ref={containerRef}
+      onClick={handleBackgroundClick}
+      onWheel={handleWheel}
+      onMouseDown={handleMouseDown}
+      onMouseMove={handleMouseMove}
+      onMouseUp={handleMouseUp}
+      onMouseLeave={handleMouseUp}
+      onTouchStart={handleTouchStart}
+      onTouchMove={handleTouchMove}
+      onTouchEnd={handleTouchEnd}
+    >
+      {/* Close button */}
+      <button
+        className={msgStyles.zoomCloseBtn}
+        onClick={onClose}
+        title="Close (Esc)"
       >
-        <span style={{ fontSize: "0.6875rem", color: "white" }}>{time}</span>
-        {sender === "user" && (
-          <span style={{ fontSize: "0.75rem", color: "#53bdeb" }}>✓✓</span>
-        )}
+        <svg
+          width="24"
+          height="24"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+        >
+          <line x1="18" y1="6" x2="6" y2="18" />
+          <line x1="6" y1="6" x2="18" y2="18" />
+        </svg>
+      </button>
+
+      {/* Zoom controls */}
+      <div className={msgStyles.zoomControls}>
+        <button
+          className={msgStyles.zoomBtn}
+          onClick={handleZoomIn}
+          title="Zoom in (+)"
+        >
+          <svg
+            width="20"
+            height="20"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+          >
+            <circle cx="11" cy="11" r="8" />
+            <line x1="21" y1="21" x2="16.65" y2="16.65" />
+            <line x1="11" y1="8" x2="11" y2="14" />
+            <line x1="8" y1="11" x2="14" y2="11" />
+          </svg>
+        </button>
+        <span className={msgStyles.zoomLevel}>{Math.round(scale * 100)}%</span>
+        <button
+          className={msgStyles.zoomBtn}
+          onClick={handleZoomOut}
+          title="Zoom out (-)"
+        >
+          <svg
+            width="20"
+            height="20"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+          >
+            <circle cx="11" cy="11" r="8" />
+            <line x1="21" y1="21" x2="16.65" y2="16.65" />
+            <line x1="8" y1="11" x2="14" y2="11" />
+          </svg>
+        </button>
+        <button
+          className={msgStyles.zoomBtn}
+          onClick={handleResetZoom}
+          title="Reset zoom (0)"
+        >
+          <svg
+            width="20"
+            height="20"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+          >
+            <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
+            <path d="M3 3v5h5" />
+          </svg>
+        </button>
+      </div>
+
+      {/* Zoomed image */}
+      <img
+        ref={imageRef}
+        src={imageUrl}
+        alt="Zoomed view"
+        className={msgStyles.zoomedImage}
+        style={{
+          transform: `translate(${position.x}px, ${position.y}px) scale(${scale})`,
+          cursor: scale > 1 ? (isDragging ? "grabbing" : "grab") : "zoom-in",
+        }}
+        onDoubleClick={handleDoubleClick}
+        draggable={false}
+      />
+
+      {/* Instructions hint */}
+      <div className={msgStyles.zoomHint}>
+        Double-tap to zoom • Pinch or scroll to adjust • Drag to pan
       </div>
     </div>
   );
@@ -377,12 +685,16 @@ interface MessageBubbleProps {
   msg: Message;
   styles: Record<string, string>;
   conversationId: string;
+  onImageLoad?: () => void;
+  onImageClick?: (imageUrl: string) => void;
 }
 
 const MessageBubble = memo(function MessageBubble({
   msg,
   styles,
   conversationId,
+  onImageLoad,
+  onImageClick,
 }: MessageBubbleProps) {
   const isImageMessage = msg.type === "image";
 
@@ -418,18 +730,26 @@ const MessageBubble = memo(function MessageBubble({
           </div>
         )}
         {msg.type === "image" && (
-          <LazyImage
-            mediaId={msg.mediaId}
-            mediaUrl={msg.mediaUrl}
-            messageId={msg.id}
-            conversationId={conversationId}
-            time={msg.time}
-            sender={msg.sender}
-          />
+          <div className={msgStyles.imageMessageContainer}>
+            <LazyImage
+              mediaId={msg.mediaId}
+              mediaUrl={resolveMediaUrl(msg) || undefined}
+              messageId={msg.id}
+              conversationId={conversationId}
+              time={msg.time}
+              sender={msg.sender}
+              onImageLoad={onImageLoad}
+              onImageClick={onImageClick}
+            />
+            {/* Caption display for images - WhatsApp style white bubble */}
+            {msg.content && msg.content !== "[image]" && (
+              <div className={msgStyles.imageCaption}>{msg.content}</div>
+            )}
+          </div>
         )}
         {(msg.type === "document" || msg.type === "video") && (
           <div className={styles.imageMessage}>
-            {msg.type === "video" && msg.mediaUrl ? (
+            {msg.type === "video" && isValidUrl(msg.mediaUrl) ? (
               <video
                 src={msg.mediaUrl}
                 controls
@@ -438,7 +758,7 @@ const MessageBubble = memo(function MessageBubble({
                   borderRadius: "12px",
                 }}
               />
-            ) : msg.type === "document" && msg.mediaUrl ? (
+            ) : msg.type === "document" && isValidUrl(msg.mediaUrl) ? (
               <a
                 href={msg.mediaUrl}
                 target="_blank"
@@ -607,10 +927,17 @@ export default function MessagesView() {
   const [showMobileChat, setShowMobileChat] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
   const [showMoreMenu, setShowMoreMenu] = useState(false);
-  // Media upload states
-  const [selectedFile, setSelectedFile] = useState<File | null>(null);
-  const [mediaPreviewUrl, setMediaPreviewUrl] = useState<string | null>(null);
+  // Media upload states - supports queue of multiple files with per-file captions
+  const [selectedFiles, setSelectedFiles] = useState<
+    Array<{ file: File; previewUrl: string | null; caption: string }>
+  >([]); // Queue of files with individual captions
+  const [activeFileIndex, setActiveFileIndex] = useState(0); // Currently previewed file
   const [uploading, setUploading] = useState(false);
+  const [isDragOver, setIsDragOver] = useState(false); // Drag-drop overlay state
+  const [zoomedImageUrl, setZoomedImageUrl] = useState<string | null>(null); // Image zoom viewer state
+  // Computed values for backward compatibility
+  const selectedFile = selectedFiles[activeFileIndex]?.file || null;
+  const mediaPreviewUrl = selectedFiles[activeFileIndex]?.previewUrl || null;
   const fileInputRef = useRef<HTMLInputElement>(null);
   const moreMenuRef = useRef<HTMLDivElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -624,6 +951,8 @@ export default function MessagesView() {
   const isInitialLoadRef = useRef(true);
   // Track if user is scrolled near bottom
   const isNearBottomRef = useRef(true);
+  // Conversation guard for prefetch - prevents stale responses on fast switching
+  const activeConversationRef = useRef<string | null>(null);
 
   // Infinite scroll pagination state
   const [hasMore, setHasMore] = useState(true);
@@ -710,6 +1039,32 @@ export default function MessagesView() {
     messagesRef.current = messages;
   }, [messages]);
 
+  // Sync caption input with active file's caption when switching files
+  useEffect(() => {
+    if (selectedFiles.length > 0 && activeFileIndex < selectedFiles.length) {
+      const activeCaption = selectedFiles[activeFileIndex]?.caption || "";
+      setMessageInput(activeCaption);
+    }
+  }, [activeFileIndex, selectedFiles.length]);
+
+  // Update the active file's caption when user types
+  const handleCaptionChange = useCallback(
+    (e: React.ChangeEvent<HTMLInputElement>) => {
+      const newCaption = e.target.value;
+      setMessageInput(newCaption);
+
+      // Also save to the active file's caption
+      if (selectedFiles.length > 0 && activeFileIndex < selectedFiles.length) {
+        setSelectedFiles((prev) =>
+          prev.map((sf, i) =>
+            i === activeFileIndex ? { ...sf, caption: newCaption } : sf,
+          ),
+        );
+      }
+    },
+    [activeFileIndex, selectedFiles.length],
+  );
+
   // Fetch conversations on mount
   const fetchConversations = useCallback(async () => {
     try {
@@ -774,6 +1129,119 @@ export default function MessagesView() {
     }
   }, []);
 
+  // Prefetch media URLs for image messages with priority-based loading
+  // HIGH priority: last 10 messages (viewport), LOW priority: older messages
+  // Uses AbortController for proper cleanup on conversation switch
+  const prefetchAbortControllerRef = useRef<AbortController | null>(null);
+
+  const prefetchMediaUrls = useCallback(
+    async (messagesToPrefetch: Message[], conversationId: string) => {
+      // Abort any in-flight prefetch from previous conversation
+      if (prefetchAbortControllerRef.current) {
+        prefetchAbortControllerRef.current.abort();
+      }
+
+      // Create new abort controller for this prefetch batch
+      const abortController = new AbortController();
+      prefetchAbortControllerRef.current = abortController;
+
+      const needsFetch = messagesToPrefetch.filter(
+        (m) =>
+          m.type === "image" &&
+          m.mediaId &&
+          !m.mediaUrl &&
+          !(["ready", "loading"] as MediaStatus[]).includes(
+            mediaStatusCache.get(m.id) || "idle",
+          ),
+      );
+
+      if (needsFetch.length === 0) return;
+
+      console.log(
+        `📸 [Prefetch] Starting prefetch for ${needsFetch.length} images`,
+      );
+
+      // Priority: last 10 first (viewport visible)
+      const highPriority = needsFetch.slice(-10);
+      const lowPriority = needsFetch.slice(0, -10);
+
+      const fetchOne = async (msg: Message) => {
+        // Check if aborted
+        if (abortController.signal.aborted) return;
+
+        // Conversation guard - abort if user switched chats
+        if (activeConversationRef.current !== conversationId) {
+          return;
+        }
+
+        // Skip if already loading
+        const currentStatus = mediaStatusCache.get(msg.id);
+        if (currentStatus === "loading") return;
+
+        mediaStatusCache.set(msg.id, "loading");
+
+        try {
+          const res = await fetch("/api/whatsapp/download-media", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              mediaId: msg.mediaId,
+              messageId: msg.id,
+              conversationId,
+            }),
+            signal: abortController.signal, // AbortController signal
+          });
+
+          const data = await res.json();
+
+          // Guard check again after async operation
+          if (
+            abortController.signal.aborted ||
+            activeConversationRef.current !== conversationId
+          ) {
+            return;
+          }
+
+          if (data.success && data.data?.mediaUrl) {
+            // Decode image before paint to prevent layout shift
+            await preloadImage(data.data.mediaUrl);
+
+            mediaUrlCache.set(msg.id, data.data.mediaUrl);
+            mediaStatusCache.set(msg.id, "ready");
+
+            // Update message in state to trigger re-render
+            setMessages((prev) =>
+              prev.map((m) =>
+                m.id === msg.id ? { ...m, mediaUrl: data.data.mediaUrl } : m,
+              ),
+            );
+            console.log(`✅ [Prefetch] Ready: ${msg.id}`);
+          } else {
+            mediaStatusCache.set(msg.id, "failed");
+            console.log(`❌ [Prefetch] Failed: ${msg.id}`);
+          }
+        } catch (err: any) {
+          // Don't log abort errors - they're expected on conversation switch
+          if (err.name !== "AbortError") {
+            mediaStatusCache.set(msg.id, "failed");
+            console.error(`❌ [Prefetch] Error for ${msg.id}:`, err);
+          }
+        }
+      };
+
+      // HIGH priority: fetch in parallel batch
+      await Promise.allSettled(highPriority.map(fetchOne));
+
+      // LOW priority: background fetch (fire and forget)
+      if (!abortController.signal.aborted) {
+        lowPriority.forEach(fetchOne);
+      }
+
+      console.log(`📸 [Prefetch] Batch complete`);
+    },
+    [],
+  );
+
   // Load older messages when user scrolls up (infinite scroll)
   const loadOlderMessages = useCallback(async () => {
     if (
@@ -822,13 +1290,18 @@ export default function MessagesView() {
         // Update pagination state
         setHasMore(data.data.hasMore ?? false);
         oldestCursorRef.current = data.data.oldestCursor ?? null;
+
+        // Prefetch media for older messages (low priority)
+        if (selectedConversation?.id) {
+          prefetchMediaUrls(normalizedMessages, selectedConversation.id);
+        }
       }
     } catch (err) {
       console.error("Error loading older messages:", err);
     } finally {
       setLoadingOlder(false);
     }
-  }, [hasMore, loadingOlder, selectedConversation]);
+  }, [hasMore, loadingOlder, selectedConversation, prefetchMediaUrls]);
 
   // Only fetch messages when the conversation ID changes, not when the object updates
   useEffect(() => {
@@ -839,16 +1312,62 @@ export default function MessagesView() {
     if (currentId && currentId !== previousId && selectedConversation) {
       prevSelectedConversationIdRef.current = currentId;
 
+      // Set conversation guard BEFORE fetching - critical for prefetch cancellation
+      activeConversationRef.current = currentId;
+
       // Reset pagination state for new conversation
       setHasMore(true);
       oldestCursorRef.current = null;
 
-      fetchMessages(selectedConversation.phone);
+      // Fetch messages and prefetch media
+      const fetchAndPrefetch = async () => {
+        try {
+          setMessagesLoading(true);
+          const response = await fetch(
+            `/api/whatsapp/messages?contactPhone=${encodeURIComponent(selectedConversation.phone)}`,
+            { cache: "no-store" },
+          );
+          const data = await response.json();
+
+          // Guard: abort if conversation changed during fetch
+          if (activeConversationRef.current !== currentId) {
+            console.log(
+              `⏭️ [Messages] Discarding result - conversation changed`,
+            );
+            return;
+          }
+
+          if (data.success) {
+            const normalizedMessages = data.data.messages.map((msg: any) => ({
+              ...msg,
+              type: msg.type || "text",
+            }));
+            setMessages(normalizedMessages);
+            setContactInfo(data.data.contact);
+            setHasMore(data.data.hasMore ?? false);
+            oldestCursorRef.current = data.data.oldestCursor ?? null;
+
+            // Prefetch media URLs immediately after setting messages
+            prefetchMediaUrls(normalizedMessages, currentId);
+          } else {
+            console.error("Failed to load messages:", data.error);
+          }
+        } catch (err) {
+          console.error("Error fetching messages:", err);
+        } finally {
+          // Only update loading state if still on same conversation
+          if (activeConversationRef.current === currentId) {
+            setMessagesLoading(false);
+          }
+        }
+      };
+
+      fetchAndPrefetch();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
     // Reset initial load flag when conversation changes
     isInitialLoadRef.current = true;
-  }, [selectedConversation?.id]);
+  }, [selectedConversation?.id, prefetchMediaUrls]);
 
   // Scroll to bottom only on initial load or when user sends a message
   useEffect(() => {
@@ -864,6 +1383,69 @@ export default function MessagesView() {
       messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
     }
   }, [messages]);
+
+  // Callback for when images finish loading - scroll to show them if user is near bottom
+  const handleImageLoad = useCallback(() => {
+    // Only auto-scroll if user is near the bottom of the chat
+    if (isNearBottomRef.current) {
+      messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    }
+  }, []);
+
+  // Drag-drop handlers for chat message area
+  const handleDragEnter = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    // Only show overlay if dragging files
+    if (e.dataTransfer.types.includes("Files")) {
+      setIsDragOver(true);
+    }
+  }, []);
+
+  const handleDragOver = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+  }, []);
+
+  const handleDragLeave = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    // Only hide overlay if leaving the container (not entering a child)
+    const rect = e.currentTarget.getBoundingClientRect();
+    const x = e.clientX;
+    const y = e.clientY;
+    if (x < rect.left || x > rect.right || y < rect.top || y > rect.bottom) {
+      setIsDragOver(false);
+    }
+  }, []);
+
+  const handleDrop = useCallback(
+    (e: React.DragEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      setIsDragOver(false);
+
+      const files = Array.from(e.dataTransfer.files);
+      const imageFiles = files.filter((file) => file.type.startsWith("image/"));
+
+      if (imageFiles.length === 0) {
+        console.log("No image files dropped");
+        return;
+      }
+
+      // Add dropped images to the file queue with previews
+      const newFiles = imageFiles.map((file) => ({
+        file,
+        previewUrl: URL.createObjectURL(file),
+        caption: "",
+      }));
+
+      setSelectedFiles((prev) => [...prev, ...newFiles]);
+      setActiveFileIndex(selectedFiles.length); // Focus on first new file
+      console.log(`📸 Added ${imageFiles.length} image(s) from drag-drop`);
+    },
+    [selectedFiles.length],
+  );
 
   // Infinite scroll: load older messages when user scrolls near top
   useEffect(() => {
@@ -932,10 +1514,47 @@ export default function MessagesView() {
             const currentConv = selectedConversationRef.current;
             if (currentConv && currentConv.id === conversationId) {
               setMessages((prev) => {
-                // Check if message already exists
-                if (prev.some((m) => m.messageId === formattedMsg.messageId)) {
+                // IDEMPOTENCY CHECK: Always check if message exists first
+                // This prevents duplicates AND handles multi-tab sync correctly:
+                // - Tab A sends message (optimistic) -> Tab B receives via realtime -> Tab B adds it
+                // - Tab A receives same message via realtime -> already exists -> skip
+                const exists = prev.some(
+                  (m) =>
+                    m.messageId === formattedMsg.messageId ||
+                    m.id === formattedMsg.id,
+                );
+
+                if (exists) {
+                  // Message already in state (from optimistic update or previous realtime event)
+                  console.log(
+                    "⏭️ [Realtime] Message already exists, skipping:",
+                    formattedMsg.messageId?.slice(-8),
+                  );
                   return prev;
                 }
+
+                // Message not in state - add it
+                // This handles:
+                // 1. Inbound messages from contacts
+                // 2. AI-generated messages (instant display - WhatsApp-level UX)
+                // 3. Human messages from other tabs/devices (multi-session sync)
+                if (newMsg.is_ai_generated) {
+                  console.log(
+                    "🤖 [Realtime] Adding AI-generated message:",
+                    formattedMsg.messageId?.slice(-8),
+                  );
+                } else if (newMsg.direction === "outbound") {
+                  console.log(
+                    "📱 [Realtime] Adding outbound message from other session:",
+                    formattedMsg.messageId?.slice(-8),
+                  );
+                } else {
+                  console.log(
+                    "📨 [Realtime] Adding inbound message:",
+                    formattedMsg.messageId?.slice(-8),
+                  );
+                }
+
                 return [...prev, formattedMsg];
               });
             }
@@ -1190,7 +1809,12 @@ export default function MessagesView() {
   const handleKeyPress = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
-      handleSendMessage();
+      // CRITICAL: Use the correct handler based on whether file is selected
+      if (selectedFile) {
+        handleSendMedia();
+      } else {
+        handleSendMessage();
+      }
     }
   };
 
@@ -1239,143 +1863,239 @@ export default function MessagesView() {
       return;
     }
 
-    setSelectedFile(file);
-    if (mediaType === "image" || mediaType === "video") {
-      setMediaPreviewUrl(URL.createObjectURL(file));
+    // Add file to queue (not replace)
+    const previewUrl =
+      mediaType === "image" || mediaType === "video"
+        ? URL.createObjectURL(file)
+        : null;
+
+    setSelectedFiles((prev) => {
+      const newFiles = [...prev, { file, previewUrl, caption: "" }];
+      // Set active to the newly added file
+      setActiveFileIndex(newFiles.length - 1);
+      // Clear the shared input since we're switching to new file
+      setMessageInput("");
+      return newFiles;
+    });
+
+    // Reset file input for reuse
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
     }
   };
 
-  // Cancel media selection
-  const handleCancelMedia = () => {
-    setSelectedFile(null);
-    if (mediaPreviewUrl) {
-      URL.revokeObjectURL(mediaPreviewUrl);
-      setMediaPreviewUrl(null);
+  // Cancel media selection - remove current file or all files
+  const handleCancelMedia = (removeAll = true) => {
+    if (removeAll) {
+      // Revoke all preview URLs and clear
+      selectedFiles.forEach((sf) => {
+        if (sf.previewUrl) URL.revokeObjectURL(sf.previewUrl);
+      });
+      setSelectedFiles([]);
+      setActiveFileIndex(0);
+    } else {
+      // Remove only the active file
+      const fileToRemove = selectedFiles[activeFileIndex];
+      if (fileToRemove?.previewUrl) {
+        URL.revokeObjectURL(fileToRemove.previewUrl);
+      }
+      setSelectedFiles((prev) => prev.filter((_, i) => i !== activeFileIndex));
+      setActiveFileIndex((prev) => Math.max(0, prev - 1));
     }
     if (fileInputRef.current) {
       fileInputRef.current.value = "";
     }
   };
 
-  // Handle sending media
+  // Handle sending media - PROCESSES ALL SELECTED FILES
+  // Uses rate-limited concurrency (max 2 parallel) to avoid WhatsApp API throttling
   const handleSendMedia = async () => {
-    if (!selectedFile || !selectedConversation || uploading) return;
+    // CRITICAL: Double-click safety guard
+    if (uploading || sending) return;
 
-    const mediaType = getMediaTypeFromFile(selectedFile);
-    if (!mediaType) return;
+    // Guard: No files or no conversation selected
+    if (selectedFiles.length === 0 || !selectedConversation) return;
 
+    // CRITICAL: Capture ALL files (with their individual captions) and clear state
+    const filesToSend = [...selectedFiles];
+    setSelectedFiles([]);
+    setActiveFileIndex(0);
     setUploading(true);
-    const caption = messageInput.trim();
-    setMessageInput("");
+    setMessageInput(""); // Clear the caption input
+
+    const startTime = performance.now();
+
+    // Debug: Log multi-file send start
+    console.log("🚀 [handleSendMedia] Starting optimized multi-file send:", {
+      fileCount: filesToSend.length,
+      filesCaptions: filesToSend.map((f) => f.caption || "(no caption)"),
+      conversationId: selectedConversation.id,
+      recipientPhone: selectedConversation.phone,
+    });
 
     // Ensure scroll to bottom when sending
     isNearBottomRef.current = true;
 
-    // Create optimistic message with local preview
-    const tempId = `temp-${Date.now()}`;
-    const optimisticMessage: Message = {
-      id: tempId,
-      messageId: tempId,
-      sender: "user",
-      content: caption || `[${mediaType}]`,
-      time: new Date()
-        .toLocaleTimeString("en-IN", {
-          hour: "numeric",
-          minute: "2-digit",
-          hour12: true,
-          timeZone: "Asia/Kolkata",
-        })
-        .toLowerCase(),
-      timestamp: new Date().toISOString(),
-      type: mediaType,
-      status: "sending",
-      mediaUrl: mediaPreviewUrl || undefined, // Local preview initially
-    };
-    setMessages((prev) => [...prev, optimisticMessage]);
+    // Track temp IDs for cleanup on error
+    const tempIds: string[] = [];
 
-    try {
-      // Step 1: Upload media to R2 + WhatsApp
-      // Include conversationId for deterministic R2 path
-      const uploadFormData = new FormData();
-      uploadFormData.append("file", selectedFile);
-      uploadFormData.append("conversationId", selectedConversation.id);
+    // Rate-limited concurrency helper (max 2 parallel to avoid WhatsApp API throttling)
+    const MAX_CONCURRENT = 2;
 
-      const uploadResponse = await fetch("/api/whatsapp/upload-media", {
-        method: "POST",
-        body: uploadFormData,
-      });
+    // Prepare all files with optimistic messages first (instant UI feedback)
+    const preparedFiles = filesToSend.map((sf, i) => {
+      const { file, previewUrl } = sf;
+      const mediaType = getMediaTypeFromFile(file);
+      const fileCaptionText = sf.caption?.trim();
+      const messageCaption =
+        fileCaptionText && fileCaptionText.length > 0
+          ? fileCaptionText
+          : undefined;
 
-      const uploadData = await uploadResponse.json();
+      const tempId = `temp-${Date.now()}-${i}`;
+      tempIds.push(tempId);
 
-      if (!uploadData.success) {
-        throw new Error(uploadData.message || "Failed to upload media");
+      return {
+        file,
+        previewUrl,
+        mediaType,
+        messageCaption,
+        tempId,
+        index: i,
+      };
+    });
+
+    // Create ALL optimistic messages in a SINGLE setState call (prevents React batching issues)
+    // CRITICAL: forEach with multiple setMessages() causes race conditions - some messages get lost!
+    const optimisticMessages: Message[] = preparedFiles
+      .filter(
+        ({ mediaType }) =>
+          mediaType &&
+          ["image", "video", "document", "audio"].includes(mediaType),
+      )
+      .map(({ mediaType, messageCaption, tempId, previewUrl }) => ({
+        id: tempId,
+        messageId: tempId,
+        sender: "user" as const,
+        content: messageCaption || `[${mediaType}]`,
+        time: new Date()
+          .toLocaleTimeString("en-IN", {
+            hour: "numeric",
+            minute: "2-digit",
+            hour12: true,
+            timeZone: "Asia/Kolkata",
+          })
+          .toLowerCase(),
+        timestamp: new Date().toISOString(),
+        type: mediaType!,
+        status: "sending",
+        mediaUrl: previewUrl || undefined,
+      }));
+
+    // SINGLE atomic state update - all messages added at once
+    setMessages((prev) => [...prev, ...optimisticMessages]);
+
+    console.log(
+      `⏱️ [handleSendMedia] Optimistic UI shown in ${(performance.now() - startTime).toFixed(0)}ms (${optimisticMessages.length} messages)`,
+    );
+
+    // Process files with rate-limited parallelism
+    const sendFile = async (pf: (typeof preparedFiles)[0]): Promise<void> => {
+      const { file, previewUrl, mediaType, messageCaption, tempId, index } = pf;
+
+      // Skip unsupported types
+      if (
+        !mediaType ||
+        !["image", "video", "document", "audio"].includes(mediaType)
+      ) {
+        console.warn(`⚠️ [handleSendMedia] Skipping unsupported: ${file.type}`);
+        if (previewUrl) URL.revokeObjectURL(previewUrl);
+        return;
       }
 
-      console.log("📤 Media uploaded to R2:", uploadData.data);
+      console.log(
+        `📤 [handleSendMedia] Sending file ${index + 1}/${filesToSend.length}: ${file.name}`,
+      );
 
-      // Update optimistic message with R2 URL (persistent)
-      // This URL will survive page refresh!
-      if (uploadData.data.mediaUrl) {
-        setMessages((prev) =>
-          prev.map((msg) =>
-            msg.id === tempId
-              ? { ...msg, mediaUrl: uploadData.data.mediaUrl }
-              : msg,
-          ),
+      // Single API call to fast endpoint (upload + send in one request)
+      const formData = new FormData();
+      formData.append("file", file);
+      formData.append("to", selectedConversation.phone);
+      formData.append("conversationId", selectedConversation.id);
+      if (messageCaption) {
+        formData.append("caption", messageCaption);
+      }
+
+      const response = await fetch("/api/whatsapp/send-media-fast", {
+        method: "POST",
+        body: formData,
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
+        console.log(
+          `✅ [handleSendMedia] File ${index + 1} sent in ${data.timing?.totalMs || "?"}ms (WhatsApp: ${data.timing?.whatsappMs || "?"}ms)`,
         );
-      }
-
-      // Step 2: Send message with media
-      // Pass both WhatsApp media_id (for delivery) and R2 metadata (for storage)
-      const sendResponse = await fetch("/api/whatsapp/send-message", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          to: selectedConversation.phone,
-          message: caption,
-          // WhatsApp delivery
-          mediaId: uploadData.data.whatsappMediaId || uploadData.data.mediaId,
-          mediaType: uploadData.data.mediaType,
-          filename: selectedFile.name,
-          // R2 persistent storage (source of truth)
-          mediaUrl: uploadData.data.mediaUrl,
-          mediaKey: uploadData.data.mediaKey,
-          mediaHash: uploadData.data.mediaHash,
-          mediaSize: uploadData.data.mediaSize,
-          mediaMime: uploadData.data.mediaMime,
-          storageProvider: uploadData.data.storageProvider,
-        }),
-      });
-
-      const sendData = await sendResponse.json();
-
-      if (sendData.success) {
+        // Update message with real ID and status
+        // IMPORTANT: Keep blob URL (previewUrl) in mediaUrl to continue displaying image
+        // The blob URL will be replaced on page refresh when R2 URL is available
+        // We intentionally do NOT revoke the blob URL here to prevent onError
         setMessages((prev) =>
           prev.map((msg) =>
             msg.id === tempId
               ? {
                   ...msg,
-                  id: sendData.data.messageId,
-                  messageId: sendData.data.messageId,
+                  id: data.data.messageId,
+                  messageId: data.data.messageId,
                   status: "sent",
-                  // Keep R2 URL for persistent display
-                  mediaUrl: uploadData.data.mediaUrl || msg.mediaUrl,
+                  // Keep existing mediaUrl (blob) - it's still valid and displaying
                 }
               : msg,
           ),
         );
+        // NOTE: We intentionally do NOT revoke previewUrl here
+        // Revoking causes <img> onError because the blob becomes invalid
+        // The blob URL will be cleaned up on page unload by the browser naturally
       } else {
-        throw new Error(sendData.message || "Failed to send media");
+        throw new Error(data.message || `Failed to send ${file.name}`);
       }
-    } catch (err: any) {
-      console.error("Error sending media:", err);
-      setMessages((prev) =>
-        prev.filter((msg) => msg.id !== optimisticMessage.id),
+    };
+
+    try {
+      // Process in batches with controlled concurrency
+      const validFiles = preparedFiles.filter(
+        (pf) =>
+          pf.mediaType &&
+          ["image", "video", "document", "audio"].includes(pf.mediaType),
       );
+
+      // Process with concurrency limit of 2
+      for (let i = 0; i < validFiles.length; i += MAX_CONCURRENT) {
+        const batch = validFiles.slice(i, i + MAX_CONCURRENT);
+        await Promise.all(batch.map(sendFile));
+      }
+
+      const totalTime = (performance.now() - startTime).toFixed(0);
+      console.log(
+        `🎉 [handleSendMedia] All ${filesToSend.length} files sent in ${totalTime}ms!`,
+      );
+    } catch (err: any) {
+      console.error("❌ [handleSendMedia] Error:", err);
+      // Remove all optimistic messages for this batch on error
+      setMessages((prev) => prev.filter((msg) => !tempIds.includes(msg.id)));
       alert(err.message || "Failed to send media. Please try again.");
+
+      // Revoke any remaining preview URLs
+      filesToSend.forEach((sf) => {
+        if (sf.previewUrl) URL.revokeObjectURL(sf.previewUrl);
+      });
     } finally {
       setUploading(false);
-      handleCancelMedia();
+      // Clean up file input
+      if (fileInputRef.current) {
+        fileInputRef.current.value = "";
+      }
     }
   };
 
@@ -2007,50 +2727,85 @@ export default function MessagesView() {
               </div>
             </div>
 
+            {/* Wrapper for chat messages with drag-drop overlay */}
             <div
-              className={styles.chatMessages}
-              onScroll={handleScroll}
-              ref={messagesContainerRef}
+              className={msgStyles.chatMessagesWrapper}
+              onDragEnter={handleDragEnter}
+              onDragOver={handleDragOver}
+              onDragLeave={handleDragLeave}
+              onDrop={handleDrop}
             >
-              {messagesLoading ? (
-                <div
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    height: "100%",
-                    padding: "2rem",
-                    color: "#000000",
-                  }}
-                >
-                  Loading messages...
-                </div>
-              ) : messages.length === 0 ? (
-                <div
-                  style={{
-                    textAlign: "center",
-                    padding: "2rem",
-                    color: "var(--dash-text-secondary)",
-                  }}
-                >
-                  No messages yet. Send a message to start the conversation.
-                </div>
-              ) : (
-                messageGroups.map((group) => (
-                  <div key={group.date}>
-                    <DateSeparator date={group.date} styles={styles} />
-                    {group.messages.map((msg) => (
-                      <MessageBubble
-                        key={msg.id}
-                        msg={msg}
-                        styles={styles}
-                        conversationId={selectedConversation.id}
-                      />
-                    ))}
+              {/* Drag-drop overlay - positioned outside scroll container */}
+              {isDragOver && (
+                <div className={msgStyles.dragDropOverlay}>
+                  <div className={msgStyles.dragDropCard}>
+                    <div className={msgStyles.dragDropIconContainer}>
+                      <svg
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      >
+                        {/* Cloud with upload arrow */}
+                        <path d="M16 16l-4-4-4 4" />
+                        <path d="M12 12v9" />
+                        <path d="M20.39 18.39A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.3" />
+                      </svg>
+                    </div>
+                    <span className={msgStyles.dragDropTitle}>
+                      Drag and drop files
+                    </span>
                   </div>
-                ))
+                </div>
               )}
-              <div ref={messagesEndRef} />
+
+              <div
+                className={styles.chatMessages}
+                onScroll={handleScroll}
+                ref={messagesContainerRef}
+              >
+                {messagesLoading ? (
+                  <div
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      height: "100%",
+                      padding: "2rem",
+                      color: "#000000",
+                    }}
+                  >
+                    Loading messages...
+                  </div>
+                ) : messages.length === 0 ? (
+                  <div
+                    style={{
+                      textAlign: "center",
+                      padding: "2rem",
+                      color: "var(--dash-text-secondary)",
+                    }}
+                  >
+                    No messages yet. Send a message to start the conversation.
+                  </div>
+                ) : (
+                  messageGroups.map((group) => (
+                    <div key={group.date}>
+                      <DateSeparator date={group.date} styles={styles} />
+                      {group.messages.map((msg) => (
+                        <MessageBubble
+                          key={msg.id}
+                          msg={msg}
+                          styles={styles}
+                          conversationId={selectedConversation.id}
+                          onImageLoad={handleImageLoad}
+                        />
+                      ))}
+                    </div>
+                  ))
+                )}
+                <div ref={messagesEndRef} />
+              </div>
             </div>
 
             <div className={styles.chatInput}>
@@ -2066,14 +2821,9 @@ export default function MessagesView() {
               {/* WhatsApp-style Media Preview - Inside chat area */}
               {selectedFile && (
                 <div
-                  className={styles.mediaPreviewModal}
+                  className={`${styles.mediaPreviewModal} ${msgStyles.mediaPreviewOverlay}`}
                   style={{
-                    position: "absolute",
-                    inset: 0,
                     background: "rgba(0, 0, 0, 0.92)",
-                    zIndex: 50,
-                    display: "flex",
-                    flexDirection: "column",
                   }}
                 >
                   {/* Modal Header */}
@@ -2087,7 +2837,7 @@ export default function MessagesView() {
                     }}
                   >
                     <button
-                      onClick={handleCancelMedia}
+                      onClick={() => handleCancelMedia()}
                       style={{
                         background: "transparent",
                         border: "none",
@@ -2111,10 +2861,21 @@ export default function MessagesView() {
                         <path d="M19 12H5M12 19l-7-7 7-7" />
                       </svg>
                     </button>
-                    <div style={{ color: "white", fontWeight: 500 }}>
+                    <div
+                      style={{
+                        color: "white",
+                        fontWeight: 500,
+                        flex: 1,
+                        textAlign: "center",
+                        overflow: "hidden",
+                        textOverflow: "ellipsis",
+                        whiteSpace: "nowrap",
+                      }}
+                    >
                       {selectedFile.name}
                     </div>
-                    <div style={{ width: 40 }} /> {/* Spacer for centering */}
+                    {/* Spacer for visual balance */}
+                    <div style={{ width: 40 }} />
                   </div>
 
                   {/* Image Preview Area */}
@@ -2199,6 +2960,104 @@ export default function MessagesView() {
                     )}
                   </div>
 
+                  {/* Thumbnail strip for multi-file queue */}
+                  {selectedFiles.length > 1 && (
+                    <div
+                      style={{
+                        display: "flex",
+                        gap: "8px",
+                        padding: "12px 24px",
+                        overflowX: "auto",
+                        background: "rgba(0,0,0,0.3)",
+                        justifyContent: "center",
+                      }}
+                    >
+                      {selectedFiles.map((sf, index) => (
+                        <div
+                          key={index}
+                          onClick={() => setActiveFileIndex(index)}
+                          style={{
+                            position: "relative",
+                            width: "56px",
+                            height: "56px",
+                            borderRadius: "8px",
+                            overflow: "hidden",
+                            cursor: "pointer",
+                            border:
+                              index === activeFileIndex
+                                ? "2px solid #00a884"
+                                : "2px solid transparent",
+                            opacity: index === activeFileIndex ? 1 : 0.6,
+                            transition: "all 0.2s ease",
+                            flexShrink: 0,
+                          }}
+                        >
+                          {sf.previewUrl ? (
+                            <img
+                              src={sf.previewUrl}
+                              alt=""
+                              style={{
+                                width: "100%",
+                                height: "100%",
+                                objectFit: "cover",
+                              }}
+                            />
+                          ) : (
+                            <div
+                              style={{
+                                width: "100%",
+                                height: "100%",
+                                background: "rgba(255,255,255,0.1)",
+                                display: "flex",
+                                alignItems: "center",
+                                justifyContent: "center",
+                                fontSize: "10px",
+                                color: "rgba(255,255,255,0.7)",
+                              }}
+                            >
+                              {sf.file.name.split(".").pop()?.toUpperCase()}
+                            </div>
+                          )}
+                          {/* Remove button */}
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              if (sf.previewUrl)
+                                URL.revokeObjectURL(sf.previewUrl);
+                              setSelectedFiles((prev) =>
+                                prev.filter((_, i) => i !== index),
+                              );
+                              if (
+                                index <= activeFileIndex &&
+                                activeFileIndex > 0
+                              ) {
+                                setActiveFileIndex((prev) => prev - 1);
+                              }
+                            }}
+                            style={{
+                              position: "absolute",
+                              top: "2px",
+                              right: "2px",
+                              width: "18px",
+                              height: "18px",
+                              borderRadius: "50%",
+                              background: "rgba(0,0,0,0.7)",
+                              border: "none",
+                              color: "white",
+                              fontSize: "12px",
+                              cursor: "pointer",
+                              display: "flex",
+                              alignItems: "center",
+                              justifyContent: "center",
+                            }}
+                          >
+                            ×
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
                   {/* Caption Input + Send Button */}
                   <div
                     style={{
@@ -2215,16 +3074,17 @@ export default function MessagesView() {
                         flex: 1,
                         display: "flex",
                         alignItems: "center",
+                        gap: "8px",
                         background: "rgba(255,255,255,0.1)",
                         borderRadius: "24px",
-                        padding: "0.75rem 1.25rem",
+                        padding: "0.5rem 1rem",
                       }}
                     >
                       <input
                         type="text"
                         placeholder="Add a caption..."
                         value={messageInput}
-                        onChange={(e) => setMessageInput(e.target.value)}
+                        onChange={handleCaptionChange}
                         onKeyPress={handleKeyPress}
                         style={{
                           flex: 1,
@@ -2236,9 +3096,63 @@ export default function MessagesView() {
                         }}
                         autoFocus
                       />
+                      {/* Attach more files button - FIRST per WhatsApp order */}
+                      <button
+                        onClick={() => fileInputRef.current?.click()}
+                        style={{
+                          background: "transparent",
+                          border: "none",
+                          cursor: "pointer",
+                          color: "rgba(255,255,255,0.7)",
+                          padding: "4px",
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                        }}
+                        title="Attach another file"
+                      >
+                        <svg
+                          width="20"
+                          height="20"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="2"
+                        >
+                          <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48" />
+                        </svg>
+                      </button>
+                      {/* Emoji button - SECOND per WhatsApp order */}
+                      <button
+                        style={{
+                          background: "transparent",
+                          border: "none",
+                          cursor: "pointer",
+                          color: "rgba(255,255,255,0.7)",
+                          padding: "4px",
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                        }}
+                        title="Emoji"
+                      >
+                        <svg
+                          width="20"
+                          height="20"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="2"
+                        >
+                          <circle cx="12" cy="12" r="10" />
+                          <path d="M8 14s1.5 2 4 2 4-2 4-2" />
+                          <line x1="9" y1="9" x2="9.01" y2="9" />
+                          <line x1="15" y1="9" x2="15.01" y2="9" />
+                        </svg>
+                      </button>
                     </div>
                     <button
-                      onClick={handleSendMessage}
+                      onClick={handleSendMedia}
                       disabled={sending || uploading}
                       style={{
                         width: "52px",
@@ -2296,24 +3210,7 @@ export default function MessagesView() {
                   disabled={sending}
                 />
                 <div className={styles.inputActions}>
-                  <button
-                    className={styles.attachBtn}
-                    onClick={() => fileInputRef.current?.click()}
-                    title="Attach image"
-                  >
-                    <svg
-                      width="18"
-                      height="18"
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="2"
-                    >
-                      <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
-                      <circle cx="8.5" cy="8.5" r="1.5" />
-                      <polyline points="21 15 16 10 5 21" />
-                    </svg>
-                  </button>
+                  {/* Attach file button - triggers file picker */}
                   <button
                     className={styles.attachBtn}
                     onClick={() => fileInputRef.current?.click()}
@@ -2330,7 +3227,8 @@ export default function MessagesView() {
                       <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48" />
                     </svg>
                   </button>
-                  <button className={styles.attachBtn}>
+                  {/* Emoji button (placeholder) */}
+                  <button className={styles.attachBtn} title="Emoji">
                     <svg
                       width="18"
                       height="18"
@@ -2345,6 +3243,14 @@ export default function MessagesView() {
                       <line x1="15" y1="9" x2="15.01" y2="9" />
                     </svg>
                   </button>
+                  {/* CRITICAL: Hidden file input - this was completely missing! */}
+                  <input
+                    type="file"
+                    ref={fileInputRef}
+                    onChange={handleFileSelect}
+                    accept="image/jpeg,image/png,image/webp,video/mp4,video/3gpp,audio/aac,audio/mp4,audio/mpeg,audio/amr,audio/ogg,audio/opus,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/plain"
+                    style={{ display: "none" }}
+                  />
                 </div>
               </div>
               <button

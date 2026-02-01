@@ -246,13 +246,24 @@ export async function POST(request: NextRequest) {
 
     if (isMediaMessage) {
       // Send media message
-      console.log("📷 Sending media message:", { mediaId, mediaType });
+      // CRITICAL: Log all values to trace the issue
+      console.log("📷 [send-message] Media message details:", {
+        phoneNumberId: phoneNumber.phone_number_id,
+        to,
+        mediaType,
+        mediaId,
+        caption: message || "(no caption)",
+        captionType: typeof message,
+        captionLength: message?.length || 0,
+        filename,
+      });
+
       response = await graphClient.sendMediaMessage(
         phoneNumber.phone_number_id,
         to,
         mediaType as "image" | "video" | "document" | "audio",
         mediaId,
-        message, // caption for images/videos
+        message, // caption for images/videos/documents
         filename, // filename for documents
       );
       messageContent = message || `[${mediaType}]`;

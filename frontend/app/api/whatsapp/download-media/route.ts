@@ -102,6 +102,7 @@ export async function POST(request: NextRequest) {
           mediaUrl: existingMessage.media_url,
           mediaKey: existingMessage.media_key,
           cached: true,
+          source: "db",
           status: "ready",
         },
       });
@@ -291,6 +292,7 @@ export async function POST(request: NextRequest) {
           mediaSize: r2Result.mediaSize,
           mediaMime: mimeType,
           cached: false,
+          source: "r2",
           status: "ready",
         },
       });

@@ -159,9 +159,18 @@ export class MetaGraphAPIClient {
       id: mediaId,
     };
 
-    // Add caption for image/video
-    if (caption && (mediaType === "image" || mediaType === "video")) {
-      mediaObject.caption = caption;
+    // CRITICAL: Trim caption and only add if non-empty
+    // Empty string caption ("") can cause silent API rejection
+    const trimmedCaption = caption?.trim();
+
+    // Add caption for image/video/document (documents also support caption)
+    if (
+      trimmedCaption &&
+      (mediaType === "image" ||
+        mediaType === "video" ||
+        mediaType === "document")
+    ) {
+      mediaObject.caption = trimmedCaption.slice(0, 1024); // Enforce 1024 char limit
     }
 
     // Add filename for documents
@@ -177,11 +186,25 @@ export class MetaGraphAPIClient {
       [mediaType]: mediaObject,
     };
 
+    // Debug logging for troubleshooting
+    console.log("📤 [WhatsApp API] sendMediaMessage:", {
+      phoneNumberId,
+      to,
+      mediaType,
+      mediaId: mediaId.slice(0, 20) + "...",
+      hasCaption: !!trimmedCaption,
+      captionLength: trimmedCaption?.length || 0,
+      hasFilename: !!filename,
+      payload: JSON.stringify(body, null, 2),
+    });
+
     const response = await this.post<{
       messaging_product: string;
       contacts: Array<{ input: string; wa_id: string }>;
       messages: Array<{ id: string }>;
     }>(`/${phoneNumberId}/messages`, body);
+
+    console.log("✅ [WhatsApp API] sendMediaMessage response:", response);
 
     return response;
   }

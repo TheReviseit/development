@@ -1,0 +1,600 @@
+/* ============================================
+   MessagesView Component Styles
+   ============================================ */
+
+/* ============================================
+   Chat Messages Wrapper - Container for drag overlay
+   ============================================ */
+
+.chatMessagesWrapper {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  overflow: hidden;
+}
+
+/* ============================================
+   Drag-Drop Overlay - Clean Minimal Design
+   ============================================ */
+
+.dragDropOverlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  /* Semi-transparent backdrop that hides messages */
+  background: rgba(236, 229, 221, 0.95);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+  animation: overlayFadeIn 0.2s ease;
+}
+
+.dragDropCard {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 40px 60px;
+  /* Clean dashed border design */
+  background: #ffffff;
+  border: 2px dashed #a0b4c8;
+  border-radius: 12px;
+  animation: cardFadeIn 0.2s ease;
+}
+
+.dragDropIconContainer {
+  width: 48px;
+  height: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.dragDropIconContainer svg {
+  width: 48px;
+  height: 48px;
+  color: #6b7b8a;
+  stroke-width: 1.5;
+}
+
+.dragDropTitle {
+  font-size: 0.9375rem;
+  font-weight: 500;
+  color: #4a5568;
+  font-family:
+    -apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto", sans-serif;
+}
+
+.dragDropSubtitle {
+  font-size: 0.8125rem;
+  color: #718096;
+  font-family:
+    -apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto", sans-serif;
+}
+
+@keyframes overlayFadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes cardFadeIn {
+  from {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+/* ============================================
+   LazyImage Component Styles
+   ============================================ */
+
+.lazyImageContainer {
+  position: relative;
+  max-width: 320px;
+  width: 100%;
+}
+
+.lazyImage {
+  width: 100%;
+  max-width: 320px;
+  height: auto;
+  aspect-ratio: 4 / 5;
+  object-fit: cover;
+  border-radius: 12px;
+  display: block;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+}
+
+.imageSkeleton {
+  width: 100%;
+  max-width: 320px;
+  aspect-ratio: 4 / 5;
+  border-radius: 12px;
+  background: linear-gradient(
+    90deg,
+    rgba(0, 0, 0, 0.08) 25%,
+    rgba(0, 0, 0, 0.04) 50%,
+    rgba(0, 0, 0, 0.08) 75%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.imageSpinner {
+  width: 32px;
+  height: 32px;
+  border: 3px solid rgba(0, 0, 0, 0.15);
+  border-top-color: rgba(0, 0, 0, 0.4);
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+.imageFailed {
+  width: 100%;
+  max-width: 320px;
+  aspect-ratio: 4 / 5;
+  border-radius: 12px;
+  background: rgba(0, 0, 0, 0.05);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  color: rgba(0, 0, 0, 0.4);
+}
+
+.imageFailed.retryable {
+  cursor: pointer;
+}
+
+.imageFailedText {
+  font-size: 12px;
+  margin-top: 8px;
+  font-family:
+    -apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto", sans-serif;
+}
+
+/* Timestamp overlay on images */
+.imageTimestamp {
+  position: absolute;
+  bottom: 6px;
+  right: 6px;
+  background: rgba(0, 0, 0, 0.5);
+  border-radius: 4px;
+  padding: 2px 6px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.imageTimestampText {
+  font-size: 11px;
+  color: white;
+  font-family:
+    -apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto", sans-serif;
+}
+
+.imageCheckmarks {
+  font-size: 12px;
+  color: #53bdeb;
+}
+
+/* ============================================
+   Image Message Container
+   ============================================ */
+
+.imageMessageContainer {
+  display: flex;
+  flex-direction: column;
+  border-radius: 12px;
+  overflow: hidden;
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
+  background: #fff;
+}
+
+.imageCaption {
+  padding: 8px 12px;
+  font-size: 0.9375rem;
+  line-height: 1.4;
+  color: #111b21;
+  background: #fff;
+  border-top: 1px solid rgba(0, 0, 0, 0.06);
+  word-break: break-word;
+}
+
+/* ============================================
+   Chat Messages Container - Drag Active State
+   ============================================ */
+
+.chatMessagesDropActive {
+  position: relative;
+}
+
+/* ============================================
+   Animations
+   ============================================ */
+
+@keyframes shimmer {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* ============================================
+   Media Preview Overlay - Full Screen on Mobile
+   ============================================ */
+
+.mediaPreviewOverlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.92);
+  z-index: 50;
+  display: flex;
+  flex-direction: column;
+  animation: overlayFadeIn 0.2s ease;
+}
+
+/* ============================================
+   Mobile Responsive Styles
+   ============================================ */
+
+@media (max-width: 768px) {
+  /* Drag-Drop Overlay - Compact for mobile */
+  .dragDropCard {
+    padding: 24px 32px;
+    margin: 16px;
+    gap: 8px;
+  }
+
+  .dragDropIconContainer {
+    width: 36px;
+    height: 36px;
+  }
+
+  .dragDropIconContainer svg {
+    width: 36px;
+    height: 36px;
+  }
+
+  .dragDropTitle {
+    font-size: 0.875rem;
+  }
+
+  .dragDropSubtitle {
+    font-size: 0.75rem;
+  }
+
+  /* LazyImage - Optimized for mobile */
+  .lazyImageContainer {
+    max-width: 240px;
+  }
+
+  .lazyImage {
+    max-width: 240px;
+    border-radius: 8px;
+  }
+
+  .imageSkeleton {
+    max-width: 240px;
+    border-radius: 8px;
+  }
+
+  .imageFailed {
+    max-width: 240px;
+    border-radius: 8px;
+  }
+
+  .imageSpinner {
+    width: 24px;
+    height: 24px;
+    border-width: 2px;
+  }
+
+  .imageFailedText {
+    font-size: 11px;
+  }
+
+  /* Timestamp overlay - Smaller on mobile */
+  .imageTimestamp {
+    bottom: 4px;
+    right: 4px;
+    padding: 1px 4px;
+    gap: 2px;
+  }
+
+  .imageTimestampText {
+    font-size: 10px;
+  }
+
+  .imageCheckmarks {
+    font-size: 10px;
+  }
+
+  /* Image Message Container */
+  .imageMessageContainer {
+    border-radius: 8px;
+  }
+
+  .imageCaption {
+    padding: 6px 10px;
+    font-size: 0.875rem;
+  }
+
+  /* Media Preview Overlay - Full screen on mobile */
+  .mediaPreviewOverlay {
+    position: fixed;
+    inset: 0;
+    z-index: 1000;
+  }
+}
+
+/* Extra small screens (phones in portrait) */
+@media (max-width: 480px) {
+  /* Even smaller images for very small screens */
+  .lazyImageContainer {
+    max-width: 200px;
+  }
+
+  .lazyImage {
+    max-width: 200px;
+  }
+
+  .imageSkeleton {
+    max-width: 200px;
+  }
+
+  .imageFailed {
+    max-width: 200px;
+  }
+
+  /* Drag-Drop - Minimal padding */
+  .dragDropCard {
+    padding: 20px 24px;
+    margin: 12px;
+    gap: 6px;
+  }
+
+  .dragDropIconContainer {
+    width: 32px;
+    height: 32px;
+  }
+
+  .dragDropIconContainer svg {
+    width: 32px;
+    height: 32px;
+  }
+
+  .dragDropTitle {
+    font-size: 0.8125rem;
+  }
+
+  .dragDropSubtitle {
+    font-size: 0.6875rem;
+  }
+}
+
+/* ============================================
+   Clickable Image Styles
+   ============================================ */
+
+.clickableImage {
+  transition:
+    transform 0.15s ease,
+    box-shadow 0.15s ease;
+}
+
+.clickableImage:hover {
+  transform: scale(1.02);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+}
+
+/* ============================================
+   Image Zoom Viewer - Full Screen Lightbox
+   ============================================ */
+
+.imageZoomViewer {
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  background: rgba(0, 0, 0, 0.95);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  animation: overlayFadeIn 0.25s ease;
+  touch-action: none; /* Prevent browser gestures */
+  user-select: none;
+}
+
+/* Close button */
+.zoomCloseBtn {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.1);
+  border: none;
+  color: white;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+  z-index: 10;
+  backdrop-filter: blur(4px);
+}
+
+.zoomCloseBtn:hover {
+  background: rgba(255, 255, 255, 0.2);
+  transform: scale(1.1);
+}
+
+/* Zoom controls container */
+.zoomControls {
+  position: absolute;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  background: rgba(0, 0, 0, 0.6);
+  border-radius: 24px;
+  backdrop-filter: blur(8px);
+  z-index: 10;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+/* Zoom button */
+.zoomBtn {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.1);
+  border: none;
+  color: white;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+}
+
+.zoomBtn:hover {
+  background: rgba(255, 255, 255, 0.25);
+  transform: scale(1.1);
+}
+
+.zoomBtn:active {
+  transform: scale(0.95);
+}
+
+/* Zoom level indicator */
+.zoomLevel {
+  color: white;
+  font-size: 0.875rem;
+  font-weight: 500;
+  min-width: 48px;
+  text-align: center;
+  font-family:
+    -apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto", sans-serif;
+}
+
+/* Zoomed image */
+.zoomedImage {
+  max-width: 90vw;
+  max-height: 85vh;
+  object-fit: contain;
+  border-radius: 8px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+  transition: transform 0.1s ease;
+  will-change: transform;
+}
+
+/* Instructions hint */
+.zoomHint {
+  position: absolute;
+  top: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 8px 16px;
+  background: rgba(0, 0, 0, 0.5);
+  border-radius: 20px;
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 0.75rem;
+  font-family:
+    -apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto", sans-serif;
+  backdrop-filter: blur(4px);
+  pointer-events: none;
+  opacity: 0;
+  animation: hintFadeInOut 4s ease forwards;
+  white-space: nowrap;
+}
+
+@keyframes hintFadeInOut {
+  0% {
+    opacity: 0;
+    transform: translateX(-50%) translateY(-10px);
+  }
+  15% {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+  }
+  70% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+/* Mobile responsive zoom viewer */
+@media (max-width: 768px) {
+  .zoomCloseBtn {
+    top: 12px;
+    right: 12px;
+    width: 40px;
+    height: 40px;
+  }
+
+  .zoomControls {
+    bottom: calc(16px + env(safe-area-inset-bottom, 0px));
+    padding: 6px 12px;
+    gap: 6px;
+  }
+
+  .zoomBtn {
+    width: 32px;
+    height: 32px;
+  }
+
+  .zoomBtn svg {
+    width: 18px;
+    height: 18px;
+  }
+
+  .zoomLevel {
+    font-size: 0.75rem;
+    min-width: 40px;
+  }
+
+  .zoomedImage {
+    max-width: 100vw;
+    max-height: 80vh;
+    border-radius: 0;
+  }
+
+  .zoomHint {
+    top: auto;
+    bottom: 80px;
+    font-size: 0.6875rem;
+    padding: 6px 12px;
+  }
+}

@@ -96,9 +96,11 @@ function createR2Client(): S3Client {
 /**
  * Compute SHA-256 hash of file content for deduplication
  */
-export async function computeFileHash(file: ArrayBuffer): Promise<string> {
+export async function computeFileHash(
+  file: ArrayBuffer | Buffer,
+): Promise<string> {
   const hash = createHash("sha256");
-  hash.update(Buffer.from(file));
+  hash.update(Buffer.isBuffer(file) ? file : Buffer.from(file));
   return hash.digest("hex");
 }
 
@@ -172,7 +174,7 @@ export interface DuplicateCheckResult {
  * - Content-Type preservation
  */
 export async function uploadToR2(params: {
-  file: ArrayBuffer;
+  file: ArrayBuffer | Buffer;
   businessId: string;
   conversationId: string;
   messageId: string;
@@ -199,14 +201,19 @@ export async function uploadToR2(params: {
     });
 
     console.log(`📤 [R2] Uploading to: ${mediaKey}`);
-    console.log(`📤 [R2] File size: ${file.byteLength} bytes`);
+    console.log(
+      `📤 [R2] File size: ${Buffer.isBuffer(file) ? file.length : file.byteLength} bytes`,
+    );
     console.log(`📤 [R2] Hash: ${mediaHash.substring(0, 16)}...`);
+
+    // Normalize to Buffer for S3 SDK
+    const uploadBuffer = Buffer.isBuffer(file) ? file : Buffer.from(file);
 
     // Upload with CDN cache headers for performance
     const command = new PutObjectCommand({
       Bucket: R2_BUCKET_NAME,
       Key: mediaKey,
-      Body: Buffer.from(file),
+      Body: uploadBuffer,
       ContentType: mimeType,
       // CDN Cache Headers: 1 year, immutable (content-addressed by hash)
       CacheControl: "public, max-age=31536000, immutable",
