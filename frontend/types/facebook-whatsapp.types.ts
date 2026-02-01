@@ -321,6 +321,24 @@ export interface WhatsAppWebhookValue {
       sha256: string;
       caption?: string;
     };
+    video?: {
+      id: string;
+      mime_type: string;
+      sha256: string;
+      caption?: string;
+    };
+    audio?: {
+      id: string;
+      mime_type: string;
+      sha256: string;
+    };
+    document?: {
+      id: string;
+      mime_type: string;
+      sha256: string;
+      filename?: string;
+      caption?: string;
+    };
     // Add other message types as needed
   }>;
   statuses?: Array<{

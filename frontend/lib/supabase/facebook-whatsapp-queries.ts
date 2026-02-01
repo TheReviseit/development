@@ -46,7 +46,7 @@ export async function createFacebookAccount(data: {
 }
 
 export async function getFacebookAccountByUserId(
-  userId: string
+  userId: string,
 ): Promise<ConnectedFacebookAccount | null> {
   const { data, error } = await supabaseAdmin
     .from("connected_facebook_accounts")
@@ -62,7 +62,7 @@ export async function getFacebookAccountByUserId(
 
 export async function updateFacebookAccount(
   id: string,
-  updates: Partial<ConnectedFacebookAccount>
+  updates: Partial<ConnectedFacebookAccount>,
 ): Promise<ConnectedFacebookAccount> {
   const { data, error } = await supabaseAdmin
     .from("connected_facebook_accounts")
@@ -108,7 +108,7 @@ export async function createBusinessManager(data: {
 }
 
 export async function getBusinessManagersByFacebookAccount(
-  facebookAccountId: string
+  facebookAccountId: string,
 ): Promise<ConnectedBusinessManager[]> {
   const { data, error } = await supabaseAdmin
     .from("connected_business_managers")
@@ -122,7 +122,7 @@ export async function getBusinessManagersByFacebookAccount(
 }
 
 export async function getBusinessManagersByUserId(
-  userId: string
+  userId: string,
 ): Promise<ConnectedBusinessManager[]> {
   const { data, error } = await supabaseAdmin
     .from("connected_business_managers")
@@ -160,7 +160,7 @@ export async function createWhatsAppAccount(data: {
 }
 
 export async function getWhatsAppAccountsByBusinessManager(
-  businessManagerId: string
+  businessManagerId: string,
 ): Promise<ConnectedWhatsAppAccount[]> {
   const { data, error } = await supabaseAdmin
     .from("connected_whatsapp_accounts")
@@ -174,7 +174,7 @@ export async function getWhatsAppAccountsByBusinessManager(
 }
 
 export async function getWhatsAppAccountsByUserId(
-  userId: string
+  userId: string,
 ): Promise<ConnectedWhatsAppAccount[]> {
   const { data, error } = await supabaseAdmin
     .from("connected_whatsapp_accounts")
@@ -188,7 +188,7 @@ export async function getWhatsAppAccountsByUserId(
 }
 
 export async function getWhatsAppAccountByWabaId(
-  wabaId: string
+  wabaId: string,
 ): Promise<ConnectedWhatsAppAccount | null> {
   const { data, error } = await supabaseAdmin
     .from("connected_whatsapp_accounts")
@@ -237,7 +237,7 @@ export async function createPhoneNumber(data: {
 }
 
 export async function getPhoneNumbersByWhatsAppAccount(
-  whatsappAccountId: string
+  whatsappAccountId: string,
 ): Promise<ConnectedPhoneNumber[]> {
   const { data, error } = await supabaseAdmin
     .from("connected_phone_numbers")
@@ -251,7 +251,7 @@ export async function getPhoneNumbersByWhatsAppAccount(
 }
 
 export async function getPhoneNumbersByUserId(
-  userId: string
+  userId: string,
 ): Promise<ConnectedPhoneNumber[]> {
   const { data, error } = await supabaseAdmin
     .from("connected_phone_numbers")
@@ -265,7 +265,7 @@ export async function getPhoneNumbersByUserId(
 }
 
 export async function getPrimaryPhoneNumber(
-  userId: string
+  userId: string,
 ): Promise<ConnectedPhoneNumber | null> {
   const { data, error } = await supabaseAdmin
     .from("connected_phone_numbers")
@@ -281,7 +281,7 @@ export async function getPrimaryPhoneNumber(
 }
 
 export async function getPhoneNumberByPhoneNumberId(
-  phoneNumberId: string
+  phoneNumberId: string,
 ): Promise<ConnectedPhoneNumber | null> {
   const { data, error } = await supabaseAdmin
     .from("connected_phone_numbers")
@@ -295,7 +295,7 @@ export async function getPhoneNumberByPhoneNumberId(
 
 export async function updatePhoneNumber(
   id: string,
-  updates: Partial<ConnectedPhoneNumber>
+  updates: Partial<ConnectedPhoneNumber>,
 ): Promise<ConnectedPhoneNumber> {
   const { data, error } = await supabaseAdmin
     .from("connected_phone_numbers")
@@ -324,6 +324,12 @@ export async function createMessage(data: {
   media_id?: string;
   is_ai_generated?: boolean;
   intent_detected?: string;
+  // R2 persistent storage metadata
+  media_key?: string; // R2 object key
+  media_hash?: string; // SHA-256 hash for dedup
+  media_size?: number; // File size in bytes
+  media_mime?: string; // MIME type
+  storage_provider?: string; // "cloudflare_r2"
 }): Promise<WhatsAppMessage> {
   const { data: message, error } = await supabaseAdmin
     .from("whatsapp_messages")
@@ -339,6 +345,12 @@ export async function createMessage(data: {
       media_id: data.media_id,
       is_ai_generated: data.is_ai_generated || false,
       intent_detected: data.intent_detected,
+      // R2 persistent storage metadata
+      media_key: data.media_key,
+      media_hash: data.media_hash,
+      media_size: data.media_size,
+      media_mime: data.media_mime,
+      storage_provider: data.storage_provider,
     })
     .select()
     .single();
@@ -356,7 +368,7 @@ export async function updateMessageStatus(
     failed_at?: string;
     error_code?: string;
     error_message?: string;
-  }
+  },
 ): Promise<WhatsAppMessage> {
   const { data, error } = await supabaseAdmin
     .from("whatsapp_messages")
@@ -372,7 +384,7 @@ export async function updateMessageStatus(
 export async function getMessagesByUserId(
   userId: string,
   limit: number = 100,
-  offset: number = 0
+  offset: number = 0,
 ): Promise<WhatsAppMessage[]> {
   const { data, error } = await supabaseAdmin
     .from("whatsapp_messages")
@@ -386,7 +398,7 @@ export async function getMessagesByUserId(
 }
 
 export async function getMessageById(
-  messageId: string
+  messageId: string,
 ): Promise<WhatsAppMessage | null> {
   const { data, error } = await supabaseAdmin
     .from("whatsapp_messages")
@@ -418,7 +430,7 @@ export async function logWebhookEvent(data: {
 export async function markWebhookProcessed(
   id: string,
   success: boolean,
-  error?: string
+  error?: string,
 ): Promise<void> {
   const { error: updateError } = await supabaseAdmin
     .from("webhook_events_log")
@@ -456,7 +468,7 @@ export async function getUserWhatsAppConnection(userId: string): Promise<{
   }
 
   const businessManagers = await getBusinessManagersByFacebookAccount(
-    facebookAccount.id
+    facebookAccount.id,
   );
   const whatsappAccounts = await getWhatsAppAccountsByUserId(userId);
   const phoneNumbers = await getPhoneNumbersByUserId(userId);

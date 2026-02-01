@@ -19,7 +19,7 @@ import { supabaseAdmin } from "@/lib/supabase/server";
 // Helper to get or create conversation
 async function getOrCreateConversation(
   businessId: string,
-  customerPhone: string
+  customerPhone: string,
 ): Promise<string | null> {
   // Try to find existing conversation
   const { data: existingConv, error: findError } = await supabaseAdmin
@@ -57,7 +57,7 @@ async function getOrCreateConversation(
 // Helper to update conversation stats after sending
 async function updateConversationAfterSend(
   conversationId: string,
-  messagePreview: string
+  messagePreview: string,
 ) {
   try {
     // First get current stats
@@ -97,7 +97,7 @@ export async function POST(request: NextRequest) {
 
     const decodedClaims = await adminAuth.verifySessionCookie(
       sessionCookie,
-      true
+      true,
     );
     const firebaseUID = decodedClaims.uid;
 
@@ -108,23 +108,48 @@ export async function POST(request: NextRequest) {
 
     // Parse request body
     const body = await request.json();
-    const { to, message, phoneNumberId } = body;
+    const {
+      to,
+      message,
+      phoneNumberId,
+      mediaId,
+      mediaType,
+      mediaUrl,
+      filename,
+      // R2 persistent storage metadata
+      mediaKey,
+      mediaHash,
+      mediaSize,
+      mediaMime,
+      storageProvider,
+    } = body;
 
     console.log("📤 Send message request:", {
       to,
       message,
       phoneNumberId,
+      mediaId,
+      mediaType,
       bodyKeys: Object.keys(body),
     });
 
-    if (!to || !message) {
+    // Validate required fields - either message (text) or mediaId (media) is required
+    const isMediaMessage = !!mediaId && !!mediaType;
+    const isTextMessage = !!message;
+
+    if (!to || (!isMediaMessage && !isTextMessage)) {
       console.error("❌ Missing required fields:", {
         to: !!to,
         message: !!message,
+        mediaId: !!mediaId,
+        mediaType: !!mediaType,
       });
       return NextResponse.json(
-        { error: "Missing required fields: to, message" },
-        { status: 400 }
+        {
+          error:
+            "Missing required fields: to, and either message or (mediaId + mediaType)",
+        },
+        { status: 400 },
       );
     }
 
@@ -136,16 +161,15 @@ export async function POST(request: NextRequest) {
           error: "WhatsApp not connected",
           message: "Please connect your WhatsApp Business Account first",
         },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
     // Get phone number to use
     const phoneNumber = phoneNumberId
       ? await (async () => {
-          const { getPhoneNumberByPhoneNumberId } = await import(
-            "@/lib/supabase/facebook-whatsapp-queries"
-          );
+          const { getPhoneNumberByPhoneNumberId } =
+            await import("@/lib/supabase/facebook-whatsapp-queries");
           return getPhoneNumberByPhoneNumberId(phoneNumberId);
         })()
       : await getPrimaryPhoneNumber(user.id);
@@ -156,7 +180,7 @@ export async function POST(request: NextRequest) {
           error: "No phone number available",
           message: "Please connect a WhatsApp Business phone number",
         },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
@@ -164,7 +188,7 @@ export async function POST(request: NextRequest) {
     if (phoneNumber.user_id !== user.id) {
       return NextResponse.json(
         { error: "Unauthorized - phone number belongs to another user" },
-        { status: 403 }
+        { status: 403 },
       );
     }
 
@@ -182,7 +206,7 @@ export async function POST(request: NextRequest) {
           message:
             "This phone number is not active. Please activate it in settings.",
         },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
@@ -197,7 +221,7 @@ export async function POST(request: NextRequest) {
     if (!businessManager) {
       return NextResponse.json(
         { error: "No business account found" },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
@@ -208,35 +232,75 @@ export async function POST(request: NextRequest) {
     if (!conversationId) {
       return NextResponse.json(
         { error: "Failed to create conversation" },
-        { status: 500 }
+        { status: 500 },
       );
     }
 
     // Decrypt access token
     const accessToken = decryptToken(facebookAccount.access_token);
-
-    // Send message via WhatsApp Cloud API
     const graphClient = createGraphAPIClient(accessToken);
-    const response = await graphClient.sendWhatsAppMessage(
-      phoneNumber.phone_number_id,
-      to,
-      message
-    );
+
+    let response;
+    let messageContent: string;
+    let dbMessageType: string;
+
+    if (isMediaMessage) {
+      // Send media message
+      console.log("📷 Sending media message:", { mediaId, mediaType });
+      response = await graphClient.sendMediaMessage(
+        phoneNumber.phone_number_id,
+        to,
+        mediaType as "image" | "video" | "document" | "audio",
+        mediaId,
+        message, // caption for images/videos
+        filename, // filename for documents
+      );
+      messageContent = message || `[${mediaType}]`;
+      dbMessageType = mediaType;
+    } else {
+      // Send text message
+      response = await graphClient.sendWhatsAppMessage(
+        phoneNumber.phone_number_id,
+        to,
+        message,
+      );
+      messageContent = message;
+      dbMessageType = "text";
+    }
 
     // Store message in database using correct schema
+    // IMPORTANT: Use R2 URL (persistent) NOT WhatsApp URL (expires)
+
+    // Debug log what we're about to store
+    console.log("💾 STORING TO DB:", {
+      message_type: dbMessageType,
+      media_url: mediaUrl ? mediaUrl.substring(0, 60) + "..." : "UNDEFINED",
+      media_id: isMediaMessage ? mediaId : "N/A",
+      storage_provider: storageProvider,
+      isMediaMessage,
+    });
+
     const messageRecord = await createMessage({
       conversation_id: conversationId,
       business_id: businessId,
       wamid: response.messages[0].id,
       direction: "outbound",
-      message_type: "text",
-      content: message, // Schema uses 'content' not 'message_body'
+      message_type: dbMessageType,
+      content: messageContent,
       status: "sent",
-      is_ai_generated: false, // User-sent message
+      is_ai_generated: false,
+      media_id: isMediaMessage ? mediaId : undefined,
+      media_url: mediaUrl || undefined, // R2 URL (source of truth)
+      // R2 storage metadata
+      media_key: mediaKey || undefined,
+      media_hash: mediaHash || undefined,
+      media_size: mediaSize || undefined,
+      media_mime: mediaMime || undefined,
+      storage_provider: storageProvider || undefined,
     });
 
     // Update conversation stats
-    await updateConversationAfterSend(conversationId, message);
+    await updateConversationAfterSend(conversationId, messageContent);
 
     return NextResponse.json({
       success: true,
@@ -245,6 +309,7 @@ export async function POST(request: NextRequest) {
         phoneNumberId: phoneNumber.phone_number_id,
         from: phoneNumber.display_phone_number,
         to,
+        messageType: dbMessageType,
       },
     });
   } catch (error: any) {
@@ -261,7 +326,7 @@ export async function POST(request: NextRequest) {
         error: "Failed to send message",
         message: errorMessage,
       },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

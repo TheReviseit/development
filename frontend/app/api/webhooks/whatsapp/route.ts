@@ -22,7 +22,7 @@ import { WhatsAppWebhookPayload } from "@/types/facebook-whatsapp.types";
 function verifyWebhookSignature(
   payload: string,
   signature: string | null,
-  appSecret: string
+  appSecret: string,
 ): boolean {
   if (!signature) return false;
 
@@ -33,7 +33,7 @@ function verifyWebhookSignature(
 
   return crypto.timingSafeEqual(
     Buffer.from(signature),
-    Buffer.from(`sha256=${expectedSignature}`)
+    Buffer.from(`sha256=${expectedSignature}`),
   );
 }
 
@@ -56,7 +56,7 @@ export async function GET(request: NextRequest) {
 
   return NextResponse.json(
     { error: "Forbidden - Invalid verify token" },
-    { status: 403 }
+    { status: 403 },
   );
 }
 
@@ -84,9 +84,8 @@ export async function POST(request: NextRequest) {
     // Log webhook event
     const { data: logEntry } = await (async () => {
       try {
-        const { supabaseAdmin: supabase } = await import(
-          "@/lib/supabase/server"
-        );
+        const { supabaseAdmin: supabase } =
+          await import("@/lib/supabase/server");
         return await supabase
           .from("webhook_events_log")
           .insert({
@@ -124,9 +123,8 @@ export async function POST(request: NextRequest) {
 
           // Get phone number AND associated client with AI configuration
           // This enables multi-tenant routing with client-specific AI processing
-          const { supabaseAdmin: supabase } = await import(
-            "@/lib/supabase/server"
-          );
+          const { supabaseAdmin: supabase } =
+            await import("@/lib/supabase/server");
 
           const { data: phoneNumber, error: phoneError } = await supabase
             .from("connected_phone_numbers")
@@ -139,14 +137,14 @@ export async function POST(request: NextRequest) {
                 business_name,
                 knowledge_base
               )
-            `
+            `,
             )
             .eq("phone_number_id", value.metadata.phone_number_id)
             .single();
 
           if (!phoneNumber || phoneError) {
             console.warn(
-              `Phone number ${value.metadata.phone_number_id} not found in database`
+              `Phone number ${value.metadata.phone_number_id} not found in database`,
             );
             continue;
           }
@@ -155,7 +153,7 @@ export async function POST(request: NextRequest) {
           console.log(
             `📱 [Webhook] Processing message for client: ${
               phoneNumber.user?.business_name || phoneNumber.user_id
-            }`
+            }`,
           );
 
           // Process incoming messages
@@ -163,6 +161,22 @@ export async function POST(request: NextRequest) {
             for (const message of value.messages) {
               try {
                 const { supabaseAdmin } = await import("@/lib/supabase/server");
+
+                // Extract media_id based on message type
+                // WhatsApp sends media IDs in type-specific paths
+                let mediaId: string | undefined;
+                if (message.type === "image" && message.image?.id) {
+                  mediaId = message.image.id;
+                } else if (message.type === "video" && message.video?.id) {
+                  mediaId = message.video.id;
+                } else if (message.type === "audio" && message.audio?.id) {
+                  mediaId = message.audio.id;
+                } else if (
+                  message.type === "document" &&
+                  message.document?.id
+                ) {
+                  mediaId = message.document.id;
+                }
 
                 // Get or create conversation for this contact
                 const contactNumber = message.from;
@@ -206,6 +220,7 @@ export async function POST(request: NextRequest) {
                   direction: "inbound",
                   message_type: message.type,
                   content: message.text?.body ?? undefined,
+                  media_id: mediaId,
                   status: "delivered",
                 });
 
@@ -226,15 +241,15 @@ export async function POST(request: NextRequest) {
 
                 if (status.status === "delivered") {
                   updates.delivered_at = new Date(
-                    parseInt(status.timestamp) * 1000
+                    parseInt(status.timestamp) * 1000,
                   ).toISOString();
                 } else if (status.status === "read") {
                   updates.read_at = new Date(
-                    parseInt(status.timestamp) * 1000
+                    parseInt(status.timestamp) * 1000,
                   ).toISOString();
                 } else if (status.status === "failed") {
                   updates.failed_at = new Date(
-                    parseInt(status.timestamp) * 1000
+                    parseInt(status.timestamp) * 1000,
                   ).toISOString();
 
                   if (status.errors && status.errors.length > 0) {
@@ -246,7 +261,7 @@ export async function POST(request: NextRequest) {
                 await updateMessageStatus(status.id, updates);
 
                 console.log(
-                  `Updated message status: ${status.id} -> ${status.status}`
+                  `Updated message status: ${status.id} -> ${status.status}`,
                 );
               } catch (error) {
                 console.error("Error updating message status:", error);

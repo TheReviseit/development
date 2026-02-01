@@ -63,6 +63,243 @@ interface ContactInfo {
   firstMessageAt?: string;
 }
 
+// GLOBAL request cache - prevents duplicate fetches across component remounts
+// This is singleton-level caching that survives component rerenders
+const mediaRequestCache = new Set<string>();
+const mediaUrlCache = new Map<string, string>(); // messageId -> mediaUrl
+
+// Lazy loading image component for inbound media
+// This fetches media from WhatsApp and uploads to R2 if no URL is available
+const LazyImage = memo(function LazyImage({
+  mediaId,
+  mediaUrl,
+  messageId,
+  conversationId,
+  time,
+  sender,
+}: {
+  mediaId?: string;
+  mediaUrl?: string;
+  messageId: string;
+  conversationId: string;
+  time: string;
+  sender: "contact" | "user";
+}) {
+  // Check global cache first
+  const cachedUrl = mediaUrlCache.get(messageId);
+  const [url, setUrl] = useState<string | null>(mediaUrl || cachedUrl || null);
+  const [loading, setLoading] = useState(!mediaUrl && !cachedUrl && !!mediaId);
+  const [error, setError] = useState(false);
+
+  useEffect(() => {
+    // If we already have a URL, skip
+    if (url || !mediaId || !messageId || !conversationId) {
+      return;
+    }
+
+    // Check if this messageId is already being fetched (global dedup)
+    if (mediaRequestCache.has(messageId)) {
+      console.log(
+        `⏳ [LazyImage] Request already in progress for ${messageId}`,
+      );
+      // Poll for result every 500ms
+      const pollInterval = setInterval(() => {
+        const cachedResult = mediaUrlCache.get(messageId);
+        if (cachedResult) {
+          setUrl(cachedResult);
+          setLoading(false);
+          clearInterval(pollInterval);
+        }
+      }, 500);
+
+      // Clean up after 30 seconds
+      setTimeout(() => {
+        clearInterval(pollInterval);
+        if (!mediaUrlCache.has(messageId)) {
+          setError(true);
+          setLoading(false);
+        }
+      }, 30000);
+
+      return () => clearInterval(pollInterval);
+    }
+
+    // Mark as in-progress in global cache
+    mediaRequestCache.add(messageId);
+    setLoading(true);
+
+    // Call the download-media API to fetch from WhatsApp and store in R2
+    const fetchMedia = async () => {
+      try {
+        const res = await fetch("/api/whatsapp/download-media", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ mediaId, messageId, conversationId }),
+        });
+
+        const data = await res.json();
+
+        // Handle 202 (in progress) - wait and retry
+        if (res.status === 202 && data.retry) {
+          console.log(`⏳ [LazyImage] Server says in progress, will retry...`);
+          await new Promise((r) => setTimeout(r, 2000));
+          // Retry once
+          const retryRes = await fetch("/api/whatsapp/download-media", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ mediaId, messageId, conversationId }),
+          });
+          const retryData = await retryRes.json();
+          if (retryData.success && retryData.data?.mediaUrl) {
+            mediaUrlCache.set(messageId, retryData.data.mediaUrl);
+            setUrl(retryData.data.mediaUrl);
+            return;
+          }
+        }
+
+        if (data.success && data.data?.mediaUrl) {
+          mediaUrlCache.set(messageId, data.data.mediaUrl);
+          setUrl(data.data.mediaUrl);
+        } else {
+          setError(true);
+        }
+      } catch (err) {
+        console.error("Error fetching inbound media:", err);
+        setError(true);
+      } finally {
+        setLoading(false);
+        // Note: We keep messageId in cache to prevent re-fetches even after success
+      }
+    };
+
+    fetchMedia();
+  }, [mediaId, messageId, conversationId, url]);
+
+  if (loading) {
+    return (
+      <div style={{ position: "relative" }}>
+        <div
+          style={{
+            width: "200px",
+            height: "200px",
+            borderRadius: "8px",
+            background: "rgba(0, 0, 0, 0.3)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+          }}
+        >
+          <div
+            style={{
+              width: "32px",
+              height: "32px",
+              border: "3px solid rgba(255, 255, 255, 0.3)",
+              borderTopColor: "white",
+              borderRadius: "50%",
+              animation: "spin 1s linear infinite",
+            }}
+          />
+        </div>
+        <div
+          style={{
+            position: "absolute",
+            bottom: "6px",
+            right: "6px",
+            background: "rgba(0, 0, 0, 0.5)",
+            borderRadius: "4px",
+            padding: "2px 6px",
+            display: "flex",
+            alignItems: "center",
+            gap: "4px",
+          }}
+        >
+          <span style={{ fontSize: "0.6875rem", color: "white" }}>{time}</span>
+        </div>
+      </div>
+    );
+  }
+
+  if (error || !url) {
+    return (
+      <div style={{ position: "relative" }}>
+        <div
+          style={{
+            width: "200px",
+            height: "150px",
+            borderRadius: "8px",
+            background: "rgba(0, 0, 0, 0.3)",
+            display: "flex",
+            flexDirection: "column",
+            alignItems: "center",
+            justifyContent: "center",
+            color: "rgba(255, 255, 255, 0.7)",
+          }}
+        >
+          <svg
+            width="48"
+            height="48"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1"
+          >
+            <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
+            <circle cx="8.5" cy="8.5" r="1.5" />
+            <polyline points="21 15 16 10 5 21" />
+          </svg>
+          <span style={{ fontSize: "0.75rem", marginTop: "0.5rem" }}>
+            Image unavailable
+          </span>
+        </div>
+        <div
+          style={{
+            position: "absolute",
+            bottom: "6px",
+            right: "6px",
+            background: "rgba(0, 0, 0, 0.5)",
+            borderRadius: "4px",
+            padding: "2px 6px",
+          }}
+        >
+          <span style={{ fontSize: "0.6875rem", color: "white" }}>{time}</span>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ position: "relative" }}>
+      <img
+        src={url}
+        alt="Image"
+        style={{
+          maxWidth: "280px",
+          borderRadius: "8px",
+          display: "block",
+        }}
+      />
+      <div
+        style={{
+          position: "absolute",
+          bottom: "6px",
+          right: "6px",
+          background: "rgba(0, 0, 0, 0.5)",
+          borderRadius: "4px",
+          padding: "2px 6px",
+          display: "flex",
+          alignItems: "center",
+          gap: "4px",
+        }}
+      >
+        <span style={{ fontSize: "0.6875rem", color: "white" }}>{time}</span>
+        {sender === "user" && (
+          <span style={{ fontSize: "0.75rem", color: "#53bdeb" }}>✓✓</span>
+        )}
+      </div>
+    </div>
+  );
+});
+
 // Helper to format time in IST
 function formatTime(dateString: string): string {
   const date = new Date(dateString);
@@ -139,12 +376,16 @@ function getAvatarColor(name: string): string {
 interface MessageBubbleProps {
   msg: Message;
   styles: Record<string, string>;
+  conversationId: string;
 }
 
 const MessageBubble = memo(function MessageBubble({
   msg,
   styles,
+  conversationId,
 }: MessageBubbleProps) {
+  const isImageMessage = msg.type === "image";
+
   return (
     <div
       className={`${styles.messageWrapper} ${
@@ -152,7 +393,10 @@ const MessageBubble = memo(function MessageBubble({
       }`}
       style={{ marginBottom: "0.75rem" }}
     >
-      <div className={styles.messageBubble}>
+      <div
+        className={isImageMessage ? undefined : styles.messageBubble}
+        style={isImageMessage ? { padding: 0 } : undefined}
+      >
         {msg.type === "text" && (
           <p className={styles.messageText}>{msg.content}</p>
         )}
@@ -174,16 +418,55 @@ const MessageBubble = memo(function MessageBubble({
           </div>
         )}
         {msg.type === "image" && (
+          <LazyImage
+            mediaId={msg.mediaId}
+            mediaUrl={msg.mediaUrl}
+            messageId={msg.id}
+            conversationId={conversationId}
+            time={msg.time}
+            sender={msg.sender}
+          />
+        )}
+        {(msg.type === "document" || msg.type === "video") && (
           <div className={styles.imageMessage}>
-            {msg.mediaUrl ? (
-              <img
+            {msg.type === "video" && msg.mediaUrl ? (
+              <video
                 src={msg.mediaUrl}
-                alt="Image"
+                controls
                 style={{
                   maxWidth: "200px",
                   borderRadius: "12px",
                 }}
               />
+            ) : msg.type === "document" && msg.mediaUrl ? (
+              <a
+                href={msg.mediaUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "8px",
+                  padding: "8px 12px",
+                  background: "rgba(255,255,255,0.1)",
+                  borderRadius: "8px",
+                  textDecoration: "none",
+                  color: "inherit",
+                }}
+              >
+                <svg
+                  width="24"
+                  height="24"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1"
+                >
+                  <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                  <polyline points="14 2 14 8 20 8" />
+                </svg>
+                <span style={{ fontSize: "0.85rem" }}>Download Document</span>
+              </a>
             ) : (
               <div className={styles.imagePlaceholder}>
                 <svg
@@ -194,114 +477,99 @@ const MessageBubble = memo(function MessageBubble({
                   stroke="currentColor"
                   strokeWidth="1"
                 >
-                  <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
-                  <circle cx="8.5" cy="8.5" r="1.5" />
-                  <polyline points="21 15 16 10 5 21" />
+                  <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                  <polyline points="14 2 14 8 20 8" />
                 </svg>
+                <span
+                  style={{
+                    fontSize: "0.75rem",
+                    marginTop: "0.5rem",
+                  }}
+                >
+                  {msg.type === "video" ? "Video" : "Document"}
+                </span>
               </div>
             )}
           </div>
         )}
-        {(msg.type === "document" || msg.type === "video") && (
-          <div className={styles.imageMessage}>
-            <div className={styles.imagePlaceholder}>
-              <svg
-                width="48"
-                height="48"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="1"
-              >
-                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-                <polyline points="14 2 14 8 20 8" />
-              </svg>
+        {/* Hide timestamp for image messages - it's overlaid on the image */}
+        {!isImageMessage && (
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: "0.35rem",
+              justifyContent: "flex-end",
+            }}
+          >
+            <span className={styles.messageTime}>{msg.time}</span>
+            {msg.sender === "user" && (
               <span
                 style={{
-                  fontSize: "0.75rem",
-                  marginTop: "0.5rem",
+                  display: "inline-flex",
+                  alignItems: "center",
                 }}
               >
-                {msg.type === "video" ? "Video" : "Document"}
+                {msg.status === "sending" ? (
+                  <svg width="16" height="11" viewBox="0 0 16 11" fill="none">
+                    <circle
+                      cx="8"
+                      cy="5.5"
+                      r="4"
+                      stroke="rgba(255,255,255,0.5)"
+                      strokeWidth="1.5"
+                      fill="none"
+                    />
+                  </svg>
+                ) : msg.status === "sent" ? (
+                  <svg width="16" height="11" viewBox="0 0 16 11" fill="none">
+                    <path
+                      d="M4 5.5L7 8.5L12 2.5"
+                      stroke="rgba(255,255,255,0.5)"
+                      strokeWidth="1.5"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    />
+                  </svg>
+                ) : msg.status === "delivered" ? (
+                  <svg width="18" height="11" viewBox="0 0 18 11" fill="none">
+                    <path
+                      d="M1 5.5L4 8.5L9 2.5"
+                      stroke="rgba(255,255,255,0.5)"
+                      strokeWidth="1.5"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    />
+                    <path
+                      d="M6 5.5L9 8.5L14 2.5"
+                      stroke="rgba(255,255,255,0.5)"
+                      strokeWidth="1.5"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    />
+                  </svg>
+                ) : msg.status === "read" ? (
+                  <svg width="18" height="11" viewBox="0 0 18 11" fill="none">
+                    <path
+                      d="M1 5.5L4 8.5L9 2.5"
+                      stroke="#53bdeb"
+                      strokeWidth="1.5"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    />
+                    <path
+                      d="M6 5.5L9 8.5L14 2.5"
+                      stroke="#53bdeb"
+                      strokeWidth="1.5"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    />
+                  </svg>
+                ) : null}
               </span>
-            </div>
+            )}
           </div>
         )}
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: "0.35rem",
-            justifyContent: "flex-end",
-          }}
-        >
-          <span className={styles.messageTime}>{msg.time}</span>
-          {msg.sender === "user" && (
-            <span
-              style={{
-                display: "inline-flex",
-                alignItems: "center",
-              }}
-            >
-              {msg.status === "sending" ? (
-                <svg width="16" height="11" viewBox="0 0 16 11" fill="none">
-                  <circle
-                    cx="8"
-                    cy="5.5"
-                    r="4"
-                    stroke="rgba(255,255,255,0.5)"
-                    strokeWidth="1.5"
-                    fill="none"
-                  />
-                </svg>
-              ) : msg.status === "sent" ? (
-                <svg width="16" height="11" viewBox="0 0 16 11" fill="none">
-                  <path
-                    d="M4 5.5L7 8.5L12 2.5"
-                    stroke="rgba(255,255,255,0.5)"
-                    strokeWidth="1.5"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  />
-                </svg>
-              ) : msg.status === "delivered" ? (
-                <svg width="18" height="11" viewBox="0 0 18 11" fill="none">
-                  <path
-                    d="M1 5.5L4 8.5L9 2.5"
-                    stroke="rgba(255,255,255,0.5)"
-                    strokeWidth="1.5"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  />
-                  <path
-                    d="M6 5.5L9 8.5L14 2.5"
-                    stroke="rgba(255,255,255,0.5)"
-                    strokeWidth="1.5"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  />
-                </svg>
-              ) : msg.status === "read" ? (
-                <svg width="18" height="11" viewBox="0 0 18 11" fill="none">
-                  <path
-                    d="M1 5.5L4 8.5L9 2.5"
-                    stroke="#53bdeb"
-                    strokeWidth="1.5"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  />
-                  <path
-                    d="M6 5.5L9 8.5L14 2.5"
-                    stroke="#53bdeb"
-                    strokeWidth="1.5"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  />
-                </svg>
-              ) : null}
-            </span>
-          )}
-        </div>
       </div>
     </div>
   );
@@ -339,13 +607,28 @@ export default function MessagesView() {
   const [showMobileChat, setShowMobileChat] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
   const [showMoreMenu, setShowMoreMenu] = useState(false);
+  // Media upload states
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [mediaPreviewUrl, setMediaPreviewUrl] = useState<string | null>(null);
+  const [uploading, setUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const moreMenuRef = useRef<HTMLDivElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const messagesContainerRef = useRef<HTMLDivElement>(null);
   const selectedConversationRef = useRef<Conversation | null>(null);
   const conversationsRef = useRef<Conversation[]>([]);
   const messagesRef = useRef<Message[]>([]);
   // Track previous conversation ID to avoid fetching on object updates
   const prevSelectedConversationIdRef = useRef<string | null>(null);
+  // Track if this is the initial load to control scroll behavior
+  const isInitialLoadRef = useRef(true);
+  // Track if user is scrolled near bottom
+  const isNearBottomRef = useRef(true);
+
+  // Infinite scroll pagination state
+  const [hasMore, setHasMore] = useState(true);
+  const [loadingOlder, setLoadingOlder] = useState(false);
+  const oldestCursorRef = useRef<string | null>(null);
 
   // Notification hooks
   const { playSound, showNotification, permissionStatus, requestPermission } =
@@ -375,10 +658,10 @@ export default function MessagesView() {
           if (conversationId) {
             console.log(
               "🖱️ Notification click detected via postMessage:",
-              conversationId
+              conversationId,
             );
             const conv = conversationsRef.current.find(
-              (c) => c.id === conversationId
+              (c) => c.id === conversationId,
             );
             if (conv) {
               setSelectedConversation(conv);
@@ -434,7 +717,7 @@ export default function MessagesView() {
       setError(null);
       const response = await fetch(
         `/api/whatsapp/conversations?filter=${filter}`,
-        { cache: "no-store" }
+        { cache: "no-store" },
       );
       const data = await response.json();
 
@@ -463,15 +746,24 @@ export default function MessagesView() {
       setMessagesLoading(true);
       const response = await fetch(
         `/api/whatsapp/messages?contactPhone=${encodeURIComponent(
-          contactPhone
+          contactPhone,
         )}`,
-        { cache: "no-store" }
+        { cache: "no-store" },
       );
       const data = await response.json();
 
       if (data.success) {
-        setMessages(data.data.messages);
+        // Normalize messages to ensure type field is set correctly
+        const normalizedMessages = data.data.messages.map((msg: any) => ({
+          ...msg,
+          type: msg.type || "text", // Default to text if type is missing
+        }));
+        setMessages(normalizedMessages);
         setContactInfo(data.data.contact);
+
+        // Set pagination state
+        setHasMore(data.data.hasMore ?? false);
+        oldestCursorRef.current = data.data.oldestCursor ?? null;
       } else {
         console.error("Failed to load messages:", data.error);
       }
@@ -482,6 +774,62 @@ export default function MessagesView() {
     }
   }, []);
 
+  // Load older messages when user scrolls up (infinite scroll)
+  const loadOlderMessages = useCallback(async () => {
+    if (
+      !hasMore ||
+      loadingOlder ||
+      !oldestCursorRef.current ||
+      !selectedConversation
+    )
+      return;
+
+    setLoadingOlder(true);
+    const container = messagesContainerRef.current;
+    const prevScrollHeight = container?.scrollHeight || 0;
+
+    try {
+      const response = await fetch(
+        `/api/whatsapp/messages?contactPhone=${encodeURIComponent(
+          selectedConversation.phone,
+        )}&before=${encodeURIComponent(oldestCursorRef.current)}`,
+        { cache: "no-store" },
+      );
+      const data = await response.json();
+
+      if (data.success) {
+        const normalizedMessages = data.data.messages.map((msg: any) => ({
+          ...msg,
+          type: msg.type || "text",
+        }));
+
+        // Prepend older messages (dedupe by id)
+        setMessages((prev) => {
+          const existingIds = new Set(prev.map((m) => m.id));
+          const newMessages = normalizedMessages.filter(
+            (m: Message) => !existingIds.has(m.id),
+          );
+          return [...newMessages, ...prev];
+        });
+
+        // Preserve scroll position after prepending
+        requestAnimationFrame(() => {
+          if (container) {
+            container.scrollTop = container.scrollHeight - prevScrollHeight;
+          }
+        });
+
+        // Update pagination state
+        setHasMore(data.data.hasMore ?? false);
+        oldestCursorRef.current = data.data.oldestCursor ?? null;
+      }
+    } catch (err) {
+      console.error("Error loading older messages:", err);
+    } finally {
+      setLoadingOlder(false);
+    }
+  }, [hasMore, loadingOlder, selectedConversation]);
+
   // Only fetch messages when the conversation ID changes, not when the object updates
   useEffect(() => {
     const currentId = selectedConversation?.id || null;
@@ -490,15 +838,52 @@ export default function MessagesView() {
     // Only fetch if the conversation ID actually changed
     if (currentId && currentId !== previousId && selectedConversation) {
       prevSelectedConversationIdRef.current = currentId;
+
+      // Reset pagination state for new conversation
+      setHasMore(true);
+      oldestCursorRef.current = null;
+
       fetchMessages(selectedConversation.phone);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
+    // Reset initial load flag when conversation changes
+    isInitialLoadRef.current = true;
   }, [selectedConversation?.id]);
 
-  // Scroll to bottom when messages change
+  // Scroll to bottom only on initial load or when user sends a message
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    if (messages.length === 0) return;
+
+    // Only auto-scroll on initial load OR if user is near bottom
+    if (isInitialLoadRef.current) {
+      // Use "auto" for instant scroll on initial load
+      messagesEndRef.current?.scrollIntoView({ behavior: "auto" });
+      isInitialLoadRef.current = false;
+    } else if (isNearBottomRef.current) {
+      // Smooth scroll for new messages when user is at bottom
+      messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    }
   }, [messages]);
+
+  // Infinite scroll: load older messages when user scrolls near top
+  useEffect(() => {
+    const container = messagesContainerRef.current;
+    if (!container) return;
+
+    const handleScroll = () => {
+      // Track if user is near bottom (for smart auto-scroll on new messages)
+      const { scrollTop, scrollHeight, clientHeight } = container;
+      isNearBottomRef.current = scrollHeight - scrollTop - clientHeight < 100;
+
+      // Trigger load older messages when near top
+      if (scrollTop < 200 && hasMore && !loadingOlder) {
+        loadOlderMessages();
+      }
+    };
+
+    container.addEventListener("scroll", handleScroll);
+    return () => container.removeEventListener("scroll", handleScroll);
+  }, [hasMore, loadingOlder, loadOlderMessages]);
 
   // Real-time subscription to whatsapp_messages and whatsapp_conversations tables
   useEffect(() => {
@@ -518,7 +903,7 @@ export default function MessagesView() {
           console.log(
             "📨 Realtime message update:",
             payload.eventType,
-            payload.new
+            payload.new,
           );
 
           const newMsg = payload.new as any;
@@ -559,7 +944,7 @@ export default function MessagesView() {
             if (newMsg.direction === "inbound") {
               // Find the conversation to get sender name
               const senderConv = conversationsRef.current.find(
-                (c) => c.id === conversationId
+                (c) => c.id === conversationId,
               );
               const senderName =
                 senderConv?.name ||
@@ -605,11 +990,11 @@ export default function MessagesView() {
               prev.map((msg) =>
                 msg.messageId === newMsg.wamid
                   ? { ...msg, status: newMsg.status }
-                  : msg
-              )
+                  : msg,
+              ),
             );
           }
-        }
+        },
       )
       .subscribe((status) => {
         console.log("🔌 Messages realtime subscription status:", status);
@@ -629,7 +1014,7 @@ export default function MessagesView() {
           console.log(
             "📋 Realtime conversation update:",
             payload.eventType,
-            payload.new
+            payload.new,
           );
 
           const updatedConv = payload.new as any;
@@ -645,7 +1030,7 @@ export default function MessagesView() {
               phone: updatedConv.customer_phone,
               lastMessage: updatedConv.last_message_preview || "",
               time: formatRelativeTime(
-                updatedConv.last_message_at || updatedConv.created_at
+                updatedConv.last_message_at || updatedConv.created_at,
               ),
               timestamp: updatedConv.last_message_at || updatedConv.created_at,
               unread: updatedConv.unread_count || 0,
@@ -676,7 +1061,7 @@ export default function MessagesView() {
                   updatedConv.last_message_preview ||
                   updated[index].lastMessage,
                 time: formatRelativeTime(
-                  updatedConv.last_message_at || updated[index].timestamp
+                  updatedConv.last_message_at || updated[index].timestamp,
                 ),
                 timestamp:
                   updatedConv.last_message_at || updated[index].timestamp,
@@ -711,11 +1096,11 @@ export default function MessagesView() {
                       totalMessages:
                         updatedConv.total_messages ?? prev.totalMessages,
                     }
-                  : prev
+                  : prev,
               );
             }
           }
-        }
+        },
       )
       .subscribe((status) => {
         console.log("🔌 Conversations realtime subscription status:", status);
@@ -779,13 +1164,13 @@ export default function MessagesView() {
                   messageId: data.data.messageId,
                   status: "sent",
                 }
-              : msg
-          )
+              : msg,
+          ),
         );
       } else {
         // Remove optimistic message on failure
         setMessages((prev) =>
-          prev.filter((msg) => msg.id !== optimisticMessage.id)
+          prev.filter((msg) => msg.id !== optimisticMessage.id),
         );
         console.error("Send message failed:", data);
         alert(data.message || data.error || "Failed to send message");
@@ -793,7 +1178,7 @@ export default function MessagesView() {
     } catch (err) {
       console.error("Error sending message:", err);
       setMessages((prev) =>
-        prev.filter((msg) => msg.id !== optimisticMessage.id)
+        prev.filter((msg) => msg.id !== optimisticMessage.id),
       );
       alert("Failed to send message. Please try again.");
     } finally {
@@ -809,13 +1194,207 @@ export default function MessagesView() {
     }
   };
 
+  // Get media type from file MIME type
+  const getMediaTypeFromFile = (
+    file: File,
+  ): "image" | "video" | "document" | "audio" | null => {
+    if (file.type.startsWith("image/")) return "image";
+    if (file.type.startsWith("video/")) return "video";
+    if (file.type.startsWith("audio/")) return "audio";
+    if (
+      file.type.includes("pdf") ||
+      file.type.includes("document") ||
+      file.type.includes("spreadsheet") ||
+      file.type.includes("presentation") ||
+      file.type.startsWith("text/")
+    )
+      return "document";
+    return null;
+  };
+
+  // Handle file selection
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const mediaType = getMediaTypeFromFile(file);
+    if (!mediaType) {
+      alert(
+        "Unsupported file type. Supported: images (JPEG, PNG, WebP), videos (MP4), audio, and documents (PDF, Word, Excel).",
+      );
+      return;
+    }
+
+    // Check file size limits
+    const sizeLimits: Record<string, number> = {
+      image: 5 * 1024 * 1024,
+      video: 16 * 1024 * 1024,
+      audio: 16 * 1024 * 1024,
+      document: 100 * 1024 * 1024,
+    };
+
+    if (file.size > sizeLimits[mediaType]) {
+      const maxMB = sizeLimits[mediaType] / (1024 * 1024);
+      alert(`File too large. ${mediaType} files must be under ${maxMB} MB.`);
+      return;
+    }
+
+    setSelectedFile(file);
+    if (mediaType === "image" || mediaType === "video") {
+      setMediaPreviewUrl(URL.createObjectURL(file));
+    }
+  };
+
+  // Cancel media selection
+  const handleCancelMedia = () => {
+    setSelectedFile(null);
+    if (mediaPreviewUrl) {
+      URL.revokeObjectURL(mediaPreviewUrl);
+      setMediaPreviewUrl(null);
+    }
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
+    }
+  };
+
+  // Handle sending media
+  const handleSendMedia = async () => {
+    if (!selectedFile || !selectedConversation || uploading) return;
+
+    const mediaType = getMediaTypeFromFile(selectedFile);
+    if (!mediaType) return;
+
+    setUploading(true);
+    const caption = messageInput.trim();
+    setMessageInput("");
+
+    // Ensure scroll to bottom when sending
+    isNearBottomRef.current = true;
+
+    // Create optimistic message with local preview
+    const tempId = `temp-${Date.now()}`;
+    const optimisticMessage: Message = {
+      id: tempId,
+      messageId: tempId,
+      sender: "user",
+      content: caption || `[${mediaType}]`,
+      time: new Date()
+        .toLocaleTimeString("en-IN", {
+          hour: "numeric",
+          minute: "2-digit",
+          hour12: true,
+          timeZone: "Asia/Kolkata",
+        })
+        .toLowerCase(),
+      timestamp: new Date().toISOString(),
+      type: mediaType,
+      status: "sending",
+      mediaUrl: mediaPreviewUrl || undefined, // Local preview initially
+    };
+    setMessages((prev) => [...prev, optimisticMessage]);
+
+    try {
+      // Step 1: Upload media to R2 + WhatsApp
+      // Include conversationId for deterministic R2 path
+      const uploadFormData = new FormData();
+      uploadFormData.append("file", selectedFile);
+      uploadFormData.append("conversationId", selectedConversation.id);
+
+      const uploadResponse = await fetch("/api/whatsapp/upload-media", {
+        method: "POST",
+        body: uploadFormData,
+      });
+
+      const uploadData = await uploadResponse.json();
+
+      if (!uploadData.success) {
+        throw new Error(uploadData.message || "Failed to upload media");
+      }
+
+      console.log("📤 Media uploaded to R2:", uploadData.data);
+
+      // Update optimistic message with R2 URL (persistent)
+      // This URL will survive page refresh!
+      if (uploadData.data.mediaUrl) {
+        setMessages((prev) =>
+          prev.map((msg) =>
+            msg.id === tempId
+              ? { ...msg, mediaUrl: uploadData.data.mediaUrl }
+              : msg,
+          ),
+        );
+      }
+
+      // Step 2: Send message with media
+      // Pass both WhatsApp media_id (for delivery) and R2 metadata (for storage)
+      const sendResponse = await fetch("/api/whatsapp/send-message", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          to: selectedConversation.phone,
+          message: caption,
+          // WhatsApp delivery
+          mediaId: uploadData.data.whatsappMediaId || uploadData.data.mediaId,
+          mediaType: uploadData.data.mediaType,
+          filename: selectedFile.name,
+          // R2 persistent storage (source of truth)
+          mediaUrl: uploadData.data.mediaUrl,
+          mediaKey: uploadData.data.mediaKey,
+          mediaHash: uploadData.data.mediaHash,
+          mediaSize: uploadData.data.mediaSize,
+          mediaMime: uploadData.data.mediaMime,
+          storageProvider: uploadData.data.storageProvider,
+        }),
+      });
+
+      const sendData = await sendResponse.json();
+
+      if (sendData.success) {
+        setMessages((prev) =>
+          prev.map((msg) =>
+            msg.id === tempId
+              ? {
+                  ...msg,
+                  id: sendData.data.messageId,
+                  messageId: sendData.data.messageId,
+                  status: "sent",
+                  // Keep R2 URL for persistent display
+                  mediaUrl: uploadData.data.mediaUrl || msg.mediaUrl,
+                }
+              : msg,
+          ),
+        );
+      } else {
+        throw new Error(sendData.message || "Failed to send media");
+      }
+    } catch (err: any) {
+      console.error("Error sending media:", err);
+      setMessages((prev) =>
+        prev.filter((msg) => msg.id !== optimisticMessage.id),
+      );
+      alert(err.message || "Failed to send media. Please try again.");
+    } finally {
+      setUploading(false);
+      handleCancelMedia();
+    }
+  };
+
+  // Track scroll position to determine if user is near bottom
+  const handleScroll = useCallback((e: React.UIEvent<HTMLDivElement>) => {
+    const target = e.target as HTMLDivElement;
+    const threshold = 100; // pixels from bottom
+    const isNearBottom =
+      target.scrollHeight - target.scrollTop - target.clientHeight < threshold;
+    isNearBottomRef.current = isNearBottom;
+  }, []);
+
   // Mark conversation as read
   const handleMarkAsRead = async () => {
     if (!selectedConversation) return;
     setConversations((prev) =>
       prev.map((conv) =>
-        conv.id === selectedConversation.id ? { ...conv, unread: 0 } : conv
-      )
+        conv.id === selectedConversation.id ? { ...conv, unread: 0 } : conv,
+      ),
     );
   };
 
@@ -836,9 +1415,9 @@ export default function MessagesView() {
         (conv) =>
           conv.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
           conv.phone.includes(searchQuery) ||
-          conv.lastMessage.toLowerCase().includes(searchQuery.toLowerCase())
+          conv.lastMessage.toLowerCase().includes(searchQuery.toLowerCase()),
       ),
-    [conversations, searchQuery]
+    [conversations, searchQuery],
   );
 
   // Group messages by date - memoized to prevent recalculation on every render
@@ -1211,14 +1790,14 @@ export default function MessagesView() {
                           );
                           // Update local state optimistically
                           setSelectedConversation((prev) =>
-                            prev ? { ...prev, aiEnabled: newState } : null
+                            prev ? { ...prev, aiEnabled: newState } : null,
                           );
                           setConversations((prev) =>
                             prev.map((c) =>
                               c.id === selectedConversation?.id
                                 ? { ...c, aiEnabled: newState }
-                                : c
-                            )
+                                : c,
+                            ),
                           );
                           // TODO: Call API to persist this setting
                           try {
@@ -1228,7 +1807,7 @@ export default function MessagesView() {
                                 method: "POST",
                                 headers: { "Content-Type": "application/json" },
                                 body: JSON.stringify({ aiEnabled: newState }),
-                              }
+                              },
                             );
                           } catch (err) {
                             console.error("Failed to toggle AI:", err);
@@ -1265,7 +1844,7 @@ export default function MessagesView() {
                             width: "40px",
                             height: "22px",
                             backgroundColor:
-                              selectedConversation?.aiEnabled ?? true
+                              (selectedConversation?.aiEnabled ?? true)
                                 ? "#ffffff"
                                 : "#555",
                             borderRadius: "11px",
@@ -1278,14 +1857,14 @@ export default function MessagesView() {
                               width: "18px",
                               height: "18px",
                               backgroundColor:
-                                selectedConversation?.aiEnabled ?? true
+                                (selectedConversation?.aiEnabled ?? true)
                                   ? "#000"
                                   : "#fff",
                               borderRadius: "50%",
                               position: "absolute",
                               top: "2px",
                               left:
-                                selectedConversation?.aiEnabled ?? true
+                                (selectedConversation?.aiEnabled ?? true)
                                   ? "20px"
                                   : "2px",
                               transition:
@@ -1382,7 +1961,7 @@ export default function MessagesView() {
                         onClick={() => {
                           if (
                             confirm(
-                              "Are you sure you want to block this contact?"
+                              "Are you sure you want to block this contact?",
                             )
                           ) {
                             alert("Block feature coming soon!");
@@ -1428,13 +2007,20 @@ export default function MessagesView() {
               </div>
             </div>
 
-            <div className={styles.chatMessages}>
+            <div
+              className={styles.chatMessages}
+              onScroll={handleScroll}
+              ref={messagesContainerRef}
+            >
               {messagesLoading ? (
                 <div
                   style={{
-                    textAlign: "center",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    height: "100%",
                     padding: "2rem",
-                    color: "var(--dash-text-secondary)",
+                    color: "#000000",
                   }}
                 >
                   Loading messages...
@@ -1454,7 +2040,12 @@ export default function MessagesView() {
                   <div key={group.date}>
                     <DateSeparator date={group.date} styles={styles} />
                     {group.messages.map((msg) => (
-                      <MessageBubble key={msg.id} msg={msg} styles={styles} />
+                      <MessageBubble
+                        key={msg.id}
+                        msg={msg}
+                        styles={styles}
+                        conversationId={selectedConversation.id}
+                      />
                     ))}
                   </div>
                 ))
@@ -1463,6 +2054,232 @@ export default function MessagesView() {
             </div>
 
             <div className={styles.chatInput}>
+              {/* Hidden file input */}
+              <input
+                type="file"
+                ref={fileInputRef}
+                onChange={handleFileSelect}
+                accept="image/jpeg,image/png,image/webp,video/mp4,video/3gpp,audio/*,application/pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,text/plain"
+                style={{ display: "none" }}
+              />
+
+              {/* WhatsApp-style Media Preview - Inside chat area */}
+              {selectedFile && (
+                <div
+                  className={styles.mediaPreviewModal}
+                  style={{
+                    position: "absolute",
+                    inset: 0,
+                    background: "rgba(0, 0, 0, 0.92)",
+                    zIndex: 50,
+                    display: "flex",
+                    flexDirection: "column",
+                  }}
+                >
+                  {/* Modal Header */}
+                  <div
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "space-between",
+                      padding: "1rem 1.5rem",
+                      borderBottom: "1px solid rgba(255,255,255,0.1)",
+                    }}
+                  >
+                    <button
+                      onClick={handleCancelMedia}
+                      style={{
+                        background: "transparent",
+                        border: "none",
+                        cursor: "pointer",
+                        padding: "0.5rem",
+                        color: "rgba(255,255,255,0.8)",
+                        fontSize: "1.5rem",
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "0.5rem",
+                      }}
+                    >
+                      <svg
+                        width="24"
+                        height="24"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                      >
+                        <path d="M19 12H5M12 19l-7-7 7-7" />
+                      </svg>
+                    </button>
+                    <div style={{ color: "white", fontWeight: 500 }}>
+                      {selectedFile.name}
+                    </div>
+                    <div style={{ width: 40 }} /> {/* Spacer for centering */}
+                  </div>
+
+                  {/* Image Preview Area */}
+                  <div
+                    style={{
+                      flex: 1,
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      padding: "2rem",
+                      overflow: "hidden",
+                    }}
+                  >
+                    {mediaPreviewUrl &&
+                    getMediaTypeFromFile(selectedFile) === "image" ? (
+                      <img
+                        src={mediaPreviewUrl}
+                        alt="Preview"
+                        style={{
+                          maxWidth: "100%",
+                          maxHeight: "100%",
+                          objectFit: "contain",
+                          borderRadius: "12px",
+                          boxShadow: "0 8px 32px rgba(0,0,0,0.5)",
+                        }}
+                      />
+                    ) : mediaPreviewUrl &&
+                      getMediaTypeFromFile(selectedFile) === "video" ? (
+                      <video
+                        src={mediaPreviewUrl}
+                        controls
+                        style={{
+                          maxWidth: "100%",
+                          maxHeight: "100%",
+                          borderRadius: "12px",
+                          boxShadow: "0 8px 32px rgba(0,0,0,0.5)",
+                        }}
+                      />
+                    ) : (
+                      <div
+                        style={{
+                          width: "200px",
+                          height: "200px",
+                          borderRadius: "16px",
+                          background: "rgba(255,255,255,0.1)",
+                          display: "flex",
+                          flexDirection: "column",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          gap: "1rem",
+                        }}
+                      >
+                        <svg
+                          width="48"
+                          height="48"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="rgba(255,255,255,0.6)"
+                          strokeWidth="1.5"
+                        >
+                          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                          <polyline points="14 2 14 8 20 8" />
+                        </svg>
+                        <div
+                          style={{
+                            color: "rgba(255,255,255,0.8)",
+                            fontSize: "1.25rem",
+                            fontWeight: 600,
+                          }}
+                        >
+                          {selectedFile.name.split(".").pop()?.toUpperCase()}
+                        </div>
+                        <div
+                          style={{
+                            color: "rgba(255,255,255,0.5)",
+                            fontSize: "0.875rem",
+                          }}
+                        >
+                          {(selectedFile.size / (1024 * 1024)).toFixed(2)} MB
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Caption Input + Send Button */}
+                  <div
+                    style={{
+                      padding: "1rem 1.5rem",
+                      background: "rgba(30, 30, 30, 0.95)",
+                      borderTop: "1px solid rgba(255,255,255,0.1)",
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "1rem",
+                    }}
+                  >
+                    <div
+                      style={{
+                        flex: 1,
+                        display: "flex",
+                        alignItems: "center",
+                        background: "rgba(255,255,255,0.1)",
+                        borderRadius: "24px",
+                        padding: "0.75rem 1.25rem",
+                      }}
+                    >
+                      <input
+                        type="text"
+                        placeholder="Add a caption..."
+                        value={messageInput}
+                        onChange={(e) => setMessageInput(e.target.value)}
+                        onKeyPress={handleKeyPress}
+                        style={{
+                          flex: 1,
+                          background: "transparent",
+                          border: "none",
+                          color: "white",
+                          fontSize: "0.9375rem",
+                          outline: "none",
+                        }}
+                        autoFocus
+                      />
+                    </div>
+                    <button
+                      onClick={handleSendMessage}
+                      disabled={sending || uploading}
+                      style={{
+                        width: "52px",
+                        height: "52px",
+                        borderRadius: "50%",
+                        background: sending || uploading ? "#666" : "#00a884",
+                        border: "none",
+                        cursor:
+                          sending || uploading ? "not-allowed" : "pointer",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        transition: "all 0.2s ease",
+                      }}
+                    >
+                      {sending || uploading ? (
+                        <div
+                          style={{
+                            width: "20px",
+                            height: "20px",
+                            border: "2px solid rgba(255,255,255,0.3)",
+                            borderTopColor: "white",
+                            borderRadius: "50%",
+                            animation: "spin 1s linear infinite",
+                          }}
+                        />
+                      ) : (
+                        <svg
+                          width="24"
+                          height="24"
+                          viewBox="0 0 24 24"
+                          fill="white"
+                        >
+                          <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z" />
+                        </svg>
+                      )}
+                    </button>
+                  </div>
+                </div>
+              )}
+
               {/* <div className={styles.inputTypeSelect}>
                 <select className={styles.messageTypeSelect}>
                   <option value="whatsapp">WhatsApp</option>
@@ -1479,7 +2296,11 @@ export default function MessagesView() {
                   disabled={sending}
                 />
                 <div className={styles.inputActions}>
-                  <button className={styles.attachBtn}>
+                  <button
+                    className={styles.attachBtn}
+                    onClick={() => fileInputRef.current?.click()}
+                    title="Attach image"
+                  >
                     <svg
                       width="18"
                       height="18"
@@ -1493,7 +2314,11 @@ export default function MessagesView() {
                       <polyline points="21 15 16 10 5 21" />
                     </svg>
                   </button>
-                  <button className={styles.attachBtn}>
+                  <button
+                    className={styles.attachBtn}
+                    onClick={() => fileInputRef.current?.click()}
+                    title="Attach file"
+                  >
                     <svg
                       width="18"
                       height="18"
@@ -1524,16 +2349,42 @@ export default function MessagesView() {
               </div>
               <button
                 className={styles.sendBtn}
-                onClick={handleSendMessage}
-                disabled={!messageInput.trim() || sending}
-                style={{ opacity: !messageInput.trim() || sending ? 0.5 : 1 }}
+                onClick={selectedFile ? handleSendMedia : handleSendMessage}
+                disabled={
+                  (!messageInput.trim() && !selectedFile) ||
+                  sending ||
+                  uploading
+                }
+                style={{
+                  opacity:
+                    (!messageInput.trim() && !selectedFile) ||
+                    sending ||
+                    uploading
+                      ? 0.5
+                      : 1,
+                }}
               >
-                <img
-                  src="/icons/message_3_dots/send.svg"
-                  alt="Send"
-                  width="28"
-                  height="28"
-                />
+                {uploading ? (
+                  <div
+                    style={{
+                      width: 28,
+                      height: 28,
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      fontSize: "0.75rem",
+                    }}
+                  >
+                    ...
+                  </div>
+                ) : (
+                  <img
+                    src="/icons/message_3_dots/send.svg"
+                    alt="Send"
+                    width="28"
+                    height="28"
+                  />
+                )}
               </button>
             </div>
           </>
@@ -1545,7 +2396,7 @@ export default function MessagesView() {
               flexDirection: "column",
               alignItems: "center",
               justifyContent: "center",
-              color: "var(--dash-text-secondary)",
+              color: "black",
               gap: "1rem",
             }}
           >
@@ -1556,7 +2407,7 @@ export default function MessagesView() {
               fill="none"
               stroke="currentColor"
               strokeWidth="1"
-              style={{ opacity: 0.5 }}
+              style={{ opacity: 1 }}
             >
               <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
             </svg>
@@ -1666,8 +2517,8 @@ export default function MessagesView() {
                     {selectedConversation.language === "hi"
                       ? "Hindi"
                       : selectedConversation.language === "hinglish"
-                      ? "Hinglish"
-                      : selectedConversation.language || "English"}
+                        ? "Hinglish"
+                        : selectedConversation.language || "English"}
                   </span>
                 </div>
               </div>

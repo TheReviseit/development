@@ -30,7 +30,7 @@ export async function GET(request: NextRequest) {
       console.error("Session verification failed:", authError.message);
       return NextResponse.json(
         { error: "Session expired", message: "Please log in again" },
-        { status: 401 }
+        { status: 401 },
       );
     }
 
@@ -45,6 +45,7 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const conversationId = searchParams.get("conversationId");
     const contactPhone = searchParams.get("contactPhone");
+    const before = searchParams.get("before"); // Cursor for loading older messages
     const limit = parseInt(searchParams.get("limit") || "50");
     const offset = parseInt(searchParams.get("offset") || "0");
     const markAsRead = searchParams.get("markAsRead") !== "false";
@@ -52,7 +53,7 @@ export async function GET(request: NextRequest) {
     if (!conversationId && !contactPhone) {
       return NextResponse.json(
         { error: "conversationId or contactPhone is required" },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
@@ -108,7 +109,7 @@ export async function GET(request: NextRequest) {
             contactPhone,
             limit,
             offset,
-            markAsRead
+            markAsRead,
           );
         }
       }
@@ -123,7 +124,7 @@ export async function GET(request: NextRequest) {
           contactPhone,
           limit,
           offset,
-          markAsRead
+          markAsRead,
         );
       }
     } else if (conversationId) {
@@ -139,34 +140,67 @@ export async function GET(request: NextRequest) {
     }
 
     console.log(
-      `🔍 Fetching messages for conversation: ${actualConversationId}`
+      `🔍 Fetching messages for conversation: ${actualConversationId}${before ? ` (before: ${before})` : ""}`,
     );
 
-    // For initial load (offset=0), fetch all messages; otherwise use pagination
+    // CURSOR-BASED PAGINATION with COMPOSITE CURSOR
+    // Supabase has a 1000 row server limit that cannot be overridden
+    // Solution: Use composite cursor (timestamp:id) for deterministic pagination
+    // This prevents skipping/duplicating messages when timestamps collide
+    const MAX_MESSAGES = 1000;
+
     let messagesQuery = supabaseAdmin
       .from("whatsapp_messages")
       .select("*")
-      .eq("conversation_id", actualConversationId)
-      .order("created_at", { ascending: true });
+      .eq("conversation_id", actualConversationId);
 
-    // Only apply range if explicitly paginating (offset > 0)
-    if (offset > 0) {
-      messagesQuery = messagesQuery.range(offset, offset + limit - 1);
+    if (before) {
+      // Parse composite cursor: "timestamp:id"
+      const [cursorTimestamp, cursorId] = before.split("::");
+
+      if (cursorTimestamp && cursorId) {
+        // Loading older messages with composite cursor
+        // Logic: (created_at < cursor_time) OR (created_at = cursor_time AND id < cursor_id)
+        messagesQuery = messagesQuery
+          .or(
+            `created_at.lt.${cursorTimestamp},and(created_at.eq.${cursorTimestamp},id.lt.${cursorId})`,
+          )
+          .order("created_at", { ascending: false })
+          .order("id", { ascending: false })
+          .limit(MAX_MESSAGES);
+      } else {
+        // Fallback for legacy cursor format (timestamp only)
+        messagesQuery = messagesQuery
+          .lt("created_at", before)
+          .order("created_at", { ascending: false })
+          .limit(MAX_MESSAGES);
+      }
+    } else {
+      // Initial load: fetch latest 1000 messages
+      messagesQuery = messagesQuery
+        .order("created_at", { ascending: false })
+        .order("id", { ascending: false })
+        .limit(MAX_MESSAGES);
     }
 
-    const { data: messages, error } = await messagesQuery;
+    let { data: messages, error } = await messagesQuery;
+
+    // Reverse to get chronological order (oldest first) for display
+    if (messages) {
+      messages = messages.reverse();
+    }
 
     console.log(
       `📬 Fetched ${
         messages?.length || 0
-      } messages for conversation ${actualConversationId}`
+      } messages for conversation ${actualConversationId}${before ? " (older)" : ""}`,
     );
 
     if (error) {
       console.error("Error fetching messages:", error);
       return NextResponse.json(
         { error: "Failed to fetch messages", details: error.message },
-        { status: 500 }
+        { status: 500 },
       );
     }
 
@@ -234,6 +268,16 @@ export async function GET(request: NextRequest) {
           name: formatPhoneNumber(contactPhone || ""),
         };
 
+    // Calculate pagination metadata with COMPOSITE CURSOR (timestamp::id)
+    const rawMessageCount = (messages || []).length;
+    const hasMoreMessages = rawMessageCount === MAX_MESSAGES;
+    // Composite cursor format: "timestamp::id" for deterministic pagination
+    const oldestMessage =
+      formattedMessages.length > 0 ? formattedMessages[0] : null;
+    const oldestCursor = oldestMessage
+      ? `${oldestMessage.timestamp}::${oldestMessage.id}`
+      : null;
+
     return NextResponse.json(
       {
         success: true,
@@ -241,7 +285,8 @@ export async function GET(request: NextRequest) {
           conversationId: actualConversationId,
           messages: formattedMessages,
           contact: contactInfo,
-          hasMore: (messages || []).length === limit,
+          hasMore: hasMoreMessages,
+          oldestCursor: oldestCursor,
           totalInConversation:
             conversation?.total_messages || formattedMessages.length,
         },
@@ -252,13 +297,13 @@ export async function GET(request: NextRequest) {
           Pragma: "no-cache",
           Expires: "0",
         },
-      }
+      },
     );
   } catch (error: any) {
     console.error("Error fetching messages:", error);
     return NextResponse.json(
       { error: "Failed to fetch messages", message: error.message },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }
@@ -269,7 +314,7 @@ async function fallbackToOldMethod(
   contactPhone: string,
   limit: number,
   offset: number,
-  markAsRead: boolean
+  markAsRead: boolean,
 ) {
   const { data: messages, error } = await supabaseAdmin
     .from("whatsapp_messages")
@@ -296,7 +341,7 @@ async function fallbackToOldMethod(
     }
     return NextResponse.json(
       { error: "Failed to fetch messages", details: error.message },
-      { status: 500 }
+      { status: 500 },
     );
   }
 

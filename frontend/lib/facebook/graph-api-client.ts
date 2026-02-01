@@ -27,7 +27,7 @@ export class MetaGraphAPIClient {
    */
   private async get<T>(
     endpoint: string,
-    params: Record<string, string> = {}
+    params: Record<string, string> = {},
   ): Promise<T> {
     const url = new URL(`${GRAPH_API_BASE_URL}${endpoint}`);
 
@@ -60,7 +60,7 @@ export class MetaGraphAPIClient {
    */
   private async post<T>(
     endpoint: string,
-    body: Record<string, any> = {}
+    body: Record<string, any> = {},
   ): Promise<T> {
     const url = new URL(`${GRAPH_API_BASE_URL}${endpoint}`);
     url.searchParams.append("access_token", this.accessToken);
@@ -80,6 +80,110 @@ export class MetaGraphAPIClient {
     }
 
     return data;
+  }
+
+  /**
+   * Make a POST request to Graph API with FormData (for file uploads)
+   */
+  private async postFormData<T>(
+    endpoint: string,
+    formData: FormData,
+  ): Promise<T> {
+    const url = new URL(`${GRAPH_API_BASE_URL}${endpoint}`);
+    url.searchParams.append("access_token", this.accessToken);
+
+    const response = await fetch(url.toString(), {
+      method: "POST",
+      body: formData,
+      // Don't set Content-Type header - let fetch set it with boundary for multipart
+    });
+
+    const data = await response.json();
+
+    if (!response.ok || data.error) {
+      throw this.handleError(data.error || data);
+    }
+
+    return data;
+  }
+
+  /**
+   * Upload media to WhatsApp servers
+   * @param phoneNumberId - The phone number ID to upload media for
+   * @param file - The file Blob to upload (File extends Blob)
+   * @param mimeType - MIME type of the file (e.g., "image/jpeg", "video/mp4")
+   * @param filename - Original filename
+   * @returns Object containing the media_id
+   */
+  public async uploadMedia(
+    phoneNumberId: string,
+    file: Blob,
+    mimeType: string,
+    filename: string,
+  ): Promise<{ id: string }> {
+    const formData = new FormData();
+    formData.append("messaging_product", "whatsapp");
+    formData.append("type", mimeType);
+    formData.append("file", file, filename);
+
+    const response = await this.postFormData<{ id: string }>(
+      `/${phoneNumberId}/media`,
+      formData,
+    );
+
+    return response;
+  }
+
+  /**
+   * Send a WhatsApp media message using a previously uploaded media_id
+   * @param phoneNumberId - The phone number ID to send from
+   * @param to - Recipient phone number
+   * @param mediaType - Type of media: "image", "video", "document", "audio"
+   * @param mediaId - The media_id from uploadMedia()
+   * @param caption - Optional caption for images/videos
+   * @param filename - Optional filename for documents
+   */
+  public async sendMediaMessage(
+    phoneNumberId: string,
+    to: string,
+    mediaType: "image" | "video" | "document" | "audio",
+    mediaId: string,
+    caption?: string,
+    filename?: string,
+  ): Promise<{
+    messaging_product: string;
+    contacts: Array<{ input: string; wa_id: string }>;
+    messages: Array<{ id: string }>;
+  }> {
+    const mediaObject: Record<string, string> = {
+      id: mediaId,
+    };
+
+    // Add caption for image/video
+    if (caption && (mediaType === "image" || mediaType === "video")) {
+      mediaObject.caption = caption;
+    }
+
+    // Add filename for documents
+    if (filename && mediaType === "document") {
+      mediaObject.filename = filename;
+    }
+
+    const body = {
+      messaging_product: "whatsapp",
+      recipient_type: "individual",
+      to,
+      type: mediaType,
+      [mediaType]: mediaObject,
+    };
+
+    const response = await this.post<{
+      messaging_product: string;
+      contacts: Array<{ input: string; wa_id: string }>;
+      messages: Array<{ id: string }>;
+    }>(`/${phoneNumberId}/messages`, body);
+
+    return response;
   }
 
   /**
@@ -161,7 +265,7 @@ export class MetaGraphAPIClient {
   public async getBusinessManagers(): Promise<MetaBusinessManager[]> {
     const response = await this.get<MetaGraphAPIResponse<MetaBusinessManager>>(
       "/me/businesses",
-      { fields: "id,name,created_time,verification_status,permitted_roles" }
+      { fields: "id,name,created_time,verification_status,permitted_roles" },
     );
 
     return response.data || [];
@@ -171,7 +275,7 @@ export class MetaGraphAPIClient {
    * Get WhatsApp Business Accounts owned by a Business Manager
    */
   public async getWhatsAppBusinessAccounts(
-    businessId: string
+    businessId: string,
   ): Promise<MetaWhatsAppBusinessAccount[]> {
     const response = await this.get<
       MetaGraphAPIResponse<MetaWhatsAppBusinessAccount>
@@ -192,7 +296,7 @@ export class MetaGraphAPIClient {
       {
         fields:
           "id,display_phone_number,verified_name,code_verification_status,is_official_business_account,platform_type",
-      }
+      },
     );
 
     return response.data || [];
@@ -204,7 +308,7 @@ export class MetaGraphAPIClient {
   public async sendWhatsAppMessage(
     phoneNumberId: string,
     to: string,
-    message: string
+    message: string,
   ): Promise<{
     messaging_product: string;
     contacts: Array<{ input: string; wa_id: string }>;
@@ -259,7 +363,7 @@ export class MetaGraphAPIClient {
         document?: { link: string; filename: string };
         video?: { link: string };
       }>;
-    }>
+    }>,
   ): Promise<{
     messaging_product: string;
     contacts: Array<{ input: string; wa_id: string }>;
@@ -292,7 +396,7 @@ export class MetaGraphAPIClient {
    * Get WhatsApp Business Account details
    */
   public async getWABADetails(
-    wabaId: string
+    wabaId: string,
   ): Promise<MetaWhatsAppBusinessAccount> {
     const data = await this.get<MetaWhatsAppBusinessAccount>(`/${wabaId}`, {
       fields:
@@ -306,7 +410,7 @@ export class MetaGraphAPIClient {
    * Get phone number details
    */
   public async getPhoneNumberDetails(
-    phoneNumberId: string
+    phoneNumberId: string,
   ): Promise<MetaPhoneNumber> {
     const data = await this.get<MetaPhoneNumber>(`/${phoneNumberId}`, {
       fields:
@@ -323,7 +427,7 @@ export class MetaGraphAPIClient {
     wabaId: string,
     callbackUrl: string,
     verifyToken: string,
-    fields: string[] = ["messages"]
+    fields: string[] = ["messages"],
   ): Promise<{ success: boolean }> {
     const body = {
       override_callback_uri: callbackUrl,
@@ -333,7 +437,7 @@ export class MetaGraphAPIClient {
 
     const response = await this.post<{ success: boolean }>(
       `/${wabaId}/subscribed_apps`,
-      body
+      body,
     );
 
     return response;
@@ -403,7 +507,7 @@ export class MetaGraphAPIClient {
       url.searchParams.append("input_token", this.accessToken);
 
       console.log(
-        "🔍 [validateToken] Calling /debug_token with App Access Token..."
+        "🔍 [validateToken] Calling /debug_token with App Access Token...",
       );
 
       const response = await fetch(url.toString(), {
@@ -416,7 +520,7 @@ export class MetaGraphAPIClient {
       if (!response.ok || data.error) {
         console.error(
           "❌ [validateToken] API error:",
-          data.error?.message || data
+          data.error?.message || data,
         );
         return {
           isValid: false,
@@ -430,7 +534,7 @@ export class MetaGraphAPIClient {
       if (tokenData.app_id !== appId) {
         console.error(
           "❌ [validateToken] Token app_id mismatch!",
-          `Expected: ${appId}, Got: ${tokenData.app_id}`
+          `Expected: ${appId}, Got: ${tokenData.app_id}`,
         );
         return {
           isValid: false,
