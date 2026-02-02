@@ -209,14 +209,27 @@ export const metadata: Metadata = {
 // Enhanced Structured Data Schemas for Better SEO
 
 // Organization Schema - Helps Google show your logo and company info
+// Enhanced with entity disambiguation and third-party trust signals
 const organizationSchema = {
   "@context": "https://schema.org",
   "@type": "Organization",
   "@id": "https://www.flowauxi.com/#organization",
   name: "Flowauxi",
   legalName: "Flowauxi Technologies",
+  // Alternate names help Google disambiguate from similar-sounding brands like "Floweraura"
+  alternateName: [
+    "flowauxi",
+    "Flowauxi.com",
+    "Flow Auxi",
+    "FlowAuxi",
+    "Flowauxi AI",
+  ],
   description:
     "AI-Powered WhatsApp Automation and Business Messaging Platform trusted by 500+ businesses",
+  // Explicit disambiguation - tells Google exactly what we are NOT
+  disambiguatingDescription:
+    "A specialized AI software platform for WhatsApp Business automation, distinct from retail or gifting services.",
+  slogan: "Transform WhatsApp into Your Business Superpower",
   url: "https://www.flowauxi.com",
   logo: {
     "@type": "ImageObject",
@@ -239,6 +252,9 @@ const organizationSchema = {
     name: "Flowauxi Team",
   },
   foundingDate: "2024",
+  // Industry Classification Codes - Critical for entity categorization
+  naics: "541512", // Computer Systems Design Services
+  isicV4: "6201", // Computer programming activities
   address: {
     "@type": "PostalAddress",
     addressCountry: "IN",
@@ -258,10 +274,18 @@ const organizationSchema = {
       email: "sales@flowauxi.com",
     },
   ],
+  // Enhanced sameAs with third-party trust signals (critical for Knowledge Graph)
   sameAs: [
+    // Social Profiles
     "https://www.linkedin.com/company/flowauxi",
     "https://twitter.com/flowauxi",
     "https://www.facebook.com/flowauxi",
+    "https://www.youtube.com/@flowauxi",
+    "https://github.com/flowauxi",
+    // Third-party Trust Signals - Massive for Google Trust
+    "https://www.crunchbase.com/organization/flowauxi",
+    "https://www.producthunt.com/products/flowauxi",
+    "https://www.trustpilot.com/review/flowauxi.com",
   ],
   areaServed: {
     "@type": "Country",
@@ -269,11 +293,16 @@ const organizationSchema = {
   },
   knowsAbout: [
     "WhatsApp Automation",
+    "WhatsApp Business API",
     "Business Messaging",
     "AI Chatbots",
     "Customer Engagement",
     "CRM Integration",
+    "Conversational AI",
+    "Marketing Automation",
   ],
+  knowsLanguage: ["en", "hi"],
+  keywords: "WhatsApp API, Business Automation, Flowauxi AI, CRM Integration",
 };
 
 // Website Schema - Helps with search functionality
@@ -415,6 +444,37 @@ const faqSchema = {
   ],
 };
 
+// Brand Schema - Explicit brand entity for Knowledge Graph disambiguation
+// This tells Google that "Flowauxi" is a distinct brand, not a typo for "Floweraura"
+const brandSchema = {
+  "@context": "https://schema.org",
+  "@type": "Brand",
+  "@id": "https://www.flowauxi.com/#brand",
+  name: "Flowauxi",
+  // Alternate names catch common misspellings and variations
+  alternateName: [
+    "flowauxi",
+    "Flowauxi.com",
+    "Flow Auxi",
+    "FlowAuxi",
+    "Flowauxi AI",
+  ],
+  description: "AI-Powered WhatsApp Automation Platform for Business",
+  // Critical: This explicitly tells Google what Flowauxi is NOT
+  disambiguatingDescription:
+    "A specialized AI software platform for WhatsApp Business automation, distinct from retail or gifting services.",
+  slogan: "Transform WhatsApp into Your Business Superpower",
+  logo: "https://www.flowauxi.com/icon-512.png",
+  url: "https://www.flowauxi.com",
+  // Keywords for additional context
+  keywords:
+    "WhatsApp API, Business Automation, Flowauxi AI, CRM Integration, AI Chatbot",
+  // Link to parent organization
+  brand: {
+    "@id": "https://www.flowauxi.com/#organization",
+  },
+};
+
 export default function RootLayout({
   children,
 }: Readonly<{
@@ -520,6 +580,15 @@ export default function RootLayout({
           type="application/ld+json"
           dangerouslySetInnerHTML={{
             __html: JSON.stringify(faqSchema),
+          }}
+        />
+
+        {/* Structured Data - Brand (Critical for Knowledge Graph disambiguation) */}
+        <script
+          id="brand-schema"
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{
+            __html: JSON.stringify(brandSchema),
           }}
         />
 

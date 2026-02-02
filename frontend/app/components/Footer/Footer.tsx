@@ -24,6 +24,8 @@ export default function Footer() {
             <p className={styles.copyright}>
               © 2025 Flowauxi. All rights reserved.
               <br />
+              <strong>Flowauxi</strong> – AI WhatsApp Automation Platform
+              <br />
               Legal Business Name: SIVASANKARA BOOPATHY RAJA RAMAN
             </p>
             <div className={styles.legalLinks}>
