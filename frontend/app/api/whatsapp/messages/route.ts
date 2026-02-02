@@ -144,10 +144,9 @@ export async function GET(request: NextRequest) {
     );
 
     // CURSOR-BASED PAGINATION with COMPOSITE CURSOR
-    // Supabase has a 1000 row server limit that cannot be overridden
-    // Solution: Use composite cursor (timestamp:id) for deterministic pagination
-    // This prevents skipping/duplicating messages when timestamps collide
-    const MAX_MESSAGES = 1000;
+    // WhatsApp-style: Load 50 messages initially, paginate on scroll up
+    // This improves performance and scroll stability
+    const MAX_MESSAGES = 50;
 
     let messagesQuery = supabaseAdmin
       .from("whatsapp_messages")

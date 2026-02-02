@@ -176,7 +176,7 @@ function setupBackgroundMessageHandler() {
 // PWA Caching Configuration
 // ============================================
 
-const CACHE_VERSION = "v4";
+const CACHE_VERSION = "v5";
 const STATIC_CACHE = `flowauxi-static-${CACHE_VERSION}`;
 const IMAGE_CACHE = `flowauxi-images-${CACHE_VERSION}`;
 const FONT_CACHE = `flowauxi-fonts-${CACHE_VERSION}`;
@@ -191,7 +191,7 @@ const STATIC_ASSETS = [
   "/offline",
 ];
 
-// URLs to never cache (authentication, API calls)
+// URLs to never cache (authentication, API calls, external storage)
 const NEVER_CACHE = [
   "firebase",
   "firebaseapp",
@@ -201,6 +201,7 @@ const NEVER_CACHE = [
   "__/auth",
   "/api/",
   "supabase.co",
+  ".r2.dev", // Cloudflare R2 storage - let browser handle directly
 ];
 
 // Check if URL should be excluded from caching

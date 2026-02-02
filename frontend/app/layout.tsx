@@ -481,7 +481,11 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" prefix="og: https://ogp.me/ns#">
+    <html
+      lang="en"
+      prefix="og: https://ogp.me/ns#"
+      data-scroll-behavior="smooth"
+    >
       <head>
         {/* DNS Prefetch for Performance */}
         <link rel="dns-prefetch" href="https://www.google-analytics.com" />

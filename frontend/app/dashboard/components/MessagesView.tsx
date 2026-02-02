@@ -1,6 +1,14 @@
 "use client";
 
-import { useState, useEffect, useRef, useCallback, useMemo, memo } from "react";
+import {
+  useState,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useCallback,
+  useMemo,
+  memo,
+} from "react";
 import { supabase } from "@/lib/supabase/client";
 import { useNotification } from "@/app/hooks/useNotification";
 import { usePushNotification } from "@/app/hooks/usePushNotification";
@@ -158,9 +166,11 @@ const LazyImage = memo(function LazyImage({
   const MAX_RETRIES = 2;
 
   // ✅ DERIVED STATE with URL validation
-  // Priority: validated prop > validated cache > null
-  // CRITICAL: Only valid HTTP/blob URLs are allowed
-  const rawUrl = mediaUrl || mediaUrlCache.get(messageId) || null;
+  // CRITICAL: Render ONLY from props, NOT from cache
+  // The cache is only for fetch deduplication, never for rendering.
+  // When prefetchMediaUrls updates state via setMessages, this component
+  // re-renders with the new mediaUrl prop - standard React data flow.
+  const rawUrl = mediaUrl || null;
   const resolvedUrl = isValidUrl(rawUrl) ? rawUrl : null;
 
   // Check if blob URL is still valid (not revoked)
@@ -931,9 +941,11 @@ const MessageBubble = memo(function MessageBubble({
         )}
         {msg.type === "image" && (
           <div className={msgStyles.imageMessageContainer}>
+            {/* Key includes URL status to force re-mount when mediaUrl changes null -> string */}
             <LazyImage
+              key={`${msg.id}-${!!msg.mediaUrl}`}
               mediaId={msg.mediaId}
-              mediaUrl={resolveMediaUrl(msg) || undefined}
+              mediaUrl={msg.mediaUrl}
               messageId={msg.id}
               conversationId={conversationId}
               time={msg.time}
@@ -1151,6 +1163,8 @@ export default function MessagesView() {
   const isInitialLoadRef = useRef(true);
   // Track if user is scrolled near bottom
   const isNearBottomRef = useRef(true);
+  // Track pending image loads - scroll completes only when all images have loaded
+  const pendingImageLoadsRef = useRef<number>(0);
   // Conversation guard for prefetch - prevents stale responses on fast switching
   const activeConversationRef = useRef<string | null>(null);
 
@@ -1410,12 +1424,16 @@ export default function MessagesView() {
             mediaStatusCache.set(msg.id, "ready");
 
             // Update message in state to trigger re-render
-            setMessages((prev) =>
-              prev.map((m) =>
+            // CRITICAL: Create new array reference for React to detect change
+            setMessages((prev) => {
+              const updated = prev.map((m) =>
                 m.id === msg.id ? { ...m, mediaUrl: data.data.mediaUrl } : m,
-              ),
-            );
-            console.log(`✅ [Prefetch] Ready: ${msg.id}`);
+              );
+              console.log(
+                `✅ [Prefetch] State updated for: ${msg.id?.slice(-8)}, URL: ${data.data.mediaUrl?.slice(0, 50)}...`,
+              );
+              return updated;
+            });
           } else {
             mediaStatusCache.set(msg.id, "failed");
             console.log(`❌ [Prefetch] Failed: ${msg.id}`);
@@ -1569,37 +1587,61 @@ export default function MessagesView() {
     isInitialLoadRef.current = true;
   }, [selectedConversation?.id, prefetchMediaUrls]);
 
-  // Scroll to bottom only on initial load or when user sends a message
-  useEffect(() => {
+  // Scroll to bottom - WhatsApp-grade scrolling
+  // Uses useLayoutEffect for synchronous scroll before browser paint
+  useLayoutEffect(() => {
     if (messages.length === 0) return;
 
-    // Only auto-scroll on initial load OR if user is near bottom
+    // Count pending image loads on initial load
     if (isInitialLoadRef.current) {
-      // Use "auto" for instant scroll on initial load
+      const imageMessages = messages.filter(
+        (m) => m.type === "image" && !m.mediaUrl,
+      );
+      pendingImageLoadsRef.current = imageMessages.length;
+
+      // Immediate scroll to approximate position
       messagesEndRef.current?.scrollIntoView({ behavior: "auto" });
-      isInitialLoadRef.current = false;
+
+      // If no images need loading, mark initial load complete
+      if (imageMessages.length === 0) {
+        isInitialLoadRef.current = false;
+      }
+      // If there ARE images, keep isInitialLoadRef true until handleImageLoad completes them all
     } else if (isNearBottomRef.current) {
       // Smooth scroll for new messages when user is at bottom
       messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
     }
   }, [messages]);
 
-  // Callback for when images finish loading - scroll to show them if user is near bottom
+  // Callback for when images finish loading - re-scrolls to account for layout changes
   const handleImageLoad = useCallback(() => {
-    // On initial load or if user is near the bottom of the chat, scroll to bottom
-    // This fixes mobile issue where images load but don't trigger scroll
-    if (isInitialLoadRef.current || isNearBottomRef.current) {
-      // Use requestAnimationFrame to ensure DOM has updated
-      requestAnimationFrame(() => {
-        // Method 1: scrollIntoView (preferred)
-        messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    // Decrement pending count
+    pendingImageLoadsRef.current = Math.max(
+      0,
+      pendingImageLoadsRef.current - 1,
+    );
 
-        // Method 2: Fallback for mobile - directly set scroll position
+    // Re-scroll to bottom after each image loads (layout may have changed)
+    if (isInitialLoadRef.current || isNearBottomRef.current) {
+      requestAnimationFrame(() => {
+        // Guard: Ensure element is in DOM and visible (prevents scroll misfire on slow devices)
+        if (!messagesEndRef.current?.offsetParent) return;
+
+        messagesEndRef.current?.scrollIntoView({
+          behavior: isInitialLoadRef.current ? "auto" : "smooth",
+        });
+
+        // Fallback for mobile - directly set scroll position
         if (messagesContainerRef.current) {
           const container = messagesContainerRef.current;
           container.scrollTop = container.scrollHeight;
         }
       });
+    }
+
+    // Mark initial load complete when all images have loaded
+    if (pendingImageLoadsRef.current === 0 && isInitialLoadRef.current) {
+      isInitialLoadRef.current = false;
     }
   }, []);
 
@@ -3068,7 +3110,7 @@ export default function MessagesView() {
                       <DateSeparator date={group.date} styles={styles} />
                       {group.messages.map((msg) => (
                         <MessageBubble
-                          key={msg.id}
+                          key={`${msg.id}-${msg.type === "image" ? !!msg.mediaUrl : ""}`}
                           msg={msg}
                           styles={styles}
                           conversationId={selectedConversation.id}
