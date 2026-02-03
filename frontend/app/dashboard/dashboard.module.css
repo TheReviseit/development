@@ -3879,7 +3879,13 @@
     background: var(--dash-bg-secondary);
     border-bottom: 1px solid var(--dash-border);
     padding: 0.75rem 1rem;
-    margin-bottom: 1rem;
+    margin-bottom: 0;
+  }
+
+  /* Reset mobileContent margin since header is now relative */
+  .mobileContent {
+    margin-top: 0;
+    padding: 1rem;
   }
 
   .mobileHeaderRow {
