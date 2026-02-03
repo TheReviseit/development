@@ -680,15 +680,19 @@
 .mobileNavItemWrapper {
   display: flex;
   flex-direction: column;
+  width: 100%;
 }
 
 .mobileSubNavContainer {
   display: flex;
   flex-direction: column;
   gap: 2px;
-  padding-left: 3rem;
+  padding-left: 2rem;
+  margin-left: 0;
   background: rgba(255, 255, 255, 0.02);
   border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  width: 100%;
+  position: relative;
 }
 
 .mobileSubNavLink {
@@ -3945,6 +3949,8 @@
     cursor: pointer;
     transition: all 0.2s ease;
     flex-shrink: 0;
+    position: relative;
+    z-index: 150;
   }
 
   .mobileMenuBtn:hover {
@@ -4017,6 +4023,78 @@
   .mobileNavLinkActive {
     background: var(--dash-accent-muted);
     color: var(--dash-accent);
+  }
+
+  /* Mobile Hide Mode Styles */
+  .mobileMenuDropdownHideMode {
+    border: 2px solid var(--dash-accent);
+    box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.15);
+  }
+
+  .mobileMenuBtnHideMode {
+    color: #1a1a2e !important;
+    background: white !important;
+    border-color: white !important;
+    z-index: 200 !important;
+    position: relative;
+  }
+
+  /* Only apply row-reverse when wrapper contains a checkbox */
+  .mobileNavItemWrapper:has(.mobileHideCheckbox) {
+    display: flex !important;
+    flex-direction: row-reverse !important;
+    align-items: center !important;
+    gap: 0.75rem;
+    width: 100%;
+    padding-right: 0.25rem;
+  }
+
+  .mobileHideCheckbox {
+    width: 24px;
+    height: 24px;
+    min-width: 24px;
+    max-width: 24px;
+    border-radius: 6px;
+    border: 2px solid var(--dash-text-muted);
+    background: transparent;
+    display: flex !important;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    flex-shrink: 0;
+    position: relative;
+    z-index: 5;
+    color: var(--dash-text-primary);
+  }
+
+  .mobileHideCheckbox:hover,
+  .mobileHideCheckbox:active {
+    border-color: var(--dash-text-primary);
+    background: rgba(255, 255, 255, 0.1);
+  }
+
+  .mobileHideCheckboxChecked {
+    background: var(--dash-text-primary) !important;
+    border-color: var(--dash-text-primary) !important;
+    color: var(--dash-bg-primary);
+  }
+
+  .mobileHideCheckboxChecked:hover,
+  .mobileHideCheckboxChecked:active {
+    background: var(--dash-text-secondary) !important;
+    border-color: var(--dash-text-secondary) !important;
+  }
+
+  .mobileNavItemWrapper > .mobileNavLink {
+    flex: 1;
+    width: auto !important;
+  }
+
+  .mobileNavLinkHidden {
+    opacity: 0.5;
+    text-decoration: line-through;
+    color: var(--dash-text-muted) !important;
   }
 
   .mobileNavLinkLogout {

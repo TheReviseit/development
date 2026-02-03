@@ -35,9 +35,7 @@
 
 /* Preview Section */
 .previewSection {
-  background: var(
-    --bg-card
-  ); /* Match the card background to remove 'patchy' look */
+  background: var(--bg-card);
   border: 1px solid var(--border);
   border-radius: 16px;
   padding: 20px;
@@ -45,15 +43,60 @@
   width: 100%;
 }
 
+/* Color Picker Row */
+.colorPickerRow {
+  margin-bottom: 20px;
+  margin-top: 10px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: white;
+  padding: 16px;
+  border-radius: 12px;
+  border: 1px solid #e5e7eb;
+  flex-wrap: wrap;
+}
+
 /* Responsive */
 @media (max-width: 768px) {
-  .previewSection {
-    padding: 16px 8px;
+  .card {
     border-radius: 12px;
+    margin-bottom: 16px;
+  }
+
+  .cardHeader {
+    padding: 16px;
+  }
+
+  .cardTitle {
+    font-size: 16px;
+  }
+
+  .previewSection {
+    padding: 12px 8px;
+    border-radius: 12px;
+  }
+
+  .colorPickerRow {
+    flex-direction: row;
+    flex-wrap: wrap;
+    gap: 10px;
+    padding: 12px;
   }
 
   .infoNote {
     margin: 12px;
     padding: 12px 16px;
+  }
+}
+
+@media (max-width: 480px) {
+  .previewSection {
+    padding: 8px 4px;
+  }
+
+  .colorPickerRow {
+    padding: 10px;
+    gap: 8px;
   }
 }

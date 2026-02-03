@@ -615,17 +615,17 @@
 
 @media (max-width: 768px) {
   .invoiceContainer {
-    padding: 16px;
+    padding: 8px;
   }
 
   .invoicePaper {
-    padding: 24px;
-    border-radius: 16px;
+    padding: 16px;
+    border-radius: 12px;
   }
 
   .invoiceHeader {
     flex-direction: column-reverse;
-    gap: 16px;
+    gap: 12px;
   }
 
   .headerRight {
@@ -634,35 +634,89 @@
 
   .storeLogo,
   .logoPlaceholder {
-    width: 60px;
-    height: 60px;
+    width: 50px;
+    height: 50px;
   }
 
   .logoPlaceholder span {
-    font-size: 24px;
+    font-size: 20px;
   }
 
   .storeName {
-    font-size: 22px;
+    font-size: 18px;
+  }
+
+  .storeDetail {
+    font-size: 11px;
+  }
+
+  .invoiceLabel {
+    font-size: 10px;
+    padding: 4px 8px;
+  }
+
+  .invoiceNumber {
+    font-size: 12px;
+  }
+
+  .invoiceDate {
+    font-size: 11px;
+  }
+
+  .divider {
+    margin: 16px 0;
+  }
+
+  .sectionTitle {
+    font-size: 10px;
+  }
+
+  .customerInfo {
+    padding: 12px;
+  }
+
+  .customerName {
+    font-size: 14px;
+    margin-bottom: 8px;
+  }
+
+  .customerDetail {
+    font-size: 11px;
+  }
+
+  .itemsTable {
+    display: block;
+    overflow-x: auto;
+    white-space: nowrap;
   }
 
   .itemsTable th,
   .itemsTable td {
-    padding: 12px 8px;
+    padding: 10px 6px;
+    font-size: 11px;
   }
 
   .productCell {
-    gap: 8px;
+    gap: 6px;
   }
 
   .productImage,
   .productImagePlaceholder {
-    width: 40px;
-    height: 40px;
+    width: 32px;
+    height: 32px;
   }
 
   .productName {
-    font-size: 13px;
+    font-size: 11px;
+  }
+
+  .productVariant {
+    font-size: 10px;
+  }
+
+  .thSerial,
+  .tdSerial {
+    display: none;
   }
 
   .thPrice,
@@ -673,16 +727,40 @@
   .totalsBox {
     min-width: auto;
     width: 100%;
+    padding: 12px 16px;
+  }
+
+  .totalRow {
+    font-size: 12px;
+    padding: 6px 0;
+  }
+
+  .grandTotal {
+    font-size: 14px;
   }
 
   .invoiceFooter {
     flex-direction: column;
-    gap: 16px;
+    gap: 12px;
     align-items: flex-start;
+    padding-top: 12px;
   }
 
   .footerRight {
     text-align: left;
+  }
+
+  .thankYou {
+    font-size: 12px;
+  }
+
+  .poweredBy {
+    font-size: 10px;
+  }
+
+  .qrCode {
+    width: 80px;
+    height: 80px;
   }
 
   .invoiceActions {
@@ -692,6 +770,7 @@
   .actionBtn {
     width: 100%;
     justify-content: center;
+    padding: 12px 16px;
   }
 }
 

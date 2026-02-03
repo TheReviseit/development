@@ -155,19 +155,7 @@ export default function InvoiceSettings({ showToast }: InvoiceSettingsProps) {
       {/* Sample Invoice Preview */}
       <div className={styles.previewSection}>
         {/* Color Setting */}
-        <div
-          style={{
-            marginBottom: "20px",
-            marginTop: "10px",
-            display: "flex",
-            alignItems: "center",
-            gap: "12px",
-            background: "white",
-            padding: "16px",
-            borderRadius: "12px",
-            border: "1px solid #e5e7eb",
-          }}
-        >
+        <div className={styles.colorPickerRow}>
           <div
             style={{
               width: "40px",
@@ -192,7 +180,7 @@ export default function InvoiceSettings({ showToast }: InvoiceSettingsProps) {
               }}
             />
           </div>
-          <div>
+          <div style={{ flex: 1, minWidth: "120px" }}>
             <label
               style={{
                 display: "block",
@@ -208,7 +196,7 @@ export default function InvoiceSettings({ showToast }: InvoiceSettingsProps) {
               Pick a color for your invoice header and accents
             </p>
           </div>
-          <div style={{ marginLeft: "auto" }}>
+          <div>
             <button
               onClick={handleSaveColor}
               disabled={saving}
@@ -223,6 +211,7 @@ export default function InvoiceSettings({ showToast }: InvoiceSettingsProps) {
                 cursor: saving ? "not-allowed" : "pointer",
                 opacity: saving ? 0.7 : 1,
                 transition: "all 0.2s ease",
+                whiteSpace: "nowrap",
               }}
             >
               {saving ? "Saving..." : "Save Color"}
