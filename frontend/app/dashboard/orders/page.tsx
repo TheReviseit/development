@@ -7,6 +7,7 @@ import styles from "./orders.module.css";
 import { useRealtimeOrders } from "@/lib/hooks/useRealtimeOrders";
 import ImageModal from "../components/ImageModal";
 import Dropdown from "@/app/utils/ui/Dropdown";
+import { RevenueAnalyticsChart } from "./components/RevenueAnalyticsChart";
 
 interface OrderItem {
   name: string;
@@ -894,6 +895,9 @@ export default function OrdersPage() {
           </button>
         </div>
       </div>
+
+      {/* Revenue Analytics Chart */}
+      <RevenueAnalyticsChart />
 
       {/* Stats Row */}
       <div className={styles.statsRow}>

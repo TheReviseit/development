@@ -210,13 +210,18 @@ export default function DashboardLayout({
           />
         )}
 
-        <DashboardSidebar
-          activeSection={activeSection}
-          onSectionChange={(section) => handleSectionChange(section as Section)}
-          userEmail={user?.email || undefined}
-          userName={user?.displayName || undefined}
-          isSidebarOpen={isSidebarOpen}
-        />
+        {/* Desktop Sidebar - Hidden on mobile */}
+        {!isMobile && (
+          <DashboardSidebar
+            activeSection={activeSection}
+            onSectionChange={(section) =>
+              handleSectionChange(section as Section)
+            }
+            userEmail={user?.email || undefined}
+            userName={user?.displayName || undefined}
+            isSidebarOpen={isSidebarOpen}
+          />
+        )}
 
         <main className={styles.mainContent}>
           {/* Mobile Header for all views */}
@@ -233,34 +238,36 @@ export default function DashboardLayout({
                     {sectionLabels[activeSection]}
                   </h2>
                 </div>
-                <button
-                  className={styles.mobileMenuBtn}
-                  onClick={() => setShowMobileMenu(!showMobileMenu)}
-                >
-                  <svg
-                    width="24"
-                    height="24"
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
+                <div className={styles.mobileHeaderActions}>
+                  <button
+                    className={styles.mobileMenuBtn}
+                    onClick={() => setShowMobileMenu(!showMobileMenu)}
                   >
-                    {showMobileMenu ? (
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2}
-                        d="M6 18L18 6M6 6l12 12"
-                      />
-                    ) : (
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2}
-                        d="M4 6h16M4 12h16M4 18h16"
-                      />
-                    )}
-                  </svg>
-                </button>
+                    <svg
+                      width="24"
+                      height="24"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      {showMobileMenu ? (
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M6 18L18 6M6 6l12 12"
+                        />
+                      ) : (
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M4 6h16M4 12h16M4 18h16"
+                        />
+                      )}
+                    </svg>
+                  </button>
+                </div>
               </div>
 
               {/* Mobile Dropdown Menu */}
@@ -772,6 +779,80 @@ export default function DashboardLayout({
                         />
                       </svg>
                       <span>Settings</span>
+                    </button>
+                    <button
+                      className={styles.mobileNavLink}
+                      onClick={() => {
+                        setShowMobileMenu(false);
+                        // You can add navigation to profile page here if needed
+                      }}
+                    >
+                      <svg
+                        width="20"
+                        height="20"
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                      >
+                        <path
+                          d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                        />
+                        <circle
+                          cx="12"
+                          cy="7"
+                          r="4"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                        />
+                      </svg>
+                      <span>Profile</span>
+                    </button>
+                    <button
+                      className={`${styles.mobileNavLink} ${styles.mobileNavLinkLogout}`}
+                      onClick={async () => {
+                        setShowMobileMenu(false);
+                        try {
+                          await fetch("/api/auth/logout", { method: "POST" });
+                          window.location.href = "/login";
+                        } catch (error) {
+                          console.error("Logout error:", error);
+                        }
+                      }}
+                    >
+                      <svg
+                        width="20"
+                        height="20"
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                      >
+                        <path
+                          d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                        />
+                        <polyline
+                          points="16 17 21 12 16 7"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                        />
+                        <line
+                          x1="21"
+                          y1="12"
+                          x2="9"
+                          y2="12"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                        />
+                      </svg>
+                      <span>Logout</span>
                     </button>
                   </div>
                 </>
