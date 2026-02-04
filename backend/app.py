@@ -248,6 +248,30 @@ if EXTENSIONS_AVAILABLE and init_extensions:
 if ROUTES_AVAILABLE and register_routes:
     register_routes(app)
 
+# Register OTP API routes (v1)
+try:
+    from routes.otp import otp_bp
+    app.register_blueprint(otp_bp, url_prefix='/v1')
+    logger.info("🔐 OTP API routes registered (/v1/otp/*)")
+except ImportError as e:
+    logger.warning(f"OTP routes not available: {e}")
+
+# Register Console Auth routes
+try:
+    from routes.console_auth import console_auth_bp
+    app.register_blueprint(console_auth_bp)
+    logger.info("👤 Console Auth routes registered (/console/auth/*)")
+except ImportError as e:
+    logger.warning(f"Console Auth routes not available: {e}")
+
+# Register Console API routes
+try:
+    from routes.console_api import console_api_bp
+    app.register_blueprint(console_api_bp)
+    logger.info("📊 Console API routes registered (/console/*)")
+except ImportError as e:
+    logger.warning(f"Console API routes not available: {e}")
+
 # Initialize webhook security
 webhook_security = None
 if RATE_LIMIT_AVAILABLE and get_webhook_security:

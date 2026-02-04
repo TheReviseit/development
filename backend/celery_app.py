@@ -34,6 +34,7 @@ try:
             "tasks.notifications",
             "tasks.maintenance",
             "tasks.orders",  # Order processing tasks
+            "tasks.otp_delivery",  # OTP delivery tasks
         ]
     )
     

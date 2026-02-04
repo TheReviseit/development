@@ -1,0 +1,279 @@
+openapi: 3.0.3
+info:
+  title: Flowauxi OTP API
+  description: |
+    Production-grade OTP API for sending and verifying OTPs via WhatsApp.
+
+    ## Authentication
+    All endpoints require API key authentication via Bearer token:
+    ```
+    Authorization: Bearer otp_live_xxx
+    ```
+
+    ## Rate Limits
+    - **Global**: 10 OTPs per phone per hour
+    - **Per-purpose**: 3 OTPs per purpose per 5 minutes
+    - **Verification**: 5 attempts per OTP
+
+    ## Sandbox Mode
+    Use `otp_test_xxx` keys for testing. Sandbox mode returns OTP in response without sending real messages.
+
+  version: 1.0.0
+  contact:
+    name: Flowauxi Support
+    email: support@flowauxi.com
+
+servers:
+  - url: https://api.flowauxi.com/v1
+    description: Production
+  - url: http://localhost:5000/v1
+    description: Development
+
+security:
+  - BearerAuth: []
+
+paths:
+  /otp/send:
+    post:
+      summary: Send OTP
+      description: Generate and send an OTP to the specified phone number.
+      operationId: sendOTP
+      tags:
+        - OTP
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SendOTPRequest"
+            example:
+              to: "+919876543210"
+              purpose: "login"
+              channel: "whatsapp"
+              otp_length: 6
+              ttl: 300
+      parameters:
+        - name: Idempotency-Key
+          in: header
+          description: Unique key for idempotent requests (prevents duplicate OTPs on retry)
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: OTP sent successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SendOTPResponse"
+        "400":
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Invalid API key
+        "403":
+          description: Phone number blocked
+        "429":
+          description: Rate limit exceeded
+
+  /otp/verify:
+    post:
+      summary: Verify OTP
+      description: Verify a user-submitted OTP code.
+      operationId: verifyOTP
+      tags:
+        - OTP
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/VerifyOTPRequest"
+            example:
+              request_id: "otp_req_abc123"
+              otp: "123456"
+      responses:
+        "200":
+          description: OTP verified successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/VerifyOTPResponse"
+        "400":
+          description: Invalid OTP
+        "409":
+          description: OTP already verified
+        "410":
+          description: OTP expired
+        "429":
+          description: Max attempts exceeded
+
+  /otp/resend:
+    post:
+      summary: Resend OTP
+      description: Resend an OTP with optional channel escalation.
+      operationId: resendOTP
+      tags:
+        - OTP
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ResendOTPRequest"
+      responses:
+        "200":
+          description: OTP resent successfully
+        "429":
+          description: Cooldown active or max resends exceeded
+
+  /otp/status/{request_id}:
+    get:
+      summary: Get OTP Status
+      description: Check the status of an OTP request.
+      operationId: getOTPStatus
+      tags:
+        - OTP
+      parameters:
+        - name: request_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Status retrieved
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OTPStatusResponse"
+        "404":
+          description: Request not found
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      description: API key in format otp_live_xxx or otp_test_xxx
+
+  schemas:
+    SendOTPRequest:
+      type: object
+      required:
+        - to
+        - purpose
+      properties:
+        to:
+          type: string
+          description: Phone number in E.164 format
+          example: "+919876543210"
+        purpose:
+          type: string
+          enum: [login, signup, password_reset, transaction]
+          description: Purpose of the OTP
+        channel:
+          type: string
+          enum: [whatsapp, sms]
+          default: whatsapp
+        otp_length:
+          type: integer
+          minimum: 4
+          maximum: 8
+          default: 6
+        ttl:
+          type: integer
+          minimum: 60
+          maximum: 600
+          default: 300
+          description: Time-to-live in seconds
+        metadata:
+          type: object
+          description: Optional metadata
+
+    SendOTPResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        request_id:
+          type: string
+          example: "otp_req_abc123"
+        expires_in:
+          type: integer
+          description: Seconds until expiry
+        sandbox:
+          type: boolean
+          description: True if sandbox mode
+        otp:
+          type: string
+          description: OTP code (only in sandbox mode)
+
+    VerifyOTPRequest:
+      type: object
+      required:
+        - request_id
+        - otp
+      properties:
+        request_id:
+          type: string
+        otp:
+          type: string
+
+    VerifyOTPResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        verified:
+          type: boolean
+
+    ResendOTPRequest:
+      type: object
+      required:
+        - request_id
+      properties:
+        request_id:
+          type: string
+        channel:
+          type: string
+          enum: [whatsapp, sms]
+
+    OTPStatusResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        request_id:
+          type: string
+        status:
+          type: string
+          enum: [pending, verified, expired]
+        delivery_status:
+          type: string
+          enum: [queued, sent, delivered, failed]
+        expires_at:
+          type: string
+          format: date-time
+        attempts:
+          type: integer
+        resend_count:
+          type: integer
+
+    ErrorResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: false
+        error:
+          type: string
+          example: "RATE_LIMITED"
+        message:
+          type: string
+        retry_after:
+          type: integer
+          description: Seconds to wait before retry

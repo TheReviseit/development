@@ -44,6 +44,10 @@ export async function proxy(request: NextRequest) {
     "/store", // Public mini store pages
     "/payment-success", // Payment success page (Razorpay redirect)
     "/api/orders/track", // Public API for order tracking by phone number
+    // OTP Developer Console (uses its own cookie-based auth)
+    "/console", // Console dashboard and all sub-pages
+    "/apis", // Public API documentation
+    "/api/console", // Console API proxy (uses own auth cookies)
   ];
 
   const isPublicPath =
