@@ -1,27 +1,76 @@
 "use client";
 
 import Link from "next/link";
+import { useState, useEffect } from "react";
 import "./docs.css";
 
 export default function DocsPage() {
+  const [theme, setTheme] = useState<"dark" | "light">("dark");
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
+
+  useEffect(() => {
+    // Check if user has console session cookie
+    const hasCookie =
+      document.cookie.includes("otp_console_session") ||
+      document.cookie.includes("flowauxi_console_session");
+    setIsLoggedIn(hasCookie);
+
+    // Check saved theme preference
+    const savedTheme = localStorage.getItem("docs-theme") as "dark" | "light";
+    if (savedTheme) setTheme(savedTheme);
+  }, []);
+
+  const toggleTheme = () => {
+    const newTheme = theme === "dark" ? "light" : "dark";
+    setTheme(newTheme);
+    localStorage.setItem("docs-theme", newTheme);
+  };
+
   return (
-    <div className="docs-page">
+    <div className={`docs-page ${theme === "light" ? "docs-light" : ""}`}>
       {/* Top Navbar */}
       <nav className="docs-navbar">
-        <Link href="/" className="docs-navbar-logo">
-          <div className="docs-navbar-logo-icon">N</div>
+        <Link href="/apis" className="docs-navbar-logo">
+          <img src="/logo.png" alt="Flowauxi" className="docs-logo-img" />
           <span className="docs-navbar-title">Flowauxi</span>
         </Link>
         <div className="docs-navbar-divider" />
         <span className="docs-navbar-subtitle">API Documentation</span>
         <div className="docs-navbar-actions">
-          <Link
-            href="/console"
-            className="docs-navbar-btn docs-navbar-btn-secondary"
+          <button
+            onClick={toggleTheme}
+            className="docs-theme-toggle"
+            title="Toggle theme"
           >
-            Console
-          </Link>
-          <Link href="/console/keys" className="docs-navbar-btn">
+            {theme === "dark" ? (
+              <svg
+                width="18"
+                height="18"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+              >
+                <circle cx="12" cy="12" r="5" />
+                <path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42" />
+              </svg>
+            ) : (
+              <svg
+                width="18"
+                height="18"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+              >
+                <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
+              </svg>
+            )}
+          </button>
+          <Link
+            href={isLoggedIn ? "/console" : "/console/login"}
+            className="docs-navbar-btn"
+          >
             Get API Key
           </Link>
         </div>

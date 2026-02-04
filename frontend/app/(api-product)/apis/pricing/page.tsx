@@ -19,34 +19,39 @@ const CheckIcon = () => (
 const plans = [
   {
     name: "Starter",
-    price: "Free",
-    period: "",
-    description: "Perfect for testing and small projects",
+    price: "₹799",
+    period: "/month",
+    description: "Perfect for MVPs and early-stage startups",
     features: [
-      "100 OTPs per month",
-      "WhatsApp channel only",
-      "Sandbox mode",
-      "Community support",
-      "Basic analytics",
+      "All prices exclusive of GST",
+      "Live OTP API access",
+      "WhatsApp OTPs at ₹0.75/OTP",
+      "Standard API latency",
+      "1 Webhook integration",
+      "Basic usage analytics",
+      "Email support",
+      "Secure API keys & console access",
     ],
+    limits: ["Soft usage cap: ~10,000 OTPs/month", "Rate limits enforced"],
     cta: "Get Started",
     ctaLink: "/console/signup",
     highlighted: false,
   },
   {
     name: "Growth",
-    price: "₹2,999",
+    price: "₹1,999",
     period: "/month",
-    description: "For growing businesses and apps",
+    description: "Built for growing products with higher OTP volume",
     features: [
-      "10,000 OTPs per month",
-      "WhatsApp + SMS channels",
-      "Production API keys",
-      "Webhooks",
-      "Priority support",
-      "Advanced analytics",
-      "Custom TTL & length",
+      "All prices exclusive of GST",
+      "WhatsApp OTPs at ₹0.60/OTP",
+      "Priority API routing (lower latency)",
+      "Unlimited webhooks",
+      "Production-grade API keys",
+      "Advanced analytics dashboard",
+      "Priority chat support",
     ],
+    limits: ["Higher rate limits", "Soft usage cap: ~50,000 OTPs/month"],
     cta: "Start Free Trial",
     ctaLink: "/console/signup",
     highlighted: true,
@@ -55,17 +60,18 @@ const plans = [
     name: "Enterprise",
     price: "Custom",
     period: "",
-    description: "For high-volume and custom needs",
+    description: "For high-volume businesses and enterprises",
     features: [
-      "Unlimited OTPs",
-      "All channels",
-      "Dedicated support",
-      "Custom SLA",
-      "White-label options",
-      "On-premise deployment",
+      "All prices exclusive of GST",
+      "Volume OTP pricing (₹0.50/OTP and below)",
+      "Dedicated account manager",
+      "Custom SLA (99.9%+ uptime)",
+      "High throughput & custom rate limits",
+      "White-label & IP-restricted APIs",
       "Custom integrations",
-      "Compliance certifications",
+      "24/7 premium support",
     ],
+    limits: [],
     cta: "Contact Sales",
     ctaLink: "mailto:sales@flowauxi.com",
     highlighted: false,
@@ -74,9 +80,19 @@ const plans = [
 
 const faqs = [
   {
-    question: "How does the free tier work?",
+    question: "Are there any free OTPs?",
     answer:
-      "The Starter plan gives you 100 free OTPs per month in sandbox mode. Perfect for development and testing. No credit card required.",
+      "No. There are no free OTPs on any plan. Every OTP sent is billed. However, sandbox/testing mode is available for development without real OTP delivery.",
+  },
+  {
+    question: "How does billing work?",
+    answer:
+      "Monthly plan fee + usage charges apply. OTP usage is billed per successful send. Unused OTP credits do not roll over.",
+  },
+  {
+    question: "Can I switch plans anytime?",
+    answer:
+      "Yes! You can upgrade your plan at any time. Changes take effect immediately.",
   },
   {
     question: "What payment methods do you accept?",
@@ -84,19 +100,9 @@ const faqs = [
       "We accept all major credit cards, debit cards, UPI, and net banking through Razorpay. Enterprise customers can pay via invoice.",
   },
   {
-    question: "Can I switch plans anytime?",
-    answer:
-      "Yes! You can upgrade or downgrade your plan at any time. Changes take effect immediately, and we'll prorate your billing.",
-  },
-  {
-    question: "What's included in priority support?",
-    answer:
-      "Priority support includes email response within 4 hours, dedicated Slack channel, and access to our engineering team for integration help.",
-  },
-  {
     question: "Do you offer volume discounts?",
     answer:
-      "Yes, enterprise plans include custom pricing based on volume. Contact our sales team for a personalized quote.",
+      "Yes, enterprise plans include custom pricing based on volume. Contact our sales team at sales@flowauxi.com for a personalized quote.",
   },
 ];
 
@@ -135,7 +141,8 @@ export default function PricingPage() {
       <section className="pricing-hero">
         <h1 className="pricing-hero-title">Simple, Transparent Pricing</h1>
         <p className="pricing-hero-subtitle">
-          Start free, scale as you grow. No hidden fees, no surprises.
+          No hidden fees. Pay monthly plan + per-OTP usage. Sandbox testing
+          available.
         </p>
       </section>
 
@@ -165,6 +172,18 @@ export default function PricingPage() {
                 </li>
               ))}
             </ul>
+            {plan.limits && plan.limits.length > 0 && (
+              <div className="pricing-limits">
+                <p className="pricing-limits-title">Limits & Notes</p>
+                <ul className="pricing-limits-list">
+                  {plan.limits.map((limit, i) => (
+                    <li key={i} className="pricing-limits-item">
+                      • {limit}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
             <Link
               href={plan.ctaLink}
               className={`pricing-cta ${plan.highlighted ? "pricing-cta-primary" : "pricing-cta-secondary"}`}
@@ -192,11 +211,17 @@ export default function PricingPage() {
       <section className="api-cta-section">
         <h2 className="api-cta-title">Ready to get started?</h2>
         <p className="api-cta-subtitle">
-          Start with 100 free OTPs. No credit card required.
+          Create your account and get your API keys in seconds. Sandbox testing
+          included.
         </p>
         <Link href="/console/signup" className="api-cta-btn">
-          Create Free Account
+          Get API Key
         </Link>
+        <p className="pricing-sales-contact">
+          <a href="mailto:sales@flowauxi.com" className="pricing-sales-link">
+            Contact sales@flowauxi.com
+          </a>
+        </p>
       </section>
 
       {/* Footer */}

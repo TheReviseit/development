@@ -683,3 +683,46 @@
     font-size: 32px;
   }
 }
+
+/* Pricing Limits Section */
+.pricing-limits {
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.pricing-limits-title {
+  font-size: 0.75rem;
+  color: rgba(255, 255, 255, 0.5);
+  margin-bottom: 8px;
+  font-weight: 600;
+}
+
+.pricing-limits-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.pricing-limits-item {
+  font-size: 0.8rem;
+  color: rgba(255, 255, 255, 0.5);
+  margin-bottom: 4px;
+}
+
+/* Sales Contact */
+.pricing-sales-contact {
+  margin-top: 16px;
+  font-size: 0.85rem;
+  color: rgba(255, 255, 255, 0.5);
+}
+
+.pricing-sales-link {
+  color: #22c55e;
+  text-decoration: none;
+  transition: color 0.2s ease;
+}
+
+.pricing-sales-link:hover {
+  color: #4ade80;
+}
