@@ -1,6 +1,9 @@
 /**
  * Next.js API Route - Console Auth Proxy
  * Proxies auth requests to backend
+ *
+ * IMPORTANT: Properly handles Set-Cookie headers which contain
+ * commas in date format (e.g., "Mon, 11 Feb 2026 04:41:17 GMT")
  */
 
 import { NextRequest, NextResponse } from "next/server";
@@ -16,10 +19,14 @@ export async function POST(
   try {
     const body = await request.json().catch(() => ({}));
 
+    // Forward cookies for requests that need them (logout, refresh)
+    const cookieHeader = request.headers.get("cookie") || "";
+
     const response = await fetch(`${BACKEND_URL}/console/auth/${action}`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
+        Cookie: cookieHeader,
         "X-Forwarded-For":
           request.headers.get("x-forwarded-for") ||
           request.headers.get("x-real-ip") ||
@@ -34,14 +41,27 @@ export async function POST(
     // Create response
     const nextResponse = NextResponse.json(data, { status: response.status });
 
-    // Forward cookies from backend
-    const setCookie = response.headers.get("set-cookie");
-    if (setCookie) {
-      // Parse and forward each cookie
-      const cookies = setCookie.split(",").map((c) => c.trim());
-      cookies.forEach((cookie) => {
+    // PROPERLY forward Set-Cookie headers from backend
+    // Use getSetCookie() which returns an array - this handles cookies correctly
+    // without breaking on commas in date strings
+    const cookies = response.headers.getSetCookie?.();
+    if (cookies && cookies.length > 0) {
+      console.log(
+        `[Auth Proxy] Forwarding ${cookies.length} cookies from backend`,
+      );
+      for (const cookie of cookies) {
+        console.log(`[Auth Proxy] Set-Cookie: ${cookie.substring(0, 60)}...`);
         nextResponse.headers.append("Set-Cookie", cookie);
-      });
+      }
+    } else {
+      // Fallback for older fetch implementations
+      const setCookieHeader = response.headers.get("set-cookie");
+      if (setCookieHeader) {
+        console.log(
+          `[Auth Proxy] Set-Cookie (raw): ${setCookieHeader.substring(0, 60)}...`,
+        );
+        nextResponse.headers.append("Set-Cookie", setCookieHeader);
+      }
     }
 
     return nextResponse;
