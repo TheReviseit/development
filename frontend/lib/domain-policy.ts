@@ -32,6 +32,7 @@ export interface DomainDecision {
   product: ProductContext;
   allowed: boolean;
   redirect?: string;
+  rewrite?: string; // Internal rewrite (shows different content at same URL)
   seo: {
     canonical: string;
     index: boolean;
@@ -106,23 +107,28 @@ export function isDevOrPreview(hostname: string): boolean {
   );
 }
 
-/**
- * Get product context from hostname.
- * In dev/preview, defaults to dashboard unless ?product=api is set.
- */
 export function getProductFromDomain(
   hostname: string,
   searchParams?: URLSearchParams,
+  pathname?: string,
 ): ProductContext {
-  // Production domains
+  // Production domains - hostname determines product
   if (hostname === "api.flowauxi.com") return "api";
   if (hostname === "flowauxi.com" || hostname === "www.flowauxi.com")
     return "dashboard";
 
-  // Dev/Preview: check URL param override
-  if (isDevOrPreview(hostname)) {
+  // Dev/Preview: Auto-detect from pathname (no manual URL param needed)
+  if (isDevOrPreview(hostname) && pathname) {
+    // API product routes
+    const apiRoutes = ["/apis", "/console", "/docs"];
+    for (const route of apiRoutes) {
+      if (pathname === route || pathname.startsWith(`${route}/`)) {
+        return "api";
+      }
+    }
+    // Allow URL param override for edge cases
     if (searchParams?.get("product") === "api") return "api";
-    return "dashboard"; // Default to dashboard in dev
+    return "dashboard";
   }
 
   // Unknown domain: default to dashboard
@@ -200,19 +206,51 @@ export function evaluateDomainAccess(request: NextRequest): DomainDecision {
   const pathname = request.nextUrl.pathname;
   const searchParams = request.nextUrl.searchParams;
 
-  // Determine product context
-  const product = getProductFromDomain(hostname, searchParams);
+  // Determine product context (now uses pathname for dev detection)
+  const product = getProductFromDomain(hostname, searchParams, pathname);
   const config = getDomainConfig(product);
 
-  // Handle root path explicitly
+  // ==========================================================================
+  // API Domain: Root path shows /apis content (REWRITE, not redirect)
+  // ==========================================================================
   if (pathname === "/" && product === "api") {
     return {
       product,
-      allowed: false,
-      redirect: config.defaultHome,
+      allowed: true,
+      rewrite: "/apis", // Show /apis content at root URL
       seo: {
-        canonical: `${config.seoBase}${config.defaultHome}`,
+        canonical: config.seoBase, // Canonical is just the root
         index: true,
+      },
+    };
+  }
+
+  // ==========================================================================
+  // API Domain: /login redirects to /console/login
+  // ==========================================================================
+  if (pathname === "/login" && product === "api") {
+    return {
+      product,
+      allowed: false,
+      redirect: "/console/login",
+      seo: {
+        canonical: `${config.seoBase}/console/login`,
+        index: false,
+      },
+    };
+  }
+
+  // ==========================================================================
+  // API Domain: /signup redirects to /console/signup
+  // ==========================================================================
+  if (pathname === "/signup" && product === "api") {
+    return {
+      product,
+      allowed: false,
+      redirect: "/console/signup",
+      seo: {
+        canonical: `${config.seoBase}/console/signup`,
+        index: false,
       },
     };
   }
@@ -257,9 +295,17 @@ export function applyDecision(
   decision: DomainDecision,
   request: NextRequest,
 ): NextResponse {
-  // If not allowed and has redirect, redirect
+  // Handle REWRITE (show different content at same URL)
+  if (decision.rewrite) {
+    const rewriteUrl = new URL(decision.rewrite, request.url);
+    const response = NextResponse.rewrite(rewriteUrl);
+    response.headers.set("x-product-context", decision.product);
+    response.headers.set("x-canonical-url", decision.seo.canonical);
+    return response;
+  }
+
+  // Handle REDIRECT
   if (!decision.allowed && decision.redirect) {
-    // Check if it's a full URL (cross-domain) or path
     if (decision.redirect.startsWith("http")) {
       return NextResponse.redirect(decision.redirect);
     }
@@ -275,8 +321,6 @@ export function applyDecision(
 
   // Allowed: continue with product context header
   const response = NextResponse.next();
-
-  // Add product context header for downstream use
   response.headers.set("x-product-context", decision.product);
   response.headers.set("x-canonical-url", decision.seo.canonical);
 

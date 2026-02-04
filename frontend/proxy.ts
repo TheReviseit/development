@@ -157,20 +157,26 @@ function redirectToDashboard(
 }
 
 // =============================================================================
-// PROXY (Main export - Orchestrator)
+// PROXY (Main export - Next.js 16+ auto-detects this)
 // =============================================================================
 
 export async function proxy(request: NextRequest) {
   const pathname = request.nextUrl.pathname;
   const hostname = request.nextUrl.hostname;
-  const isApiPath = pathname.startsWith("/api");
+  // Only match actual API endpoints (/api/...), NOT /apis (which is a page)
+  const isApiPath = pathname.startsWith("/api/") || pathname === "/api";
 
   // ==========================================================================
   // STEP 1: Domain-aware routing (delegated to domain-policy.ts)
   // ==========================================================================
   const domainDecision = evaluateDomainAccess(request);
 
-  // Handle domain-level redirects (e.g., / on api.flowauxi.com → /apis)
+  // Handle domain-level REWRITES (e.g., api.flowauxi.com/ → shows /apis content)
+  if (domainDecision.rewrite) {
+    return applyDecision(domainDecision, request);
+  }
+
+  // Handle domain-level REDIRECTS (e.g., /login on API domain → /console/login)
   if (!domainDecision.allowed && domainDecision.redirect) {
     return applyDecision(domainDecision, request);
   }
