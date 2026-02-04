@@ -84,13 +84,29 @@ export async function GET(
     // Forward cookies from request
     const cookieHeader = request.headers.get("cookie") || "";
 
+    // Debug logging
+    console.log(`[Auth Proxy GET] /${action}`);
+    console.log(
+      `[Auth Proxy GET] Cookie header: ${cookieHeader.substring(0, 80)}...`,
+    );
+
+    // Also check for the specific cookie
+    const sessionCookie = request.cookies.get("otp_console_session");
+    console.log(
+      `[Auth Proxy GET] Session cookie obj: ${sessionCookie ? "present" : "undefined"}`,
+    );
+
     const response = await fetch(`${BACKEND_URL}/console/auth/${action}`, {
       method: "GET",
       headers: {
-        Cookie: cookieHeader,
+        Cookie: sessionCookie
+          ? `otp_console_session=${sessionCookie.value}`
+          : cookieHeader,
         "X-Forwarded-For": request.headers.get("x-forwarded-for") || "",
       },
     });
+
+    console.log(`[Auth Proxy GET] Backend response: ${response.status}`);
 
     const data = await response.json();
     return NextResponse.json(data, { status: response.status });
