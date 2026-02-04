@@ -251,7 +251,7 @@ if ROUTES_AVAILABLE and register_routes:
 # Register OTP API routes (v1)
 try:
     from routes.otp import otp_bp
-    app.register_blueprint(otp_bp, url_prefix='/v1')
+    app.register_blueprint(otp_bp, url_prefix='/v1/otp')
     logger.info("🔐 OTP API routes registered (/v1/otp/*)")
 except ImportError as e:
     logger.warning(f"OTP routes not available: {e}")

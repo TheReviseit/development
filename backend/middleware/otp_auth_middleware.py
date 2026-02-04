@@ -7,7 +7,7 @@ Features:
 - Key prefix lookup + hash verification
 - Soft-delete aware (checks revoked_at)
 - Rate limit enforcement
-- Business context injection
+- Project/Business context injection
 """
 
 import hmac
@@ -38,7 +38,7 @@ def is_sandbox_key(api_key: str) -> bool:
 
 def verify_api_key(api_key: str, supabase_client) -> Optional[Dict[str, Any]]:
     """
-    Verify API key and return business context.
+    Verify API key and return project context.
     
     Lookup flow:
     1. Extract key prefix (first 16 chars)
@@ -52,7 +52,7 @@ def verify_api_key(api_key: str, supabase_client) -> Optional[Dict[str, Any]]:
         supabase_client: Supabase client instance
         
     Returns:
-        Business context dict or None if invalid
+        Project context dict or None if invalid
     """
     if not api_key or len(api_key) < 16:
         return None
@@ -63,8 +63,8 @@ def verify_api_key(api_key: str, supabase_client) -> Optional[Dict[str, Any]]:
     try:
         # Lookup by prefix
         result = supabase_client.table("otp_api_keys").select(
-            "id, business_id, key_hash, scopes, rate_limit_per_minute, rate_limit_per_day, "
-            "is_active, expires_at, revoked_at"
+            "id, project_id, key_hash, scopes, rate_limit_per_minute, rate_limit_per_day, "
+            "is_active, expires_at, revoked_at, environment"
         ).eq("key_prefix", key_prefix).single().execute()
         
         key_record = result.data
@@ -104,25 +104,43 @@ def verify_api_key(api_key: str, supabase_client) -> Optional[Dict[str, Any]]:
         except Exception:
             pass  # Don't fail auth on usage tracking error
         
-        # Fetch business info
-        business_result = supabase_client.table("otp_businesses").select(
-            "id, name, whatsapp_mode, phone_number_id, webhook_url, webhook_secret"
-        ).eq("id", key_record["business_id"]).single().execute()
+        # Fetch project info
+        project_id = key_record.get("project_id")
+        project = {}
         
-        business = business_result.data if business_result.data else {}
+        if project_id:
+            project_result = supabase_client.table("otp_projects").select(
+                "id, name, org_id, environment, whatsapp_mode, whatsapp_phone_number_id, "
+                "webhook_url, webhook_secret, otp_length, otp_ttl_seconds, max_verify_attempts"
+            ).eq("id", project_id).single().execute()
+            
+            project = project_result.data if project_result.data else {}
+        
+        # Determine if this is sandbox mode
+        # test environment OR test key prefix = sandbox mode
+        is_sandbox = (
+            key_record.get("environment") == "test" or 
+            is_sandbox_key(api_key)
+        )
         
         return {
             "key_id": key_record["id"],
-            "business_id": key_record["business_id"],
-            "business_name": business.get("name"),
+            "project_id": project_id,
+            "business_id": project_id,  # Alias for backward compatibility
+            "org_id": project.get("org_id"),
+            "project_name": project.get("name"),
             "scopes": key_record.get("scopes", ["send", "verify"]),
             "rate_limit_per_minute": key_record.get("rate_limit_per_minute", 60),
             "rate_limit_per_day": key_record.get("rate_limit_per_day", 10000),
-            "whatsapp_mode": business.get("whatsapp_mode", "platform"),
-            "phone_number_id": business.get("phone_number_id"),
-            "webhook_url": business.get("webhook_url"),
-            "webhook_secret": business.get("webhook_secret"),
-            "is_sandbox": is_sandbox_key(api_key)
+            "whatsapp_mode": project.get("whatsapp_mode", "platform"),
+            "phone_number_id": project.get("whatsapp_phone_number_id"),
+            "webhook_url": project.get("webhook_url"),
+            "webhook_secret": project.get("webhook_secret"),
+            "otp_length": project.get("otp_length", 6),
+            "otp_ttl_seconds": project.get("otp_ttl_seconds", 300),
+            "max_verify_attempts": project.get("max_verify_attempts", 5),
+            "is_sandbox": is_sandbox,
+            "environment": key_record.get("environment", "test")
         }
         
     except Exception as e:
@@ -146,7 +164,7 @@ def require_otp_auth(scopes: list = None):
         
     Injects into flask.g:
         g.otp_api_key: The API key string
-        g.otp_business: Business context dict
+        g.otp_business: Project context dict
         g.otp_is_sandbox: Boolean for sandbox mode
     """
     scopes = scopes or []
@@ -172,11 +190,11 @@ def require_otp_auth(scopes: list = None):
                     "message": "Invalid API key format"
                 }), 401
             
-            # Verify key and get business context
+            # Verify key and get project context
             try:
                 from supabase_client import get_supabase_client
                 supabase = get_supabase_client()
-                business_context = verify_api_key(api_key, supabase)
+                project_context = verify_api_key(api_key, supabase)
             except Exception as e:
                 logger.error(f"Auth error: {e}")
                 return jsonify({
@@ -185,7 +203,7 @@ def require_otp_auth(scopes: list = None):
                     "message": "Authentication service unavailable"
                 }), 500
             
-            if not business_context:
+            if not project_context:
                 return jsonify({
                     "success": False,
                     "error": "INVALID_API_KEY",
@@ -194,7 +212,7 @@ def require_otp_auth(scopes: list = None):
             
             # Check required scopes
             if scopes:
-                key_scopes = business_context.get("scopes", [])
+                key_scopes = project_context.get("scopes", [])
                 missing_scopes = [s for s in scopes if s not in key_scopes]
                 if missing_scopes:
                     return jsonify({
@@ -205,8 +223,8 @@ def require_otp_auth(scopes: list = None):
             
             # Inject context into flask.g
             g.otp_api_key = api_key
-            g.otp_business = business_context
-            g.otp_is_sandbox = business_context.get("is_sandbox", False)
+            g.otp_business = project_context  # Keep name for backward compatibility
+            g.otp_is_sandbox = project_context.get("is_sandbox", False)
             
             return f(*args, **kwargs)
         

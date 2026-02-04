@@ -303,7 +303,8 @@ class OTPService:
         try:
             self.db.table("otp_requests").insert({
                 "request_id": request_id,
-                "business_id": business_id,
+                "project_id": business_id,  # Use project_id (passed as business_id for compatibility)
+                "business_id": business_id,  # Keep for backward compatibility
                 "phone": phone,
                 "purpose": purpose,
                 "otp_hash": otp_hash,
@@ -816,7 +817,7 @@ class OTPService:
         """Store idempotency key."""
         try:
             self.db.table("otp_idempotency_keys").insert({
-                "business_id": business_id,
+                "project_id": business_id,  # Use project_id
                 "idempotency_key": idempotency_key,
                 "request_id": request_id,
                 "request_hash": hashlib.sha256(idempotency_key.encode()).hexdigest()
@@ -832,7 +833,7 @@ class OTPService:
         otp: str,
         channel: str
     ) -> None:
-        """Queue OTP delivery via Celery task."""
+        """Queue OTP delivery via Celery task, fallback to synchronous delivery."""
         try:
             from tasks.otp_delivery import deliver_otp
             deliver_otp.delay(
@@ -843,12 +844,82 @@ class OTPService:
                 channel=channel
             )
         except Exception as e:
-            logger.error(f"Failed to queue delivery task: {e}")
-            # Update delivery status to failed
+            logger.warning(f"Celery queue failed, trying synchronous delivery: {e}")
+            # Fallback: Send synchronously when Celery is not available
+            try:
+                self._send_otp_sync(request_id, business_id, phone, otp, channel)
+            except Exception as sync_error:
+                logger.error(f"Synchronous delivery also failed: {sync_error}")
+                self.db.table("otp_requests").update({
+                    "delivery_status": DeliveryStatus.FAILED,
+                    "last_delivery_error": str(sync_error)
+                }).eq("request_id", request_id).execute()
+    
+    def _send_otp_sync(
+        self,
+        request_id: str,
+        business_id: str,
+        phone: str,
+        otp: str,
+        channel: str
+    ) -> None:
+        """Send OTP synchronously via WhatsApp API."""
+        import os
+        import requests
+        
+        # Update status to 'sent'
+        self.db.table("otp_requests").update({
+            "delivery_status": DeliveryStatus.SENT,
+            "delivery_channel": channel
+        }).eq("request_id", request_id).execute()
+        
+        # Get credentials from environment
+        phone_number_id = os.getenv("WHATSAPP_PHONE_NUMBER_ID")
+        access_token = os.getenv("WHATSAPP_ACCESS_TOKEN")
+        template_name = os.getenv("WHATSAPP_OTP_TEMPLATE", "otp_authentication")
+        
+        if not phone_number_id or not access_token:
+            raise Exception("WhatsApp credentials not configured")
+        
+        # Format phone (remove + for WhatsApp API)
+        whatsapp_phone = phone.lstrip('+')
+        
+        # Send via WhatsApp Cloud API
+        url = f"https://graph.facebook.com/v18.0/{phone_number_id}/messages"
+        
+        headers = {
+            "Authorization": f"Bearer {access_token}",
+            "Content-Type": "application/json"
+        }
+        
+        payload = {
+            "messaging_product": "whatsapp",
+            "to": whatsapp_phone,
+            "type": "template",
+            "template": {
+                "name": template_name,
+                "language": {"code": "en"},
+                "components": [
+                    {
+                        "type": "body",
+                        "parameters": [
+                            {"type": "text", "text": otp}
+                        ]
+                    }
+                ]
+            }
+        }
+        
+        response = requests.post(url, headers=headers, json=payload, timeout=30)
+        
+        if response.status_code == 200:
             self.db.table("otp_requests").update({
-                "delivery_status": DeliveryStatus.FAILED,
-                "last_delivery_error": str(e)
+                "delivery_status": DeliveryStatus.DELIVERED
             }).eq("request_id", request_id).execute()
+            logger.info(f"OTP delivered synchronously to {phone}")
+        else:
+            error_msg = response.json().get("error", {}).get("message", response.text)
+            raise Exception(f"WhatsApp API error: {error_msg}")
     
     async def _audit_log(
         self,
@@ -862,7 +933,7 @@ class OTPService:
         """Record audit log entry."""
         try:
             self.db.table("otp_audit_logs").insert({
-                "business_id": business_id,
+                "project_id": business_id,  # Use project_id
                 "request_id": request_id,
                 "action": action,
                 "phone": phone,

@@ -141,30 +141,36 @@ def deliver_otp(
 # =============================================================================
 
 def _get_business_config(db, business_id: str) -> Dict[str, Any]:
-    """Get business configuration including WhatsApp credentials."""
+    """Get project configuration including WhatsApp credentials."""
     try:
-        result = db.table("otp_businesses").select(
-            "id, name, whatsapp_mode, phone_number_id, webhook_url, webhook_secret"
+        # First try otp_projects table (new schema)
+        result = db.table("otp_projects").select(
+            "id, name, whatsapp_mode, whatsapp_phone_number_id, webhook_url, webhook_secret"
         ).eq("id", business_id).single().execute()
         
-        business = result.data if result.data else {}
+        project = result.data if result.data else {}
         
-        if business.get("whatsapp_mode") == "customer" and business.get("phone_number_id"):
+        if project.get("whatsapp_mode") == "customer" and project.get("whatsapp_phone_number_id"):
             # Customer mode: get their credentials
-            from credential_manager import get_credentials_by_phone_number_id
-            creds = get_credentials_by_phone_number_id(business["phone_number_id"])
-            if creds:
-                business["access_token"] = creds.get("access_token")
-                business["phone_number_id"] = creds.get("phone_number_id")
-        else:
-            # Platform mode: use environment credentials
-            business["phone_number_id"] = os.getenv("WHATSAPP_PHONE_NUMBER_ID")
-            business["access_token"] = os.getenv("WHATSAPP_ACCESS_TOKEN")
+            try:
+                from credential_manager import get_credentials_by_phone_number_id
+                creds = get_credentials_by_phone_number_id(project["whatsapp_phone_number_id"])
+                if creds:
+                    project["access_token"] = creds.get("access_token")
+                    project["phone_number_id"] = creds.get("phone_number_id")
+            except Exception as e:
+                logger.warning(f"Failed to get customer credentials: {e}")
         
-        return business
+        # Fallback to platform mode: use environment credentials
+        if not project.get("phone_number_id"):
+            project["phone_number_id"] = os.getenv("WHATSAPP_PHONE_NUMBER_ID")
+        if not project.get("access_token"):
+            project["access_token"] = os.getenv("WHATSAPP_ACCESS_TOKEN")
+        
+        return project
         
     except Exception as e:
-        logger.error(f"Failed to get business config: {e}")
+        logger.error(f"Failed to get project config: {e}")
         return {
             "phone_number_id": os.getenv("WHATSAPP_PHONE_NUMBER_ID"),
             "access_token": os.getenv("WHATSAPP_ACCESS_TOKEN")
@@ -303,19 +309,19 @@ def deliver_webhook(
         from supabase_client import get_supabase_client
         db = get_supabase_client()
         
-        # Get business webhook config
-        result = db.table("otp_businesses").select(
+        # Get project webhook config
+        result = db.table("otp_projects").select(
             "webhook_url, webhook_secret"
         ).eq("id", business_id).single().execute()
         
-        business = result.data
+        project = result.data
         
-        if not business or not business.get("webhook_url"):
-            logger.debug(f"No webhook configured for business {business_id}")
+        if not project or not project.get("webhook_url"):
+            logger.debug(f"No webhook configured for project {business_id}")
             return {"success": True, "skipped": True}
         
-        webhook_url = business["webhook_url"]
-        webhook_secret = business.get("webhook_secret", "")
+        webhook_url = project["webhook_url"]
+        webhook_secret = project.get("webhook_secret", "")
         
         # Build payload
         payload = {
@@ -402,7 +408,7 @@ def _log_webhook_attempt(
     """Log webhook delivery attempt."""
     try:
         result = db.table("otp_webhook_logs").insert({
-            "business_id": business_id,
+            "project_id": business_id,  # Use project_id
             "request_id": request_id,
             "event_type": event_type,
             "payload": payload,
@@ -439,7 +445,7 @@ def _update_webhook_log(
         elif extra:
             # Create new log for dead letter
             db.table("otp_webhook_logs").insert({
-                "business_id": extra.get("business_id"),
+                "project_id": extra.get("business_id"),  # Use project_id
                 "request_id": extra.get("request_id"),
                 "event_type": extra.get("event_type"),
                 "payload": {},
