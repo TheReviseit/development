@@ -1,90 +1,278 @@
+/**
+ * Next.js Proxy - Enterprise Auth & Domain Gateway
+ *
+ * Server-side route protection with:
+ * - Domain-aware multi-product routing
+ * - Declarative policy-based auth
+ * - Cross-auth detection and blocking
+ * - Standardized error redirects
+ * - Zero client-side flash
+ *
+ * Architecture:
+ * - proxy.ts: Orchestrator only
+ * - lib/domain-policy.ts: All domain decision logic
+ */
+
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
+import {
+  evaluateDomainAccess,
+  applyDecision,
+  getProductFromDomain,
+  isDevOrPreview,
+  type ProductContext,
+} from "@/lib/domain-policy";
 
-/**
- * Proxy for Next.js Edge Runtime
- *
- * NOTE: This runs in Edge Runtime and cannot use Node.js APIs
- * - No Firebase Admin SDK
- * - No Supabase server client
- * - Session validation must happen in API routes
- */
+// =============================================================================
+// TYPES
+// =============================================================================
+
+type UserType = "normal" | "console" | null;
+
+// =============================================================================
+// AUTH ROUTE POLICY (Declarative - Which routes require which auth)
+// =============================================================================
+
+const AUTH_ROUTE_POLICY: Record<string, "normal" | "console"> = {
+  "/dashboard": "normal",
+  "/console": "console",
+  "/settings": "normal",
+  "/onboarding": "normal",
+};
+
+const PUBLIC_ROUTES = [
+  "/",
+  "/login",
+  "/signup",
+  "/console/login",
+  "/console/signup",
+  "/forgot-password",
+  "/reset-password",
+  "/verify-email",
+  "/privacy",
+  "/terms",
+  "/data-deletion",
+  "/data-handling-policy",
+  "/apis",
+  "/store",
+  "/payment-success",
+  "/error",
+  "/offline",
+  "/docs",
+  "/onboarding-embedded",
+  "/manifest.webmanifest",
+  "/sw.js",
+  "/sitemap.xml",
+  "/robots.txt",
+  "/pricing",
+];
+
+const PUBLIC_API_ROUTES = [
+  "/api/auth/login",
+  "/api/auth/logout",
+  "/api/auth/create-user",
+  "/api/auth/check-user-exists",
+  "/api/auth/send-verification",
+  "/api/webhooks",
+  "/api/facebook/deauthorize",
+  "/api/facebook/data-deletion",
+  "/api/ai-appointment-book",
+  "/api/store",
+  "/api/orders/track",
+  "/api/console",
+];
+
+// =============================================================================
+// AUTH HELPERS
+// =============================================================================
+
+function getUserTypeFromCookies(request: NextRequest): UserType {
+  // Updated cookie names for shared domain strategy
+  const hasNormalSession =
+    request.cookies.has("session") || request.cookies.has("flowauxi_session");
+  const hasConsoleSession =
+    request.cookies.has("otp_console_session") ||
+    request.cookies.has("flowauxi_console_session");
+
+  if (hasNormalSession && hasConsoleSession) {
+    return null; // Let route handler decide
+  }
+
+  if (hasConsoleSession) return "console";
+  if (hasNormalSession) return "normal";
+  return null;
+}
+
+function getRequiredUserType(pathname: string): "normal" | "console" | null {
+  for (const [routePrefix, userType] of Object.entries(AUTH_ROUTE_POLICY)) {
+    if (pathname.startsWith(routePrefix)) {
+      return userType;
+    }
+  }
+  return null;
+}
+
+function isPublicRoute(pathname: string): boolean {
+  return PUBLIC_ROUTES.some(
+    (route) => pathname === route || pathname.startsWith(`${route}/`),
+  );
+}
+
+function isPublicApiRoute(pathname: string): boolean {
+  return PUBLIC_API_ROUTES.some((route) => pathname.startsWith(route));
+}
+
+function redirectToError(
+  request: NextRequest,
+  code: string,
+  expected: string,
+  current: string,
+): NextResponse {
+  const url = new URL(`/error`, request.url);
+  url.searchParams.set("code", code);
+  url.searchParams.set("expected", expected);
+  url.searchParams.set("current", current);
+  return NextResponse.redirect(url);
+}
+
+function redirectToLogin(
+  request: NextRequest,
+  userType: "normal" | "console",
+  next?: string,
+): NextResponse {
+  const loginPath = userType === "console" ? "/console/login" : "/login";
+  const url = new URL(loginPath, request.url);
+  if (next) {
+    url.searchParams.set("next", next);
+  }
+  return NextResponse.redirect(url);
+}
+
+function redirectToDashboard(
+  request: NextRequest,
+  userType: "normal" | "console",
+): NextResponse {
+  const dashboardPath = userType === "console" ? "/console" : "/dashboard";
+  return NextResponse.redirect(new URL(dashboardPath, request.url));
+}
+
+// =============================================================================
+// PROXY (Main export - Orchestrator)
+// =============================================================================
+
 export async function proxy(request: NextRequest) {
-  const session = request.cookies.get("session");
+  const pathname = request.nextUrl.pathname;
+  const hostname = request.nextUrl.hostname;
+  const isApiPath = pathname.startsWith("/api");
 
-  // Public paths that don't require auth
-  const publicPaths = [
-    "/login",
-    "/signup",
-    "/api/auth/login",
-    "/api/auth/logout",
-    "/api/auth/create-user",
-    "/api/auth/check-user-exists",
-    "/api/auth/send-verification",
-    "/privacy",
-    "/terms",
-    "/data-deletion",
-    "/onboarding-embedded",
-    "/api/webhooks",
-    "/api/facebook/deauthorize",
-    "/api/facebook/data-deletion",
-    "/api/ai-appointment-book", // Internal API for AI booking (uses x-api-key auth instead)
-    "/data-handling-policy",
-    "/manifest.webmanifest",
-    "/sw.js",
-    "/offline",
-    "/_vercel",
-    // SEO files - MUST be public for search engines
-    "/sitemap.xml",
-    "/robots.txt",
-    "/forgot-password",
-    "/reset-password",
-    "/verify-email",
-    "/api/store", // Public API for mini store data
-    "/store", // Public mini store pages
-    "/payment-success", // Payment success page (Razorpay redirect)
-    "/api/orders/track", // Public API for order tracking by phone number
-    // OTP Developer Console (uses its own cookie-based auth)
-    "/console", // Console dashboard and all sub-pages
-    "/apis", // Public API documentation
-    "/api/console", // Console API proxy (uses own auth cookies)
-  ];
+  // ==========================================================================
+  // STEP 1: Domain-aware routing (delegated to domain-policy.ts)
+  // ==========================================================================
+  const domainDecision = evaluateDomainAccess(request);
 
-  const isPublicPath =
-    request.nextUrl.pathname === "/" ||
-    publicPaths.some((path) => request.nextUrl.pathname.startsWith(path));
+  // Handle domain-level redirects (e.g., / on api.flowauxi.com → /apis)
+  if (!domainDecision.allowed && domainDecision.redirect) {
+    return applyDecision(domainDecision, request);
+  }
 
-  const isAdminPath = request.nextUrl.pathname.startsWith("/admin");
-  const isApiPath = request.nextUrl.pathname.startsWith("/api");
-
-  // If trying to access protected route without session cookie
-  if (!session && !isPublicPath) {
-    if (isApiPath) {
+  // ==========================================================================
+  // STEP 2: API Routes - Let them handle their own auth
+  // ==========================================================================
+  if (isApiPath) {
+    if (isPublicApiRoute(pathname)) {
+      return addProductHeaders(
+        NextResponse.next(),
+        domainDecision.product,
+        domainDecision.seo.canonical,
+      );
+    }
+    const userType = getUserTypeFromCookies(request);
+    if (!userType && !pathname.startsWith("/api/console")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
-    return NextResponse.redirect(new URL("/login", request.url));
+    return addProductHeaders(
+      NextResponse.next(),
+      domainDecision.product,
+      domainDecision.seo.canonical,
+    );
   }
 
-  // For admin paths, add a header that routes can check
-  // Actual validation happens in the route handlers
-  if (isAdminPath && session) {
-    const response = NextResponse.next();
-    response.headers.set("x-requires-admin", "true");
-    return response;
+  // ==========================================================================
+  // STEP 3: Auth checks for page routes
+  // ==========================================================================
+  const userType = getUserTypeFromCookies(request);
+  const requiredType = getRequiredUserType(pathname);
+  const isPublic = isPublicRoute(pathname);
+
+  // Case 1: Public routes - allow all
+  if (isPublic) {
+    // Redirect logged-in users away from login pages
+    if (pathname === "/login" && userType === "normal") {
+      return redirectToDashboard(request, "normal");
+    }
+    if (pathname === "/console/login" && userType === "console") {
+      return redirectToDashboard(request, "console");
+    }
+    // Cross-auth on login pages: redirect to correct dashboard
+    if (pathname === "/login" && userType === "console") {
+      return redirectToDashboard(request, "console");
+    }
+    if (pathname === "/console/login" && userType === "normal") {
+      return redirectToDashboard(request, "normal");
+    }
+
+    return addProductHeaders(
+      NextResponse.next(),
+      domainDecision.product,
+      domainDecision.seo.canonical,
+    );
   }
 
-  return NextResponse.next();
+  // Case 2: Protected route, no auth
+  if (requiredType && !userType) {
+    return redirectToLogin(request, requiredType, pathname);
+  }
+
+  // Case 3: Protected route, wrong user type (CROSS-AUTH)
+  if (requiredType && userType && userType !== requiredType) {
+    return redirectToError(request, "WRONG_PORTAL", requiredType, userType);
+  }
+
+  // Case 4: Protected route, correct user type - allow
+  return addProductHeaders(
+    NextResponse.next(),
+    domainDecision.product,
+    domainDecision.seo.canonical,
+  );
 }
+
+// =============================================================================
+// HELPER: Add product context headers
+// =============================================================================
+
+function addProductHeaders(
+  response: NextResponse,
+  product: ProductContext,
+  canonical: string,
+): NextResponse {
+  response.headers.set("x-product-context", product);
+  response.headers.set("x-canonical-url", canonical);
+  return response;
+}
+
+// =============================================================================
+// CONFIG
+// =============================================================================
 
 export const config = {
   matcher: [
     /*
-     * Match all request paths except for the ones starting with:
+     * Match all request paths except:
      * - _next/static (static files)
-     * - _next/image (image optimization files)
-     * - favicon.ico (favicon file)
-     * - public files (images, etc)
+     * - _next/image (image optimization)
+     * - favicon.ico
+     * - Static files
      */
-    "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:jpg|jpeg|gif|png|svg|ico|css|js|webmanifest|json|xml|txt)).*)",
+    "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:jpg|jpeg|gif|png|svg|ico|css|js|webp|woff|woff2|webmanifest|json|xml|txt)).*)",
   ],
 };

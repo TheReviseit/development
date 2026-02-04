@@ -917,7 +917,7 @@ class OTPService:
         # Get credentials from environment
         phone_number_id = os.getenv("WHATSAPP_PHONE_NUMBER_ID")
         access_token = os.getenv("WHATSAPP_ACCESS_TOKEN")
-        template_name = os.getenv("WHATSAPP_OTP_TEMPLATE", "otp_authentication")
+        template_name = os.getenv("WHATSAPP_OTP_TEMPLATE", "auth_otps")
         
         if not phone_number_id or not access_token:
             raise Exception("WhatsApp credentials not configured")
@@ -926,7 +926,7 @@ class OTPService:
         whatsapp_phone = phone.lstrip('+')
         
         # Send via WhatsApp Cloud API
-        url = f"https://graph.facebook.com/v18.0/{phone_number_id}/messages"
+        url = f"https://graph.facebook.com/v24.0/{phone_number_id}/messages"
         
         headers = {
             "Authorization": f"Bearer {access_token}",
@@ -940,7 +940,7 @@ class OTPService:
             "type": "template",
             "template": {
                 "name": template_name,
-                "language": {"code": os.getenv("WHATSAPP_OTP_LANGUAGE", "en")},
+                "language": {"code": os.getenv("WHATSAPP_OTP_LANGUAGE", "en")},  # Must match template language
                 "components": [
                     {
                         "type": "body",

@@ -7,22 +7,28 @@ const baseUrl = "https://www.flowauxi.com";
 
 // Homepage metadata
 export const homeMetadata: Metadata = {
-  title:
-    "Flowauxi - AI WhatsApp Automation & Business Messaging Platform | Free Trial",
+  title: "Flowauxi - AI WhatsApp Automation & OTP API Platform",
   description:
-    "Transform your WhatsApp into a powerful business tool with AI automation. Get instant customer responses, automated follow-ups, and CRM integration. Trusted by 500+ businesses. Start your 14-day free trial today!",
+    "Transform your WhatsApp into a powerful business tool with AI automation. Plus OTP Verification API for secure authentication via WhatsApp & SMS. Trusted by 500+ businesses. Start your 14-day free trial today!",
   keywords: [
     "WhatsApp automation",
     "WhatsApp business API",
     "AI WhatsApp chatbot",
     "automated customer support",
     "WhatsApp CRM integration",
+    // OTP API keywords
+    "OTP API",
+    "OTP verification API",
+    "WhatsApp OTP",
+    "SMS OTP API",
+    "phone verification API",
+    "2FA API",
+    "two-factor authentication API",
   ],
   openGraph: {
-    title:
-      "Flowauxi - AI WhatsApp Automation & Business Messaging Platform | Free Trial",
+    title: "Flowauxi - AI WhatsApp Automation & OTP API Platform | Free Trial",
     description:
-      "Transform your WhatsApp into a powerful business tool with AI automation. Trusted by 500+ businesses.",
+      "Transform your WhatsApp into a powerful business tool with AI automation. Plus secure OTP Verification API. Trusted by 500+ businesses.",
     url: baseUrl,
     type: "website",
     images: [
@@ -30,7 +36,7 @@ export const homeMetadata: Metadata = {
         url: `${baseUrl}/og-image.png`,
         width: 1200,
         height: 630,
-        alt: "Flowauxi - WhatsApp Automation Platform",
+        alt: "Flowauxi - WhatsApp Automation & OTP API Platform",
       },
     ],
   },

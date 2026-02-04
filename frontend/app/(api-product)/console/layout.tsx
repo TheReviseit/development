@@ -75,7 +75,7 @@ const navItems = [
   { href: "/console/analytics", icon: AnalyticsIcon, label: "Analytics" },
   { href: "/console/webhooks", icon: WebhookIcon, label: "Webhooks" },
   { href: "/console/settings", icon: SettingsIcon, label: "Settings" },
-  { href: "/apis", icon: DocsIcon, label: "API Docs" },
+  { href: "/docs", icon: DocsIcon, label: "API Docs" },
 ];
 
 interface ConsoleLayoutProps {

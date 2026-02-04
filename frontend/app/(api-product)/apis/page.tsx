@@ -219,16 +219,9 @@ export default function APIsPage() {
       {/* Fixed Header at Top */}
       <header className="api-header">
         <div className="api-header-inner">
-          <Link href="/" className="api-header-logo">
-            <svg
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="1.5"
-            >
-              <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
-            </svg>
-            <span>Flowauxi</span>
+          <Link href="/apis" className="api-header-logo">
+            <img src="/logo.png" alt="Flowauxi" className="api-logo-img" />
+            <span>Flowauxi API</span>
           </Link>
 
           <nav className="api-header-nav">
@@ -241,6 +234,12 @@ export default function APIsPage() {
             <a href="#features" className="api-header-link">
               Features
             </a>
+            <Link href="/apis/pricing" className="api-header-link">
+              Pricing
+            </Link>
+            <Link href="/docs" className="api-header-link">
+              Docs
+            </Link>
             <Link href="/console/login" className="api-header-cta">
               Get API Key
             </Link>

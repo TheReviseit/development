@@ -26,8 +26,8 @@ logger = logging.getLogger('otp.delivery')
 # Configuration
 WEBHOOK_MAX_ATTEMPTS = 5
 WEBHOOK_INITIAL_BACKOFF = 60  # seconds
-WHATSAPP_OTP_TEMPLATE = os.getenv('WHATSAPP_OTP_TEMPLATE', 'otp_authentication')
-WHATSAPP_OTP_LANGUAGE = os.getenv('WHATSAPP_OTP_LANGUAGE', 'en_US')  # Support en, en_US, etc.
+WHATSAPP_OTP_TEMPLATE = os.getenv('WHATSAPP_OTP_TEMPLATE', 'auth_otps')
+WHATSAPP_OTP_LANGUAGE = os.getenv('WHATSAPP_OTP_LANGUAGE', 'en')  # Must match template language
 
 
 # =============================================================================
@@ -296,7 +296,7 @@ def _send_whatsapp_otp(business: Dict, phone: str, otp: str) -> Dict[str, Any]:
     
     # Build the CORRECT payload for authentication templates
     # https://developers.facebook.com/docs/whatsapp/business-management-api/authentication-templates
-    url = f"https://graph.facebook.com/v18.0/{phone_number_id}/messages"
+    url = f"https://graph.facebook.com/v24.0/{phone_number_id}/messages"
     
     headers = {
         "Authorization": f"Bearer {access_token}",
@@ -335,7 +335,12 @@ def _send_whatsapp_otp(business: Dict, phone: str, otp: str) -> Dict[str, Any]:
         }
     }
     
-    logger.info(f"Sending OTP to {whatsapp_phone} via template '{WHATSAPP_OTP_TEMPLATE}'")
+    logger.info(f"Sending WhatsApp OTP:")
+    logger.info(f"  Template: {WHATSAPP_OTP_TEMPLATE}")
+    logger.info(f"  Language: {WHATSAPP_OTP_LANGUAGE}")
+    logger.info(f"  Recipient: {whatsapp_phone}")
+    logger.info(f"  OTP Length: {len(otp)}")
+    logger.info(f"  Payload: {json.dumps(payload, indent=2)}")
     
     try:
         response = requests.post(url, headers=headers, json=payload, timeout=30)
@@ -365,8 +370,14 @@ def _send_whatsapp_otp(business: Dict, phone: str, otp: str) -> Dict[str, Any]:
             error_subcode = error_obj.get("error_subcode", "")
             
             logger.error(
-                f"WhatsApp API error: code={error_code}, subcode={error_subcode}, "
-                f"message={error_message}, status={response.status_code}"
+                f"WhatsApp API Error Details:\n"
+                f"  Status Code: {response.status_code}\n"
+                f"  Error Code: {error_code}\n"
+                f"  Error Subcode: {error_subcode}\n"
+                f"  Message: {error_message}\n"
+                f"  Template: {WHATSAPP_OTP_TEMPLATE}\n"
+                f"  Language: {WHATSAPP_OTP_LANGUAGE}\n"
+                f"  Full Response: {json.dumps(data, indent=2)}"
             )
             
             return {

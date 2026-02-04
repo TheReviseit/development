@@ -9,8 +9,9 @@ import HeroSection from "./HeroSection";
 const TrustedBy = dynamic(() => import("./TrustedBy"), { ssr: false });
 const WhatsAppFeatures = dynamic(
   () => import("./WhatsAppFeatures/WhatsAppFeatures"),
-  { ssr: false }
+  { ssr: false },
 );
+const OTPAPISection = dynamic(() => import("./OTPAPISection"), { ssr: false });
 
 // Lazy load below-fold components for better performance
 const PricingCards = dynamic(() => import("./PricingCards/PricingCards"), {
@@ -19,7 +20,7 @@ const PricingCards = dynamic(() => import("./PricingCards/PricingCards"), {
 const Testimonials = dynamic(() => import("./Testimonials"), { ssr: false });
 const ContactSection = dynamic(
   () => import("./ContactSection/ContactSection"),
-  { ssr: false }
+  { ssr: false },
 );
 const Footer = dynamic(() => import("./Footer/Footer"), { ssr: false });
 
@@ -36,7 +37,7 @@ export default function HomePageContent() {
           observer.disconnect(); // Only need to trigger once
         }
       },
-      { rootMargin: "200px" } // Start loading 200px before visible
+      { rootMargin: "200px" }, // Start loading 200px before visible
     );
 
     if (triggerRef.current) {
@@ -67,6 +68,9 @@ export default function HomePageContent() {
 
       {/* WhatsApp Features Section */}
       <WhatsAppFeatures />
+
+      {/* OTP API Section - NEW */}
+      <OTPAPISection />
 
       {/* Trigger point for below-fold content */}
       <div ref={triggerRef} />

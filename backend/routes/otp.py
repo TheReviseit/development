@@ -14,6 +14,7 @@ from flask import Blueprint, request, jsonify, g
 
 from middleware.otp_auth_middleware import require_otp_auth, get_client_ip
 from middleware.otp_rate_limiter import check_otp_rate_limits, get_rate_limiter
+from middleware.security_enforcer import require_paid_otp_access
 
 logger = logging.getLogger('otp.routes')
 
@@ -27,6 +28,7 @@ otp_bp = Blueprint('otp', __name__, url_prefix='/otp')
 
 @otp_bp.route('/send', methods=['POST'])
 @require_otp_auth(scopes=['send'])
+@require_paid_otp_access()  # 🔒 NO OTP WITHOUT PAID PLAN
 def send_otp():
     """
     Generate and send an OTP.
@@ -296,6 +298,7 @@ def verify_otp():
 
 @otp_bp.route('/resend', methods=['POST'])
 @require_otp_auth(scopes=['send'])
+@require_paid_otp_access()  # 🔒 NO OTP WITHOUT PAID PLAN
 def resend_otp():
     """
     Resend an OTP with channel escalation.

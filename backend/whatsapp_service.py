@@ -14,7 +14,7 @@ class WhatsAppService:
     def __init__(self):
         self.phone_number_id = os.getenv('WHATSAPP_PHONE_NUMBER_ID')
         self.access_token = os.getenv('WHATSAPP_ACCESS_TOKEN')
-        self.api_version = 'v18.0'
+        self.api_version = 'v24.0'
         self.base_url = f'https://graph.facebook.com/{self.api_version}'
         
     def send_text_message(self, to: str, message: str) -> Dict[str, Any]:

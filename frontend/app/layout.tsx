@@ -73,6 +73,14 @@ export const metadata: Metadata = {
     "business messaging solution",
     "multi-channel messaging",
     "automated customer support",
+    // OTP API keywords
+    "OTP API",
+    "OTP verification API",
+    "WhatsApp OTP",
+    "SMS OTP API",
+    "phone verification API",
+    "2FA API",
+    "two-factor authentication",
   ],
   authors: [
     { name: "Flowauxi Team", url: "https://www.flowauxi.com" },
@@ -300,9 +308,14 @@ const organizationSchema = {
     "CRM Integration",
     "Conversational AI",
     "Marketing Automation",
+    "OTP Verification API",
+    "Two-Factor Authentication",
+    "Phone Verification",
+    "SMS OTP",
   ],
   knowsLanguage: ["en", "hi"],
-  keywords: "WhatsApp API, Business Automation, Flowauxi AI, CRM Integration",
+  keywords:
+    "WhatsApp API, Business Automation, Flowauxi AI, CRM Integration, OTP API, Phone Verification",
 };
 
 // Website Schema - Helps with search functionality

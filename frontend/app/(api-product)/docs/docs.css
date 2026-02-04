@@ -1,0 +1,521 @@
+/* API Documentation Page Styles */
+/* Full-page layout with fixed sidebar like console */
+
+/* Reset and Base */
+.docs-page {
+  min-height: 100vh;
+  background: #000000;
+  color: #ffffff;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Top Navbar */
+.docs-navbar {
+  height: 56px;
+  background: #0a0a0a;
+  border-bottom: 1px solid #222222;
+  display: flex;
+  align-items: center;
+  padding: 0 24px;
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 100;
+}
+
+.docs-navbar-logo {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  text-decoration: none;
+  color: #ffffff;
+}
+
+.docs-navbar-logo-icon {
+  width: 32px;
+  height: 32px;
+  background: #ffffff;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 16px;
+  color: #000000;
+}
+
+.docs-navbar-title {
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.docs-navbar-divider {
+  width: 1px;
+  height: 24px;
+  background: #333333;
+  margin: 0 16px;
+}
+
+.docs-navbar-subtitle {
+  font-size: 14px;
+  color: #999999;
+}
+
+.docs-navbar-actions {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.docs-navbar-btn {
+  padding: 8px 16px;
+  background: #ffffff;
+  color: #000000;
+  border: none;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  text-decoration: none;
+  cursor: pointer;
+  transition: opacity 0.15s ease;
+}
+
+.docs-navbar-btn:hover {
+  opacity: 0.9;
+}
+
+.docs-navbar-btn-secondary {
+  background: transparent;
+  color: #999999;
+  border: 1px solid #333333;
+}
+
+.docs-navbar-btn-secondary:hover {
+  color: #ffffff;
+  border-color: #555555;
+}
+
+/* Layout Container */
+.docs-layout {
+  display: flex;
+  margin-top: 56px;
+  min-height: calc(100vh - 56px);
+}
+
+/* Sidebar */
+.docs-sidebar {
+  width: 280px;
+  background: #0a0a0a;
+  border-right: 1px solid #222222;
+  position: fixed;
+  top: 56px;
+  left: 0;
+  bottom: 0;
+  overflow-y: auto;
+  padding: 24px 0;
+}
+
+.docs-nav {
+  padding: 0 16px;
+}
+
+.docs-nav-title {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: #666666;
+  margin: 0 0 12px;
+  padding: 0 12px;
+}
+
+.docs-nav-list {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 32px;
+}
+
+.docs-nav-item {
+  margin-bottom: 2px;
+}
+
+.docs-nav-link {
+  display: block;
+  padding: 10px 12px;
+  color: #888888;
+  text-decoration: none;
+  border-radius: 6px;
+  font-size: 14px;
+  transition: all 0.15s ease;
+}
+
+.docs-nav-link:hover {
+  background: #1a1a1a;
+  color: #ffffff;
+}
+
+.docs-nav-link.active {
+  background: #ffffff;
+  color: #000000;
+  font-weight: 500;
+}
+
+/* Main Content */
+.docs-main {
+  flex: 1;
+  margin-left: 280px;
+  padding: 40px 48px;
+  max-width: 100%;
+  overflow-x: hidden;
+}
+
+.docs-content {
+  max-width: 900px;
+}
+
+/* Section Styles */
+.docs-section {
+  margin-bottom: 64px;
+}
+
+.docs-section-title {
+  font-size: 28px;
+  font-weight: 700;
+  margin: 0 0 24px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid #222222;
+  color: #ffffff;
+}
+
+/* Endpoint Cards */
+.endpoint-card {
+  background: #0a0a0a;
+  border: 1px solid #222222;
+  border-radius: 12px;
+  margin-bottom: 24px;
+  overflow: hidden;
+}
+
+.endpoint-header {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 20px 24px;
+  border-bottom: 1px solid #222222;
+  background: #111111;
+}
+
+.endpoint-method {
+  display: inline-block;
+  padding: 6px 12px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.method-post {
+  background: #ffffff;
+  color: #000000;
+}
+
+.method-get {
+  background: #333333;
+  color: #ffffff;
+}
+
+.method-put {
+  background: #666666;
+  color: #ffffff;
+}
+
+.method-delete {
+  background: #999999;
+  color: #000000;
+}
+
+.endpoint-path {
+  font-family: "Monaco", "Menlo", "Ubuntu Mono", monospace;
+  font-size: 15px;
+  color: #ffffff;
+  font-weight: 500;
+}
+
+.endpoint-description {
+  color: #666666;
+  font-size: 14px;
+  margin-left: auto;
+}
+
+.endpoint-body {
+  padding: 24px;
+}
+
+.endpoint-subsection {
+  margin-bottom: 28px;
+}
+
+.endpoint-subsection:last-child {
+  margin-bottom: 0;
+}
+
+.endpoint-subsection-title {
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: #666666;
+  margin: 0 0 12px;
+}
+
+/* Code Blocks */
+.code-block {
+  background: #111111;
+  border: 1px solid #222222;
+  border-radius: 8px;
+  padding: 20px;
+  overflow-x: auto;
+}
+
+.code-block pre {
+  margin: 0;
+  font-family: "Monaco", "Menlo", "Ubuntu Mono", monospace;
+  font-size: 13px;
+  line-height: 1.7;
+  color: #e0e0e0;
+}
+
+.code-block code {
+  font-family: inherit;
+}
+
+/* Tables */
+.docs-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+
+.docs-table th {
+  text-align: left;
+  padding: 12px 16px;
+  background: #111111;
+  border: 1px solid #222222;
+  font-weight: 600;
+  color: #888888;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.docs-table td {
+  padding: 14px 16px;
+  border: 1px solid #222222;
+  color: #cccccc;
+}
+
+.docs-table tr:hover td {
+  background: #0f0f0f;
+}
+
+.param-name {
+  font-family: "Monaco", "Menlo", "Ubuntu Mono", monospace;
+  font-weight: 600;
+  color: #ffffff;
+}
+
+.param-type {
+  font-family: "Monaco", "Menlo", "Ubuntu Mono", monospace;
+  font-size: 12px;
+  color: #666666;
+}
+
+.param-required {
+  color: #ffffff;
+  font-size: 11px;
+  font-weight: 600;
+  background: #333333;
+  padding: 2px 6px;
+  border-radius: 3px;
+}
+
+.param-optional {
+  color: #555555;
+  font-size: 11px;
+}
+
+/* Error Codes */
+.error-list {
+  display: grid;
+  gap: 12px;
+}
+
+.error-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+  padding: 16px 20px;
+  background: #0a0a0a;
+  border: 1px solid #222222;
+  border-radius: 8px;
+}
+
+.error-code {
+  font-family: "Monaco", "Menlo", "Ubuntu Mono", monospace;
+  font-weight: 600;
+  color: #ffffff;
+  white-space: nowrap;
+}
+
+.error-status {
+  font-size: 11px;
+  color: #666666;
+  padding: 3px 8px;
+  background: #1a1a1a;
+  border-radius: 4px;
+  margin-left: 8px;
+}
+
+.error-message {
+  color: #888888;
+  font-size: 14px;
+  line-height: 1.5;
+  margin: 0;
+}
+
+/* Auth and Info Boxes */
+.auth-box {
+  background: #0a0a0a;
+  border: 1px solid #222222;
+  border-radius: 8px;
+  padding: 24px;
+  margin-bottom: 24px;
+}
+
+.auth-box-title {
+  font-size: 16px;
+  font-weight: 600;
+  margin: 0 0 12px;
+  color: #ffffff;
+}
+
+.auth-box-text {
+  color: #888888;
+  font-size: 14px;
+  line-height: 1.7;
+  margin: 0 0 16px;
+}
+
+/* Inline Code */
+.inline-code {
+  font-family: "Monaco", "Menlo", "Ubuntu Mono", monospace;
+  background: #1a1a1a;
+  padding: 3px 8px;
+  border-radius: 4px;
+  font-size: 13px;
+  color: #ffffff;
+}
+
+/* Rate Limit Box */
+.rate-limit-box {
+  background: #111111;
+  border: 1px solid #222222;
+  border-radius: 8px;
+  padding: 20px;
+  margin-top: 16px;
+}
+
+.rate-limit-title {
+  font-weight: 600;
+  color: #ffffff;
+  margin: 0 0 8px;
+  font-size: 14px;
+}
+
+.rate-limit-text {
+  color: #888888;
+  font-size: 14px;
+  margin: 0;
+}
+
+/* Quick Start Steps */
+.quick-start-steps {
+  counter-reset: step;
+}
+
+.quick-start-step {
+  display: flex;
+  gap: 20px;
+  margin-bottom: 32px;
+  padding-bottom: 32px;
+  border-bottom: 1px solid #222222;
+}
+
+.quick-start-step:last-child {
+  border-bottom: none;
+  margin-bottom: 0;
+  padding-bottom: 0;
+}
+
+.step-number {
+  width: 36px;
+  height: 36px;
+  background: #ffffff;
+  color: #000000;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 15px;
+  flex-shrink: 0;
+}
+
+.step-content {
+  flex: 1;
+}
+
+.step-title {
+  font-weight: 600;
+  color: #ffffff;
+  margin: 0 0 8px;
+  font-size: 18px;
+}
+
+.step-description {
+  color: #888888;
+  font-size: 14px;
+  margin: 0 0 16px;
+  line-height: 1.6;
+}
+
+/* Mobile responsive */
+@media (max-width: 1024px) {
+  .docs-sidebar {
+    width: 240px;
+  }
+
+  .docs-main {
+    margin-left: 240px;
+    padding: 32px;
+  }
+}
+
+@media (max-width: 768px) {
+  .docs-sidebar {
+    display: none;
+  }
+
+  .docs-main {
+    margin-left: 0;
+    padding: 24px;
+  }
+
+  .docs-navbar-subtitle {
+    display: none;
+  }
+}

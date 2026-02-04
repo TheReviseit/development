@@ -77,12 +77,13 @@ def verify_password(password: str, password_hash: str) -> bool:
 # =============================================================================
 
 def create_access_token(user_id: str, org_id: Optional[str] = None) -> str:
-    """Create short-lived access token."""
+    """Create short-lived access token with user_type claim."""
     expires = datetime.utcnow() + timedelta(minutes=JWT_ACCESS_TOKEN_EXPIRE_MINUTES)
     
     payload = {
         'sub': user_id,
         'type': 'access',
+        'user_type': 'console',  # CRITICAL: Identity claim for cross-auth protection
         'exp': expires,
         'iat': datetime.utcnow()
     }
