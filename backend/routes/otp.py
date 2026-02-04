@@ -473,6 +473,90 @@ def _error_to_status(error_code: str) -> int:
 
 
 # =============================================================================
+# HEALTH CHECK
+# =============================================================================
+
+@otp_bp.route('/health', methods=['GET'])
+def otp_health_check():
+    """
+    OTP Delivery Health Check Endpoint.
+    
+    Returns status of critical OTP dependencies:
+    - WhatsApp API credentials
+    - Celery worker availability
+    - Last successful delivery timestamp
+    
+    Response:
+        {
+            "success": true,
+            "whatsapp": "ok",
+            "celery": "ok",
+            "last_delivery": "2026-02-04T10:21:00Z"
+        }
+    """
+    import os
+    from datetime import datetime
+    
+    health = {
+        "success": True,
+        "timestamp": datetime.utcnow().isoformat() + "Z"
+    }
+    
+    # Check WhatsApp credentials
+    phone_number_id = os.getenv("WHATSAPP_PHONE_NUMBER_ID")
+    access_token = os.getenv("WHATSAPP_ACCESS_TOKEN")
+    template_name = os.getenv("WHATSAPP_OTP_TEMPLATE", "otp_authentication")
+    
+    if phone_number_id and access_token and len(access_token) > 50:
+        health["whatsapp"] = "ok"
+        health["whatsapp_template"] = template_name
+    else:
+        health["whatsapp"] = "error"
+        health["whatsapp_error"] = "Credentials not configured or invalid"
+        health["success"] = False
+    
+    # Check Celery worker availability
+    try:
+        from celery_app import celery_app
+        if celery_app:
+            # Try to inspect active workers
+            inspect = celery_app.control.inspect(timeout=2.0)
+            active = inspect.active()
+            if active:
+                health["celery"] = "ok"
+                health["celery_workers"] = len(active)
+            else:
+                health["celery"] = "warning"
+                health["celery_warning"] = "No active workers found - OTPs will use sync fallback"
+        else:
+            health["celery"] = "disabled"
+    except Exception as e:
+        health["celery"] = "error"
+        health["celery_error"] = str(e)
+    
+    # Check last successful delivery
+    try:
+        from supabase_client import get_supabase_client
+        db = get_supabase_client()
+        
+        result = db.table("otp_requests").select(
+            "created_at"
+        ).eq("delivery_status", "delivered").order(
+            "created_at", desc=True
+        ).limit(1).execute()
+        
+        if result.data and len(result.data) > 0:
+            health["last_delivery"] = result.data[0]["created_at"]
+        else:
+            health["last_delivery"] = None
+    except Exception as e:
+        health["last_delivery_error"] = str(e)
+    
+    status_code = 200 if health["success"] else 503
+    return jsonify(health), status_code
+
+
+# =============================================================================
 # ERROR HANDLERS
 # =============================================================================
 

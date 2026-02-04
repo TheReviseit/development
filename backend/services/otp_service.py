@@ -330,8 +330,21 @@ class OTPService:
         await self._increment_rate_limits(phone, purpose)
         
         # Queue delivery (unless sandbox)
+        delivery_result = None
         if not is_sandbox:
-            self._queue_delivery(request_id, business_id, phone, otp, channel)
+            delivery_result = self._queue_delivery(request_id, business_id, phone, otp, channel)
+            
+            # CRITICAL: Propagate delivery failures to API response
+            if delivery_result and delivery_result.get("status") == "failed":
+                logger.error(f"OTP delivery failed for {request_id}: {delivery_result.get('error')}")
+                await self._audit_log(business_id, request_id, "send_delivery_failed", phone, False, delivery_result.get("error_code"))
+                return {
+                    "success": False,
+                    "error": "OTP_DELIVERY_FAILED",
+                    "message": f"Failed to deliver OTP: {delivery_result.get('error', 'Unknown error')}",
+                    "request_id": request_id,  # Include for retry/status checking
+                    "retryable": delivery_result.get("retryable", True)
+                }
         
         # Build response
         response = {
@@ -339,6 +352,10 @@ class OTPService:
             "request_id": request_id,
             "expires_in": ttl_seconds
         }
+        
+        # Include delivery status info for transparency
+        if delivery_result:
+            response["delivery_status"] = delivery_result.get("status", "queued")
         
         # Include OTP in sandbox mode only
         if is_sandbox:
@@ -832,8 +849,15 @@ class OTPService:
         phone: str,
         otp: str,
         channel: str
-    ) -> None:
-        """Queue OTP delivery via Celery task, fallback to synchronous delivery."""
+    ) -> Dict[str, Any]:
+        """
+        Queue OTP delivery via Celery task, fallback to synchronous delivery.
+        
+        Returns delivery result to propagate failures to API response.
+        
+        Returns:
+            Dict with 'queued' or 'delivered' status, or 'failed' with error details
+        """
         try:
             from tasks.otp_delivery import deliver_otp
             deliver_otp.delay(
@@ -843,17 +867,27 @@ class OTPService:
                 otp=otp,
                 channel=channel
             )
+            logger.info(f"OTP {request_id} queued for async delivery via Celery")
+            return {"status": "queued", "async": True}
         except Exception as e:
             logger.warning(f"Celery queue failed, trying synchronous delivery: {e}")
             # Fallback: Send synchronously when Celery is not available
             try:
-                self._send_otp_sync(request_id, business_id, phone, otp, channel)
+                result = self._send_otp_sync(request_id, business_id, phone, otp, channel)
+                return result
             except Exception as sync_error:
                 logger.error(f"Synchronous delivery also failed: {sync_error}")
                 self.db.table("otp_requests").update({
                     "delivery_status": DeliveryStatus.FAILED,
                     "last_delivery_error": str(sync_error)
                 }).eq("request_id", request_id).execute()
+                # Return failure for API propagation
+                return {
+                    "status": "failed",
+                    "error": str(sync_error),
+                    "error_code": "OTP_DELIVERY_FAILED",
+                    "retryable": True
+                }
     
     def _send_otp_sync(
         self,
@@ -862,8 +896,15 @@ class OTPService:
         phone: str,
         otp: str,
         channel: str
-    ) -> None:
-        """Send OTP synchronously via WhatsApp API."""
+    ) -> Dict[str, Any]:
+        """
+        Send OTP synchronously via WhatsApp API (fallback when Celery unavailable).
+        
+        FIXED: Corrected WhatsApp template payload structure for authentication OTPs.
+        
+        Returns:
+            Dict with delivery status and message_id or error details
+        """
         import os
         import requests
         
@@ -894,32 +935,58 @@ class OTPService:
         
         payload = {
             "messaging_product": "whatsapp",
+            "recipient_type": "individual",
             "to": whatsapp_phone,
             "type": "template",
             "template": {
                 "name": template_name,
-                "language": {"code": "en"},
+                "language": {"code": os.getenv("WHATSAPP_OTP_LANGUAGE", "en")},
                 "components": [
                     {
                         "type": "body",
                         "parameters": [
-                            {"type": "text", "text": otp}
+                            {
+                                "type": "text",
+                                "text": otp
+                            }
+                        ]
+                    },
+                    {
+                        "type": "button",
+                        "sub_type": "url",
+                        "index": "0",
+                        "parameters": [
+                            {
+                                "type": "text",
+                                "text": otp
+                            }
                         ]
                     }
                 ]
             }
         }
         
+        logger.info(f"Sending OTP synchronously to {whatsapp_phone} via template '{template_name}'")
         response = requests.post(url, headers=headers, json=payload, timeout=30)
+        data = response.json()
         
         if response.status_code == 200:
+            # Validate wamid presence
+            messages = data.get("messages", [])
+            if not messages or not messages[0].get("id"):
+                raise Exception(f"WhatsApp delivery rejected - no message ID returned: {data}")
+            
+            message_id = messages[0]["id"]
             self.db.table("otp_requests").update({
                 "delivery_status": DeliveryStatus.DELIVERED
             }).eq("request_id", request_id).execute()
-            logger.info(f"OTP delivered synchronously to {phone}")
+            logger.info(f"OTP delivered synchronously to {phone}, wamid={message_id}")
+            return {"status": "delivered", "message_id": message_id}
         else:
-            error_msg = response.json().get("error", {}).get("message", response.text)
-            raise Exception(f"WhatsApp API error: {error_msg}")
+            error_obj = data.get("error", {})
+            error_msg = error_obj.get("message", response.text)
+            error_code = error_obj.get("code", "UNKNOWN")
+            raise Exception(f"WhatsApp API error (code={error_code}): {error_msg}")
     
     async def _audit_log(
         self,
