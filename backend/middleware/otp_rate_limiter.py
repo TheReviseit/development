@@ -221,7 +221,7 @@ class OTPRateLimiter:
         db = self._get_supabase()
         
         try:
-            result = db.table("otp_blocked_numbers").select("*").eq(
+            result = db.table("otp_blocked_destinations").select("*").eq(
                 "phone", phone
             ).execute()
             
@@ -261,7 +261,7 @@ class OTPRateLimiter:
         
         try:
             # Get or create violation record
-            result = db.table("otp_blocked_numbers").select("*").eq(
+            result = db.table("otp_blocked_destinations").select("*").eq(
                 "phone", phone
             ).eq("reason", "rate_limit_abuse").execute()
             
@@ -271,7 +271,7 @@ class OTPRateLimiter:
                 
                 if new_count >= RATE_VIOLATION_THRESHOLD:
                     # Block the phone number
-                    db.table("otp_blocked_numbers").update({
+                    db.table("otp_blocked_destinations").update({
                         "rate_limit_violations": new_count,
                         "blocked_at": datetime.utcnow().isoformat(),
                         "expires_at": (datetime.utcnow() + timedelta(hours=BLOCK_DURATION_HOURS)).isoformat()
@@ -280,12 +280,12 @@ class OTPRateLimiter:
                     logger.warning(f"Phone {phone} auto-blocked for rate limit abuse")
                     return True
                 else:
-                    db.table("otp_blocked_numbers").update({
+                    db.table("otp_blocked_destinations").update({
                         "rate_limit_violations": new_count
                     }).eq("id", record["id"]).execute()
             else:
                 # Create new record (1 hour expiry for tracking)
-                db.table("otp_blocked_numbers").insert({
+                db.table("otp_blocked_destinations").insert({
                     "phone": phone,
                     "reason": "rate_limit_abuse",
                     "rate_limit_violations": 1,

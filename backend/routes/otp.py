@@ -9,6 +9,7 @@ Endpoints:
 - GET /v1/otp/status/<request_id> - Check OTP status
 """
 
+import re
 import logging
 from flask import Blueprint, request, jsonify, g
 
@@ -16,10 +17,16 @@ from middleware.otp_auth_middleware import require_otp_auth, get_client_ip
 from middleware.otp_rate_limiter import check_otp_rate_limits, get_rate_limiter
 from middleware.security_enforcer import require_paid_otp_access
 
+# Provider abstraction for channel support
+from services.otp.providers import get_supported_channels, detect_destination_type
+
 logger = logging.getLogger('otp.routes')
 
 # Create blueprint
 otp_bp = Blueprint('otp', __name__, url_prefix='/otp')
+
+# Email validation regex
+EMAIL_REGEX = re.compile(r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$')
 
 
 # =============================================================================
@@ -35,9 +42,10 @@ def send_otp():
     
     Request Body:
         {
-            "to": "+919876543210",
+            "to": "+919876543210" OR "user@example.com",
             "purpose": "login",
-            "channel": "whatsapp",
+            "channel": "whatsapp" | "email" | "sms",
+            "destination_type": "phone" | "email",  # Optional, auto-detected
             "otp_length": 6,
             "ttl": 300,
             "metadata": {}
@@ -51,6 +59,8 @@ def send_otp():
         {
             "success": true,
             "request_id": "otp_req_xxx",
+            "channel": "whatsapp",
+            "destination_type": "phone",
             "expires_in": 300
         }
     
@@ -73,9 +83,10 @@ def send_otp():
         }), 400
     
     # Extract parameters
-    phone = data.get('to', '').strip()
+    destination = data.get('to', '').strip()
     purpose = data.get('purpose', '').strip()
-    channel = data.get('channel', 'whatsapp').strip()
+    channel = data.get('channel', 'whatsapp').strip().lower()
+    destination_type_explicit = data.get('destination_type')  # Optional explicit type
     otp_length = data.get('otp_length', 6)
     ttl = data.get('ttl', 300)
     metadata = data.get('metadata', {})
@@ -83,63 +94,124 @@ def send_otp():
     # Get idempotency key from header
     idempotency_key = request.headers.get('Idempotency-Key')
     
-    # Validation
-    if not phone:
+    # Validation - destination required
+    if not destination:
         return jsonify({
             "success": False,
-            "error": "INVALID_PHONE",
-            "message": "Phone number is required"
+            "error": {
+                "code": "MISSING_DESTINATION",
+                "message": "Destination (phone or email) is required"
+            }
         }), 400
     
+    # Auto-detect destination type if not explicitly provided
+    if destination_type_explicit:
+        destination_type = destination_type_explicit.lower()
+        if destination_type not in ['phone', 'email']:
+            return jsonify({
+                "success": False,
+                "error": {
+                    "code": "INVALID_DESTINATION_TYPE",
+                    "message": "destination_type must be 'phone' or 'email'"
+                }
+            }), 400
+    else:
+        # Backward compatible auto-detection
+        destination_type = detect_destination_type(destination)
+    
+    # Validate channel
+    supported_channels = get_supported_channels()
+    if channel not in supported_channels:
+        return jsonify({
+            "success": False,
+            "error": {
+                "code": "INVALID_CHANNEL",
+                "message": f"Channel must be one of: {supported_channels}"
+            }
+        }), 400
+    
+    # Validate channel/destination compatibility
+    if channel == 'email' and destination_type != 'email':
+        return jsonify({
+            "success": False,
+            "error": {
+                "code": "DESTINATION_CHANNEL_MISMATCH",
+                "message": "Email channel requires email destination"
+            }
+        }), 400
+    
+    if channel in ['whatsapp', 'sms'] and destination_type != 'phone':
+        return jsonify({
+            "success": False,
+            "error": {
+                "code": "DESTINATION_CHANNEL_MISMATCH",
+                "message": f"{channel.title()} channel requires phone destination"
+            }
+        }), 400
+    
+    # Validate destination format
+    if destination_type == 'email':
+        if not EMAIL_REGEX.match(destination):
+            return jsonify({
+                "success": False,
+                "error": {
+                    "code": "INVALID_EMAIL",
+                    "message": "Invalid email address format"
+                }
+            }), 400
+        # No need to normalize email here, provider will do it
+    else:
+        # Phone number - normalize
+        destination = _normalize_phone(destination)
+    
+    # Validate purpose
     if not purpose:
         return jsonify({
             "success": False,
-            "error": "INVALID_PURPOSE",
-            "message": "Purpose is required (login, signup, password_reset, transaction)"
+            "error": {
+                "code": "MISSING_PURPOSE",
+                "message": "Purpose is required (login, signup, password_reset, transaction)"
+            }
         }), 400
     
     valid_purposes = ['login', 'signup', 'password_reset', 'transaction']
     if purpose not in valid_purposes:
         return jsonify({
             "success": False,
-            "error": "INVALID_PURPOSE",
-            "message": f"Purpose must be one of: {valid_purposes}"
-        }), 400
-    
-    if channel not in ['whatsapp', 'sms']:
-        return jsonify({
-            "success": False,
-            "error": "INVALID_CHANNEL",
-            "message": "Channel must be 'whatsapp' or 'sms'"
+            "error": {
+                "code": "INVALID_PURPOSE",
+                "message": f"Purpose must be one of: {valid_purposes}"
+            }
         }), 400
     
     if not isinstance(otp_length, int) or not 4 <= otp_length <= 8:
         return jsonify({
             "success": False,
-            "error": "INVALID_OTP_LENGTH",
-            "message": "OTP length must be between 4 and 8"
+            "error": {
+                "code": "INVALID_OTP_LENGTH",
+                "message": "OTP length must be between 4 and 8"
+            }
         }), 400
     
     if not isinstance(ttl, int) or not 60 <= ttl <= 600:
         return jsonify({
             "success": False,
-            "error": "INVALID_TTL",
-            "message": "TTL must be between 60 and 600 seconds"
+            "error": {
+                "code": "INVALID_TTL",
+                "message": "TTL must be between 60 and 600 seconds"
+            }
         }), 400
     
-    # Normalize phone
-    phone = _normalize_phone(phone)
-    
-    # Check rate limits
+    # Check rate limits (works for both phone and email)
     rate_check = check_otp_rate_limits(
-        phone=phone,
+        phone=destination,  # Rate limiter handles both types
         purpose=purpose,
         api_key_limit=g.otp_business.get('rate_limit_per_minute', 60)
     )
     
     if not rate_check['allowed']:
         # Record violation for potential auto-block
-        get_rate_limiter().record_violation(phone)
+        get_rate_limiter().record_violation(destination)
         
         return jsonify({
             "success": False,
@@ -165,7 +237,7 @@ def send_otp():
         try:
             result = loop.run_until_complete(service.send_otp(
                 business_id=business_id,
-                phone=phone,
+                phone=destination,  # Works for both phone and email
                 purpose=purpose,
                 channel=channel,
                 otp_length=otp_length,

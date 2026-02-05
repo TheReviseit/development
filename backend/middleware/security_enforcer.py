@@ -373,8 +373,10 @@ def _get_identity_from_context() -> tuple[Optional[str], Optional[str]]:
     # OTP API key context
     if hasattr(g, 'otp_business') and g.otp_business:
         business = g.otp_business
+        # For API key auth, project_id is the identity (no user_id in context)
+        # org_id is the organization, fallback to project_id if not set
         return (
-            business.get('user_id') or business.get('owner_id'),
+            business.get('user_id') or business.get('owner_id') or business.get('project_id'),
             business.get('org_id') or business.get('project_id')
         )
     

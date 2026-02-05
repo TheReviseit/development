@@ -26,6 +26,10 @@ export async function DELETE(request: NextRequest) {
   return proxyRequest(request, "DELETE");
 }
 
+export async function PATCH(request: NextRequest) {
+  return proxyRequest(request, "PATCH");
+}
+
 async function proxyRequest(request: NextRequest, method: string) {
   try {
     // Get the path after /api/console - maps to /console on backend
@@ -54,7 +58,7 @@ async function proxyRequest(request: NextRequest, method: string) {
     };
 
     // Add Content-Type for requests with body
-    if (method === "POST" || method === "PUT") {
+    if (method === "POST" || method === "PUT" || method === "PATCH") {
       headers["Content-Type"] = "application/json";
     }
 
@@ -64,8 +68,8 @@ async function proxyRequest(request: NextRequest, method: string) {
       headers,
     };
 
-    // Add body for POST/PUT
-    if (method === "POST" || method === "PUT") {
+    // Add body for POST/PUT/PATCH
+    if (method === "POST" || method === "PUT" || method === "PATCH") {
       try {
         const body = await request.json();
         fetchOptions.body = JSON.stringify(body);

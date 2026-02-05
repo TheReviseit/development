@@ -1,7 +1,11 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
+
+// =============================================================================
+// Types
+// =============================================================================
 
 interface DashboardStats {
   otps_sent_today: number;
@@ -12,35 +16,41 @@ interface DashboardStats {
   active_api_keys: number;
 }
 
+// =============================================================================
+// Dashboard Page
+// =============================================================================
+
 export default function ConsoleDashboardPage() {
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
-  useEffect(() => {
-    const fetchStats = async () => {
-      try {
-        const response = await fetch("/api/console/dashboard/stats", {
-          credentials: "include",
-        });
+  const fetchStats = useCallback(async () => {
+    try {
+      const response = await fetch("/api/console/dashboard/stats", {
+        credentials: "include",
+      });
+      const data = await response.json();
 
-        const data = await response.json();
-
-        if (data.success) {
-          setStats(data.stats);
-        } else {
-          setError("Failed to load dashboard stats");
-        }
-      } catch (err) {
-        console.error("Stats error:", err);
-        setError("Unable to load dashboard");
-      } finally {
-        setLoading(false);
+      if (data.success) {
+        setStats(data.stats);
+        setError("");
+      } else {
+        setError("Failed to load dashboard stats");
       }
-    };
-
-    fetchStats();
+    } catch (err) {
+      console.error("Stats error:", err);
+      setError("Unable to load dashboard");
+    } finally {
+      setLoading(false);
+    }
   }, []);
+
+  useEffect(() => {
+    fetchStats();
+    const interval = setInterval(fetchStats, 30000);
+    return () => clearInterval(interval);
+  }, [fetchStats]);
 
   if (loading) {
     return (
@@ -139,6 +149,8 @@ export default function ConsoleDashboardPage() {
                 fill="none"
                 stroke="currentColor"
                 strokeWidth="1.5"
+                width="64"
+                height="64"
               >
                 <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" />
               </svg>

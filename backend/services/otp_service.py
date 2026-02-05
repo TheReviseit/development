@@ -249,8 +249,31 @@ class OTPService:
         Returns:
             Dict with request_id, expires_in, and optionally otp (sandbox)
         """
-        # Normalize phone
-        phone = self._normalize_phone(phone)
+        # Detect destination type and normalize accordingly
+        from services.otp.providers import detect_destination_type
+        destination_type = detect_destination_type(phone)
+        
+        # CHANNEL-DESTINATION VALIDATION (Critical for preventing DATABASE_ERROR)
+        # WhatsApp/SMS require phone, Email requires email address
+        channel_destination_valid = (
+            (channel in ('whatsapp', 'sms') and destination_type == 'phone') or
+            (channel == 'email' and destination_type == 'email')
+        )
+        if not channel_destination_valid:
+            logger.error(f"Channel/destination mismatch: channel={channel}, destination_type={destination_type}")
+            return {
+                "success": False,
+                "error": "INVALID_DESTINATION",
+                "message": f"Channel '{channel}' is not compatible with destination type '{destination_type}'. "
+                           f"WhatsApp/SMS require phone numbers, Email requires email addresses."
+            }
+        
+        # Only normalize phone numbers, NOT email addresses
+        if destination_type == 'phone':
+            phone = self._normalize_phone(phone)
+        else:
+            # For email, just lowercase and strip whitespace
+            phone = phone.strip().lower()
         
         # Validate purpose
         if purpose not in [p.value for p in OTPPurpose]:
@@ -271,7 +294,7 @@ class OTPService:
             }
         
         # Check rate limits
-        rate_check = await self._check_rate_limits(phone, purpose)
+        rate_check = await self._check_rate_limits(phone, purpose, destination_type)
         if not rate_check["allowed"]:
             # Record violation for potential auto-block
             await self._record_rate_violation(phone)
@@ -299,21 +322,33 @@ class OTPService:
         request_id = generate_request_id()
         expires_at = datetime.utcnow() + timedelta(seconds=ttl_seconds)
         
-        # Store OTP request
+        # Store OTP request with proper column separation
         try:
-            self.db.table("otp_requests").insert({
+            # Build insert data with proper column separation
+            insert_data = {
                 "request_id": request_id,
-                "project_id": business_id,  # Use project_id (passed as business_id for compatibility)
+                "project_id": business_id,
                 "business_id": business_id,  # Keep for backward compatibility
-                "phone": phone,
                 "purpose": purpose,
                 "otp_hash": otp_hash,
                 "otp_length": otp_length,
                 "channel": channel,
+                "destination_type": destination_type,  # 'phone' or 'email'
                 "expires_at": expires_at.isoformat(),
                 "next_allowed_resend_at": (datetime.utcnow() + timedelta(seconds=RESEND_COOLDOWN_SECONDS)).isoformat(),
                 "metadata": metadata or {}
-            }).execute()
+            }
+            
+            # Store in appropriate column based on destination type
+            # CRITICAL: Do NOT set columns to None - simply omit them to avoid NOT NULL violations
+            if destination_type == 'email':
+                insert_data["email"] = phone  # phone variable contains the email address
+                # DO NOT set phone key - omit it entirely for email destinations
+            else:
+                insert_data["phone"] = phone
+                # DO NOT set email key - omit it entirely for phone destinations
+            
+            self.db.table("otp_requests").insert(insert_data).execute()
         except Exception as e:
             logger.error(f"Failed to store OTP request: {e}")
             return {
@@ -451,10 +486,20 @@ class OTPService:
             "attempts": otp_request["attempts"] + 1
         }).eq("request_id", request_id).execute()
         
-        # Verify OTP hash
+        # Get the correct destination for verification (phone or email)
+        destination = otp_request.get("phone") or otp_request.get("email")
+        if not destination:
+            logger.error(f"OTP request {request_id} has no destination (phone or email)")
+            return {
+                "success": False,
+                "error": "INVALID_REQUEST",
+                "message": "OTP request has invalid destination data"
+            }
+        
+        # Verify OTP hash using destination (works for both phone and email)
         is_valid = verify_otp_hash(
             otp,
-            otp_request["phone"],
+            destination,
             otp_request["purpose"],
             otp_request["otp_hash"]
         )
@@ -464,7 +509,7 @@ class OTPService:
                 otp_request["business_id"],
                 request_id,
                 "verify_failed",
-                otp_request["phone"],
+                destination,
                 False
             )
             return {
@@ -485,7 +530,7 @@ class OTPService:
             otp_request["business_id"],
             request_id,
             "verify_success",
-            otp_request["phone"],
+            destination,  # Use destination (phone or email)
             True
         )
         
@@ -574,6 +619,15 @@ class OTPService:
                 "message": "Maximum resend attempts exceeded"
             }
         
+        # Get destination (phone or email) for hash and delivery
+        destination = otp_request.get("phone") or otp_request.get("email")
+        if not destination:
+            return {
+                "success": False,
+                "error": "INVALID_REQUEST",
+                "message": "OTP request has no destination"
+            }
+        
         # Determine channel (escalation logic)
         if force_channel:
             channel = force_channel
@@ -585,7 +639,7 @@ class OTPService:
         
         # Generate new OTP (same request_id, new code)
         otp = generate_otp(otp_request.get("otp_length", DEFAULT_OTP_LENGTH))
-        otp_hash = hash_otp(otp, otp_request["phone"], otp_request["purpose"])
+        otp_hash = hash_otp(otp, destination, otp_request["purpose"])
         
         # Extend expiry
         new_expires_at = datetime.utcnow() + timedelta(seconds=DEFAULT_TTL_SECONDS)
@@ -605,7 +659,7 @@ class OTPService:
         self._queue_delivery(
             request_id,
             otp_request["business_id"],
-            otp_request["phone"],
+            destination,
             otp,
             channel
         )
@@ -614,7 +668,7 @@ class OTPService:
             otp_request["business_id"],
             request_id,
             "resend",
-            otp_request["phone"],
+            destination,
             True
         )
         
@@ -695,7 +749,7 @@ class OTPService:
     async def _check_blocked(self, phone: str) -> Dict[str, Any]:
         """Check if phone number is blocked."""
         try:
-            result = self.db.table("otp_blocked_numbers").select("*").eq(
+            result = self.db.table("otp_blocked_destinations").select("*").eq(
                 "phone", phone
             ).gt("expires_at", datetime.utcnow().isoformat()).execute()
             
@@ -712,20 +766,28 @@ class OTPService:
         
         return {"blocked": False}
     
-    async def _check_rate_limits(self, phone: str, purpose: str) -> Dict[str, Any]:
+    async def _check_rate_limits(self, phone: str, purpose: str, destination_type: str = 'phone') -> Dict[str, Any]:
         """
-        Check hybrid rate limits.
+        Check hybrid rate limits (channel-aware).
         
-        - Global: 10 OTPs per hour per phone
+        - Global: 10 OTPs per hour per destination
         - Per-purpose: 3 OTPs per 5 minutes per purpose
+        
+        Args:
+            phone: The destination (phone number or email address)
+            purpose: OTP purpose (login, signup, etc.)
+            destination_type: 'phone' or 'email' to query correct column
         """
         now = datetime.utcnow()
+        
+        # Determine which column to query based on destination type
+        destination_column = "email" if destination_type == "email" else "phone"
         
         # Check global limit (10/hour)
         hour_ago = now - timedelta(hours=1)
         try:
             result = self.db.table("otp_requests").select("id").eq(
-                "phone", phone
+                destination_column, phone
             ).gt("created_at", hour_ago.isoformat()).execute()
             
             global_count = len(result.data) if result.data else 0
@@ -742,7 +804,7 @@ class OTPService:
         window_start = now - timedelta(seconds=RATE_LIMIT_PER_PURPOSE_WINDOW)
         try:
             result = self.db.table("otp_requests").select("id").eq(
-                "phone", phone
+                destination_column, phone
             ).eq("purpose", purpose).gt("created_at", window_start.isoformat()).execute()
             
             purpose_count = len(result.data) if result.data else 0
@@ -761,7 +823,7 @@ class OTPService:
         """Record rate limit violation and auto-block if threshold reached."""
         try:
             # Check existing violations
-            result = self.db.table("otp_blocked_numbers").select("*").eq(
+            result = self.db.table("otp_blocked_destinations").select("*").eq(
                 "phone", phone
             ).eq("reason", "rate_limit_abuse").execute()
             
@@ -771,19 +833,19 @@ class OTPService:
                 
                 if new_count >= RATE_VIOLATION_THRESHOLD:
                     # Auto-block for 24 hours
-                    self.db.table("otp_blocked_numbers").update({
+                    self.db.table("otp_blocked_destinations").update({
                         "rate_limit_violations": new_count,
                         "blocked_at": datetime.utcnow().isoformat(),
                         "expires_at": (datetime.utcnow() + timedelta(hours=BLOCK_DURATION_HOURS)).isoformat()
                     }).eq("id", block["id"]).execute()
                     logger.warning(f"Phone {phone} auto-blocked for rate limit abuse")
                 else:
-                    self.db.table("otp_blocked_numbers").update({
+                    self.db.table("otp_blocked_destinations").update({
                         "rate_limit_violations": new_count
                     }).eq("id", block["id"]).execute()
             else:
                 # Create new record
-                self.db.table("otp_blocked_numbers").insert({
+                self.db.table("otp_blocked_destinations").insert({
                     "phone": phone,
                     "reason": "rate_limit_abuse",
                     "rate_limit_violations": 1,
@@ -898,15 +960,15 @@ class OTPService:
         channel: str
     ) -> Dict[str, Any]:
         """
-        Send OTP synchronously via WhatsApp API (fallback when Celery unavailable).
+        Send OTP synchronously via provider abstraction (fallback when Celery unavailable).
         
-        FIXED: Corrected WhatsApp template payload structure for authentication OTPs.
+        Uses the same provider abstraction as the async Celery task for consistency.
         
         Returns:
             Dict with delivery status and message_id or error details
         """
         import os
-        import requests
+        from services.otp.providers import get_provider, OTPContext, detect_destination_type
         
         # Update status to 'sent'
         self.db.table("otp_requests").update({
@@ -914,79 +976,52 @@ class OTPService:
             "delivery_channel": channel
         }).eq("request_id", request_id).execute()
         
-        # Get credentials from environment
-        phone_number_id = os.getenv("WHATSAPP_PHONE_NUMBER_ID")
-        access_token = os.getenv("WHATSAPP_ACCESS_TOKEN")
-        template_name = os.getenv("WHATSAPP_OTP_TEMPLATE", "auth_otps")
+        # Auto-detect destination type
+        destination_type = detect_destination_type(phone)
         
-        if not phone_number_id or not access_token:
-            raise Exception("WhatsApp credentials not configured")
+        # Get business config for credentials
+        try:
+            result = self.db.table("otp_projects").select("*").eq(
+                "id", business_id
+            ).single().execute()
+            business = result.data or {}
+        except Exception:
+            business = {}
         
-        # Format phone (remove + for WhatsApp API)
-        whatsapp_phone = phone.lstrip('+')
+        # Build OTP context
+        context = OTPContext(
+            request_id=request_id,
+            destination=phone,
+            destination_type=destination_type,
+            otp=otp,
+            purpose="verification",
+            business_id=business_id,
+            business_name=business.get("name"),
+            phone_number_id=business.get("whatsapp_phone_number_id") or os.getenv("WHATSAPP_PHONE_NUMBER_ID"),
+            access_token=os.getenv("WHATSAPP_ACCESS_TOKEN"),
+            resend_api_key=os.getenv('RESEND_API_KEY')
+        )
         
-        # Send via WhatsApp Cloud API
-        url = f"https://graph.facebook.com/v24.0/{phone_number_id}/messages"
-        
-        headers = {
-            "Authorization": f"Bearer {access_token}",
-            "Content-Type": "application/json"
-        }
-        
-        payload = {
-            "messaging_product": "whatsapp",
-            "recipient_type": "individual",
-            "to": whatsapp_phone,
-            "type": "template",
-            "template": {
-                "name": template_name,
-                "language": {"code": os.getenv("WHATSAPP_OTP_LANGUAGE", "en")},  # Must match template language
-                "components": [
-                    {
-                        "type": "body",
-                        "parameters": [
-                            {
-                                "type": "text",
-                                "text": otp
-                            }
-                        ]
-                    },
-                    {
-                        "type": "button",
-                        "sub_type": "url",
-                        "index": "0",
-                        "parameters": [
-                            {
-                                "type": "text",
-                                "text": otp
-                            }
-                        ]
-                    }
-                ]
-            }
-        }
-        
-        logger.info(f"Sending OTP synchronously to {whatsapp_phone} via template '{template_name}'")
-        response = requests.post(url, headers=headers, json=payload, timeout=30)
-        data = response.json()
-        
-        if response.status_code == 200:
-            # Validate wamid presence
-            messages = data.get("messages", [])
-            if not messages or not messages[0].get("id"):
-                raise Exception(f"WhatsApp delivery rejected - no message ID returned: {data}")
+        try:
+            # Get provider for channel
+            provider = get_provider(channel)
             
-            message_id = messages[0]["id"]
-            self.db.table("otp_requests").update({
-                "delivery_status": DeliveryStatus.DELIVERED
-            }).eq("request_id", request_id).execute()
-            logger.info(f"OTP delivered synchronously to {phone}, wamid={message_id}")
-            return {"status": "delivered", "message_id": message_id}
-        else:
-            error_obj = data.get("error", {})
-            error_msg = error_obj.get("message", response.text)
-            error_code = error_obj.get("code", "UNKNOWN")
-            raise Exception(f"WhatsApp API error (code={error_code}): {error_msg}")
+            logger.info(f"Sending OTP synchronously to {phone[:6]}*** via {channel}")
+            result = provider.send_otp(context)
+            
+            if result.success:
+                self.db.table("otp_requests").update({
+                    "delivery_status": DeliveryStatus.DELIVERED,
+                    "message_id": result.message_id
+                }).eq("request_id", request_id).execute()
+                logger.info(f"OTP delivered synchronously via {channel}, message_id={result.message_id}")
+                return {"status": "delivered", "message_id": result.message_id}
+            else:
+                raise Exception(f"{provider.get_provider_name()} error: {result.error}")
+                
+        except ValueError as e:
+            # Unsupported channel - this shouldn't happen if validation is correct
+            raise Exception(f"Unsupported channel '{channel}': {e}")
     
     async def _audit_log(
         self,

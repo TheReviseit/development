@@ -67,13 +67,36 @@ const DocsIcon = () => (
   </svg>
 );
 
-const navItems = [
+// OTP Shield Icon
+const OTPIcon = () => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+    <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+    <path d="M9 12l2 2 4-4" />
+  </svg>
+);
+
+// Channel Icon
+const ChannelsIcon = () => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+    <rect x="2" y="3" width="20" height="14" rx="2" />
+    <path d="M8 21h8" />
+    <path d="M12 17v4" />
+  </svg>
+);
+
+interface NavItem {
+  href: string;
+  icon: React.FC;
+  label: string;
+}
+
+const navItems: NavItem[] = [
   { href: "/console", icon: DashboardIcon, label: "Dashboard" },
   { href: "/console/projects", icon: ProjectIcon, label: "Projects" },
   { href: "/console/keys", icon: KeyIcon, label: "API Keys" },
   { href: "/console/logs", icon: LogsIcon, label: "Logs" },
   { href: "/console/analytics", icon: AnalyticsIcon, label: "Analytics" },
-  { href: "/console/webhooks", icon: WebhookIcon, label: "Webhooks" },
+  { href: "/console/otp", icon: OTPIcon, label: "Upgrade" },
   { href: "/console/settings", icon: SettingsIcon, label: "Settings" },
   { href: "/docs", icon: DocsIcon, label: "API Docs" },
 ];
@@ -114,8 +137,12 @@ export default function ConsoleLayout({ children }: ConsoleLayoutProps) {
       }
     };
 
-    // Skip auth check for login/signup pages
-    if (pathname === "/console/login" || pathname === "/console/signup") {
+    // Skip auth check for login/signup/billing pages
+    if (
+      pathname === "/console/login" ||
+      pathname === "/console/signup" ||
+      pathname?.startsWith("/console/billing")
+    ) {
       setLoading(false);
       return;
     }
@@ -123,8 +150,12 @@ export default function ConsoleLayout({ children }: ConsoleLayoutProps) {
     checkAuth();
   }, [pathname, router]);
 
-  // For login/signup, don't show layout
-  if (pathname === "/console/login" || pathname === "/console/signup") {
+  // For login/signup/billing, don't show console layout
+  if (
+    pathname === "/console/login" ||
+    pathname === "/console/signup" ||
+    pathname?.startsWith("/console/billing")
+  ) {
     return <>{children}</>;
   }
 
@@ -176,7 +207,7 @@ export default function ConsoleLayout({ children }: ConsoleLayoutProps) {
             const Icon = item.icon;
             const isActive =
               pathname === item.href ||
-              (item.href !== "/console" && pathname.startsWith(item.href));
+              (item.href !== "/console" && pathname?.startsWith(item.href));
 
             return (
               <Link

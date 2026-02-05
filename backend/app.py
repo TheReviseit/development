@@ -272,6 +272,14 @@ try:
 except ImportError as e:
     logger.warning(f"Console API routes not available: {e}")
 
+# Register Console Billing routes
+try:
+    from routes.console_billing import console_billing_bp
+    app.register_blueprint(console_billing_bp)
+    logger.info("💳 Console Billing routes registered (/console/billing/*)")
+except ImportError as e:
+    logger.warning(f"Console Billing routes not available: {e}")
+
 # Initialize webhook security
 webhook_security = None
 if RATE_LIMIT_AVAILABLE and get_webhook_security:

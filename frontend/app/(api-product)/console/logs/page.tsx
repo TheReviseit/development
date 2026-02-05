@@ -1,10 +1,15 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useCallback } from "react";
+
+// =============================================================================
+// Types
+// =============================================================================
 
 interface LogEntry {
   request_id: string;
   phone: string;
+  email?: string;
   purpose: string;
   status: "pending" | "verified" | "expired";
   delivery_status: "queued" | "sent" | "delivered" | "failed";
@@ -13,6 +18,10 @@ interface LogEntry {
   resend_count: number;
   created_at: string;
 }
+
+// =============================================================================
+// Logs Page
+// =============================================================================
 
 export default function LogsPage() {
   const [logs, setLogs] = useState<LogEntry[]>([]);
@@ -24,11 +33,7 @@ export default function LogsPage() {
     purpose: "",
   });
 
-  useEffect(() => {
-    fetchLogs();
-  }, [page, filters]);
-
-  const fetchLogs = async () => {
+  const fetchLogs = useCallback(async () => {
     setLoading(true);
     try {
       const params = new URLSearchParams({
@@ -44,7 +49,7 @@ export default function LogsPage() {
       const data = await response.json();
 
       if (data.success) {
-        setLogs(data.logs);
+        setLogs(data.logs || []);
         setHasMore(data.pagination?.has_more || false);
       }
     } catch (err) {
@@ -52,7 +57,11 @@ export default function LogsPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [page, filters]);
+
+  useEffect(() => {
+    fetchLogs();
+  }, [fetchLogs]);
 
   const getStatusBadge = (status: string) => {
     const classes: Record<string, string> = {
@@ -170,6 +179,8 @@ export default function LogsPage() {
                 fill="none"
                 stroke="currentColor"
                 strokeWidth="1.5"
+                width="64"
+                height="64"
               >
                 <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" />
                 <polyline points="14 2 14 8 20 8" />
@@ -186,10 +197,11 @@ export default function LogsPage() {
               <thead>
                 <tr>
                   <th>Request ID</th>
-                  <th>Phone</th>
+                  <th>Destination</th>
                   <th>Purpose</th>
                   <th>Status</th>
                   <th>Delivery</th>
+                  <th>Channel</th>
                   <th>Attempts</th>
                   <th>Time</th>
                 </tr>
@@ -204,10 +216,12 @@ export default function LogsPage() {
                           color: "var(--console-text-muted)",
                         }}
                       >
-                        {log.request_id}
+                        {log.request_id.slice(0, 12)}...
                       </code>
                     </td>
-                    <td style={{ fontFamily: "monospace" }}>{log.phone}</td>
+                    <td style={{ fontFamily: "monospace" }}>
+                      {log.phone || log.email || "—"}
+                    </td>
                     <td>
                       <span className="console-badge info">{log.purpose}</span>
                     </td>
@@ -225,6 +239,9 @@ export default function LogsPage() {
                         {log.delivery_status}
                       </span>
                     </td>
+                    <td style={{ textTransform: "capitalize" }}>
+                      {log.channel}
+                    </td>
                     <td style={{ textAlign: "center" }}>
                       {log.attempts}
                       {log.resend_count > 0 && (
@@ -235,7 +252,7 @@ export default function LogsPage() {
                           }}
                         >
                           {" "}
-                          (+{log.resend_count} resend)
+                          (+{log.resend_count})
                         </span>
                       )}
                     </td>

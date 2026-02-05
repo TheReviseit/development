@@ -1,0 +1,445 @@
+/* =============================================================================
+   Console Billing Pages Styles
+   ============================================================================= */
+
+/* Select Plan Page */
+.billing-page {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 40px 24px;
+}
+
+.billing-header {
+  text-align: center;
+  margin-bottom: 48px;
+}
+
+.billing-header h1 {
+  font-size: 2.5rem;
+  font-weight: 700;
+  color: #fff;
+  margin-bottom: 12px;
+}
+
+.billing-header p {
+  font-size: 1.125rem;
+  color: rgba(255, 255, 255, 0.6);
+}
+
+.billing-loading {
+  text-align: center;
+  color: rgba(255, 255, 255, 0.6);
+  padding: 80px 0;
+  font-size: 1.125rem;
+}
+
+.billing-error {
+  background: rgba(239, 68, 68, 0.15);
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  border-radius: 8px;
+  padding: 12px 16px;
+  color: #f87171;
+  margin-bottom: 24px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* Plans Grid */
+.plans-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 24px;
+  margin-bottom: 48px;
+}
+
+.plan-card {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 16px;
+  padding: 32px;
+  position: relative;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.plan-card:hover {
+  background: rgba(255, 255, 255, 0.05);
+  border-color: rgba(124, 58, 237, 0.3);
+  transform: translateY(-2px);
+}
+
+.plan-card.selected {
+  background: rgba(124, 58, 237, 0.1);
+  border-color: #7c3aed;
+  box-shadow: 0 0 0 2px rgba(124, 58, 237, 0.2);
+}
+
+.plan-card.current {
+  cursor: default;
+  opacity: 0.7;
+}
+
+.plan-badge {
+  position: absolute;
+  top: -12px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(255, 255, 255, 0.1);
+  color: rgba(255, 255, 255, 0.8);
+  padding: 4px 12px;
+  border-radius: 20px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.plan-badge.popular {
+  background: linear-gradient(135deg, #7c3aed, #a855f7);
+  color: #fff;
+}
+
+.plan-name {
+  font-size: 1.5rem;
+  font-weight: 600;
+  color: #fff;
+  margin-bottom: 16px;
+  text-align: center;
+}
+
+.plan-price {
+  text-align: center;
+  margin-bottom: 24px;
+  padding-bottom: 24px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.plan-price .amount {
+  font-size: 2.5rem;
+  font-weight: 700;
+  color: #fff;
+}
+
+.plan-price .period {
+  font-size: 1rem;
+  color: rgba(255, 255, 255, 0.5);
+}
+
+.plan-features {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 24px 0;
+}
+
+.plan-features li {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 0;
+  color: rgba(255, 255, 255, 0.8);
+  font-size: 0.95rem;
+}
+
+.plan-features li svg {
+  width: 18px;
+  height: 18px;
+  stroke: #22c55e;
+  flex-shrink: 0;
+}
+
+.plan-select-btn {
+  width: 100%;
+  padding: 14px 24px;
+  border-radius: 8px;
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: transparent;
+  color: rgba(255, 255, 255, 0.8);
+}
+
+.plan-select-btn:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.3);
+}
+
+.plan-select-btn.selected {
+  background: #7c3aed;
+  border-color: #7c3aed;
+  color: #fff;
+}
+
+.plan-select-btn.current {
+  background: rgba(255, 255, 255, 0.05);
+  cursor: default;
+  opacity: 0.6;
+}
+
+/* Billing Actions */
+.billing-actions {
+  text-align: center;
+}
+
+.billing-cta {
+  background: linear-gradient(135deg, #7c3aed, #a855f7);
+  color: #fff;
+  border: none;
+  padding: 16px 48px;
+  border-radius: 8px;
+  font-size: 1.125rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.billing-cta:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px rgba(124, 58, 237, 0.4);
+}
+
+.billing-cta:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.billing-note {
+  margin-top: 16px;
+  color: rgba(255, 255, 255, 0.5);
+  font-size: 0.875rem;
+}
+
+/* =============================================================================
+   Checkout Page
+   ============================================================================= */
+
+.checkout-page {
+  min-height: 80vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 40px 24px;
+}
+
+.checkout-loading {
+  color: rgba(255, 255, 255, 0.6);
+  font-size: 1.125rem;
+}
+
+.checkout-card {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 16px;
+  padding: 40px;
+  max-width: 420px;
+  width: 100%;
+  text-align: center;
+}
+
+.checkout-card h1 {
+  font-size: 1.5rem;
+  font-weight: 600;
+  color: #fff;
+  margin-bottom: 32px;
+}
+
+.checkout-summary {
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 8px;
+  padding: 20px;
+  margin-bottom: 24px;
+}
+
+.summary-row {
+  display: flex;
+  justify-content: space-between;
+  padding: 8px 0;
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.summary-row .value {
+  color: #fff;
+  font-weight: 500;
+}
+
+.summary-row .value.amount {
+  font-size: 1.25rem;
+  color: #7c3aed;
+}
+
+.checkout-error {
+  background: rgba(239, 68, 68, 0.15);
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  border-radius: 8px;
+  padding: 12px 16px;
+  color: #f87171;
+  margin-bottom: 24px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  text-align: left;
+}
+
+.checkout-btn {
+  width: 100%;
+  background: linear-gradient(135deg, #7c3aed, #a855f7);
+  color: #fff;
+  border: none;
+  padding: 16px 24px;
+  border-radius: 8px;
+  font-size: 1.125rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  margin-bottom: 16px;
+}
+
+.checkout-btn:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px rgba(124, 58, 237, 0.4);
+}
+
+.checkout-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.checkout-back {
+  background: transparent;
+  border: none;
+  color: rgba(255, 255, 255, 0.6);
+  font-size: 0.95rem;
+  cursor: pointer;
+  padding: 8px;
+  transition: color 0.2s ease;
+}
+
+.checkout-back:hover {
+  color: rgba(255, 255, 255, 0.9);
+}
+
+.checkout-security {
+  margin-top: 24px;
+  color: rgba(255, 255, 255, 0.5);
+  font-size: 0.875rem;
+}
+
+/* Success State */
+.checkout-success {
+  text-align: center;
+  padding: 60px 40px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(34, 197, 94, 0.3);
+  border-radius: 16px;
+}
+
+.success-icon {
+  width: 80px;
+  height: 80px;
+  background: rgba(34, 197, 94, 0.2);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 auto 24px;
+  font-size: 2.5rem;
+  color: #22c55e;
+}
+
+.checkout-success h2 {
+  font-size: 1.75rem;
+  font-weight: 600;
+  color: #fff;
+  margin-bottom: 12px;
+}
+
+.checkout-success p {
+  color: rgba(255, 255, 255, 0.6);
+  font-size: 1rem;
+}
+
+/* Upgrade Banner Component */
+.upgrade-banner {
+  background: linear-gradient(
+    135deg,
+    rgba(124, 58, 237, 0.2),
+    rgba(168, 85, 247, 0.1)
+  );
+  border: 1px solid rgba(124, 58, 237, 0.3);
+  border-radius: 12px;
+  padding: 16px 24px;
+  margin-bottom: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.upgrade-banner-content {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.upgrade-banner-icon {
+  width: 40px;
+  height: 40px;
+  background: rgba(124, 58, 237, 0.3);
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.25rem;
+}
+
+.upgrade-banner-text h4 {
+  color: #fff;
+  font-size: 0.95rem;
+  font-weight: 600;
+  margin: 0 0 4px 0;
+}
+
+.upgrade-banner-text p {
+  color: rgba(255, 255, 255, 0.6);
+  font-size: 0.85rem;
+  margin: 0;
+}
+
+.upgrade-banner-btn {
+  background: #7c3aed;
+  color: #fff;
+  border: none;
+  padding: 10px 20px;
+  border-radius: 6px;
+  font-size: 0.875rem;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.2s ease;
+}
+
+.upgrade-banner-btn:hover {
+  background: #9333ea;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .plans-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .billing-header h1 {
+    font-size: 2rem;
+  }
+
+  .upgrade-banner {
+    flex-direction: column;
+    text-align: center;
+  }
+
+  .upgrade-banner-content {
+    flex-direction: column;
+  }
+}

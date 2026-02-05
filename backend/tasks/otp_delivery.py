@@ -1,12 +1,14 @@
 """
 OTP Delivery Celery Tasks
-Async OTP Delivery with Channel Escalation and Webhooks
+Async OTP Delivery with Multi-Channel Provider Abstraction
 
 Features:
 - High-priority queue (user-facing)
-- Retry with exponential backoff
+- Provider abstraction for multi-channel (WhatsApp, Email, SMS)
+- Retry with exponential backoff (provider-specific)
 - Channel escalation (WhatsApp -> SMS)
 - Webhook notifications with retry
+- Billing-accurate usage tracking
 - Dead letter logging
 """
 
@@ -20,6 +22,16 @@ from typing import Dict, Any, Optional
 
 import requests
 from celery import shared_task
+
+# Provider abstraction layer
+from services.otp.providers import (
+    get_provider,
+    OTPContext,
+    detect_destination_type
+)
+from services.otp.providers.base import DeliveryStatus
+from services.otp.providers.errors import OTPProviderError
+from services.otp.usage_tracker import get_usage_tracker
 
 logger = logging.getLogger('otp.delivery')
 
@@ -123,21 +135,29 @@ def deliver_otp(
     self,
     request_id: str,
     business_id: str,
-    phone: str,
+    phone: str,  # Can be phone or email depending on channel
     otp: str,
-    channel: str = 'whatsapp'
+    channel: str = 'whatsapp',
+    destination_type: str = None  # Optional explicit destination type
 ):
     """
-    Deliver OTP via specified channel.
+    Deliver OTP via specified channel using provider abstraction.
     
     Args:
         request_id: OTP request ID
         business_id: Business UUID
-        phone: Recipient phone number
+        phone: Recipient destination (phone or email)
         otp: The OTP code to send
-        channel: Delivery channel (whatsapp, sms)
+        channel: Delivery channel (whatsapp, email, sms)
+        destination_type: Optional explicit type (phone/email), auto-detected if not provided
     """
-    logger.info(f"Delivering OTP {request_id} to {phone} via {channel}")
+    logger.info(f"Delivering OTP {request_id} to {phone[:6]}*** via {channel}")
+    
+    # Auto-detect destination type if not provided
+    if destination_type is None:
+        destination_type = detect_destination_type(phone)
+    
+    usage_tracker = get_usage_tracker()
     
     try:
         from supabase_client import get_supabase_client
@@ -147,38 +167,100 @@ def deliver_otp(
         db.table("otp_requests").update({
             "delivery_status": "sent",
             "delivery_channel": channel,
-            "delivery_attempts": self.request.retries + 1
+            "delivery_attempts": self.request.retries + 1,
+            "destination_type": destination_type
         }).eq("request_id", request_id).execute()
         
-        # Get business config for WhatsApp credentials
+        # Record sent event (not billable until delivered)
+        usage_tracker.record_sent_event(
+            project_id=business_id,
+            request_id=request_id,
+            channel=channel,
+            destination_type=destination_type
+        )
+        
+        # Get business config for credentials (needed for BYOC mode)
         business = _get_business_config(db, business_id)
         
-        # Deliver based on channel
-        if channel == 'whatsapp':
-            result = _send_whatsapp_otp(business, phone, otp)
-        elif channel == 'sms':
-            result = _send_sms_otp(business, phone, otp)
-        else:
-            result = {"success": False, "error": f"Unknown channel: {channel}"}
-        
-        if result.get("success"):
-            # Update delivery status to 'delivered'
-            db.table("otp_requests").update({
-                "delivery_status": "delivered"
-            }).eq("request_id", request_id).execute()
+        # Use provider abstraction for delivery
+        try:
+            provider = get_provider(channel)
             
-            # Fire webhook
-            _queue_webhook(
-                business_id=business_id,
+            # Build OTP context
+            context = OTPContext(
                 request_id=request_id,
-                event_type="otp.delivery.delivered",
-                data={"channel": channel}
+                destination=phone,
+                destination_type=destination_type,
+                otp=otp,
+                purpose="verification",  # Generic purpose for delivery
+                business_id=business_id,
+                business_name=business.get("name"),
+                phone_number_id=business.get("phone_number_id"),
+                access_token=business.get("access_token"),
+                resend_api_key=os.getenv('RESEND_API_KEY')
             )
             
-            logger.info(f"OTP {request_id} delivered successfully via {channel}")
-            return {"success": True, "channel": channel}
-        else:
-            raise Exception(result.get("error", "Delivery failed"))
+            # Deliver via provider
+            result = provider.send_otp(context)
+            
+            if result.success:
+                # Update delivery status to 'delivered'
+                db.table("otp_requests").update({
+                    "delivery_status": "delivered",
+                    "message_id": result.message_id
+                }).eq("request_id", request_id).execute()
+                
+                # Record billable delivered event
+                usage_tracker.record_delivered_event(
+                    project_id=business_id,
+                    request_id=request_id,
+                    channel=channel,
+                    destination_type=destination_type,
+                    message_id=result.message_id
+                )
+                
+                # Fire webhook
+                _queue_webhook(
+                    business_id=business_id,
+                    request_id=request_id,
+                    event_type="otp.delivery.delivered",
+                    data={"channel": channel, "message_id": result.message_id}
+                )
+                
+                logger.info(f"OTP {request_id} delivered successfully via {channel}")
+                return {"success": True, "channel": channel, "message_id": result.message_id}
+            else:
+                # Provider returned failure
+                raise Exception(result.error or "Delivery failed")
+                
+        except ValueError as e:
+            # Unsupported channel - fallback to legacy handlers
+            logger.warning(f"Provider not found for {channel}, using legacy: {e}")
+            result = _deliver_legacy(business, phone, otp, channel)
+            
+            if result.get("success"):
+                db.table("otp_requests").update({
+                    "delivery_status": "delivered"
+                }).eq("request_id", request_id).execute()
+                
+                usage_tracker.record_delivered_event(
+                    project_id=business_id,
+                    request_id=request_id,
+                    channel=channel,
+                    destination_type=destination_type,
+                    message_id=result.get("message_id")
+                )
+                
+                _queue_webhook(
+                    business_id=business_id,
+                    request_id=request_id,
+                    event_type="otp.delivery.delivered",
+                    data={"channel": channel}
+                )
+                
+                return {"success": True, "channel": channel}
+            else:
+                raise Exception(result.get("error", "Delivery failed"))
             
     except Exception as e:
         logger.error(f"OTP delivery failed for {request_id}: {e}")
@@ -210,6 +292,34 @@ def deliver_otp(
             logger.error(f"Failed to update delivery status: {db_error}")
         
         raise
+
+
+# =============================================================================
+# LEGACY DELIVERY FALLBACK
+# =============================================================================
+
+def _deliver_legacy(business: Dict, phone: str, otp: str, channel: str) -> Dict[str, Any]:
+    """
+    Legacy delivery fallback for channels not yet in provider abstraction.
+    
+    This function maintains backward compatibility with existing WhatsApp/SMS
+    delivery logic while we transition to the provider abstraction layer.
+    
+    Args:
+        business: Business config with credentials
+        phone: Phone number
+        otp: OTP code
+        channel: Channel type
+        
+    Returns:
+        Dict with success status
+    """
+    if channel == 'whatsapp':
+        return _send_whatsapp_otp(business, phone, otp)
+    elif channel == 'sms':
+        return _send_sms_otp(business, phone, otp)
+    else:
+        return {"success": False, "error": f"Unknown channel: {channel}"}
 
 
 # =============================================================================
