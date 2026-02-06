@@ -305,11 +305,12 @@ class ConsoleAuthService:
             # Audit log
             await self._audit_log(user_id, org_id, 'signup', ip_address=ip_address)
             
-            # TODO: Send verification email
-            # await self._send_verification_email(email, verification_token)
+            # Send verification OTP email
+            otp_result = await self._send_verification_otp(email)
             
             return {
                 'success': True,
+                'requires_verification': True,
                 'user': {
                     'id': user_id,
                     'email': email,
@@ -332,6 +333,367 @@ class ConsoleAuthService:
                 'success': False,
                 'error': 'SIGNUP_FAILED',
                 'message': 'Unable to create account'
+            }
+    
+    # -------------------------------------------------------------------------
+    # EMAIL OTP VERIFICATION
+    # -------------------------------------------------------------------------
+    
+    async def send_verification_otp(
+        self,
+        email: str,
+        ip_address: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """
+        Send 6-digit OTP to email for verification.
+        
+        Args:
+            email: Email address to send OTP to
+            ip_address: Optional IP for rate limiting
+            
+        Returns:
+            Success response with expires_in or error
+        """
+        email = email.lower().strip()
+        
+        # Rate limit check (reuse existing rate limiter)
+        rate_check = await self._check_auth_rate_limit(ip_address, email, 'send_otp')
+        if not rate_check['allowed']:
+            return {
+                'success': False,
+                'error': 'RATE_LIMITED',
+                'message': rate_check['message'],
+                'retry_after': rate_check.get('retry_after')
+            }
+        
+        # Validate email exists in system
+        try:
+            user_result = self.db.table('otp_console_users').select('id, name').eq(
+                'email', email
+            ).limit(1).execute()
+            
+            user = user_result.data[0] if user_result.data else None
+            if not user:
+                return {
+                    'success': False,
+                    'error': 'USER_NOT_FOUND',
+                    'message': 'No account found with this email'
+                }
+        except Exception as e:
+            logger.error(f"Error checking user for OTP: {e}")
+            return {
+                'success': False,
+                'error': 'DATABASE_ERROR',
+                'message': 'Unable to process request'
+            }
+        
+        return await self._send_verification_otp(email, user.get('name'))
+    
+    async def _send_verification_otp(
+        self,
+        email: str,
+        name: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """
+        Internal: Generate and send OTP via Resend.
+        """
+        import random
+        import hashlib
+        
+        # Generate 6-digit OTP
+        otp = ''.join([str(random.randint(0, 9)) for _ in range(6)])
+        otp_hash = hashlib.sha256(otp.encode()).hexdigest()
+        
+        # OTP expires in 10 minutes
+        expires_at = datetime.utcnow() + timedelta(minutes=10)
+        
+        try:
+            # Delete any existing OTP for this email
+            self.db.table('otp_console_verification').delete().eq(
+                'email', email
+            ).execute()
+            
+            # Store new OTP
+            self.db.table('otp_console_verification').insert({
+                'email': email,
+                'otp_hash': otp_hash,
+                'attempts': 0,
+                'expires_at': expires_at.isoformat()
+            }).execute()
+            
+            # Send email via Resend
+            await self._send_otp_email(email, otp, name)
+            
+            logger.info(f"Verification OTP sent to {email[:3]}***@{email.split('@')[1]}")
+            
+            return {
+                'success': True,
+                'expires_in': 600,  # 10 minutes
+                'message': 'Verification code sent to your email'
+            }
+            
+        except Exception as e:
+            logger.error(f"Failed to send OTP: {e}")
+            return {
+                'success': False,
+                'error': 'SEND_FAILED',
+                'message': 'Unable to send verification code'
+            }
+    
+    async def _send_otp_email(
+        self,
+        email: str,
+        otp: str,
+        name: Optional[str] = None
+    ) -> None:
+        """
+        Send OTP email using Resend SDK.
+        
+        Raises:
+            Exception: If email fails to send
+        """
+        import os
+        
+        api_key = os.getenv('RESEND_API_KEY')
+        if not api_key:
+            logger.error("RESEND_API_KEY not configured")
+            raise ValueError("Email service not configured")
+        
+        try:
+            import resend
+            resend.api_key = api_key
+            
+            from_email = os.getenv('OTP_FROM_EMAIL', 'otp@flowauxi.com')
+            from_name = os.getenv('OTP_FROM_NAME', 'Flowauxi')
+            
+            # Premium HTML email template
+            html_body = self._get_verification_email_html(otp, name or email.split('@')[0])
+            text_body = f"""Flowauxi - Email Verification
+
+Your verification code is: {otp}
+
+This code expires in 10 minutes.
+
+If you didn't request this code, you can safely ignore this email.
+
+--
+Flowauxi"""
+            
+            logger.info(f"Sending OTP email to {email[:3]}***@{email.split('@')[1]} from {from_email}")
+            
+            # Send email and capture response
+            result = resend.Emails.send({
+                "from": f"{from_name} <{from_email}>",
+                "to": [email],
+                "subject": "Verify your Flowauxi Console account",
+                "html": html_body,
+                "text": text_body
+            })
+            
+            # Validate response - Resend returns {'id': 'xxx'} on success
+            if result and isinstance(result, dict) and result.get('id'):
+                logger.info(f"OTP email sent successfully. Resend ID: {result['id']}")
+            else:
+                logger.error(f"Resend returned unexpected response: {result}")
+                raise Exception(f"Email send failed: unexpected response from Resend")
+            
+        except ImportError:
+            logger.error("Resend SDK not installed. Install with: pip install resend")
+            raise
+        except Exception as e:
+            logger.error(f"Resend email error: {type(e).__name__}: {e}")
+            raise
+    
+    def _get_verification_email_html(self, otp: str, name: str) -> str:
+        """Generate premium verification email HTML."""
+        return f"""
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Verify Your Email</title>
+</head>
+<body style="margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background-color: #000000;">
+    <table width="100%" cellpadding="0" cellspacing="0" style="background-color: #000000; padding: 48px 24px;">
+        <tr>
+            <td align="center">
+                <table width="100%" cellpadding="0" cellspacing="0" style="max-width: 440px; background-color: #0a0a0a; border-radius: 16px; border: 1px solid rgba(255,255,255,0.1);">
+                    <tr>
+                        <td style="padding: 48px 40px; text-align: center;">
+                            <!-- Logo -->
+                            <div style="margin-bottom: 32px;">
+                                <span style="font-size: 24px; font-weight: 600; color: #ffffff; letter-spacing: -0.02em;">
+                                    ⬡ Flowauxi
+                                </span>
+                            </div>
+                            
+                            <!-- Greeting -->
+                            <h1 style="margin: 0 0 8px 0; font-size: 28px; font-weight: 500; color: #ffffff; letter-spacing: -0.02em;">
+                                Verify your email
+                            </h1>
+                            <p style="margin: 0 0 40px 0; font-size: 15px; color: rgba(255,255,255,0.6); line-height: 1.5;">
+                                Hi {name}, enter this code to verify your email address and complete your registration.
+                            </p>
+                            
+                            <!-- OTP Code -->
+                            <div style="background-color: #000000; border-radius: 12px; padding: 28px 24px; margin-bottom: 32px; border: 1px solid rgba(255,255,255,0.1);">
+                                <p style="margin: 0 0 8px 0; font-size: 11px; color: rgba(255,255,255,0.5); text-transform: uppercase; letter-spacing: 0.1em;">
+                                    Your verification code
+                                </p>
+                                <p style="margin: 0; font-size: 40px; font-weight: 600; letter-spacing: 12px; color: #ffffff; font-family: 'SF Mono', 'Fira Code', monospace;">
+                                    {otp}
+                                </p>
+                            </div>
+                            
+                            <!-- Expiry notice -->
+                            <p style="margin: 0 0 8px 0; font-size: 13px; color: rgba(255,255,255,0.5);">
+                                This code expires in 10 minutes.
+                            </p>
+                            <p style="margin: 0; font-size: 13px; color: rgba(255,255,255,0.4);">
+                                If you didn't request this code, you can safely ignore this email.
+                            </p>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td style="padding: 24px 40px; background-color: rgba(255,255,255,0.02); border-top: 1px solid rgba(255,255,255,0.05); text-align: center; border-radius: 0 0 16px 16px;">
+                            <p style="margin: 0; font-size: 12px; color: rgba(255,255,255,0.4);">
+                                Sent by Flowauxi • Do not share this code
+                            </p>
+                        </td>
+                    </tr>
+                </table>
+            </td>
+        </tr>
+    </table>
+</body>
+</html>
+"""
+    
+    async def verify_email_otp(
+        self,
+        email: str,
+        otp: str,
+        ip_address: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """
+        Verify OTP code submitted by user.
+        
+        Args:
+            email: User's email address
+            otp: 6-digit OTP code
+            ip_address: Optional IP for logging
+            
+        Returns:
+            Success response or error with attempts remaining
+        """
+        import hashlib
+        
+        email = email.lower().strip()
+        otp = otp.strip()
+        
+        # Validate OTP format
+        if not otp.isdigit() or len(otp) != 6:
+            return {
+                'success': False,
+                'error': 'INVALID_OTP_FORMAT',
+                'message': 'Please enter a 6-digit code'
+            }
+        
+        try:
+            # Fetch stored OTP
+            result = self.db.table('otp_console_verification').select('*').eq(
+                'email', email
+            ).limit(1).execute()
+            
+            stored = result.data[0] if result.data else None
+            if not stored:
+                return {
+                    'success': False,
+                    'error': 'NO_OTP_FOUND',
+                    'message': 'No verification code found. Please request a new one.'
+                }
+            
+            # Check expiry
+            expires_at = datetime.fromisoformat(stored['expires_at'].replace('Z', '+00:00'))
+            if datetime.utcnow().replace(tzinfo=expires_at.tzinfo) > expires_at:
+                # Clean up expired OTP
+                self.db.table('otp_console_verification').delete().eq(
+                    'email', email
+                ).execute()
+                return {
+                    'success': False,
+                    'error': 'OTP_EXPIRED',
+                    'message': 'Verification code expired. Please request a new one.'
+                }
+            
+            # Check max attempts (3 max)
+            if stored['attempts'] >= 3:
+                self.db.table('otp_console_verification').delete().eq(
+                    'email', email
+                ).execute()
+                return {
+                    'success': False,
+                    'error': 'MAX_ATTEMPTS',
+                    'message': 'Too many failed attempts. Please request a new code.'
+                }
+            
+            # Verify OTP hash
+            otp_hash = hashlib.sha256(otp.encode()).hexdigest()
+            
+            if otp_hash != stored['otp_hash']:
+                # Increment attempts
+                self.db.table('otp_console_verification').update({
+                    'attempts': stored['attempts'] + 1
+                }).eq('id', stored['id']).execute()
+                
+                attempts_remaining = 2 - stored['attempts']
+                return {
+                    'success': False,
+                    'error': 'INVALID_OTP',
+                    'message': 'Incorrect verification code',
+                    'attempts_remaining': max(0, attempts_remaining)
+                }
+            
+            # SUCCESS - Mark email as verified
+            self.db.table('otp_console_users').update({
+                'is_email_verified': True,
+                'email_verified_at': datetime.utcnow().isoformat()
+            }).eq('email', email).execute()
+            
+            # Clean up OTP record
+            self.db.table('otp_console_verification').delete().eq(
+                'email', email
+            ).execute()
+            
+            # Audit log
+            user_result = self.db.table('otp_console_users').select('id').eq(
+                'email', email
+            ).limit(1).execute()
+            
+            user_for_audit = user_result.data[0] if user_result.data else None
+            if user_for_audit:
+                await self._audit_log(
+                    user_for_audit['id'],
+                    None,
+                    'email_verified',
+                    ip_address=ip_address
+                )
+            
+            logger.info(f"Email verified: {email[:3]}***@{email.split('@')[1]}")
+            
+            return {
+                'success': True,
+                'verified': True,
+                'message': 'Email verified successfully'
+            }
+            
+        except Exception as e:
+            logger.error(f"OTP verification error: {e}")
+            return {
+                'success': False,
+                'error': 'VERIFICATION_FAILED',
+                'message': 'Unable to verify code'
             }
     
     # -------------------------------------------------------------------------
@@ -361,12 +723,12 @@ class ConsoleAuthService:
             }
         
         try:
-            # Fetch user
+            # Fetch user - use limit(1) to gracefully handle non-existent users
             result = self.db.table('otp_console_users').select('*').eq(
                 'email', email
-            ).single().execute()
+            ).limit(1).execute()
             
-            user = result.data
+            user = result.data[0] if result.data else None
             
             if not user:
                 await self._record_auth_attempt(ip_address, email, 'login', False)
@@ -480,9 +842,9 @@ class ConsoleAuthService:
         try:
             result = self.db.table('otp_console_users').select(
                 'id, email, name, is_email_verified'
-            ).eq('id', user_id).single().execute()
+            ).eq('id', user_id).limit(1).execute()
             
-            user = result.data
+            user = result.data[0] if result.data else None
             if not user:
                 return None
             
@@ -529,11 +891,12 @@ class ConsoleAuthService:
         
         try:
             # Verify session exists
-            session = self.db.table('otp_console_sessions').select('id, user_id').eq(
+            session_result = self.db.table('otp_console_sessions').select('id, user_id').eq(
                 'refresh_token_hash', token_hash
-            ).single().execute()
+            ).limit(1).execute()
             
-            if not session.data:
+            session = session_result.data[0] if session_result.data else None
+            if not session:
                 return {
                     'success': False,
                     'error': 'SESSION_NOT_FOUND',

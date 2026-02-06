@@ -65,14 +65,14 @@
 
 .plan-card:hover {
   background: rgba(255, 255, 255, 0.05);
-  border-color: rgba(124, 58, 237, 0.3);
+  border-color: rgba(255, 255, 255, 0.3);
   transform: translateY(-2px);
 }
 
 .plan-card.selected {
-  background: rgba(124, 58, 237, 0.1);
-  border-color: #7c3aed;
-  box-shadow: 0 0 0 2px rgba(124, 58, 237, 0.2);
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.6);
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.1);
 }
 
 .plan-card.current {
@@ -96,8 +96,8 @@
 }
 
 .plan-badge.popular {
-  background: linear-gradient(135deg, #7c3aed, #a855f7);
-  color: #fff;
+  background: linear-gradient(135deg, #ffffff, #e0e0e0);
+  color: #000;
 }
 
 .plan-name {
@@ -167,9 +167,9 @@
 }
 
 .plan-select-btn.selected {
-  background: #7c3aed;
-  border-color: #7c3aed;
-  color: #fff;
+  background: #ffffff;
+  border-color: #ffffff;
+  color: #000;
 }
 
 .plan-select-btn.current {
@@ -184,8 +184,8 @@
 }
 
 .billing-cta {
-  background: linear-gradient(135deg, #7c3aed, #a855f7);
-  color: #fff;
+  background: linear-gradient(135deg, #ffffff, #e0e0e0);
+  color: #000;
   border: none;
   padding: 16px 48px;
   border-radius: 8px;
@@ -197,7 +197,7 @@
 
 .billing-cta:hover:not(:disabled) {
   transform: translateY(-2px);
-  box-shadow: 0 8px 24px rgba(124, 58, 237, 0.4);
+  box-shadow: 0 8px 24px rgba(255, 255, 255, 0.2);
 }
 
 .billing-cta:disabled {
@@ -266,7 +266,7 @@
 
 .summary-row .value.amount {
   font-size: 1.25rem;
-  color: #7c3aed;
+  color: #ffffff;
 }
 
 .checkout-error {
@@ -284,8 +284,8 @@
 
 .checkout-btn {
   width: 100%;
-  background: linear-gradient(135deg, #7c3aed, #a855f7);
-  color: #fff;
+  background: linear-gradient(135deg, #ffffff, #e0e0e0);
+  color: #000;
   border: none;
   padding: 16px 24px;
   border-radius: 8px;
@@ -298,7 +298,7 @@
 
 .checkout-btn:hover:not(:disabled) {
   transform: translateY(-2px);
-  box-shadow: 0 8px 24px rgba(124, 58, 237, 0.4);
+  box-shadow: 0 8px 24px rgba(255, 255, 255, 0.2);
 }
 
 .checkout-btn:disabled {
@@ -364,10 +364,10 @@
 .upgrade-banner {
   background: linear-gradient(
     135deg,
-    rgba(124, 58, 237, 0.2),
-    rgba(168, 85, 247, 0.1)
+    rgba(255, 255, 255, 0.1),
+    rgba(255, 255, 255, 0.05)
   );
-  border: 1px solid rgba(124, 58, 237, 0.3);
+  border: 1px solid rgba(255, 255, 255, 0.2);
   border-radius: 12px;
   padding: 16px 24px;
   margin-bottom: 24px;
@@ -386,7 +386,7 @@
 .upgrade-banner-icon {
   width: 40px;
   height: 40px;
-  background: rgba(124, 58, 237, 0.3);
+  background: rgba(255, 255, 255, 0.15);
   border-radius: 10px;
   display: flex;
   align-items: center;
@@ -408,8 +408,8 @@
 }
 
 .upgrade-banner-btn {
-  background: #7c3aed;
-  color: #fff;
+  background: #ffffff;
+  color: #000;
   border: none;
   padding: 10px 20px;
   border-radius: 6px;
@@ -421,7 +421,7 @@
 }
 
 .upgrade-banner-btn:hover {
-  background: #9333ea;
+  background: #e0e0e0;
 }
 
 /* Responsive */

@@ -24,6 +24,7 @@ from middleware.subscription_guard import (
     inject_subscription
 )
 from services.otp_service import generate_api_key
+from services.audit_service import log_audit_event
 
 logger = logging.getLogger('console.api')
 
@@ -336,16 +337,15 @@ def update_project_channels():
             'updated_at': datetime.utcnow().isoformat()
         }).eq('id', org_id).execute()
         
-        # Audit log
-        db.table('otp_console_audit_logs').insert({
-            'user_id': user.id,
-            'org_id': org_id,
-            'action': 'enable_channel' if enabled else 'disable_channel',
-            'resource_type': 'channel',
-            'resource_id': channel,
-            'ip_address': get_client_ip(),
-            'metadata': {'channel': channel, 'enabled': enabled}
-        }).execute()
+        # Audit log (async, non-blocking)
+        log_audit_event(
+            user_id=str(user.id),
+            org_id=str(org_id),
+            action='enable_channel' if enabled else 'disable_channel',
+            resource_type='channel',
+            resource_id=channel,  # Now TEXT, works with 'email', 'whatsapp' etc.
+            metadata={'channel': channel, 'enabled': enabled}
+        )
         
         return jsonify({
             'success': True,
@@ -438,15 +438,14 @@ def create_project():
         
         project = result.data[0]
         
-        # Audit log
-        db.table('otp_console_audit_logs').insert({
-            'user_id': user.id,
-            'org_id': org_id,
-            'action': 'create_project',
-            'resource_type': 'project',
-            'resource_id': project['id'],
-            'ip_address': get_client_ip()
-        }).execute()
+        # Audit log (async, non-blocking)
+        log_audit_event(
+            user_id=str(user.id),
+            org_id=str(org_id),
+            action='create_project',
+            resource_type='project',
+            resource_id=str(project['id'])
+        )
         
         return jsonify({
             'success': True,
@@ -527,16 +526,15 @@ def update_project(project_id: str):
         if not result.data:
             return jsonify({'success': False, 'error': 'NOT_FOUND'}), 404
         
-        # Audit log
-        db.table('otp_console_audit_logs').insert({
-            'user_id': user.id,
-            'org_id': org_id,
-            'action': 'update_project',
-            'resource_type': 'project',
-            'resource_id': project_id,
-            'ip_address': get_client_ip(),
-            'metadata': updates
-        }).execute()
+        # Audit log (async, non-blocking)
+        log_audit_event(
+            user_id=str(user.id),
+            org_id=str(org_id),
+            action='update_project',
+            resource_type='project',
+            resource_id=str(project_id),
+            metadata=updates
+        )
         
         return jsonify({
             'success': True,
@@ -680,15 +678,15 @@ def create_api_key(project_id: str):
         
         key_record = result.data[0]
         
-        # Audit log
-        db.table('otp_console_audit_logs').insert({
-            'user_id': user.id,
-            'org_id': org_id,
-            'action': 'create_api_key',
-            'resource_type': 'api_key',
-            'resource_id': key_record['id'],
-            'ip_address': get_client_ip()
-        }).execute()
+        # Audit log (async, non-blocking)
+        log_audit_event(
+            user_id=str(user.id),
+            org_id=str(org_id),
+            action='create_api_key',
+            resource_type='api_key',
+            resource_id=str(key_record['id']),
+            metadata={'name': name, 'environment': environment}
+        )
         
         return jsonify({
             'success': True,
@@ -745,16 +743,15 @@ def revoke_api_key(project_id: str, key_id: str):
         if not result.data:
             return jsonify({'success': False, 'error': 'KEY_NOT_FOUND'}), 404
         
-        # Audit log
-        db.table('otp_console_audit_logs').insert({
-            'user_id': user.id,
-            'org_id': org_id,
-            'action': 'revoke_api_key',
-            'resource_type': 'api_key',
-            'resource_id': key_id,
-            'ip_address': get_client_ip(),
-            'metadata': {'reason': reason}
-        }).execute()
+        # Audit log (async, non-blocking)
+        log_audit_event(
+            user_id=str(user.id),
+            org_id=str(org_id),
+            action='revoke_api_key',
+            resource_type='api_key',
+            resource_id=str(key_id),
+            metadata={'reason': reason}
+        )
         
         return jsonify({'success': True}), 200
         

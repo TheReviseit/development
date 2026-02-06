@@ -25,6 +25,7 @@ from typing import Optional, Dict, Any, Tuple
 from flask import Blueprint, request, jsonify, g
 
 from middleware.console_auth_middleware import require_console_auth
+from services.audit_service import log_billing_event
 
 logger = logging.getLogger('console.billing')
 
@@ -36,6 +37,8 @@ try:
     
     if RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET:
         razorpay_client = razorpay.Client(auth=(RAZORPAY_KEY_ID, RAZORPAY_KEY_SECRET))
+        # Note: set_timeout not supported in this version of razorpay
+        # razorpay_client.set_timeout(10)
         RAZORPAY_AVAILABLE = True
     else:
         razorpay_client = None
@@ -46,7 +49,10 @@ except ImportError:
     RAZORPAY_AVAILABLE = False
     logger.warning("Razorpay SDK not installed")
 
-# Console plan configuration
+# Plan tier ordering (lower index = lower tier)
+# Used for upgrade/downgrade validation
+PLAN_TIER_ORDER = ['starter', 'growth', 'enterprise']
+
 # Console plan configuration
 CONSOLE_PLAN_CONFIG = {
     'starter': {
@@ -56,6 +62,7 @@ CONSOLE_PLAN_CONFIG = {
         'interval': 'monthly',
         'display_name': 'Starter',
         'entitlement_level': 'live',
+        'tier': 0,
         'features': [
             "Live OTP API access",
             "WhatsApp OTPs at ₹0.75/OTP",
@@ -73,6 +80,7 @@ CONSOLE_PLAN_CONFIG = {
         'interval': 'monthly',
         'display_name': 'Growth',
         'entitlement_level': 'live',
+        'tier': 1,
         'features': [
             "WhatsApp OTPs at ₹0.60/OTP",
             "Priority API routing (lower latency)",
@@ -89,6 +97,7 @@ CONSOLE_PLAN_CONFIG = {
         'interval': 'monthly',
         'display_name': 'Enterprise',
         'entitlement_level': 'enterprise',
+        'tier': 2,
         'action': 'contact_sales',
         'features': [
             "Volume OTP pricing (₹0.50/OTP and below)",
@@ -101,6 +110,22 @@ CONSOLE_PLAN_CONFIG = {
         ]
     }
 }
+
+
+def get_plan_tier(plan_name: str) -> int:
+    """Get numeric tier for a plan. Higher = better plan."""
+    plan = CONSOLE_PLAN_CONFIG.get(plan_name.lower())
+    if plan:
+        return plan.get('tier', -1)
+    try:
+        return PLAN_TIER_ORDER.index(plan_name.lower())
+    except ValueError:
+        return -1
+
+
+def is_upgrade(current_plan: str, target_plan: str) -> bool:
+    """Check if target_plan is a higher tier than current_plan."""
+    return get_plan_tier(target_plan) > get_plan_tier(current_plan)
 
 # Create blueprint
 console_billing_bp = Blueprint('console_billing', __name__, url_prefix='/console/billing')
@@ -266,29 +291,50 @@ def create_order():
     # Check for existing subscription
     existing_sub = get_console_subscription(org_id)
     
-    # If already active, don't allow new subscription
-    if existing_sub and existing_sub['billing_status'] == 'active':
-        return error_response(
-            'You already have an active subscription',
-            'ALREADY_SUBSCRIBED',
-            400
-        )
-    
     # Generate idempotency key
     idempotency_key = generate_idempotency_key(org_id, plan_name)
     
-    # Check if there's a pending order with this key
-    if existing_sub and existing_sub.get('idempotency_key') == idempotency_key:
-        if existing_sub['billing_status'] == 'payment_pending':
-            # Return existing order
-            return success_response({
-                'subscription_id': existing_sub['razorpay_subscription_id'],
-                'key_id': RAZORPAY_KEY_ID,
-                'amount': plan['amount'],
-                'currency': plan['currency'],
-                'plan_name': plan['display_name'],
-                'existing_order': True
-            })
+    # Handle existing subscription scenarios
+    if existing_sub:
+        current_status = existing_sub['billing_status']
+        current_plan = existing_sub.get('plan_name', '').lower()
+        
+        # Double-click protection: Return existing pending order for same plan
+        if current_status == 'payment_pending':
+            if existing_sub.get('idempotency_key') == idempotency_key:
+                # Same plan, same day - return existing order
+                return success_response({
+                    'subscription_id': existing_sub['razorpay_subscription_id'],
+                    'key_id': RAZORPAY_KEY_ID,
+                    'amount': plan['amount'],
+                    'currency': plan['currency'],
+                    'plan_name': plan['display_name'],
+                    'existing_order': True
+                })
+            # Different plan while payment_pending - allow upgrade attempt
+            logger.info(f"Upgrade from pending {current_plan} to {plan_name} for org {org_id}")
+        
+        # Active subscription logic
+        elif current_status == 'active':
+            # Same plan - block
+            if current_plan == plan_name:
+                return error_response(
+                    f'You are already subscribed to the {plan["display_name"]} plan',
+                    'ALREADY_ON_PLAN',
+                    400
+                )
+            
+            # Downgrade - block (must contact support)
+            if not is_upgrade(current_plan, plan_name):
+                current_display = CONSOLE_PLAN_CONFIG.get(current_plan, {}).get('display_name', current_plan.title())
+                return error_response(
+                    f'Cannot downgrade from {current_display} to {plan["display_name"]}. Please contact support.',
+                    'DOWNGRADE_NOT_ALLOWED',
+                    400
+                )
+            
+            # Upgrade allowed - proceed
+            logger.info(f"Upgrade detected: {current_plan} -> {plan_name} for org {org_id}")
     
     try:
         from supabase_client import get_supabase_client
@@ -303,44 +349,65 @@ def create_order():
         
         # Create or get Razorpay customer
         customer_id = None
+        user_email = getattr(user, 'email', None) or 'user@example.com'
+        org_name = org.get('name', 'Organization') or 'Organization'
+        
         try:
             customer = razorpay_client.customer.create(data={
-                'name': org.get('name', 'Organization'),
-                'email': user.email,
+                'name': org_name[:50],  # Razorpay has length limits
+                'email': user_email,
                 'notes': {
-                    'org_id': org_id,
-                    'user_id': user.id
+                    'org_id': str(org_id),
+                    'user_id': str(user.id)
                 }
             })
             customer_id = customer['id']
+            logger.info(f"Created Razorpay customer {customer_id} for org {org_id}")
         except razorpay.errors.BadRequestError as e:
             if 'already exists' in str(e).lower():
                 # Find existing customer by email
-                customers = razorpay_client.customer.all({'count': 100})
-                for c in customers.get('items', []):
-                    if c.get('email') == user.email:
-                        customer_id = c['id']
-                        break
+                try:
+                    customers = razorpay_client.customer.all({'count': 100})
+                    for c in customers.get('items', []):
+                        if c.get('email') == user_email:
+                            customer_id = c['id']
+                            logger.info(f"Found existing Razorpay customer {customer_id}")
+                            break
+                except Exception as fetch_err:
+                    logger.warning(f"Failed to fetch customers: {fetch_err}")
             if not customer_id:
                 logger.error(f"Failed to create/find customer: {e}")
                 return error_response('Failed to create customer', 'CUSTOMER_ERROR', 500)
+        except (razorpay.errors.ServerError, Exception) as e:
+            # Razorpay server error - log as ERROR but proceed without customer
+            # Customer ID is optional for subscription creation
+            logger.error(
+                f"Razorpay customer creation failed for org {org_id}: {e}",
+                extra={'org_id': org_id, 'error': str(e)}
+            )
+            # Customer ID will be None, subscription can still be created
         
         # Create Razorpay subscription
-        subscription = razorpay_client.subscription.create(data={
+        subscription_data = {
             'plan_id': plan['plan_id'],
-            'customer_id': customer_id,
             'total_count': 12,  # 12 months
             'quantity': 1,
             'customer_notify': 1,
             'notes': {
-                'org_id': org_id,
+                'org_id': str(org_id),
                 'plan_name': plan_name,
                 'idempotency_key': idempotency_key
             }
-        })
+        }
         
-        # Upsert subscription record
-        subscription_data = {
+        # Only add customer_id if we have one
+        if customer_id:
+            subscription_data['customer_id'] = customer_id
+        
+        subscription = razorpay_client.subscription.create(data=subscription_data)
+        
+        # Upsert subscription record in our database
+        db_subscription_data = {
             'org_id': org_id,
             'plan_name': plan_name,
             'billing_status': 'payment_pending',
@@ -351,28 +418,29 @@ def create_order():
         }
         
         if existing_sub:
+            # Track upgrade history
+            if existing_sub.get('plan_name') and existing_sub['plan_name'] != plan_name:
+                db_subscription_data['upgrade_from'] = existing_sub['plan_name']
+            
             # Update existing record
             db.table('otp_console_subscriptions').update(
-                subscription_data
+                db_subscription_data
             ).eq('id', existing_sub['id']).execute()
         else:
             # Insert new record
             db.table('otp_console_subscriptions').insert(
-                subscription_data
+                db_subscription_data
             ).execute()
         
-        # Audit log
-        db.table('otp_console_audit_logs').insert({
-            'user_id': user.id,
-            'org_id': org_id,
-            'action': 'create_billing_order',
-            'resource_type': 'subscription',
-            'resource_id': subscription['id'],
-            'details': {
-                'plan_name': plan_name,
-                'amount': plan['amount']
-            }
-        }).execute()
+        # Audit log (async, non-blocking - never fails the request)
+        log_billing_event(
+            user_id=str(user.id),
+            org_id=str(org_id),
+            action='create_billing_order',
+            razorpay_id=subscription['id'],
+            plan_name=plan_name,
+            amount=plan['amount']
+        )
         
         logger.info(f"Created order {subscription['id']} for org {org_id}, plan {plan_name}")
         

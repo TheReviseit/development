@@ -223,23 +223,54 @@ class EntitlementService:
         try:
             supabase = self._get_supabase()
             
-            # Query active subscription
+            # CONSOLE SUBSCRIPTIONS: Primary lookup by org_id in otp_console_subscriptions
+            # This is where console billing creates subscriptions
+            if org_id:
+                try:
+                    result = supabase.table('otp_console_subscriptions').select('*').eq(
+                        'org_id', org_id
+                    ).limit(1).execute()
+                    
+                    if result.data:
+                        sub = result.data[0]
+                        plan_tier = self._parse_plan_tier(sub.get('plan_name'))
+                        billing_status = self._parse_billing_status(sub.get('billing_status'))
+                        
+                        # Get usage for current period
+                        usage = await self._get_current_usage(
+                            org_id,
+                            sub.get('current_period_start')
+                        )
+                        
+                        logger.debug(f"Found console subscription for org={org_id}: plan={plan_tier}, status={billing_status}")
+                        
+                        return EntitlementContext(
+                            user_id=user_id,
+                            org_id=org_id,
+                            plan_tier=plan_tier,
+                            billing_status=billing_status,
+                            subscription_id=sub.get('id'),
+                            current_period_start=self._parse_datetime(sub.get('current_period_start')),
+                            current_period_end=self._parse_datetime(sub.get('current_period_end')),
+                            otp_used_this_month=usage.get('otp_send', 0),
+                            features=PLAN_FEATURES.get(plan_tier, {}) if plan_tier else {},
+                        )
+                except Exception as e:
+                    logger.debug(f"No console subscription for org {org_id}: {e}")
+            
+            # FALLBACK: Legacy subscriptions table (for API-level subscriptions)
             query = supabase.table('subscriptions').select('*')
             
             if org_id:
-                # Org-level subscription (preferred for multi-tenant)
                 query = query.eq('org_id', org_id)
             else:
-                # User-level subscription fallback
                 query = query.eq('user_id', user_id)
             
-            # Get most recent active subscription
             result = query.eq('status', 'active').order(
                 'created_at', desc=True
             ).limit(1).execute()
             
             if not result.data:
-                # No active subscription - check for any subscription
                 result = supabase.table('subscriptions').select('*').eq(
                     'user_id', user_id
                 ).order('created_at', desc=True).limit(1).execute()
@@ -249,7 +280,6 @@ class EntitlementService:
                 plan_tier = self._parse_plan_tier(sub.get('plan_name'))
                 billing_status = self._parse_billing_status(sub.get('status'))
                 
-                # Get usage for current period
                 usage = await self._get_current_usage(
                     org_id or user_id,
                     sub.get('current_period_start')

@@ -2,9 +2,8 @@
 
 import React, { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import Script from "next/script";
-import "../console.css";
-import "./billing.css";
+import "../../console.css";
+import "../billing.css";
 
 declare global {
   interface Window {
@@ -29,20 +28,53 @@ export default function CheckoutPage() {
   const [error, setError] = useState<string | null>(null);
   const [razorpayLoaded, setRazorpayLoaded] = useState(false);
 
+  // Load Razorpay script on mount - more reliable than Next.js Script
+  useEffect(() => {
+    // Check if already loaded (global object or script element)
+    if (typeof window !== "undefined" && window.Razorpay) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- Initial sync with external state
+      setRazorpayLoaded(true);
+      return;
+    }
+
+    // Prevent duplicate script loading
+    if (document.getElementById("razorpay-sdk")) {
+      // Script exists but Razorpay not ready yet, wait for it
+      const checkInterval = setInterval(() => {
+        if (window.Razorpay) {
+          setRazorpayLoaded(true);
+          clearInterval(checkInterval);
+        }
+      }, 100);
+      return () => clearInterval(checkInterval);
+    }
+
+    // Create and append script
+    const script = document.createElement("script");
+    script.id = "razorpay-sdk";
+    script.src = "https://checkout.razorpay.com/v1/checkout.js";
+    script.async = true;
+    script.onload = () => setRazorpayLoaded(true);
+    script.onerror = () =>
+      setError("Failed to load payment system. Please refresh the page.");
+    document.body.appendChild(script);
+  }, []);
+
   useEffect(() => {
     // Get order from session storage
     const orderData = sessionStorage.getItem("billing_order");
     if (!orderData) {
-      router.push("/console/billing/select-plan");
+      router.push("/console/otp");
       return;
     }
 
     try {
       const parsed = JSON.parse(orderData);
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- Initial sync with sessionStorage
       setOrder(parsed);
       setStatus("ready");
     } catch {
-      router.push("/console/billing/select-plan");
+      router.push("/console/otp");
     }
   }, [router]);
 
@@ -101,7 +133,7 @@ export default function CheckoutPage() {
         },
       },
       theme: {
-        color: "#7c3aed",
+        color: "#ffffff",
       },
     };
 
@@ -159,11 +191,6 @@ export default function CheckoutPage() {
 
   return (
     <>
-      <Script
-        src="https://checkout.razorpay.com/v1/checkout.js"
-        onLoad={() => setRazorpayLoaded(true)}
-      />
-
       <div className="checkout-page">
         <div className="checkout-card">
           <h1>Complete Your Subscription</h1>
@@ -203,7 +230,7 @@ export default function CheckoutPage() {
 
           <button
             className="checkout-back"
-            onClick={() => router.push("/console/billing/select-plan")}
+            onClick={() => router.push("/console/otp")}
           >
             ← Back to Plans
           </button>

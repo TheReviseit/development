@@ -135,6 +135,7 @@ def signup():
         if result.get('success'):
             response_data = {
                 'success': True,
+                'requires_verification': result.get('requires_verification', False),
                 'user': result['user'],
                 'org': result['org']
             }
@@ -157,6 +158,152 @@ def signup():
             'success': False,
             'error': 'INTERNAL_ERROR',
             'message': 'Unable to create account'
+        }), 500
+
+
+# =============================================================================
+# EMAIL VERIFICATION OTP
+# =============================================================================
+
+@console_auth_bp.route('/send-otp', methods=['POST'])
+def send_otp():
+    """
+    Send verification OTP to user's email.
+    
+    Request Body:
+        {
+            "email": "user@example.com"
+        }
+    
+    Response:
+        {
+            "success": true,
+            "expires_in": 600,
+            "message": "Verification code sent"
+        }
+    """
+    try:
+        data = request.get_json() or {}
+    except Exception:
+        return jsonify({
+            'success': False,
+            'error': 'INVALID_JSON'
+        }), 400
+    
+    email = data.get('email', '').strip()
+    
+    if not email:
+        return jsonify({
+            'success': False,
+            'error': 'MISSING_EMAIL',
+            'message': 'Email is required'
+        }), 400
+    
+    ip_address = get_client_ip()
+    
+    try:
+        import asyncio
+        service = get_console_auth_service()
+        
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        try:
+            result = loop.run_until_complete(service.send_verification_otp(
+                email=email,
+                ip_address=ip_address
+            ))
+        finally:
+            loop.close()
+        
+        if result.get('success'):
+            return jsonify(result), 200
+        else:
+            error_code = result.get('error', 'SEND_FAILED')
+            status_code = _error_to_status(error_code)
+            return jsonify(result), status_code
+            
+    except Exception as e:
+        logger.error(f"Send OTP error: {e}")
+        return jsonify({
+            'success': False,
+            'error': 'INTERNAL_ERROR',
+            'message': 'Unable to send verification code'
+        }), 500
+
+
+@console_auth_bp.route('/verify-otp', methods=['POST'])
+def verify_otp():
+    """
+    Verify email OTP code.
+    
+    Request Body:
+        {
+            "email": "user@example.com",
+            "code": "123456"
+        }
+    
+    Response:
+        {
+            "success": true,
+            "verified": true,
+            "message": "Email verified successfully"
+        }
+    """
+    try:
+        data = request.get_json() or {}
+    except Exception:
+        return jsonify({
+            'success': False,
+            'error': 'INVALID_JSON'
+        }), 400
+    
+    email = data.get('email', '').strip()
+    code = data.get('code', '').strip()
+    
+    if not email:
+        return jsonify({
+            'success': False,
+            'error': 'MISSING_EMAIL',
+            'message': 'Email is required'
+        }), 400
+    
+    if not code:
+        return jsonify({
+            'success': False,
+            'error': 'MISSING_CODE',
+            'message': 'Verification code is required'
+        }), 400
+    
+    ip_address = get_client_ip()
+    
+    try:
+        import asyncio
+        service = get_console_auth_service()
+        
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        try:
+            result = loop.run_until_complete(service.verify_email_otp(
+                email=email,
+                otp=code,
+                ip_address=ip_address
+            ))
+        finally:
+            loop.close()
+        
+        if result.get('success'):
+            return jsonify(result), 200
+        else:
+            error_code = result.get('error', 'VERIFICATION_FAILED')
+            status_code = _error_to_status(error_code)
+            return jsonify(result), status_code
+            
+    except Exception as e:
+        logger.error(f"Verify OTP error: {e}")
+        return jsonify({
+            'success': False,
+            'error': 'INTERNAL_ERROR',
+            'message': 'Unable to verify code'
         }), 500
 
 
@@ -390,11 +537,20 @@ def _error_to_status(error_code: str) -> int:
     status_map = {
         'MISSING_EMAIL': 400,
         'MISSING_PASSWORD': 400,
+        'MISSING_CODE': 400,
         'INVALID_EMAIL': 400,
+        'INVALID_OTP_FORMAT': 400,
         'WEAK_PASSWORD': 400,
         'EMAIL_EXISTS': 409,
         'INVALID_CREDENTIALS': 401,
+        'INVALID_OTP': 401,
+        'NO_OTP_FOUND': 404,
+        'USER_NOT_FOUND': 404,
+        'OTP_EXPIRED': 410,
+        'MAX_ATTEMPTS': 429,
         'RATE_LIMITED': 429,
+        'SEND_FAILED': 500,
+        'VERIFICATION_FAILED': 500,
         'INTERNAL_ERROR': 500,
         'DATABASE_ERROR': 500,
     }

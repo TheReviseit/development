@@ -1,13 +1,13 @@
 "use client";
 
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import Script from "next/script";
 import "./otp.css";
 
 // =============================================================================
-// Icons (SVG)
+// Premium SVG Icons
 // =============================================================================
 
 const WhatsAppIcon = () => (
@@ -109,6 +109,66 @@ const StarIcon = () => (
   </svg>
 );
 
+// Status Icons (SVG replacements for emojis)
+const SandboxIcon = () => (
+  <svg
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2"
+    width="24"
+    height="24"
+  >
+    <path d="M9 3H5a2 2 0 00-2 2v4m6-6h10a2 2 0 012 2v4M9 3v18m0 0h10a2 2 0 002-2v-4M9 21H5a2 2 0 01-2-2v-4m0-6v6m18-6v6" />
+    <circle cx="12" cy="12" r="3" />
+  </svg>
+);
+
+const RocketIcon = () => (
+  <svg
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2"
+    width="24"
+    height="24"
+  >
+    <path d="M4.5 16.5c-1.5 1.26-2 5-2 5s3.74-.5 5-2c.71-.84.7-2.13-.09-2.91a2.18 2.18 0 00-2.91-.09z" />
+    <path d="M12 15l-3-3a22 22 0 012-3.95A12.88 12.88 0 0122 2c0 2.72-.78 7.5-6 11a22.35 22.35 0 01-4 2z" />
+    <path d="M9 12H4s.55-3.03 2-4c1.62-1.08 5 0 5 0" />
+    <path d="M12 15v5s3.03-.55 4-2c1.08-1.62 0-5 0-5" />
+  </svg>
+);
+
+const AlertIcon = () => (
+  <svg
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2"
+    width="18"
+    height="18"
+  >
+    <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
+    <line x1="12" y1="9" x2="12" y2="13" />
+    <line x1="12" y1="17" x2="12.01" y2="17" />
+  </svg>
+);
+
+const LockIcon = () => (
+  <svg
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2"
+    width="20"
+    height="20"
+  >
+    <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+    <path d="M7 11V7a5 5 0 0110 0v4" />
+  </svg>
+);
+
 // =============================================================================
 // Types
 // =============================================================================
@@ -144,6 +204,8 @@ export default function UpgradePage() {
   const [plans, setPlans] = useState<Plan[]>([]);
   const [currentSubscription, setCurrentSubscription] =
     useState<Subscription | null>(null);
+  const [entitlementLevel, setEntitlementLevel] = useState<string>("none");
+  const [canCreateLiveKeys, setCanCreateLiveKeys] = useState<boolean>(false);
   const [selectedPlan, setSelectedPlan] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [processing, setProcessing] = useState(false);
@@ -167,8 +229,15 @@ export default function UpgradePage() {
         credentials: "include",
       });
       const subData = await subRes.json();
-      if (subData.success && subData.subscription) {
-        setCurrentSubscription(subData.subscription);
+
+      if (subData.success) {
+        // Use the direct values from the API response
+        setEntitlementLevel(subData.entitlement_level || "none");
+        setCanCreateLiveKeys(subData.can_create_live_keys || false);
+
+        if (subData.subscription) {
+          setCurrentSubscription(subData.subscription);
+        }
       }
     } catch (err) {
       console.error("Failed to fetch data:", err);
@@ -178,7 +247,11 @@ export default function UpgradePage() {
   };
 
   const handleSelectPlan = async (planId: string) => {
-    if (currentSubscription?.plan_name === planId) return;
+    if (
+      currentSubscription?.plan_name === planId &&
+      currentSubscription?.billing_status === "active"
+    )
+      return;
 
     if (planId === "enterprise") {
       window.location.href = "mailto:sales@flowauxi.com";
@@ -247,7 +320,40 @@ export default function UpgradePage() {
   }
 
   const currentPlanName = currentSubscription?.plan_name || null;
-  const entitlementLevel = currentSubscription?.entitlement_level || "sandbox";
+  const billingStatus = currentSubscription?.billing_status || null;
+  const hasActivePlan =
+    currentSubscription && billingStatus === "active" && currentPlanName;
+
+  // Determine status display
+  const getStatusInfo = () => {
+    if (hasActivePlan) {
+      return {
+        icon: <RocketIcon />,
+        title: `${currentPlanName.charAt(0).toUpperCase() + currentPlanName.slice(1)} Plan`,
+        description: "You have full access to live APIs.",
+        variant: "active" as const,
+      };
+    }
+
+    if (entitlementLevel === "sandbox") {
+      return {
+        icon: <SandboxIcon />,
+        title: "Sandbox Mode",
+        description: "Test keys only. Upgrade to create live API keys.",
+        variant: "sandbox" as const,
+      };
+    }
+
+    return {
+      icon: <LockIcon />,
+      title: "No Active Plan",
+      description:
+        "Subscribe to a plan to create live API keys and start sending OTPs.",
+      variant: "none" as const,
+    };
+  };
+
+  const statusInfo = getStatusInfo();
 
   return (
     <>
@@ -263,40 +369,31 @@ export default function UpgradePage() {
 
       <div className="console-content">
         {/* Current Status Banner */}
-        <div className="upgrade-status-banner">
-          <div className="upgrade-status-icon">
-            {entitlementLevel === "sandbox" ? "🧪" : "🚀"}
-          </div>
+        <div className={`upgrade-status-banner ${statusInfo.variant}`}>
+          <div className="upgrade-status-icon">{statusInfo.icon}</div>
           <div className="upgrade-status-text">
-            <h4>
-              {entitlementLevel === "sandbox"
-                ? "Sandbox Mode"
-                : currentPlanName
-                  ? `${currentPlanName.charAt(0).toUpperCase() + currentPlanName.slice(1)} Plan`
-                  : "Active"}
-            </h4>
-            <p>
-              {entitlementLevel === "sandbox"
-                ? "Test keys only. Upgrade to create live API keys."
-                : "You have full access to live APIs."}
-            </p>
+            <h4>{statusInfo.title}</h4>
+            <p>{statusInfo.description}</p>
           </div>
         </div>
 
         {error && (
           <div className="upgrade-error">
-            <span>⚠️</span> {error}
+            <AlertIcon />
+            <span>{error}</span>
           </div>
         )}
 
         <p className="upgrade-subtitle">
-          Choose a plan to unlock live API access and send real OTPs.
+          {hasActivePlan
+            ? "Manage your subscription or upgrade to a higher plan."
+            : "Choose a plan to unlock live API access and send real OTPs."}
         </p>
 
         {/* Plans Grid */}
         <div className="upgrade-plans-grid">
           {plans.map((plan) => {
-            const isCurrent = currentPlanName === plan.id;
+            const isCurrent = hasActivePlan && currentPlanName === plan.id;
             const isSelected = selectedPlan === plan.id;
             const isPopular = plan.id === "growth";
             const isEnterprise = plan.id === "enterprise";
@@ -348,7 +445,7 @@ export default function UpgradePage() {
                       ? "Contact Sales"
                       : processing && isSelected
                         ? "Processing..."
-                        : "Select Plan"}
+                        : "Get Started"}
                 </button>
               </div>
             );
@@ -386,7 +483,7 @@ export default function UpgradePage() {
           </div>
         </div>
 
-        <p className="upgrade-guarantee">Cancel anytime.</p>
+        <p className="upgrade-guarantee">Cancel anytime. No hidden fees.</p>
       </div>
     </>
   );

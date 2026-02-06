@@ -1,6 +1,6 @@
 /* =============================================================================
    Upgrade Console Styles
-   Black & White Premium Enterprise Theme
+   Premium Enterprise-Grade Black & White Theme
 ============================================================================= */
 
 /* Header & Layout */
@@ -78,59 +78,135 @@
 
 /* Error Message */
 .upgrade-error {
-  background: rgba(255, 59, 48, 0.1);
+  background: rgba(255, 59, 48, 0.08);
   border: 1px solid rgba(255, 59, 48, 0.2);
-  color: #ff453a;
-  padding: 12px 16px;
-  border-radius: 8px;
+  color: #ff6b6b;
+  padding: 14px 18px;
+  border-radius: 10px;
   margin-bottom: 24px;
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 12px;
   font-size: 13px;
+  font-weight: 500;
+}
+
+.upgrade-error svg {
+  flex-shrink: 0;
+  color: #ff6b6b;
 }
 
 /* =============================================================================
-   Status Banner
+   Status Banner - Premium Variants
 ============================================================================= */
 
 .upgrade-status-banner {
   background: linear-gradient(
-    180deg,
-    rgba(255, 255, 255, 0.05) 0%,
-    rgba(255, 255, 255, 0.02) 100%
+    135deg,
+    rgba(255, 255, 255, 0.04) 0%,
+    rgba(255, 255, 255, 0.01) 100%
   );
   border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 12px;
-  padding: 24px;
+  border-radius: 16px;
+  padding: 28px 32px;
   display: flex;
   align-items: center;
-  gap: 20px;
-  margin-bottom: 32px;
+  gap: 24px;
+  margin-bottom: 40px;
+  backdrop-filter: blur(12px);
+}
+
+/* No Plan - Warning state */
+.upgrade-status-banner.none {
+  background: linear-gradient(
+    135deg,
+    rgba(255, 171, 0, 0.08) 0%,
+    rgba(255, 171, 0, 0.02) 100%
+  );
+  border-color: rgba(255, 171, 0, 0.2);
+}
+
+.upgrade-status-banner.none .upgrade-status-icon {
+  background: rgba(255, 171, 0, 0.15);
+  color: #ffab00;
+}
+
+.upgrade-status-banner.none .upgrade-status-text h4 {
+  color: #ffab00;
+}
+
+/* Sandbox - Neutral state */
+.upgrade-status-banner.sandbox {
+  background: linear-gradient(
+    135deg,
+    rgba(100, 149, 237, 0.08) 0%,
+    rgba(100, 149, 237, 0.02) 100%
+  );
+  border-color: rgba(100, 149, 237, 0.2);
+}
+
+.upgrade-status-banner.sandbox .upgrade-status-icon {
+  background: rgba(100, 149, 237, 0.15);
+  color: #6495ed;
+}
+
+.upgrade-status-banner.sandbox .upgrade-status-text h4 {
+  color: #6495ed;
+}
+
+/* Active - Success state */
+.upgrade-status-banner.active {
+  background: linear-gradient(
+    135deg,
+    rgba(50, 205, 50, 0.08) 0%,
+    rgba(50, 205, 50, 0.02) 100%
+  );
+  border-color: rgba(50, 205, 50, 0.2);
+}
+
+.upgrade-status-banner.active .upgrade-status-icon {
+  background: rgba(50, 205, 50, 0.15);
+  color: #32cd32;
+}
+
+.upgrade-status-banner.active .upgrade-status-text h4 {
+  color: #32cd32;
 }
 
 .upgrade-status-icon {
-  width: 48px;
-  height: 48px;
-  border-radius: 12px;
-  background: rgba(255, 255, 255, 0.1);
+  width: 56px;
+  height: 56px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.08);
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 24px;
+  flex-shrink: 0;
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.upgrade-status-icon svg {
+  width: 28px;
+  height: 28px;
+}
+
+.upgrade-status-text {
+  flex: 1;
 }
 
 .upgrade-status-text h4 {
-  font-size: 16px;
+  font-size: 17px;
   font-weight: 600;
   color: #fff;
-  margin: 0 0 4px 0;
+  margin: 0 0 6px 0;
+  letter-spacing: -0.2px;
 }
 
 .upgrade-status-text p {
-  font-size: 13px;
+  font-size: 14px;
   color: rgba(255, 255, 255, 0.5);
   margin: 0;
+  line-height: 1.4;
 }
 
 /* =============================================================================
@@ -144,10 +220,16 @@
   margin-bottom: 64px;
 }
 
-@media (max-width: 900px) {
+@media (max-width: 1000px) {
+  .upgrade-plans-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 700px) {
   .upgrade-plans-grid {
     grid-template-columns: 1fr;
-    max-width: 500px;
+    max-width: 440px;
     margin-left: auto;
     margin-right: auto;
   }
@@ -157,27 +239,35 @@
   position: relative;
   background: rgba(255, 255, 255, 0.02);
   border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 16px;
-  padding: 32px 24px;
+  border-radius: 20px;
+  padding: 36px 28px;
   display: flex;
   flex-direction: column;
-  transition: all 0.2s ease;
+  transition: all 0.25s ease;
 }
 
 .upgrade-plan-card:hover {
   background: rgba(255, 255, 255, 0.04);
-  border-color: rgba(255, 255, 255, 0.15);
-  transform: translateY(-2px);
+  border-color: rgba(255, 255, 255, 0.18);
+  transform: translateY(-4px);
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.2);
+}
+
+.upgrade-plan-card.popular {
+  border-color: rgba(255, 255, 255, 0.25);
+  background: rgba(255, 255, 255, 0.04);
 }
 
 .upgrade-plan-card.selected {
-  background: rgba(255, 255, 255, 0.05);
+  background: rgba(255, 255, 255, 0.06);
   border-color: #fff;
-  box-shadow: 0 0 0 1px #fff;
+  box-shadow:
+    0 0 0 1px #fff,
+    0 20px 40px rgba(0, 0, 0, 0.2);
 }
 
 .upgrade-plan-card.current {
-  opacity: 0.7;
+  opacity: 0.65;
   pointer-events: none;
   background: rgba(255, 255, 255, 0.01);
 }
@@ -185,81 +275,87 @@
 /* Plan Badges */
 .upgrade-plan-badge {
   position: absolute;
-  top: -12px;
+  top: -14px;
   left: 50%;
   transform: translateX(-50%);
   font-size: 11px;
-  font-weight: 600;
+  font-weight: 700;
   text-transform: uppercase;
-  letter-spacing: 0.5px;
-  padding: 4px 12px;
-  border-radius: 20px;
+  letter-spacing: 0.8px;
+  padding: 6px 16px;
+  border-radius: 24px;
   color: #000;
   background: #fff;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.25);
+  white-space: nowrap;
 }
 
 .upgrade-plan-badge.current {
-  background: rgba(255, 255, 255, 0.15);
-  color: rgba(255, 255, 255, 0.9);
+  background: rgba(255, 255, 255, 0.12);
+  color: rgba(255, 255, 255, 0.85);
   backdrop-filter: blur(8px);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
 }
 
 /* Plan Content */
 .upgrade-plan-name {
-  font-size: 18px;
+  font-size: 20px;
   font-weight: 600;
   color: #fff;
-  margin: 12px 0 24px 0;
+  margin: 16px 0 28px 0;
   text-align: center;
+  letter-spacing: -0.3px;
 }
 
 .upgrade-plan-price {
   text-align: center;
-  padding-bottom: 24px;
-  margin-bottom: 24px;
+  padding-bottom: 28px;
+  margin-bottom: 28px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.08);
 }
 
 .upgrade-plan-price .amount {
-  font-size: 36px;
+  font-size: 40px;
   font-weight: 700;
   color: #fff;
-  letter-spacing: -1px;
+  letter-spacing: -2px;
 }
 
 .upgrade-plan-price .period {
-  font-size: 13px;
+  font-size: 14px;
   color: rgba(255, 255, 255, 0.4);
+  font-weight: 500;
 }
 
 /* Features List */
 .upgrade-plan-features {
   list-style: none;
   padding: 0;
-  margin: 0 0 32px 0;
+  margin: 0 0 36px 0;
   flex: 1;
 }
 
 .upgrade-plan-features li {
   display: flex;
-  align-items: center;
-  gap: 12px;
-  margin-bottom: 16px;
+  align-items: flex-start;
+  gap: 14px;
+  margin-bottom: 18px;
   font-size: 14px;
   color: rgba(255, 255, 255, 0.7);
+  line-height: 1.4;
 }
 
 .upgrade-plan-features li svg {
   color: #fff;
   flex-shrink: 0;
+  margin-top: 2px;
 }
 
 /* Plan Button */
 .upgrade-plan-btn {
   width: 100%;
-  padding: 14px;
-  border-radius: 8px;
+  padding: 16px;
+  border-radius: 10px;
   font-size: 14px;
   font-weight: 600;
   cursor: pointer;
@@ -267,11 +363,12 @@
   background: #fff;
   color: #000;
   border: none;
+  letter-spacing: -0.2px;
 }
 
 .upgrade-plan-btn:hover:not(:disabled) {
-  transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(255, 255, 255, 0.1);
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px rgba(255, 255, 255, 0.15);
 }
 
 .upgrade-plan-btn:disabled {
@@ -280,8 +377,8 @@
 }
 
 .upgrade-plan-btn.current {
-  background: rgba(255, 255, 255, 0.1);
-  color: rgba(255, 255, 255, 0.5);
+  background: rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.45);
   cursor: default;
 }
 
@@ -291,24 +388,24 @@
 
 .upgrade-features-section {
   text-align: center;
-  margin-bottom: 64px;
-  padding-top: 48px;
-  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  margin-bottom: 48px;
+  padding-top: 56px;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
 }
 
 .upgrade-features-section h3 {
-  font-size: 16px;
+  font-size: 13px;
   font-weight: 600;
-  color: rgba(255, 255, 255, 0.9);
-  margin-bottom: 32px;
+  color: rgba(255, 255, 255, 0.5);
+  margin-bottom: 36px;
   text-transform: uppercase;
-  letter-spacing: 1px;
+  letter-spacing: 2px;
 }
 
 .upgrade-features-grid {
   display: grid;
   grid-template-columns: repeat(6, 1fr);
-  gap: 24px;
+  gap: 32px;
 }
 
 @media (max-width: 900px) {
@@ -317,7 +414,7 @@
   }
 }
 
-@media (max-width: 600px) {
+@media (max-width: 500px) {
   .upgrade-features-grid {
     grid-template-columns: repeat(2, 1fr);
   }
@@ -327,25 +424,27 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 12px;
-  color: rgba(255, 255, 255, 0.6);
+  gap: 14px;
+  color: rgba(255, 255, 255, 0.55);
 }
 
 .upgrade-feature-item svg {
-  width: 24px;
-  height: 24px;
-  color: rgba(255, 255, 255, 0.4);
+  width: 26px;
+  height: 26px;
+  color: rgba(255, 255, 255, 0.35);
 }
 
 .upgrade-feature-item span {
   font-size: 12px;
   font-weight: 500;
+  letter-spacing: -0.1px;
 }
 
 /* Guarantee */
 .upgrade-guarantee {
   text-align: center;
-  color: rgba(255, 255, 255, 0.3);
+  color: rgba(255, 255, 255, 0.25);
   font-size: 13px;
-  margin-top: 40px;
+  margin-top: 24px;
+  font-weight: 500;
 }

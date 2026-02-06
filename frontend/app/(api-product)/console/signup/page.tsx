@@ -38,7 +38,14 @@ function SignupForm() {
       const data = await response.json();
 
       if (data.success) {
-        router.push(next);
+        // Check if email verification is required
+        if (data.requires_verification) {
+          // Store email for the verification page (secure - not in URL)
+          sessionStorage.setItem("console_verify_email", email);
+          router.push("/console/verify-email");
+        } else {
+          router.push(next);
+        }
       } else {
         setError(data.message || "Unable to create account");
         setLoading(false);

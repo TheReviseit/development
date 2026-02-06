@@ -4,6 +4,12 @@
  *
  * Routes handled: /api/console/dashboard/*, /api/console/projects/*, etc.
  * (excludes /api/console/auth/* which has its own route)
+ *
+ * AUTH STRATEGY:
+ * - Access tokens are JWT with 15-minute TTL
+ * - Backend handles token refresh automatically on valid refresh token
+ * - If access token is expired AND refresh fails → 401 forces re-login
+ * - This proxy MUST forward all Set-Cookie headers to preserve token rotation
  */
 
 import { NextRequest, NextResponse } from "next/server";
@@ -40,16 +46,13 @@ async function proxyRequest(request: NextRequest, method: string) {
     // Get cookies from request - this is what the browser sends
     const cookieHeader = request.headers.get("cookie") || "";
 
-    // Debug logging
+    // Safe debug logging - log cookie NAMES only, not values
+    const cookieNames = cookieHeader
+      .split(";")
+      .map((c) => c.trim().split("=")[0])
+      .filter(Boolean);
     console.log(`[Console API Proxy] ${method} ${pathAfterConsole}`);
-    console.log(
-      `[Console API Proxy] Cookie header present: ${cookieHeader.length > 0}`,
-    );
-    if (cookieHeader) {
-      // Log first 50 chars only, mask the rest for security
-      const preview = cookieHeader.substring(0, 50);
-      console.log(`[Console API Proxy] Cookie preview: ${preview}...`);
-    }
+    console.log(`[Console API Proxy] Cookies received:`, cookieNames);
 
     // Build headers - match the working auth proxy exactly
     const headers: Record<string, string> = {
@@ -62,10 +65,11 @@ async function proxyRequest(request: NextRequest, method: string) {
       headers["Content-Type"] = "application/json";
     }
 
-    // Build fetch options
+    // Build fetch options - CRITICAL: cache: 'no-store' prevents Next.js caching
     const fetchOptions: RequestInit = {
       method,
       headers,
+      cache: "no-store", // FIX: Prevent stale auth responses
     };
 
     // Add body for POST/PUT/PATCH
@@ -97,13 +101,38 @@ async function proxyRequest(request: NextRequest, method: string) {
       }
     }
 
-    // Create response
+    // Create response with proper cache control headers
     const nextResponse = NextResponse.json(data, { status: response.status });
 
-    // Forward Set-Cookie headers from backend (if any)
-    const setCookie = response.headers.get("set-cookie");
-    if (setCookie) {
-      nextResponse.headers.append("Set-Cookie", setCookie);
+    // FIX: Add cache control headers to prevent browser/CDN caching
+    nextResponse.headers.set(
+      "Cache-Control",
+      "private, no-cache, no-store, must-revalidate",
+    );
+    nextResponse.headers.set("Vary", "Cookie"); // Prevent caching across users
+
+    // FIX: Forward ALL Set-Cookie headers from backend using getSetCookie()
+    // This is CRITICAL for token rotation - .get('set-cookie') only returns first cookie!
+    const cookies = response.headers.getSetCookie?.();
+    if (cookies && cookies.length > 0) {
+      const cookieNamesReceived = cookies.map((c) => c.split("=")[0]);
+      console.log(
+        `[Console API Proxy] Forwarding ${cookies.length} Set-Cookie headers:`,
+        cookieNamesReceived,
+      );
+      for (const cookie of cookies) {
+        nextResponse.headers.append("Set-Cookie", cookie);
+      }
+    } else {
+      // Fallback for older fetch implementations
+      const setCookieHeader = response.headers.get("set-cookie");
+      if (setCookieHeader) {
+        console.log(
+          `[Console API Proxy] Set-Cookie (fallback):`,
+          setCookieHeader.split("=")[0],
+        );
+        nextResponse.headers.append("Set-Cookie", setCookieHeader);
+      }
     }
 
     return nextResponse;

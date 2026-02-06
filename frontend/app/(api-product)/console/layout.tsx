@@ -122,6 +122,13 @@ export default function ConsoleLayout({ children }: ConsoleLayoutProps) {
         if (response.ok) {
           const data = await response.json();
           if (data.success) {
+            // Check if email is verified
+            if (data.user && !data.user.is_email_verified) {
+              // Store email and redirect to verification (secure - not in URL)
+              sessionStorage.setItem("console_verify_email", data.user.email);
+              router.push("/console/verify-email");
+              return;
+            }
             setUser(data.user);
           } else {
             router.push(`/console/login?next=${encodeURIComponent(pathname)}`);
@@ -137,10 +144,11 @@ export default function ConsoleLayout({ children }: ConsoleLayoutProps) {
       }
     };
 
-    // Skip auth check for login/signup/billing pages
+    // Skip auth check for login/signup/verify-email/billing pages
     if (
       pathname === "/console/login" ||
       pathname === "/console/signup" ||
+      pathname === "/console/verify-email" ||
       pathname?.startsWith("/console/billing")
     ) {
       setLoading(false);
@@ -150,10 +158,11 @@ export default function ConsoleLayout({ children }: ConsoleLayoutProps) {
     checkAuth();
   }, [pathname, router]);
 
-  // For login/signup/billing, don't show console layout
+  // For login/signup/verify-email/billing, don't show console layout
   if (
     pathname === "/console/login" ||
     pathname === "/console/signup" ||
+    pathname === "/console/verify-email" ||
     pathname?.startsWith("/console/billing")
   ) {
     return <>{children}</>;

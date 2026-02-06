@@ -976,6 +976,16 @@ class OTPService:
             "delivery_channel": channel
         }).eq("request_id", request_id).execute()
         
+        # Fetch OTP request to get the actual purpose
+        try:
+            otp_request_result = self.db.table("otp_requests").select(
+                "purpose"
+            ).eq("request_id", request_id).single().execute()
+            purpose = otp_request_result.data.get("purpose", "login") if otp_request_result.data else "login"
+        except Exception as e:
+            logger.warning(f"Could not fetch purpose for request {request_id}, defaulting to 'login': {e}")
+            purpose = "login"
+        
         # Auto-detect destination type
         destination_type = detect_destination_type(phone)
         
@@ -988,13 +998,13 @@ class OTPService:
         except Exception:
             business = {}
         
-        # Build OTP context
+        # Build OTP context with actual purpose from request
         context = OTPContext(
             request_id=request_id,
             destination=phone,
             destination_type=destination_type,
             otp=otp,
-            purpose="verification",
+            purpose=purpose,  # Use actual purpose from request
             business_id=business_id,
             business_name=business.get("name"),
             phone_number_id=business.get("whatsapp_phone_number_id") or os.getenv("WHATSAPP_PHONE_NUMBER_ID"),
