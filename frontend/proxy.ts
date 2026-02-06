@@ -81,6 +81,7 @@ const PUBLIC_API_ROUTES = [
   "/api/orders/track",
   "/api/console",
   "/api/v1", // OTP API proxy routes
+  "/api/whatsapp", // WhatsApp webhook and public endpoints
 ];
 
 // =============================================================================

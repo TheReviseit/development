@@ -47,10 +47,10 @@ DEFAULT_LANGUAGE = os.getenv('WHATSAPP_OTP_LANGUAGE', 'en')
 
 # Purpose to template mapping (if different templates per purpose)
 PURPOSE_TEMPLATES = {
-    "login": os.getenv('WHATSAPP_OTP_TEMPLATE', 'auth_otps'),
-    "signup": os.getenv('WHATSAPP_OTP_TEMPLATE', 'auth_otps'),
-    "password_reset": os.getenv('WHATSAPP_OTP_TEMPLATE', 'auth_otps'),
-    "transaction": os.getenv('WHATSAPP_OTP_TEMPLATE', 'auth_otps'),
+    "login": os.getenv('WHATSAPP_OTP_TEMPLATE', 'auth_otps').strip(),
+    "signup": os.getenv('WHATSAPP_OTP_TEMPLATE', 'auth_otps').strip(),
+    "password_reset": os.getenv('WHATSAPP_OTP_TEMPLATE', 'auth_otps').strip(),
+    "transaction": os.getenv('WHATSAPP_OTP_TEMPLATE', 'auth_otps').strip(),
 }
 
 
@@ -69,8 +69,8 @@ class WhatsAppOTPProvider(OTPProviderInterface):
         self.timeout = 30  # seconds
         
         # Default credentials (platform mode)
-        self.default_phone_number_id = os.getenv('WHATSAPP_PHONE_NUMBER_ID')
-        self.default_access_token = os.getenv('WHATSAPP_ACCESS_TOKEN')
+        self.default_phone_number_id = (os.getenv('WHATSAPP_PHONE_NUMBER_ID') or "").strip()
+        self.default_access_token = (os.getenv('WHATSAPP_ACCESS_TOKEN') or "").strip()
     
     def get_channel_type(self) -> str:
         return "whatsapp"
@@ -216,7 +216,7 @@ class WhatsAppOTPProvider(OTPProviderInterface):
                     {
                         "type": "button",
                         "sub_type": "url",
-                        "index": "0",
+                        "index": 0,
                         "parameters": [{"type": "text", "text": context.otp}]
                     }
                 ]
