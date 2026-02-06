@@ -80,6 +80,7 @@ const PUBLIC_API_ROUTES = [
   "/api/store",
   "/api/orders/track",
   "/api/console",
+  "/api/v1", // OTP API proxy routes
 ];
 
 // =============================================================================
