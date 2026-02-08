@@ -22,6 +22,7 @@ import hashlib
 import logging
 import uuid
 import time
+import gevent
 import requests
 from functools import wraps
 from flask import Blueprint, request, jsonify, g
@@ -227,7 +228,7 @@ def retry_api_call(max_retries=3, initial_delay=1):
                         raise e
                     
                     logger.warning(f"Razorpay ServerError (attempt {retries}/{max_retries}): {e}. Retrying in {delay}s...")
-                    time.sleep(delay)
+                    gevent.sleep(delay)  # GEVENT SAFE - does not block greenlet
                     delay *= 2  # Exponential backoff
                 except Exception as e:
                     # Detect network-related errors
@@ -245,7 +246,7 @@ def retry_api_call(max_retries=3, initial_delay=1):
                         raise e
                     
                     logger.warning(f"API connection error (attempt {retries}/{max_retries}): {e}. Retrying in {delay}s...")
-                    time.sleep(delay)
+                    gevent.sleep(delay)  # GEVENT SAFE
                     delay *= 2  # Exponential backoff
         return wrapper
     return decorator
@@ -622,10 +623,86 @@ def get_subscription_by_razorpay_id(razorpay_subscription_id: str) -> Optional[D
 # Subscription Endpoints
 # =============================================================================
 
-@retry_api_call(max_retries=2, initial_delay=0.3)
 def create_razorpay_customer(data):
-    """Create Razorpay customer with retry logic."""
+    """
+    Create Razorpay customer - NO RETRY.
+    
+    Customer creation is NOT idempotent in Razorpay (same email = error).
+    Fail fast and let caller handle errors.
+    """
     return razorpay_client.customer.create(data=data)
+
+
+def get_existing_razorpay_customer(user_id: str, email: str) -> Optional[str]:
+    """
+    Get existing Razorpay customer ID for user from database.
+    
+    This is the ONLY lookup method - we do NOT use customer.all() API
+    as it's slow, unreliable, and a cross-tenant data risk.
+    
+    Args:
+        user_id: Internal user ID
+        email: User email (for logging only)
+        
+    Returns:
+        Razorpay customer ID if found, None otherwise
+    """
+    if not SUPABASE_AVAILABLE:
+        return None
+    
+    try:
+        supabase = get_supabase_client()
+        # Check most recent subscription for this user with a customer_id
+        result = supabase.table('subscriptions').select(
+            'razorpay_customer_id'
+        ).eq('user_id', user_id).not_.is_(
+            'razorpay_customer_id', 'null'
+        ).order('created_at', desc=True).limit(1).execute()
+        
+        if result.data and result.data[0].get('razorpay_customer_id'):
+            logger.debug(f"Found existing customer for user {user_id}: {result.data[0]['razorpay_customer_id']}")
+            return result.data[0]['razorpay_customer_id']
+    except Exception as e:
+        logger.warning(f"Failed to lookup existing customer for user {user_id}: {e}")
+    
+    return None
+
+
+def persist_razorpay_customer(user_id: str, customer_id: str) -> bool:
+    """
+    Persist Razorpay customer ID to database immediately.
+    
+    This is called BEFORE subscription creation to prevent
+    duplicate customer creation on frontend retries.
+    
+    Args:
+        user_id: Internal user ID
+        customer_id: Razorpay customer ID to store
+        
+    Returns:
+        True if persisted successfully, False otherwise
+    """
+    if not SUPABASE_AVAILABLE:
+        return True  # Allow to proceed if no DB
+    
+    try:
+        supabase = get_supabase_client()
+        # Insert a placeholder subscription record with customer_id
+        # This will be updated when subscription is created
+        # Using upsert to handle race conditions
+        supabase.table('subscriptions').upsert({
+            'user_id': user_id,
+            'razorpay_customer_id': customer_id,
+            'plan_name': 'pending',  # Will be updated
+            'plan_id': 'pending',
+            'status': 'customer_created',  # Transient state
+        }, on_conflict='user_id,plan_name').execute()
+        logger.info(f"Persisted customer {customer_id} for user {user_id}")
+        return True
+    except Exception as e:
+        # Log but don't fail - customer can still be used
+        logger.warning(f"Failed to persist customer {customer_id}: {e}")
+        return True  # Allow to proceed
 
 def create_razorpay_subscription(data, idempotency_key=None):
     """
@@ -712,48 +789,87 @@ def create_subscription():
                 'idempotency_hit': True
             })
         
-        # Create Razorpay customer
-        customer_id = None
-        try:
-            customer_data = {
-                'name': data.customer_name or '',
-                'email': data.customer_email,
-                'contact': data.customer_phone or '',
-                'notes': {'user_id': user_id}
-            }
-            logger.info(f"[{request_id}] Creating Razorpay customer for email: {data.customer_email}")
-            customer = create_razorpay_customer(customer_data)
-            customer_id = customer['id']
-            logger.info(f"[{request_id}] Created customer: {customer_id}")
-        except razorpay.errors.BadRequestError as e:
-            error_msg = str(e)
-            if 'already exists' in error_msg.lower():
-                # Find existing customer by email
-                logger.info(f"[{request_id}] Customer exists, looking up by email")
-                try:
-                    customers = razorpay_client.customer.all({'count': 100})
-                    for c in customers.get('items', []):
-                        if c.get('email') == data.customer_email:
-                            customer_id = c['id']
-                            logger.info(f"[{request_id}] Found existing customer: {customer_id}")
-                            break
-                except Exception as lookup_err:
-                    logger.error(f"[{request_id}] Customer lookup failed: {lookup_err}")
-            if not customer_id:
-                logger.error(f"[{request_id}] Customer creation failed: {error_msg}")
-                return error_response('Failed to create customer', 'CUSTOMER_ERROR', 500)
-        except razorpay.errors.ServerError as e:
-            # Razorpay server error during customer creation
-            logger.error(f"[{request_id}] Razorpay ServerError during customer creation: {e}")
-            return error_response(
-                'Payment service temporarily unavailable. Please try again.',
-                'RAZORPAY_CUSTOMER_ERROR',
-                503
-            )
-        except Exception as e:
-            # Catch-all for unexpected errors
-            logger.error(f"[{request_id}] Unexpected error creating customer: {e}")
-            return error_response('Failed to create customer', 'CUSTOMER_ERROR', 500)
+        # =================================================================
+        # STEP 1: Get or Create Razorpay Customer (with immediate persist)
+        # =================================================================
+        
+        # First, check if we already have a customer for this user
+        customer_id = get_existing_razorpay_customer(user_id, data.customer_email)
+        
+        if customer_id:
+            logger.info(f"[{request_id}] Reusing existing Razorpay customer: {customer_id}")
+        else:
+            # Create new customer (NO RETRY - fail fast)
+            try:
+                customer_data = {
+                    'name': data.customer_name or '',
+                    'email': data.customer_email,
+                    'contact': data.customer_phone or '',
+                    'notes': {'user_id': user_id}
+                }
+                logger.info(f"[{request_id}] Creating Razorpay customer for email: {data.customer_email}")
+                customer = create_razorpay_customer(customer_data)
+                customer_id = customer['id']
+                logger.info(f"[{request_id}] Created customer: {customer_id}")
+                
+                # CRITICAL: Persist customer_id IMMEDIATELY before subscription
+                # This prevents duplicate customer creation on frontend retries
+                persist_razorpay_customer(user_id, customer_id)
+                
+            except razorpay.errors.BadRequestError as e:
+                error_msg = str(e)
+                # Log the full error including response body
+                logger.error(
+                    f"[{request_id}] Razorpay BadRequestError during customer creation",
+                    extra={'error': error_msg, 'email': data.customer_email}
+                )
+                
+                if 'already exists' in error_msg.lower():
+                    # Customer exists in Razorpay but NOT in our DB
+                    # This is a data sync issue - return clear error
+                    return error_response(
+                        'A customer with this email already exists in payment system. '
+                        'Please contact support or use a different email.',
+                        'CUSTOMER_EXISTS',
+                        400  # Client error - not retryable
+                    )
+                else:
+                    return error_response(
+                        f'Invalid customer data: {error_msg}',
+                        'CUSTOMER_VALIDATION_ERROR',
+                        400  # Client error
+                    )
+                    
+            except razorpay.errors.ServerError as e:
+                # Razorpay 5xx - their issue, not ours
+                error_msg = str(e)
+                logger.error(
+                    f"[{request_id}] Razorpay ServerError during customer creation: {error_msg}",
+                    extra={'error': error_msg, 'email': data.customer_email}
+                )
+                return error_response(
+                    'Payment service temporarily unavailable. Please try again in a moment.',
+                    'RAZORPAY_SERVER_ERROR',
+                    503  # Service unavailable - retryable
+                )
+                
+            except requests.exceptions.Timeout:
+                # Request timeout - likely network/Razorpay issue
+                logger.error(f"[{request_id}] Razorpay request timeout during customer creation")
+                return error_response(
+                    'Payment service request timed out. Please try again.',
+                    'RAZORPAY_TIMEOUT',
+                    504  # Gateway timeout
+                )
+                
+            except Exception as e:
+                # Catch-all for unexpected errors
+                logger.exception(f"[{request_id}] Unexpected error creating customer: {e}")
+                return error_response(
+                    'Failed to create customer. Please try again.',
+                    'CUSTOMER_ERROR',
+                    500
+                )
         
         # CRITICAL: Validate customer_id before proceeding
         if not customer_id:

@@ -78,7 +78,7 @@ GoogleIcon.displayName = "GoogleIcon";
 // Helper function to create session with retry
 async function createSessionWithRetry(
   idToken: string,
-  retries = 2
+  retries = 2,
 ): Promise<boolean> {
   for (let i = 0; i <= retries; i++) {
     try {
@@ -117,6 +117,7 @@ export default function SignupPage() {
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [error, setError] = useState("");
+  const [phone, setPhone] = useState("");
   const [loading, setLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
 
@@ -202,7 +203,7 @@ export default function SignupPage() {
         const userCredential = await createUserWithEmailAndPassword(
           auth,
           email,
-          password
+          password,
         );
         await updateProfile(userCredential.user, { displayName: name });
 
@@ -225,6 +226,7 @@ export default function SignupPage() {
                 firebase_uid: userCredential.user.uid,
                 full_name: name,
                 email: email,
+                phone: phone,
               }),
             }),
             // Send verification email
@@ -252,7 +254,7 @@ export default function SignupPage() {
           if (!verifyResponse.ok) {
             console.error(
               "Verification email failed with status:",
-              verifyResponse.status
+              verifyResponse.status,
             );
             // Continue anyway - user can resend from verify-email page
           }
@@ -275,7 +277,7 @@ export default function SignupPage() {
         }
       }
     },
-    [name, email, password, confirmPassword, router]
+    [name, email, password, confirmPassword, router],
   );
 
   const handleGoogleSignUp = useCallback(async () => {
@@ -305,7 +307,7 @@ export default function SignupPage() {
         if (exists) {
           // User already exists - show error and stop signup
           setError(
-            "An account with this email already exists. Please use the login page instead."
+            "An account with this email already exists. Please use the login page instead.",
           );
           setGoogleLoading(false);
 
@@ -429,6 +431,23 @@ export default function SignupPage() {
                   onChange={(e) => setName(e.target.value)}
                   required
                   autoComplete="name"
+                />
+              </div>
+
+              <div className={styles.formGroup}>
+                <label htmlFor="phone">
+                  Phone Number{" "}
+                  <span style={{ color: "#888", fontWeight: "normal" }}>
+                    (optional)
+                  </span>
+                </label>
+                <input
+                  type="tel"
+                  id="phone"
+                  placeholder="+91 XXXXX XXXXX"
+                  value={phone}
+                  onChange={(e) => setPhone(e.target.value)}
+                  autoComplete="tel"
                 />
               </div>
 

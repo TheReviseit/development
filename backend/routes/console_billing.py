@@ -23,6 +23,7 @@ from functools import wraps
 from typing import Optional, Dict, Any, Tuple
 
 from flask import Blueprint, request, jsonify, g
+import requests  # For timeout exception handling
 
 from middleware.console_auth_middleware import require_console_auth
 from services.audit_service import log_billing_event
@@ -364,28 +365,35 @@ def create_order():
             customer_id = customer['id']
             logger.info(f"Created Razorpay customer {customer_id} for org {org_id}")
         except razorpay.errors.BadRequestError as e:
-            if 'already exists' in str(e).lower():
-                # Find existing customer by email
-                try:
-                    customers = razorpay_client.customer.all({'count': 100})
-                    for c in customers.get('items', []):
-                        if c.get('email') == user_email:
-                            customer_id = c['id']
-                            logger.info(f"Found existing Razorpay customer {customer_id}")
-                            break
-                except Exception as fetch_err:
-                    logger.warning(f"Failed to fetch customers: {fetch_err}")
-            if not customer_id:
-                logger.error(f"Failed to create/find customer: {e}")
-                return error_response('Failed to create customer', 'CUSTOMER_ERROR', 500)
+            error_msg = str(e)
+            if 'already exists' in error_msg.lower():
+                # Customer exists in Razorpay but NOT in our DB - data sync issue
+                # Do NOT use customer.all() - it's slow, unreliable, and a security risk
+                logger.warning(f"Customer already exists in Razorpay for email {user_email}")
+                return error_response(
+                    'A customer with this email already exists. Please contact support.',
+                    'CUSTOMER_EXISTS',
+                    400
+                )
+            else:
+                logger.error(f"Failed to create customer: {e}")
+                return error_response(
+                    f'Invalid customer data: {error_msg}',
+                    'CUSTOMER_VALIDATION_ERROR',
+                    400
+                )
         except (razorpay.errors.ServerError, Exception) as e:
-            # Razorpay server error - log as ERROR but proceed without customer
-            # Customer ID is optional for subscription creation
+            # Razorpay server error - log and return 503
             logger.error(
                 f"Razorpay customer creation failed for org {org_id}: {e}",
                 extra={'org_id': org_id, 'error': str(e)}
             )
-            # Customer ID will be None, subscription can still be created
+            # Return error immediately - don't proceed without customer
+            return error_response(
+                'Payment service temporarily unavailable. Please try again.',
+                'RAZORPAY_CUSTOMER_ERROR',
+                503
+            )
         
         # Create Razorpay subscription
         subscription_data = {
