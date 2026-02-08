@@ -3,6 +3,10 @@
     {
       "path": "/api/cron/token-refresh",
       "schedule": "0 2 * * *"
+    },
+    {
+      "path": "/api/cron/expire-bookings",
+      "schedule": "* * * * *"
     }
   ]
 }

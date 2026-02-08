@@ -1,0 +1,324 @@
+/* Appointment Details Page Styles */
+
+.statusSection {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+}
+
+.statusBadge {
+  display: inline-block;
+  padding: 0.5rem 1rem;
+  background: #10b981;
+  color: white;
+  font-size: 0.875rem;
+  font-weight: 600;
+  border-radius: 20px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.bookingId {
+  color: #6b7280;
+  font-size: 0.875rem;
+  font-family: monospace;
+}
+
+/* Appointment Card */
+.card {
+  background: white;
+  border-radius: 16px;
+  padding: 1.5rem;
+  box-shadow:
+    0 4px 6px -1px rgba(0, 0, 0, 0.1),
+    0 2px 4px -1px rgba(0, 0, 0, 0.06);
+  margin-bottom: 1.5rem;
+}
+
+.dateSection {
+  display: flex;
+  align-items: center;
+  gap: 1.5rem;
+  padding-bottom: 1.25rem;
+  border-bottom: 1px solid #f3f4f6;
+  margin-bottom: 1.25rem;
+}
+
+.dateBox {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 1rem;
+  background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%);
+  color: white;
+  border-radius: 12px;
+  min-width: 80px;
+}
+
+.dayName {
+  font-size: 0.75rem;
+  font-weight: 500;
+  text-transform: uppercase;
+  opacity: 0.9;
+}
+
+.dayNumber {
+  font-size: 2rem;
+  font-weight: 700;
+  line-height: 1.1;
+}
+
+.monthName {
+  font-size: 0.75rem;
+  font-weight: 500;
+  text-transform: uppercase;
+  opacity: 0.9;
+}
+
+.timeInfo {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.time {
+  font-size: 1.5rem;
+  font-weight: 600;
+  color: #1f2937;
+}
+
+.duration {
+  font-size: 0.875rem;
+  color: #6b7280;
+}
+
+/* Details */
+.details {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.detailRow {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  padding: 0.5rem 0;
+}
+
+.label {
+  color: #6b7280;
+  font-size: 0.875rem;
+}
+
+.value {
+  font-weight: 500;
+  color: #1f2937;
+  text-align: right;
+  max-width: 60%;
+}
+
+/* Actions */
+.actions {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  margin-bottom: 1.5rem;
+}
+
+.actionButton {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  padding: 1rem;
+  background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%);
+  color: white;
+  font-weight: 600;
+  font-size: 0.9375rem;
+  border: none;
+  border-radius: 10px;
+  cursor: pointer;
+  text-decoration: none;
+  transition: all 0.2s ease;
+}
+
+.actionButton:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 10px 15px -3px rgba(99, 102, 241, 0.3);
+}
+
+.actionButtonSecondary {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  padding: 1rem;
+  background: #f3f4f6;
+  color: #374151;
+  font-weight: 600;
+  font-size: 0.9375rem;
+  border: none;
+  border-radius: 10px;
+  cursor: pointer;
+  text-decoration: none;
+  transition: all 0.2s ease;
+}
+
+.actionButtonSecondary:hover {
+  background: #e5e7eb;
+}
+
+.actionButtonDanger {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  padding: 1rem;
+  background: white;
+  color: #ef4444;
+  font-weight: 600;
+  font-size: 0.9375rem;
+  border: 2px solid #fecaca;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.actionButtonDanger:hover {
+  background: #fef2f2;
+  border-color: #ef4444;
+}
+
+/* Back Link */
+.backLink {
+  display: block;
+  text-align: center;
+  color: #6366f1;
+  font-weight: 500;
+  text-decoration: none;
+  padding: 1rem;
+  transition: color 0.2s ease;
+}
+
+.backLink:hover {
+  color: #4f46e5;
+  text-decoration: underline;
+}
+
+/* Share Section */
+.shareSection {
+  background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%);
+  border: 1px solid #bae6fd;
+  border-radius: 16px;
+  padding: 1.5rem;
+  margin-bottom: 1.5rem;
+  text-align: center;
+}
+
+.shareTitle {
+  font-size: 1.125rem;
+  font-weight: 600;
+  color: #0369a1;
+  margin: 0 0 0.5rem;
+}
+
+.shareSubtitle {
+  font-size: 0.875rem;
+  color: #0284c7;
+  margin: 0 0 1rem;
+}
+
+.urlBox {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+}
+
+.urlInput {
+  flex: 1;
+  padding: 0.75rem 1rem;
+  background: white;
+  border: 2px solid #e0e7ff;
+  border-radius: 8px;
+  font-size: 0.875rem;
+  color: #374151;
+  font-family: monospace;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.urlInput:focus {
+  outline: none;
+  border-color: #6366f1;
+}
+
+.copyButton {
+  padding: 0.75rem 1.25rem;
+  background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%);
+  color: white;
+  font-weight: 600;
+  font-size: 0.875rem;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+  min-width: 90px;
+}
+
+.copyButton:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 6px -1px rgba(99, 102, 241, 0.3);
+}
+
+.shareButtons {
+  display: flex;
+  gap: 0.75rem;
+  justify-content: center;
+}
+
+.shareButtonWhatsapp {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  padding: 0.75rem 1.5rem;
+  background: #25d366;
+  color: white;
+  font-weight: 600;
+  font-size: 0.875rem;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  text-decoration: none;
+  transition: all 0.2s ease;
+}
+
+.shareButtonWhatsapp:hover {
+  background: #1da851;
+  transform: translateY(-1px);
+}
+
+.shareButtonEmail {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  padding: 0.75rem 1.5rem;
+  background: #6b7280;
+  color: white;
+  font-weight: 600;
+  font-size: 0.875rem;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  text-decoration: none;
+  transition: all 0.2s ease;
+}
+
+.shareButtonEmail:hover {
+  background: #4b5563;
+  transform: translateY(-1px);
+}

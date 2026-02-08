@@ -2100,7 +2100,7 @@ export default function BotSettingsView() {
               <label>Unique Selling Points (comma separated)</label>
               <input
                 type="text"
-                value={data.brandVoice.uniqueSellingPoints.join(", ")}
+                value={(data.brandVoice.uniqueSellingPoints || []).join(", ")}
                 onChange={(e) =>
                   setData({
                     ...data,
@@ -2121,7 +2121,7 @@ export default function BotSettingsView() {
               <label>Topics AI Should Avoid (comma separated)</label>
               <input
                 type="text"
-                value={data.brandVoice.avoidTopics.join(", ")}
+                value={(data.brandVoice.avoidTopics || []).join(", ")}
                 onChange={(e) =>
                   setData({
                     ...data,
@@ -2322,7 +2322,7 @@ export default function BotSettingsView() {
               <label>Payment Methods (comma separated)</label>
               <input
                 type="text"
-                value={data.policies.paymentMethods.join(", ")}
+                value={(data.policies.paymentMethods || []).join(", ")}
                 onChange={(e) =>
                   setData({
                     ...data,

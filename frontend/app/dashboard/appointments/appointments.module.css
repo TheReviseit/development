@@ -494,8 +494,15 @@
   font-weight: 700;
   letter-spacing: 0.2px;
   color: #0f172a;
-  font-family: "Inter", "Segoe UI", system-ui, -apple-system, BlinkMacSystemFont,
-    "Helvetica Neue", Arial, sans-serif;
+  font-family:
+    "Inter",
+    "Segoe UI",
+    system-ui,
+    -apple-system,
+    BlinkMacSystemFont,
+    "Helvetica Neue",
+    Arial,
+    sans-serif;
   display: block;
   line-height: 1.4;
   white-space: nowrap;
@@ -1098,7 +1105,9 @@
   padding: 0.375rem 0.5rem;
   margin-bottom: 0.25rem;
   cursor: pointer;
-  transition: transform 0.15s, box-shadow 0.15s;
+  transition:
+    transform 0.15s,
+    box-shadow 0.15s;
 }
 
 .weekAppointment:hover {
@@ -1207,7 +1216,9 @@
   padding: 0.5rem;
   min-height: 80px;
   cursor: pointer;
-  transition: border-color 0.2s, background 0.2s;
+  transition:
+    border-color 0.2s,
+    background 0.2s;
 }
 
 .dayTimeSlot:hover {
@@ -1235,7 +1246,9 @@
   margin-bottom: 0.5rem;
   border-left: 4px solid #22c55e;
   cursor: pointer;
-  transition: transform 0.15s, box-shadow 0.15s;
+  transition:
+    transform 0.15s,
+    box-shadow 0.15s;
 }
 
 .dayAppointmentCard:hover {
@@ -1641,7 +1654,9 @@
     z-index: 100;
     align-items: center;
     justify-content: center;
-    transition: transform 0.2s ease, box-shadow 0.2s ease;
+    transition:
+      transform 0.2s ease,
+      box-shadow 0.2s ease;
     /* iOS haptic-like feedback feel */
     -webkit-tap-highlight-color: transparent;
     touch-action: manipulation;
@@ -1676,7 +1691,9 @@
     z-index: 100;
     align-items: center;
     justify-content: center;
-    transition: transform 0.2s ease, box-shadow 0.2s ease;
+    transition:
+      transform 0.2s ease,
+      box-shadow 0.2s ease;
     -webkit-tap-highlight-color: transparent;
     touch-action: manipulation;
   }
@@ -1846,7 +1863,9 @@
     justify-content: center;
     overflow: visible;
     position: relative;
-    transition: transform 0.15s ease, background 0.2s ease;
+    transition:
+      transform 0.15s ease,
+      background 0.2s ease;
     box-sizing: border-box;
     /* Prevent text selection on touch */
     -webkit-user-select: none;
@@ -2162,7 +2181,9 @@
     flex-direction: column;
     gap: 0.25rem;
     cursor: pointer;
-    transition: transform 0.15s ease, opacity 0.15s ease;
+    transition:
+      transform 0.15s ease,
+      opacity 0.15s ease;
     -webkit-tap-highlight-color: transparent;
   }
 
@@ -3561,5 +3582,135 @@
 
   .bottomSheetEmptyText {
     font-size: 0.9375rem;
+  }
+}
+
+/* ============================================
+   Shareable Booking URL Section
+   ============================================ */
+.shareBookingSection {
+  background: linear-gradient(135deg, #1a1a1a 0%, #0f1a0f 100%);
+  border: 1px solid rgba(34, 193, 90, 0.3);
+  border-radius: 12px;
+  padding: 1rem 1.25rem;
+  margin-bottom: 1.5rem;
+}
+
+.shareBookingContent {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.shareBookingInfo {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.shareBookingIcon {
+  font-size: 1.5rem;
+}
+
+.shareBookingText {
+  display: flex;
+  flex-direction: column;
+  gap: 0.125rem;
+}
+
+.shareBookingText strong {
+  color: #ffffff;
+  font-size: 0.9375rem;
+  font-weight: 600;
+}
+
+.shareBookingText span {
+  color: #808080;
+  font-size: 0.8125rem;
+}
+
+.shareBookingActions {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.shareBookingUrl {
+  flex: 1;
+  min-width: 200px;
+  padding: 0.625rem 0.875rem;
+  background: #0f0f0f;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 8px;
+  color: #b0b0b0;
+  font-size: 0.8125rem;
+  font-family: monospace;
+}
+
+.shareBookingUrl:focus {
+  outline: none;
+  border-color: #22c15a;
+}
+
+.copyUrlBtn {
+  padding: 0.625rem 1rem;
+  background: #22c15a;
+  color: #000000;
+  border: none;
+  border-radius: 8px;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+  min-width: 80px;
+}
+
+.copyUrlBtn:hover {
+  background: #1ea550;
+  transform: translateY(-1px);
+}
+
+.shareWhatsappBtn {
+  padding: 0.625rem 1rem;
+  background: #25d366;
+  color: #ffffff;
+  border: none;
+  border-radius: 8px;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  cursor: pointer;
+  text-decoration: none;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+}
+
+.shareWhatsappBtn:hover {
+  background: #1da851;
+  transform: translateY(-1px);
+}
+
+/* Mobile responsive for share section */
+@media (max-width: 767px) {
+  .shareBookingSection {
+    padding: 0.875rem 1rem;
+    margin-bottom: 1rem;
+  }
+
+  .shareBookingActions {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .shareBookingUrl {
+    min-width: 100%;
+  }
+
+  .copyUrlBtn,
+  .shareWhatsappBtn {
+    width: 100%;
+    justify-content: center;
+    text-align: center;
   }
 }

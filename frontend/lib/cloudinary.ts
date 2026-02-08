@@ -6,19 +6,19 @@ import { v2 as cloudinary } from "cloudinary";
 // Never use hardcoded values for secrets
 if (!process.env.CLOUDINARY_API_SECRET) {
   throw new Error(
-    "CLOUDINARY_API_SECRET is required. Please set it in your .env file."
+    "CLOUDINARY_API_SECRET is required. Please set it in your .env file.",
   );
 }
 
 if (!process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME) {
   throw new Error(
-    "NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME is required. Please set it in your .env file."
+    "NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME is required. Please set it in your .env file.",
   );
 }
 
 if (!process.env.NEXT_PUBLIC_CLOUDINARY_API_KEY) {
   throw new Error(
-    "NEXT_PUBLIC_CLOUDINARY_API_KEY is required. Please set it in your .env file."
+    "NEXT_PUBLIC_CLOUDINARY_API_KEY is required. Please set it in your .env file.",
   );
 }
 
@@ -36,7 +36,7 @@ export async function getSignature() {
       timestamp,
       folder: "flowauxi/profile-pictures",
     },
-    process.env.CLOUDINARY_API_SECRET!
+    process.env.CLOUDINARY_API_SECRET!,
   );
 
   return { timestamp, signature };
@@ -49,7 +49,7 @@ export async function getSignature() {
  */
 export async function getProductImageSignature(
   userId: string,
-  productId: string
+  productId: string,
 ) {
   const timestamp = Math.round(new Date().getTime() / 1000);
 
@@ -64,7 +64,7 @@ export async function getProductImageSignature(
 
   const signature = cloudinary.utils.api_sign_request(
     params,
-    process.env.CLOUDINARY_API_SECRET!
+    process.env.CLOUDINARY_API_SECRET!,
   );
 
   return {
@@ -90,6 +90,52 @@ export async function deleteProductImage(publicId: string) {
     return { success: result.result === "ok", result };
   } catch (error) {
     console.error("Failed to delete product image:", error);
+    return { success: false, error: String(error) };
+  }
+}
+
+/**
+ * Generate a secure signature for service image uploads.
+ * Uses multi-tenant folder structure:
+ * flowauxi/users/{userId}/services/
+ */
+export async function getServiceImageSignature(userId: string) {
+  const timestamp = Math.round(new Date().getTime() / 1000);
+
+  const folder = `flowauxi/users/${userId}/services`;
+
+  const params = {
+    timestamp,
+    folder,
+  };
+
+  const signature = cloudinary.utils.api_sign_request(
+    params,
+    process.env.CLOUDINARY_API_SECRET!,
+  );
+
+  return {
+    timestamp,
+    signature,
+    folder,
+    cloudName: process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME,
+    apiKey: process.env.NEXT_PUBLIC_CLOUDINARY_API_KEY,
+  };
+}
+
+/**
+ * Delete a service image from Cloudinary.
+ */
+export async function deleteServiceImage(publicId: string) {
+  if (!publicId) {
+    return { success: false, error: "No public ID provided" };
+  }
+
+  try {
+    const result = await cloudinary.uploader.destroy(publicId);
+    return { success: result.result === "ok", result };
+  } catch (error) {
+    console.error("Failed to delete service image:", error);
     return { success: false, error: String(error) };
   }
 }

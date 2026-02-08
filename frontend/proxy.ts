@@ -59,6 +59,7 @@ const PUBLIC_ROUTES = [
   "/error",
   "/offline",
   "/docs",
+  "/booking", // Customer-facing booking pages
   "/onboarding-embedded",
   "/manifest.webmanifest",
   "/sw.js",
@@ -82,6 +83,7 @@ const PUBLIC_API_ROUTES = [
   "/api/console",
   "/api/v1", // OTP API proxy routes
   "/api/whatsapp", // WhatsApp webhook and public endpoints
+  "/api/booking", // Public booking page APIs
 ];
 
 // =============================================================================

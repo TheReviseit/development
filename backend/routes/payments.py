@@ -86,8 +86,12 @@ try:
     
     if RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET:
         razorpay_client = razorpay.Client(auth=(RAZORPAY_KEY_ID, RAZORPAY_KEY_SECRET))
+        # Configure timeout via the underlying requests session
+        # This ensures we fail fast instead of blocking forever
+        if hasattr(razorpay_client, 'session'):
+            razorpay_client.session.timeout = 10  # 10 second timeout
         RAZORPAY_AVAILABLE = True
-        logger.info("✅ Razorpay client initialized")
+        logger.info("✅ Razorpay client initialized (10s timeout)")
     else:
         razorpay_client = None
         RAZORPAY_AVAILABLE = False
@@ -206,7 +210,7 @@ def require_auth(f):
 
 
 def retry_api_call(max_retries=3, initial_delay=1):
-    """Decorator to retry API calls on network errors."""
+    """Decorator to retry API calls on network errors and Razorpay server errors."""
     def decorator(f):
         @wraps(f)
         def wrapper(*args, **kwargs):
@@ -215,6 +219,16 @@ def retry_api_call(max_retries=3, initial_delay=1):
             while True:
                 try:
                     return f(*args, **kwargs)
+                except razorpay.errors.ServerError as e:
+                    # Razorpay 5xx server errors - transient, should retry
+                    retries += 1
+                    if retries > max_retries:
+                        logger.error(f"Razorpay ServerError after {retries} retries: {e}")
+                        raise e
+                    
+                    logger.warning(f"Razorpay ServerError (attempt {retries}/{max_retries}): {e}. Retrying in {delay}s...")
+                    time.sleep(delay)
+                    delay *= 2  # Exponential backoff
                 except Exception as e:
                     # Detect network-related errors
                     msg = str(e).lower()
@@ -235,6 +249,7 @@ def retry_api_call(max_retries=3, initial_delay=1):
                     delay *= 2  # Exponential backoff
         return wrapper
     return decorator
+
 
 
 # =============================================================================
@@ -607,14 +622,30 @@ def get_subscription_by_razorpay_id(razorpay_subscription_id: str) -> Optional[D
 # Subscription Endpoints
 # =============================================================================
 
-@retry_api_call(max_retries=3, initial_delay=0.5)
+@retry_api_call(max_retries=2, initial_delay=0.3)
 def create_razorpay_customer(data):
     """Create Razorpay customer with retry logic."""
     return razorpay_client.customer.create(data=data)
 
-@retry_api_call(max_retries=3, initial_delay=0.5)
-def create_razorpay_subscription(data):
-    """Create Razorpay subscription with retry logic."""
+def create_razorpay_subscription(data, idempotency_key=None):
+    """
+    Create Razorpay subscription.
+    
+    IMPORTANT: NO RETRY - subscription creation is NOT idempotent!
+    Retrying could create duplicate subscriptions in Razorpay.
+    
+    Args:
+        data: Subscription data dict
+        idempotency_key: Optional idempotency key for Razorpay header
+    """
+    # Future-proofing: Razorpay supports idempotency headers
+    # This prevents duplicate subscriptions if called multiple times with same key
+    headers = {}
+    if idempotency_key:
+        headers['X-Razorpay-Idempotency-Key'] = idempotency_key
+    
+    # Note: razorpay-python doesn't support custom headers directly yet,
+    # but we're ready when they add support. For now, rely on our DB idempotency.
     return razorpay_client.subscription.create(data=data)
 
 
@@ -764,8 +795,15 @@ def create_subscription():
         return error_response(f'Razorpay error: {error_msg}', 'RAZORPAY_BAD_REQUEST', 400)
     except razorpay.errors.ServerError as e:
         error_msg = str(e)
+        # Log detailed context for debugging
+        env_mode = 'test' if 'test' in RAZORPAY_KEY_ID else 'live'
         logger.error(f"[{request_id}] Razorpay ServerError: {error_msg}")
-        return error_response('Razorpay server error, please try again', 'RAZORPAY_SERVER_ERROR', 503)
+        logger.error(f"[{request_id}] Context: plan_id={plan.get('plan_id')}, customer_id={customer_id}, env={env_mode}")
+        return error_response(
+            'Payment service temporarily unavailable. Please try again in a moment.',
+            'RAZORPAY_SERVER_ERROR',
+            503
+        )
     except Exception as e:
         error_msg = str(e)
         logger.exception(f"[{request_id}] Error creating subscription: {error_msg}")

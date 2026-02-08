@@ -17,6 +17,7 @@ type Section =
   | "contacts"
   | "campaigns"
   | "appointments"
+  | "services"
   | "orders"
   | "products"
   | "bot-settings"
@@ -31,6 +32,7 @@ const sectionLabels: Record<Section, string> = {
   contacts: "Contacts",
   campaigns: "Campaigns",
   appointments: "Appointments",
+  services: "Services",
   orders: "Orders",
   products: "Products",
   "bot-settings": "AI Settings",
@@ -45,6 +47,7 @@ const getActiveSection = (pathname: string): Section => {
   if (pathname.includes("/templates")) return "templates";
   if (pathname.includes("/contacts")) return "contacts";
   if (pathname.includes("/campaigns")) return "campaigns";
+  if (pathname.includes("/services")) return "services";
   if (pathname.includes("/appointments")) return "appointments";
   if (pathname.includes("/orders")) return "orders";
   if (pathname.includes("/products")) return "products";

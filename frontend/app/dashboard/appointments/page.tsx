@@ -70,6 +70,25 @@ export default function AppointmentsPage() {
   });
   const [userId, setUserId] = useState<string | null>(null);
 
+  // Shareable booking URL
+  const [copiedBookingUrl, setCopiedBookingUrl] = useState(false);
+  const bookingUrl = userId
+    ? typeof window !== "undefined"
+      ? `${window.location.origin}/booking/${userId}`
+      : `/booking/${userId}`
+    : "";
+
+  const handleCopyBookingUrl = async () => {
+    if (!bookingUrl) return;
+    try {
+      await navigator.clipboard.writeText(bookingUrl);
+      setCopiedBookingUrl(true);
+      setTimeout(() => setCopiedBookingUrl(false), 2000);
+    } catch (err) {
+      console.error("Failed to copy:", err);
+    }
+  };
+
   // Mobile detection for new calendar UX
   const [isMobile, setIsMobile] = useState(false);
   const [showBottomSheet, setShowBottomSheet] = useState(false);
@@ -144,11 +163,11 @@ export default function AppointmentsPage() {
       console.log("📝 Realtime: Appointment updated");
       setAppointments((prev) =>
         prev.map((apt) =>
-          apt.id === updatedAppointment.id ? updatedAppointment : apt
-        )
+          apt.id === updatedAppointment.id ? updatedAppointment : apt,
+        ),
       );
     },
-    []
+    [],
   );
 
   const handleRealtimeDelete = useCallback((deleted: { id: string }) => {
@@ -197,12 +216,12 @@ export default function AppointmentsPage() {
       const startDate = new Date(
         currentDate.getFullYear(),
         currentDate.getMonth(),
-        1
+        1,
       );
       const endDate = new Date(
         currentDate.getFullYear(),
         currentDate.getMonth() + 1,
-        0
+        0,
       );
 
       const params = new URLSearchParams({
@@ -228,8 +247,8 @@ export default function AppointmentsPage() {
         if (data.data.length === 0) {
           console.log(
             `📅 No appointments in range ${formatDateLocal(
-              startDate
-            )} to ${formatDateLocal(endDate)}`
+              startDate,
+            )} to ${formatDateLocal(endDate)}`,
           );
           console.log(`📅 Tip: Use /api/appointments/debug to diagnose issues`);
         }
@@ -321,7 +340,11 @@ export default function AppointmentsPage() {
   // Navigation
   const navigateMonth = (direction: number) => {
     setCurrentDate(
-      new Date(currentDate.getFullYear(), currentDate.getMonth() + direction, 1)
+      new Date(
+        currentDate.getFullYear(),
+        currentDate.getMonth() + direction,
+        1,
+      ),
     );
   };
 
@@ -376,7 +399,7 @@ export default function AppointmentsPage() {
     const dateStr = formatDateLocal(date);
     return appointments.filter(
       (apt) =>
-        apt.date === dateStr && apt.time.startsWith(timeSlot.split(":")[0])
+        apt.date === dateStr && apt.time.startsWith(timeSlot.split(":")[0]),
     );
   };
 
@@ -473,7 +496,7 @@ export default function AppointmentsPage() {
 
   const handleStatusChange = async (
     appointment: Appointment,
-    newStatus: string
+    newStatus: string,
   ) => {
     try {
       const response = await fetch(`/api/appointments/${appointment.id}`, {
@@ -682,6 +705,43 @@ export default function AppointmentsPage() {
         </div>
       </div>
 
+      {/* Shareable Booking URL */}
+      {userId && (
+        <div className={styles.shareBookingSection}>
+          <div className={styles.shareBookingContent}>
+            <div className={styles.shareBookingInfo}>
+              <span className={styles.shareBookingIcon}>📅</span>
+              <div className={styles.shareBookingText}>
+                <strong>Your Booking Page</strong>
+                <span>Share this link for customers to book appointments</span>
+              </div>
+            </div>
+            <div className={styles.shareBookingActions}>
+              <input
+                type="text"
+                readOnly
+                value={bookingUrl}
+                className={styles.shareBookingUrl}
+              />
+              <button
+                onClick={handleCopyBookingUrl}
+                className={styles.copyUrlBtn}
+              >
+                {copiedBookingUrl ? "✓ Copied!" : "Copy"}
+              </button>
+              <a
+                href={`https://wa.me/?text=${encodeURIComponent(`Book an appointment with us: ${bookingUrl}`)}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className={styles.shareWhatsappBtn}
+              >
+                WhatsApp
+              </a>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Calendar Section */}
       <div className={styles.calendarSection}>
         {/* Calendar */}
@@ -861,7 +921,7 @@ export default function AppointmentsPage() {
                       )}
                     </div>
                   );
-                }
+                },
               )}
             </div>
           )}
@@ -920,7 +980,7 @@ export default function AppointmentsPage() {
                         {TIME_SLOTS.map((timeSlot) => {
                           const slotAppointments = getAppointmentsForTimeSlot(
                             date,
-                            timeSlot
+                            timeSlot,
                           );
                           return (
                             <div
@@ -997,7 +1057,7 @@ export default function AppointmentsPage() {
                         {getWeekDays(currentDate).map((date, dayIndex) => {
                           const slotAppointments = getAppointmentsForTimeSlot(
                             date,
-                            timeSlot
+                            timeSlot,
                           );
                           return (
                             <div
@@ -1063,7 +1123,7 @@ export default function AppointmentsPage() {
                 {TIME_SLOTS.map((timeSlot) => {
                   const slotAppointments = getAppointmentsForTimeSlot(
                     currentDate,
-                    timeSlot
+                    timeSlot,
                   );
                   return (
                     <div key={timeSlot} className={styles.dayTimeRow}>
@@ -1601,7 +1661,7 @@ export default function AppointmentsPage() {
                         weekday: "long",
                         month: "short",
                         day: "numeric",
-                      }
+                      },
                     )}
                 </span>
                 <span className={styles.bottomSheetCount}>

@@ -1,0 +1,589 @@
+.viewContainer {
+  min-height: 100vh;
+  background: #f4f4f6;
+  font-family: var(
+    --booking-font,
+    -apple-system,
+    BlinkMacSystemFont,
+    "Segoe UI",
+    Roboto,
+    sans-serif
+  );
+  color: #111827;
+}
+
+/* ============================================================
+   Header - Minimal White Style
+   ============================================================ */
+.viewHeader {
+  background: #f4f4f6;
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  padding: 16px 20px;
+}
+
+.headerContent {
+  max-width: 1200px;
+  margin: 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.backBtn {
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  background: #ffffff;
+  border-radius: 12px;
+  cursor: pointer;
+  color: #111827;
+  transition: all 0.2s ease;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+}
+
+.backBtn:hover {
+  background: #f0f0f0;
+  transform: translateX(-2px);
+}
+
+.headerTitle {
+  flex: 1;
+  font-size: 18px;
+  font-weight: 600;
+  margin: 0;
+  color: #111827;
+}
+
+/* ============================================================
+   COVERFLOW CAROUSEL - Premium 3D Design
+   ============================================================ */
+.carouselSection {
+  position: relative;
+  width: 100%;
+  padding: 40px 0 60px;
+  overflow: hidden;
+  background: #f4f4f6;
+}
+
+.carouselWrapper {
+  position: relative;
+  max-width: 1200px;
+  margin: 0 auto;
+  height: 400px;
+  perspective: 1200px;
+}
+
+@media (max-width: 768px) {
+  .carouselWrapper {
+    height: 320px;
+  }
+}
+
+.carouselTrack {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transform-style: preserve-3d;
+}
+
+/* Individual Slide */
+.carouselSlide {
+  position: absolute;
+  width: 300px;
+  height: 380px;
+  border-radius: 24px;
+  overflow: hidden;
+  cursor: pointer;
+  transition: all 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.15);
+  background: #ffffff;
+}
+
+@media (max-width: 768px) {
+  .carouselSlide {
+    width: 240px;
+    height: 300px;
+    border-radius: 20px;
+  }
+}
+
+/* Center Slide - Active */
+.slideCenter {
+  transform: translateX(0) scale(1) rotateY(0deg);
+  z-index: 10;
+  filter: none;
+}
+
+/* Left Slide - Previous */
+.slideLeft {
+  transform: translateX(-220px) scale(0.75) rotateY(15deg);
+  z-index: 5;
+  filter: blur(2px) brightness(0.85);
+  opacity: 0.9;
+}
+
+@media (max-width: 768px) {
+  .slideLeft {
+    transform: translateX(-160px) scale(0.7) rotateY(15deg);
+  }
+}
+
+/* Right Slide - Next */
+.slideRight {
+  transform: translateX(220px) scale(0.75) rotateY(-15deg);
+  z-index: 5;
+  filter: blur(2px) brightness(0.85);
+  opacity: 0.9;
+}
+
+@media (max-width: 768px) {
+  .slideRight {
+    transform: translateX(160px) scale(0.7) rotateY(-15deg);
+  }
+}
+
+/* Far Left */
+.slideFarLeft {
+  transform: translateX(-400px) scale(0.55) rotateY(25deg);
+  z-index: 2;
+  filter: blur(4px) brightness(0.7);
+  opacity: 0.5;
+}
+
+@media (max-width: 768px) {
+  .slideFarLeft {
+    display: none;
+  }
+}
+
+/* Far Right */
+.slideFarRight {
+  transform: translateX(400px) scale(0.55) rotateY(-25deg);
+  z-index: 2;
+  filter: blur(4px) brightness(0.7);
+  opacity: 0.5;
+}
+
+@media (max-width: 768px) {
+  .slideFarRight {
+    display: none;
+  }
+}
+
+/* Hidden Slides */
+.slideHidden {
+  opacity: 0;
+  pointer-events: none;
+  transform: translateX(0) scale(0.3);
+}
+
+/* Slide Image */
+.slideImage {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center;
+}
+
+/* Slide Title Overlay */
+.slideOverlay {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  padding: 32px 24px;
+  background: linear-gradient(
+    to top,
+    rgba(0, 0, 0, 0.7) 0%,
+    rgba(0, 0, 0, 0.3) 50%,
+    transparent 100%
+  );
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+}
+
+.slideTitle {
+  font-size: 28px;
+  font-weight: 300;
+  color: #ffffff;
+  letter-spacing: 2px;
+  text-transform: lowercase;
+  margin: 0;
+  text-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+}
+
+@media (max-width: 768px) {
+  .slideTitle {
+    font-size: 22px;
+  }
+}
+
+/* Slide Placeholder */
+.slidePlaceholder {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+}
+
+.slidePlaceholder span {
+  font-size: 100px;
+  font-weight: 200;
+  color: #ffffff;
+  opacity: 0.3;
+}
+
+/* Navigation Arrows */
+.carouselNav {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 52px;
+  height: 52px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255, 255, 255, 0.95);
+  border: none;
+  border-radius: 50%;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.12);
+  z-index: 20;
+}
+
+.carouselNav:hover {
+  background: #ffffff;
+  transform: translateY(-50%) scale(1.1);
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.18);
+}
+
+.carouselNav:active {
+  transform: translateY(-50%) scale(0.95);
+}
+
+.carouselNavPrev {
+  left: 40px;
+}
+
+.carouselNavNext {
+  right: 40px;
+}
+
+@media (max-width: 768px) {
+  .carouselNavPrev {
+    left: 16px;
+  }
+  .carouselNavNext {
+    right: 16px;
+  }
+  .carouselNav {
+    width: 44px;
+    height: 44px;
+  }
+}
+
+.carouselNav svg {
+  color: #111827;
+  width: 20px;
+  height: 20px;
+}
+
+/* Navigation Dots */
+.carouselDots {
+  display: flex;
+  justify-content: center;
+  gap: 10px;
+  margin-top: 32px;
+}
+
+.carouselDot {
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+  background: #d1d5db;
+  border: none;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  padding: 0;
+}
+
+.carouselDot:hover {
+  background: #9ca3af;
+}
+
+.carouselDotActive {
+  width: 32px;
+  background: #111827;
+}
+
+/* ============================================================
+   Content Section
+   ============================================================ */
+.contentSection {
+  max-width: 800px;
+  margin: 0 auto;
+  padding: 0 20px 120px;
+}
+
+.categoryTag {
+  display: inline-block;
+  font-size: 13px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: #6366f1;
+  margin-bottom: 12px;
+}
+
+.serviceTitle {
+  font-size: 32px;
+  font-weight: 700;
+  color: #111827;
+  margin: 0 0 20px;
+  line-height: 1.2;
+}
+
+@media (min-width: 768px) {
+  .serviceTitle {
+    font-size: 40px;
+  }
+}
+
+/* ============================================================
+   Meta Cards
+   ============================================================ */
+.metaCards {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 32px;
+  flex-wrap: wrap;
+}
+
+.metaCard {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 20px;
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
+  border-radius: 14px;
+  font-size: 15px;
+  font-weight: 500;
+  color: #111827;
+}
+
+.metaCard svg {
+  color: #6366f1;
+  flex-shrink: 0;
+}
+
+.priceCard {
+  font-size: 20px;
+  font-weight: 700;
+}
+
+/* ============================================================
+   Description
+   ============================================================ */
+.descriptionSection {
+  margin-bottom: 32px;
+}
+
+.sectionLabel {
+  font-size: 13px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: #6b7280;
+  margin-bottom: 12px;
+}
+
+.description {
+  font-size: 16px;
+  line-height: 1.7;
+  color: #4b5563;
+  margin: 0;
+}
+
+/* ============================================================
+   Details List
+   ============================================================ */
+.detailsList {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 32px;
+  display: grid;
+  gap: 12px;
+}
+
+.detailItem {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 16px;
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
+  border-radius: 14px;
+}
+
+.detailItem svg {
+  color: #10b981;
+  flex-shrink: 0;
+}
+
+.detailLabel {
+  font-size: 14px;
+  color: #4b5563;
+}
+
+/* ============================================================
+   Fixed Bottom CTA
+   ============================================================ */
+.bottomCta {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  padding: 16px 20px;
+  background: #ffffff;
+  border-top: 1px solid #e5e7eb;
+  z-index: 100;
+}
+
+.ctaInner {
+  max-width: 800px;
+  margin: 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.ctaPrice {
+  display: flex;
+  flex-direction: column;
+}
+
+.ctaPriceLabel {
+  font-size: 12px;
+  color: #6b7280;
+}
+
+.ctaPriceValue {
+  font-size: 24px;
+  font-weight: 700;
+  color: #111827;
+}
+
+.bookNowBtn {
+  padding: 16px 40px;
+  background: #111827;
+  color: #ffffff;
+  font-size: 16px;
+  font-weight: 600;
+  border: none;
+  border-radius: 14px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.bookNowBtn:hover {
+  background: #1f2937;
+  transform: translateY(-1px);
+}
+
+/* ============================================================
+   Loading State
+   ============================================================ */
+.loadingContainer {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 60vh;
+  gap: 16px;
+  color: #6b7280;
+}
+
+.loadingSpinner {
+  width: 40px;
+  height: 40px;
+  border: 3px solid #e5e7eb;
+  border-top-color: #6366f1;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* ============================================================
+   Error State
+   ============================================================ */
+.errorContainer {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 60vh;
+  gap: 16px;
+  text-align: center;
+  padding: 40px;
+}
+
+.errorContainer h2 {
+  font-size: 24px;
+  margin: 0;
+}
+
+.errorContainer p {
+  color: #6b7280;
+  margin: 0 0 16px;
+}
+
+.retryBtn {
+  padding: 14px 28px;
+  background: #111827;
+  color: #ffffff;
+  font-size: 15px;
+  font-weight: 600;
+  border: none;
+  border-radius: 14px;
+  cursor: pointer;
+}
+
+.retryBtn:hover {
+  background: #1f2937;
+}
+
+/* Legacy classes for backward compatibility */
+.heroSection {
+  display: none;
+}
+.carouselContainer {
+  display: none;
+}
+.carouselContent {
+  display: none;
+}
+.carouselBadge {
+  display: none;
+}
+.carouselButton {
+  display: none;
+}

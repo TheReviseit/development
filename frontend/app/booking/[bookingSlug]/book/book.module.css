@@ -1,0 +1,490 @@
+/* ============================================================
+   BOOKING FORM PAGE STYLES
+   Reference: Split layout with summary on left, form on right
+   ============================================================ */
+
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap");
+
+:root {
+  --form-primary: #000000;
+  --form-primary-hover: #1a1a1a;
+  --form-text: #111827;
+  --form-text-secondary: #6b7280;
+  --form-border: #e5e7eb;
+  --form-bg: #ffffff;
+  --form-radius: 12px;
+}
+
+/* ============================================================
+   SUMMARY PANEL - Left Side (No Background Image)
+   ============================================================ */
+.summaryPanel {
+  width: 50%;
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, #f8f9fc 0%, #f3f4f6 100%);
+  padding: 40px 32px;
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  overflow: hidden;
+}
+
+@media (max-width: 1024px) {
+  .summaryPanel {
+    width: 100%;
+    min-height: auto;
+    height: auto;
+    position: relative;
+    padding: 24px 20px;
+  }
+}
+
+.summaryCard {
+  background: rgba(255, 255, 255, 1);
+  border-radius: var(--form-radius);
+  padding: 24px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+  width: 100%;
+  max-width: 400px;
+  border: 1px solid var(--form-border);
+}
+
+.summaryHeader {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 20px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--form-border);
+}
+
+.summaryServiceImage {
+  position: relative;
+  width: 56px;
+  height: 56px;
+  border-radius: 10px;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.summaryServiceInfo {
+  flex: 1;
+}
+
+.summaryServiceName {
+  font-family: "Inter", sans-serif;
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: var(--form-text);
+  margin: 0 0 4px 0;
+  line-height: 1.2;
+}
+
+.summaryServiceDesc {
+  font-family: "Inter", sans-serif;
+  font-size: 0.85rem;
+  color: var(--form-text-secondary);
+  margin: 0;
+}
+
+.summaryDetails {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.summaryRow {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.summaryLabel {
+  font-family: "Inter", sans-serif;
+  font-size: 0.9rem;
+  color: var(--form-text-secondary);
+  font-weight: 500;
+}
+
+.summaryValue {
+  font-family: "Inter", sans-serif;
+  font-size: 0.9rem;
+  color: var(--form-text);
+  font-weight: 600;
+  text-align: right;
+}
+
+.summaryDivider {
+  height: 1px;
+  background: var(--form-border);
+  margin: 12px 0;
+}
+
+.summaryPriceSection {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.summaryTotalRow {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding-top: 8px;
+}
+
+.summaryTotalLabel {
+  font-family: "Inter", sans-serif;
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--form-text);
+}
+
+.summaryTotalValue {
+  font-family: "Inter", sans-serif;
+  font-size: 1.25rem;
+  font-weight: 800;
+  color: var(--form-text);
+}
+
+/* ============================================================
+   FORM WRAPPER - Right Panel
+   ============================================================ */
+.formWrapper {
+  width: 100%;
+  max-width: 440px;
+}
+
+/* Timer Banner */
+.timerBanner {
+  background: #fef3c7;
+  color: #92400e;
+  font-family: "Inter", sans-serif;
+  font-size: 0.85rem;
+  font-weight: 500;
+  padding: 10px 16px;
+  border-radius: 8px;
+  text-align: center;
+  margin-bottom: 24px;
+}
+
+.timerValue {
+  font-weight: 700;
+  color: var(--form-primary);
+}
+
+/* Form Header */
+.formHeader {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 28px;
+}
+
+.formTitle {
+  flex: 1;
+  font-family: "Inter", sans-serif;
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: var(--form-text);
+  margin: 0;
+  letter-spacing: -0.03em;
+}
+
+.confirmBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 10px 24px;
+  background: var(--form-primary);
+  color: white;
+  font-family: "Inter", sans-serif;
+  font-size: 0.9rem;
+  font-weight: 600;
+  border: none;
+  border-radius: 50px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+}
+
+.confirmBtn:hover:not(:disabled) {
+  background: var(--form-primary-hover);
+  transform: translateY(-1px);
+}
+
+.confirmBtn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Form */
+.bookingForm {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.nameRow {
+  display: flex;
+  gap: 12px;
+}
+
+.nameRow .formGroup {
+  flex: 1;
+}
+
+.formGroup {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.label {
+  font-family: "Inter", sans-serif;
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--form-text);
+}
+
+.required {
+  color: var(--form-primary);
+}
+
+.optional {
+  font-weight: 400;
+  color: var(--form-text-secondary);
+}
+
+.input {
+  font-family: "Inter", sans-serif;
+  font-size: 0.95rem;
+  padding: 14px 16px;
+  border: 1px solid var(--form-border);
+  border-radius: 10px;
+  background: var(--form-bg);
+  color: var(--form-text);
+  transition:
+    border-color 0.2s ease,
+    box-shadow 0.2s ease;
+}
+
+.input:focus {
+  outline: none;
+  border-color: var(--form-primary);
+  box-shadow: 0 0 0 3px rgba(0, 0, 0, 0.05);
+}
+
+.input::placeholder {
+  color: #9ca3af;
+}
+
+/* Error Message */
+.errorMessage {
+  background: #fef2f2;
+  color: #dc2626;
+  font-family: "Inter", sans-serif;
+  font-size: 0.9rem;
+  padding: 12px 16px;
+  border-radius: 8px;
+  border: 1px solid #fecaca;
+}
+
+/* Payment Section */
+.paymentSection {
+  margin-top: 8px;
+}
+
+.paymentButtons {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.payOnlineBtn,
+.confirmBookingBtn {
+  width: 100%;
+  padding: 16px 24px;
+  background: var(--form-primary);
+  color: white;
+  font-family: "Inter", sans-serif;
+  font-size: 1rem;
+  font-weight: 600;
+  border: none;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.payOnlineBtn:hover:not(:disabled),
+.confirmBookingBtn:hover:not(:disabled) {
+  background: var(--form-primary-hover);
+  transform: translateY(-1px);
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.2);
+}
+
+.payOnlineBtn:disabled,
+.confirmBookingBtn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.payLaterBtn {
+  width: 100%;
+  padding: 16px 24px;
+  background: transparent;
+  color: var(--form-text);
+  font-family: "Inter", sans-serif;
+  font-size: 1rem;
+  font-weight: 600;
+  border: 1px solid var(--form-border);
+  border-radius: 10px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.payLaterBtn:hover:not(:disabled) {
+  border-color: var(--form-text);
+  background: #f9fafb;
+}
+
+.payLaterBtn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* ============================================================
+   SUCCESS STATE
+   ============================================================ */
+.successContainer {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  padding: 20px;
+}
+
+.successIcon {
+  width: 72px;
+  height: 72px;
+  background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+  color: white;
+  font-size: 2rem;
+  font-weight: 700;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 24px;
+  box-shadow: 0 8px 24px rgba(16, 185, 129, 0.3);
+}
+
+.successTitle {
+  font-family: "Inter", sans-serif;
+  font-size: 1.75rem;
+  font-weight: 800;
+  color: var(--form-text);
+  margin: 0 0 8px 0;
+  letter-spacing: -0.03em;
+}
+
+.successSubtitle {
+  font-family: "Inter", sans-serif;
+  font-size: 1rem;
+  color: var(--form-text-secondary);
+  margin: 0 0 32px 0;
+}
+
+.bookingDetails {
+  width: 100%;
+  max-width: 320px;
+  background: #f9fafb;
+  border-radius: var(--form-radius);
+  padding: 20px;
+  margin-bottom: 24px;
+}
+
+.detailRow {
+  display: flex;
+  justify-content: space-between;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--form-border);
+}
+
+.detailRow:last-child {
+  border-bottom: none;
+}
+
+.detailLabel {
+  font-family: "Inter", sans-serif;
+  font-size: 0.9rem;
+  color: var(--form-text-secondary);
+}
+
+.detailValue {
+  font-family: "Inter", sans-serif;
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--form-text);
+  text-align: right;
+}
+
+.backButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 14px 32px;
+  background: var(--form-text);
+  color: white;
+  font-family: "Inter", sans-serif;
+  font-size: 0.95rem;
+  font-weight: 600;
+  border: none;
+  border-radius: 50px;
+  cursor: pointer;
+  text-decoration: none;
+  transition: all 0.2s ease;
+}
+
+.backButton:hover {
+  background: #374151;
+  transform: translateY(-1px);
+}
+
+/* ============================================================
+   RESPONSIVE
+   ============================================================ */
+@media (max-width: 480px) {
+  .summaryCard {
+    padding: 18px;
+  }
+
+  .formHeader {
+    gap: 10px;
+  }
+
+  .formTitle {
+    font-size: 1.25rem;
+  }
+
+  .confirmBtn {
+    padding: 8px 16px;
+    font-size: 0.85rem;
+  }
+
+  .nameRow {
+    flex-direction: column;
+    gap: 20px;
+  }
+
+  .input {
+    padding: 12px 14px;
+    font-size: 0.9rem;
+  }
+}
