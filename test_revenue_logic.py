@@ -9,7 +9,7 @@ sys.path.append(os.path.join(os.getcwd(), 'backend'))
 from routes.analytics import get_revenue_date_config
 
 def test_date_logic():
-    print("[TEST] Testing Revenue Analytics Date Logic...")
+    print("[TEST] Testing Revenue Analytics ffDate Logic...")
     
     # Test Day (Hour buckets)
     config = get_revenue_date_config('day')
