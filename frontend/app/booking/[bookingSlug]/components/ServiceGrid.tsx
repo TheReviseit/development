@@ -27,7 +27,10 @@ export default function ServiceGrid({
 
   // Container animation
   const containerVariants = prefersReducedMotion
-    ? {}
+    ? {
+        hidden: { opacity: 1 },
+        visible: { opacity: 1 },
+      }
     : {
         hidden: { opacity: 0 },
         visible: {

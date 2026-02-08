@@ -592,15 +592,14 @@
 }
 
 .timingRow {
-  display: grid;
-  grid-template-columns: 1fr;
+  display: flex;
+  flex-direction: column;
   gap: var(--space-md);
   padding: var(--space-lg);
   background: var(--bg-secondary);
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-md);
   transition: all var(--transition-fast);
-  align-items: center;
 }
 
 .timingRow:hover {
@@ -608,10 +607,18 @@
   background: var(--bg-tertiary);
 }
 
+.timingHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  width: 100%;
+}
+
 .dayLabel {
   font-weight: 600;
   color: var(--text-primary);
   font-size: 14px;
+  min-width: 48px;
 }
 
 .closedToggle {
@@ -635,8 +642,8 @@
   width: 44px;
   height: 24px;
   min-width: 44px;
-  min-height: 24px; /* Reset inherited min-height */
-  padding: 0; /* Reset inherited padding */
+  min-height: 24px;
+  padding: 0;
   border: 1px solid var(--border-strong);
   border-radius: 20px;
   background: var(--bg-secondary);
@@ -680,6 +687,14 @@
   box-shadow: 0 0 0 4px rgba(34, 193, 90, 0.15);
 }
 
+.timeInputsContainer {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--space-md);
+  align-items: center;
+  width: 100%;
+}
+
 .timeInput {
   width: 100%;
   padding: var(--space-md) var(--space-lg);
@@ -708,7 +723,7 @@
 }
 
 .timeInput::-webkit-calendar-picker-indicator {
-  filter: invert(1) brightness(2);
+  filter: brightness(0) invert(1);
   opacity: 1;
   cursor: pointer;
   transition: opacity var(--transition-fast);
@@ -1196,26 +1211,12 @@
 /* ============================================
    AI Capabilities Section
    ============================================ */
-.capabilitiesSection {
-  background: var(--bg-secondary);
-  border: 1px solid rgba(34, 193, 90, 0.2);
-  border-radius: var(--radius-xl);
-  padding: var(--space-xl);
-  margin-bottom: var(--space-2xl);
-  color: var(--text-primary);
-  cursor: pointer;
-  transition: all var(--transition-base);
-}
-
-.capabilitiesSection:hover {
-  border-color: rgba(34, 193, 90, 0.4);
-}
-
 .capabilityRow {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: var(--space-lg);
+  gap: var(--space-md);
+  flex-wrap: wrap;
 }
 
 .capabilityInfo {
@@ -1224,7 +1225,7 @@
 }
 
 .capabilityTitle {
-  font-size: 15px;
+  font-size: 14px;
   font-weight: 600;
   color: var(--text-primary);
   margin-bottom: 4px;
@@ -1244,7 +1245,22 @@
   font-size: 10px;
   color: var(--text-muted);
   transition: transform var(--transition-base);
-  margin-left: auto;
+  margin-left: var(--space-xs);
+}
+
+.capabilitiesSection {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-xl);
+  padding: var(--space-xl);
+  margin-bottom: var(--space-lg);
+  color: var(--text-primary);
+  cursor: pointer;
+  transition: all var(--transition-base);
+}
+
+.capabilitiesSection:hover {
+  border-color: var(--border-default);
 }
 
 .chevronUp {
@@ -1286,6 +1302,8 @@
   width: 52px;
   height: 28px;
   flex-shrink: 0;
+  min-height: 28px;
+  padding: 8px 0;
 }
 
 .toggleSwitch input {
@@ -1332,18 +1350,6 @@
 
 .toggleSwitch input:focus + .toggleSlider {
   box-shadow: 0 0 0 3px rgba(34, 193, 90, 0.2);
-}
-
-.newBadge {
-  display: inline-flex;
-  padding: 2px 8px;
-  background: linear-gradient(135deg, var(--accent-success) 0%, #2dd4bf 100%);
-  color: white;
-  border-radius: 10px;
-  font-size: 10px;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
 }
 
 /* ============================================
@@ -1875,8 +1881,12 @@
   }
 
   .timingRow {
-    grid-template-columns: auto auto 1fr auto 1fr;
+    grid-template-columns: 80px 120px 1fr auto 1fr;
     align-items: center;
+  }
+
+  .timeInputsContainer {
+    grid-template-columns: 1fr auto 1fr;
   }
 
   .addButton {
@@ -2106,11 +2116,7 @@
   }
 
   .capabilityTitle {
-    font-size: 14px;
-  }
-
-  .newBadge {
-    display: none;
+    font-size: 13px;
   }
 
   .capabilityDescription {

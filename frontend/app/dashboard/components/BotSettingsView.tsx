@@ -188,6 +188,11 @@ const INDUSTRIES = [
     iconPath: "/icons/ai_settings/bussiness_type/salon.svg",
   },
   {
+    value: "makeup_studio",
+    label: "Makeup Studio",
+    iconPath: "/icons/ai_settings/bussiness_type/salon.svg",
+  },
+  {
     value: "clinic",
     label: "Clinic / Healthcare",
     iconPath: "/icons/ai_settings/bussiness_type/clinic.svg",
@@ -237,11 +242,6 @@ const INDUSTRIES = [
     label: "Logistics & Delivery",
     iconPath: "/icons/ai_settings/bussiness_type/logistics.svg",
   },
-  // {
-  //   value: "home_services",
-  //   label: "Home Services",
-  //   iconPath: "/icons/ai_settings/bussiness_type/others.svg",
-  // },
   {
     value: "automobile",
     label: "Automobile",
@@ -262,6 +262,12 @@ const INDUSTRIES = [
     label: "Other (Custom)",
     iconPath: "/icons/ai_settings/bussiness_type/others.svg",
   },
+];
+
+const AI_TONES = [
+  { id: "friendly", label: "Friendly & Casual", icon: "😊" },
+  { id: "professional", label: "Professional & Formal", icon: "💼" },
+  { id: "casual", label: "Fun & Playful", icon: "🎉" },
 ];
 
 const DEFAULT_TIMING: DayTiming = {
@@ -524,6 +530,7 @@ export default function BotSettingsView() {
   ]);
   const [orderMinimalMode, setOrderMinimalMode] = useState(false);
   const [orderConfigExpanded, setOrderConfigExpanded] = useState(false);
+  const [productsConfigExpanded, setProductsConfigExpanded] = useState(false);
 
   // Ref to always have latest data for async operations (fixes stale closure in setTimeout)
   const dataRef = useRef(data);
@@ -1484,7 +1491,7 @@ export default function BotSettingsView() {
       label: "Brand Voice",
       iconPath: "/icons/ai_settings/brand_voice.svg",
     },
-    // Services/Products tab - hide for e-commerce (moved to sidebar as Products)
+    /* Commented out as requested
     ...(!currentConfig.hasEcommerce
       ? [
           {
@@ -1494,6 +1501,7 @@ export default function BotSettingsView() {
           },
         ]
       : []),
+    */
     // Timings - only for businesses with physical presence or appointments
     ...(currentConfig.hasTimings
       ? [
@@ -2063,19 +2071,17 @@ export default function BotSettingsView() {
 
             <div className={styles.formGroup}>
               <label>AI Tone</label>
-              <select
+              <CustomDropdown
+                options={AI_TONES}
                 value={data.brandVoice.tone}
-                onChange={(e) =>
+                onChange={(value) =>
                   setData({
                     ...data,
-                    brandVoice: { ...data.brandVoice, tone: e.target.value },
+                    brandVoice: { ...data.brandVoice, tone: value },
                   })
                 }
-              >
-                <option value="friendly">😊 Friendly & Casual</option>
-                <option value="professional">💼 Professional & Formal</option>
-                <option value="casual">🎉 Fun & Playful</option>
-              </select>
+                placeholder="Select AI Tone..."
+              />
             </div>
 
             <div className={styles.formGroup}>
@@ -2140,6 +2146,7 @@ export default function BotSettingsView() {
           </div>
         )}
 
+        {/* Commented out as requested
         {activeTab === "services" && (
           <div className={styles.section}>
             <div className={styles.sectionHeader}>
@@ -2186,6 +2193,7 @@ export default function BotSettingsView() {
             )}
           </div>
         )}
+        */}
 
         {activeTab === "timings" && (
           <div className={styles.section}>
@@ -2203,30 +2211,35 @@ export default function BotSettingsView() {
                 ] as const
               ).map((day) => (
                 <div key={day} className={styles.timingRow}>
-                  <span className={styles.dayLabel}>
-                    {day.charAt(0).toUpperCase() + day.slice(1)}
-                  </span>
-                  <label className={styles.closedToggle}>
-                    <input
-                      type="checkbox"
-                      checked={data.timings[day].isClosed}
-                      onChange={(e) =>
-                        setData({
-                          ...data,
-                          timings: {
-                            ...data.timings,
-                            [day]: {
-                              ...data.timings[day],
-                              isClosed: e.target.checked,
+                  <div className={styles.timingHeader}>
+                    <span className={styles.dayLabel}>
+                      {(day.charAt(0).toUpperCase() + day.slice(1)).substring(
+                        0,
+                        3,
+                      )}
+                    </span>
+                    <label className={styles.closedToggle}>
+                      <span>Closed</span>
+                      <input
+                        type="checkbox"
+                        checked={data.timings[day].isClosed}
+                        onChange={(e) =>
+                          setData({
+                            ...data,
+                            timings: {
+                              ...data.timings,
+                              [day]: {
+                                ...data.timings[day],
+                                isClosed: e.target.checked,
+                              },
                             },
-                          },
-                        })
-                      }
-                    />
-                    <span>Closed</span>
-                  </label>
+                          })
+                        }
+                      />
+                    </label>
+                  </div>
                   {!data.timings[day].isClosed && (
-                    <>
+                    <div className={styles.timeInputsContainer}>
                       <input
                         type="time"
                         value={data.timings[day].open}
@@ -2262,7 +2275,7 @@ export default function BotSettingsView() {
                         }
                         className={styles.timeInput}
                       />
-                    </>
+                    </div>
                   )}
                 </div>
               ))}
@@ -2513,390 +2526,373 @@ export default function BotSettingsView() {
 
         {activeTab === "capabilities" && (
           <div className={styles.section}>
-            {/* Appointment Booking Toggle - Hidden for ecommerce businesses */}
-            {!currentConfig.hasEcommerce && (
-              <>
-                <div
-                  className={`${styles.capabilitiesSection} ${
-                    capabilityExpanded ? styles.capabilitiesExpanded : ""
-                  }`}
-                  onClick={() => setCapabilityExpanded(!capabilityExpanded)}
-                >
-                  <div className={styles.capabilityRow}>
-                    <div className={styles.capabilityInfo}>
-                      <div className={styles.capabilityTitle}>
-                        <img
-                          src="/icons/ai_settings/bussiness_type/calender.svg"
-                          alt="Calendar"
-                          width={20}
-                          height={20}
-                          style={{ filter: "invert(1)" }}
-                        />
-                        Appointment Booking
-                        <span className={styles.newBadge}>NEW</span>
-                        <span
-                          className={`${styles.chevron} ${
-                            capabilityExpanded ? styles.chevronUp : ""
-                          }`}
-                        >
-                          ▼
-                        </span>
-                      </div>
-                    </div>
-                    <label
-                      className={styles.toggleSwitch}
-                      onClick={(e) => e.stopPropagation()}
+            {/* Appointment Booking Toggle */}
+            <div
+              className={`${styles.capabilitiesSection} ${
+                capabilityExpanded ? styles.capabilitiesExpanded : ""
+              }`}
+              onClick={() => setCapabilityExpanded(!capabilityExpanded)}
+              style={{ cursor: "pointer" }}
+            >
+              <div className={styles.capabilityRow}>
+                <div className={styles.capabilityInfo}>
+                  <div className={styles.capabilityTitle}>
+                    <svg
+                      width="20"
+                      height="20"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
                     >
-                      <input
-                        type="checkbox"
-                        checked={appointmentBookingEnabled}
-                        onChange={handleAppointmentToggle}
-                        disabled={capabilitiesLoading}
-                      />
-                      <span className={styles.toggleSlider}></span>
-                    </label>
+                      <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
+                      <line x1="16" y1="2" x2="16" y2="6" />
+                      <line x1="8" y1="2" x2="8" y2="6" />
+                      <line x1="3" y1="10" x2="21" y2="10" />
+                    </svg>
+                    <span>Appointment Booking</span>
+                    <span
+                      className={`${styles.chevron} ${
+                        capabilityExpanded ? styles.chevronUp : ""
+                      }`}
+                    >
+                      ▼
+                    </span>
                   </div>
-                  <div
-                    className={`${styles.capabilityDropdown} ${
-                      capabilityExpanded ? styles.capabilityDropdownOpen : ""
-                    }`}
-                  >
-                    <p className={styles.capabilityDropdownText}>
-                      Enable AI-powered appointment scheduling. When enabled,
-                      your AI assistant can book appointments through WhatsApp
-                      and a new Appointments menu appears in the sidebar.
-                    </p>
+                </div>
+                <label
+                  className={styles.toggleSwitch}
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <input
+                    type="checkbox"
+                    checked={appointmentBookingEnabled}
+                    onChange={handleAppointmentToggle}
+                    disabled={capabilitiesLoading}
+                  />
+                  <span className={styles.toggleSlider}></span>
+                </label>
+              </div>
+              <div
+                className={`${styles.capabilityDropdown} ${
+                  capabilityExpanded ? styles.capabilityDropdownOpen : ""
+                }`}
+              >
+                <p className={styles.capabilityDropdownText}>
+                  Enable AI-powered appointment scheduling. When enabled, your
+                  AI assistant can book appointments through WhatsApp and a new
+                  Appointments menu appears in the sidebar.
+                </p>
+              </div>
+            </div>
+
+            {/* Appointment Configuration - COMMENTED OUT 
+            {appointmentBookingEnabled && capabilityExpanded && (
+              <div className={styles.appointmentConfig}>
+                <div
+                  className={styles.configCard}
+                  style={{ marginTop: "1.5rem" }}
+                >
+                  <h3 className={styles.configCardTitle}>Business Hours</h3>
+                  <p className={styles.configCardDescription}>
+                    Set your available hours for appointments
+                  </p>
+                  <div className={styles.businessHoursGrid}>
+                    <div className={styles.formGroup}>
+                      <label>Opens At</label>
+                      <input
+                        type="time"
+                        value={businessHours.start}
+                        onChange={(e) =>
+                          setBusinessHours({
+                            ...businessHours,
+                            start: e.target.value,
+                          })
+                        }
+                      />
+                    </div>
+                    <div className={styles.formGroup}>
+                      <label>Closes At</label>
+                      <input
+                        type="time"
+                        value={businessHours.end}
+                        onChange={(e) =>
+                          setBusinessHours({
+                            ...businessHours,
+                            end: e.target.value,
+                          })
+                        }
+                      />
+                    </div>
+                    <div className={styles.formGroup}>
+                      <label>Slot Duration</label>
+                      <select
+                        value={businessHours.duration}
+                        onChange={(e) =>
+                          setBusinessHours({
+                            ...businessHours,
+                            duration: parseInt(e.target.value),
+                          })
+                        }
+                      >
+                        <option value={15}>15 minutes</option>
+                        <option value={30}>30 minutes</option>
+                        <option value={45}>45 minutes</option>
+                        <option value={60}>1 hour</option>
+                        <option value={90}>1.5 hours</option>
+                        <option value={120}>2 hours</option>
+                      </select>
+                    </div>
                   </div>
                 </div>
 
-                {/* Appointment Configuration - Only show when enabled and expanded */}
-                {appointmentBookingEnabled && capabilityExpanded && (
-                  <div className={styles.appointmentConfig}>
-                    {/* Business Hours Configuration */}
-                    <div
-                      className={styles.configCard}
-                      style={{ marginTop: "1.5rem" }}
-                    >
-                      <h3 className={styles.configCardTitle}>Business Hours</h3>
+                <div
+                  className={styles.configCard}
+                  style={{ marginTop: "1rem" }}
+                >
+                  <div className={styles.configCardHeader}>
+                    <div>
+                      <h3 className={styles.configCardTitle}>Services</h3>
                       <p className={styles.configCardDescription}>
-                        Set your available hours for appointments
+                        Configure your services with duration and capacity per
+                        slot
                       </p>
-                      <div className={styles.businessHoursGrid}>
-                        <div className={styles.formGroup}>
-                          <label>Opens At</label>
-                          <input
-                            type="time"
-                            value={businessHours.start}
-                            onChange={(e) =>
-                              setBusinessHours({
-                                ...businessHours,
-                                start: e.target.value,
-                              })
-                            }
-                          />
-                        </div>
-                        <div className={styles.formGroup}>
-                          <label>Closes At</label>
-                          <input
-                            type="time"
-                            value={businessHours.end}
-                            onChange={(e) =>
-                              setBusinessHours({
-                                ...businessHours,
-                                end: e.target.value,
-                              })
-                            }
-                          />
-                        </div>
-                        <div className={styles.formGroup}>
-                          <label>Slot Duration</label>
-                          <select
-                            value={businessHours.duration}
-                            onChange={(e) =>
-                              setBusinessHours({
-                                ...businessHours,
-                                duration: parseInt(e.target.value),
-                              })
-                            }
-                          >
-                            <option value={15}>15 minutes</option>
-                            <option value={30}>30 minutes</option>
-                            <option value={45}>45 minutes</option>
-                            <option value={60}>1 hour</option>
-                            <option value={90}>1.5 hours</option>
-                            <option value={120}>2 hours</option>
-                          </select>
-                        </div>
-                      </div>
                     </div>
+                    <button className={styles.addButton} onClick={addService}>
+                      + Add Service
+                    </button>
+                  </div>
 
-                    {/* Services Configuration */}
-                    <div
-                      className={styles.configCard}
-                      style={{ marginTop: "1rem" }}
-                    >
-                      <div className={styles.configCardHeader}>
-                        <div>
-                          <h3 className={styles.configCardTitle}>Services</h3>
-                          <p className={styles.configCardDescription}>
-                            Configure your services with duration and capacity
-                            per slot
-                          </p>
-                        </div>
-                        <button
-                          className={styles.addButton}
-                          onClick={addService}
+                  <div className={styles.fieldBuilderList}>
+                    {services.map((service, index) => (
+                      <div key={service.id} className={styles.fieldBuilderItem}>
+                        <div
+                          className={styles.fieldBuilderContent}
+                          style={{ flex: 1 }}
                         >
-                          + Add Service
-                        </button>
+                          <div className={styles.fieldBuilderRow}>
+                            <input
+                              type="text"
+                              placeholder="Service Name (e.g., Haircut, Consultation)"
+                              value={service.name}
+                              onChange={(e) =>
+                                updateService(service.id, {
+                                  name: e.target.value,
+                                })
+                              }
+                              className={styles.fieldLabelInput}
+                              style={{ flex: 2 }}
+                            />
+                            <div
+                              className={styles.formGroup}
+                              style={{ flex: 1, minWidth: "120px" }}
+                            >
+                              <label
+                                style={{
+                                  fontSize: "12px",
+                                  marginBottom: "4px",
+                                }}
+                              >
+                                Duration
+                              </label>
+                              <select
+                                value={service.duration}
+                                onChange={(e) =>
+                                  updateService(service.id, {
+                                    duration: parseInt(e.target.value),
+                                  })
+                                }
+                                className={styles.fieldTypeSelect}
+                              >
+                                <option value={15}>15 min</option>
+                                <option value={30}>30 min</option>
+                                <option value={45}>45 min</option>
+                                <option value={60}>1 hour</option>
+                                <option value={90}>1.5 hours</option>
+                                <option value={120}>2 hours</option>
+                              </select>
+                            </div>
+                            <div
+                              className={styles.formGroup}
+                              style={{ flex: 1, minWidth: "120px" }}
+                            >
+                              <label
+                                style={{
+                                  fontSize: "12px",
+                                  marginBottom: "4px",
+                                }}
+                              >
+                                Capacity/Slot
+                              </label>
+                              <input
+                                type="number"
+                                min={1}
+                                max={100}
+                                value={service.capacity}
+                                onChange={(e) =>
+                                  updateService(service.id, {
+                                    capacity: Math.max(
+                                      1,
+                                      parseInt(e.target.value) || 1,
+                                    ),
+                                  })
+                                }
+                                className={styles.fieldTypeSelect}
+                                style={{ width: "100%" }}
+                              />
+                            </div>
+                            <button
+                              className={styles.removeFieldBtn}
+                              onClick={() => removeService(service.id)}
+                              title="Remove service"
+                            >
+                              ×
+                            </button>
+                          </div>
+                        </div>
                       </div>
+                    ))}
+                    {services.length === 0 && (
+                      <p
+                        style={{
+                          color: "#888",
+                          textAlign: "center",
+                          padding: "1rem",
+                        }}
+                      >
+                        No services configured. Add at least one service.
+                      </p>
+                    )}
+                  </div>
+                </div>
 
-                      <div className={styles.fieldBuilderList}>
-                        {services.map((service, index) => (
+                <div
+                  className={styles.configCard}
+                  style={{ marginTop: "1rem" }}
+                >
+                  <div className={styles.configCardHeader}>
+                    <div>
+                      <h3 className={styles.configCardTitle}>
+                        Appointment Questions
+                      </h3>
+                      <p className={styles.configCardDescription}>
+                        Configure what information the AI will collect from
+                        customers
+                      </p>
+                    </div>
+                    <button
+                      className={styles.addButton}
+                      onClick={addAppointmentField}
+                    >
+                      + Add Question
+                    </button>
+                  </div>
+
+                  <div className={styles.fieldBuilderList}>
+                    {appointmentFields
+                      .sort((a, b) => a.order - b.order)
+                      .map((field, index) => {
+                        return (
                           <div
-                            key={service.id}
+                            key={field.id}
                             className={styles.fieldBuilderItem}
                           >
-                            <div
-                              className={styles.fieldBuilderContent}
-                              style={{ flex: 1 }}
-                            >
+                            <div className={styles.fieldBuilderOrder}>
+                              <button
+                                className={styles.orderBtn}
+                                onClick={() => moveFieldUp(field.id)}
+                                disabled={index === 0}
+                                title="Move up"
+                              >
+                                ↑
+                              </button>
+                              <span className={styles.orderNumber}>
+                                {field.order}
+                              </span>
+                              <button
+                                className={styles.orderBtn}
+                                onClick={() => moveFieldDown(field.id)}
+                                disabled={
+                                  index === appointmentFields.length - 1
+                                }
+                                title="Move down"
+                              >
+                                ↓
+                              </button>
+                            </div>
+
+                            <div className={styles.fieldBuilderContent}>
                               <div className={styles.fieldBuilderRow}>
                                 <input
                                   type="text"
-                                  placeholder="Service Name (e.g., Haircut, Consultation)"
-                                  value={service.name}
+                                  placeholder="Question/Field Label"
+                                  value={field.label}
                                   onChange={(e) =>
-                                    updateService(service.id, {
-                                      name: e.target.value,
+                                    updateAppointmentField(field.id, {
+                                      label: e.target.value,
                                     })
                                   }
                                   className={styles.fieldLabelInput}
-                                  style={{ flex: 2 }}
                                 />
-                                <div
-                                  className={styles.formGroup}
-                                  style={{ flex: 1, minWidth: "120px" }}
+                                <select
+                                  value={field.type}
+                                  onChange={(e) =>
+                                    updateAppointmentField(field.id, {
+                                      type: e.target
+                                        .value as AppointmentField["type"],
+                                    })
+                                  }
+                                  className={styles.fieldTypeSelect}
                                 >
-                                  <label
-                                    style={{
-                                      fontSize: "12px",
-                                      marginBottom: "4px",
-                                    }}
-                                  >
-                                    Duration
-                                  </label>
-                                  <select
-                                    value={service.duration}
-                                    onChange={(e) =>
-                                      updateService(service.id, {
-                                        duration: parseInt(e.target.value),
-                                      })
-                                    }
-                                    className={styles.fieldTypeSelect}
-                                  >
-                                    <option value={15}>15 min</option>
-                                    <option value={30}>30 min</option>
-                                    <option value={45}>45 min</option>
-                                    <option value={60}>1 hour</option>
-                                    <option value={90}>1.5 hours</option>
-                                    <option value={120}>2 hours</option>
-                                  </select>
-                                </div>
-                                <div
-                                  className={styles.formGroup}
-                                  style={{ flex: 1, minWidth: "120px" }}
-                                >
-                                  <label
-                                    style={{
-                                      fontSize: "12px",
-                                      marginBottom: "4px",
-                                    }}
-                                  >
-                                    Capacity/Slot
-                                  </label>
+                                  <option value="text">Text</option>
+                                  <option value="phone">Phone</option>
+                                  <option value="email">Email</option>
+                                  <option value="date">Date</option>
+                                  <option value="time">Time</option>
+                                  <option value="textarea">Long Text</option>
+                                  <option value="select">Dropdown</option>
+                                </select>
+                                <label className={styles.requiredToggle}>
                                   <input
-                                    type="number"
-                                    min={1}
-                                    max={100}
-                                    value={service.capacity}
+                                    type="checkbox"
+                                    checked={field.required}
                                     onChange={(e) =>
-                                      updateService(service.id, {
-                                        capacity: Math.max(
-                                          1,
-                                          parseInt(e.target.value) || 1,
-                                        ),
+                                      updateAppointmentField(field.id, {
+                                        required: e.target.checked,
                                       })
                                     }
-                                    className={styles.fieldTypeSelect}
-                                    style={{ width: "100%" }}
                                   />
-                                </div>
-                                <button
-                                  className={styles.removeFieldBtn}
-                                  onClick={() => removeService(service.id)}
-                                  title="Remove service"
-                                >
-                                  ×
-                                </button>
+                                  <span>Required</span>
+                                </label>
                               </div>
                             </div>
+
+                            <button
+                              className={styles.removeFieldBtn}
+                              onClick={() => removeAppointmentField(field.id)}
+                              title="Remove field"
+                            >
+                              ✕
+                            </button>
                           </div>
-                        ))}
-                        {services.length === 0 && (
-                          <p
-                            style={{
-                              color: "#888",
-                              textAlign: "center",
-                              padding: "1rem",
-                            }}
-                          >
-                            No services configured. Add at least one service.
-                          </p>
-                        )}
-                      </div>
-                    </div>
-
-                    {/* Field Builder - Appointment Questions */}
-                    <div
-                      className={styles.configCard}
-                      style={{ marginTop: "1rem" }}
-                    >
-                      <div className={styles.configCardHeader}>
-                        <div>
-                          <h3 className={styles.configCardTitle}>
-                            Appointment Questions
-                          </h3>
-                          <p className={styles.configCardDescription}>
-                            Configure what information the AI will collect from
-                            customers
-                          </p>
-                        </div>
-                        <button
-                          className={styles.addButton}
-                          onClick={addAppointmentField}
-                        >
-                          + Add Question
-                        </button>
-                      </div>
-
-                      <div className={styles.fieldBuilderList}>
-                        {appointmentFields
-                          .sort((a, b) => a.order - b.order)
-                          .map((field, index) => {
-                            return (
-                              <div
-                                key={field.id}
-                                className={styles.fieldBuilderItem}
-                              >
-                                <div className={styles.fieldBuilderOrder}>
-                                  <button
-                                    className={styles.orderBtn}
-                                    onClick={() => moveFieldUp(field.id)}
-                                    disabled={index === 0}
-                                    title="Move up"
-                                  >
-                                    ↑
-                                  </button>
-                                  <span className={styles.orderNumber}>
-                                    {field.order}
-                                  </span>
-                                  <button
-                                    className={styles.orderBtn}
-                                    onClick={() => moveFieldDown(field.id)}
-                                    disabled={
-                                      index === appointmentFields.length - 1
-                                    }
-                                    title="Move down"
-                                  >
-                                    ↓
-                                  </button>
-                                </div>
-
-                                <div className={styles.fieldBuilderContent}>
-                                  <div className={styles.fieldBuilderRow}>
-                                    <input
-                                      type="text"
-                                      placeholder="Question/Field Label"
-                                      value={field.label}
-                                      onChange={(e) =>
-                                        updateAppointmentField(field.id, {
-                                          label: e.target.value,
-                                        })
-                                      }
-                                      className={styles.fieldLabelInput}
-                                    />
-                                    <select
-                                      value={field.type}
-                                      onChange={(e) =>
-                                        updateAppointmentField(field.id, {
-                                          type: e.target
-                                            .value as AppointmentField["type"],
-                                        })
-                                      }
-                                      className={styles.fieldTypeSelect}
-                                    >
-                                      <option value="text">Text</option>
-                                      <option value="phone">Phone</option>
-                                      <option value="email">Email</option>
-                                      <option value="date">Date</option>
-                                      <option value="time">Time</option>
-                                      <option value="textarea">
-                                        Long Text
-                                      </option>
-                                      <option value="select">Dropdown</option>
-                                    </select>
-                                    <label className={styles.requiredToggle}>
-                                      <input
-                                        type="checkbox"
-                                        checked={field.required}
-                                        onChange={(e) =>
-                                          updateAppointmentField(field.id, {
-                                            required: e.target.checked,
-                                          })
-                                        }
-                                      />
-                                      <span>Required</span>
-                                    </label>
-                                  </div>
-                                </div>
-
-                                <button
-                                  className={styles.removeFieldBtn}
-                                  onClick={() =>
-                                    removeAppointmentField(field.id)
-                                  }
-                                  title="Remove field"
-                                >
-                                  ✕
-                                </button>
-                              </div>
-                            );
-                          })}
-                      </div>
-                    </div>
-
-                    {/* Save Configuration Button */}
-                    <div style={{ marginTop: "1.5rem", textAlign: "right" }}>
-                      <button
-                        className={styles.primaryButton}
-                        onClick={saveAppointmentConfig}
-                        disabled={capabilitiesLoading}
-                      >
-                        {capabilitiesLoading
-                          ? "Saving..."
-                          : "Save Configuration"}
-                      </button>
-                    </div>
+                        );
+                      })}
                   </div>
-                )}
-              </>
-            )}
-          </div>
-        )}
+                </div>
 
-        {activeTab === "capabilities" && (
-          <div style={{ marginTop: "2rem" }}>
+                <div style={{ marginTop: "1.5rem", textAlign: "right" }}>
+                  <button
+                    className={styles.primaryButton}
+                    onClick={saveAppointmentConfig}
+                    disabled={capabilitiesLoading}
+                  >
+                    {capabilitiesLoading ? "Saving..." : "Save Configuration"}
+                  </button>
+                </div>
+              </div>
+            )}
+            END COMMENTED SECTION */}
+
             {/* Order Booking Toggle */}
             <div
               className={`${styles.capabilitiesSection} ${
@@ -2915,7 +2911,6 @@ export default function BotSettingsView() {
                       fill="none"
                       stroke="currentColor"
                       strokeWidth="2"
-                      style={{ marginRight: "8px" }}
                     >
                       <path
                         d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"
@@ -2933,8 +2928,7 @@ export default function BotSettingsView() {
                         strokeLinejoin="round"
                       />
                     </svg>
-                    Order Booking
-                    <span className={styles.newBadge}>NEW</span>
+                    <span>Order Booking</span>
                     <span
                       className={`${styles.chevron} ${
                         orderConfigExpanded ? styles.chevronUp : ""
@@ -3225,15 +3219,14 @@ export default function BotSettingsView() {
                 </div>
               </div>
             )}
-          </div>
-        )}
 
-        {activeTab === "capabilities" && (
-          <div style={{ marginTop: "2rem" }}>
             {/* Products Toggle */}
             <div
-              className={styles.capabilitiesSection}
-              style={{ cursor: "default" }}
+              className={`${styles.capabilitiesSection} ${
+                productsConfigExpanded ? styles.capabilitiesExpanded : ""
+              }`}
+              onClick={() => setProductsConfigExpanded(!productsConfigExpanded)}
+              style={{ cursor: "pointer" }}
             >
               <div className={styles.capabilityRow}>
                 <div className={styles.capabilityInfo}>
@@ -3245,7 +3238,6 @@ export default function BotSettingsView() {
                       fill="none"
                       stroke="currentColor"
                       strokeWidth="2"
-                      style={{ marginRight: "8px" }}
                     >
                       <path
                         d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"
@@ -3259,14 +3251,15 @@ export default function BotSettingsView() {
                         strokeLinejoin="round"
                       />
                     </svg>
-                    Products Catalog
-                    <span className={styles.newBadge}>NEW</span>
+                    <span>Products Catalog</span>
+                    <span
+                      className={`${styles.chevron} ${
+                        productsConfigExpanded ? styles.chevronUp : ""
+                      }`}
+                    >
+                      ▼
+                    </span>
                   </div>
-                  <p className={styles.capabilityDescription}>
-                    When enabled, a Products menu appears in the sidebar where
-                    you can manage your product catalog. Your AI assistant can
-                    recommend products to customers.
-                  </p>
                 </div>
                 <label
                   className={styles.toggleSwitch}
@@ -3280,6 +3273,17 @@ export default function BotSettingsView() {
                   />
                   <span className={styles.toggleSlider}></span>
                 </label>
+              </div>
+              <div
+                className={`${styles.capabilityDropdown} ${
+                  productsConfigExpanded ? styles.capabilityDropdownOpen : ""
+                }`}
+              >
+                <p className={styles.capabilityDropdownText}>
+                  When enabled, a Products menu appears in the sidebar where you
+                  can manage your product catalog. Your AI assistant can
+                  recommend products to customers.
+                </p>
               </div>
             </div>
           </div>
@@ -3295,7 +3299,7 @@ export default function BotSettingsView() {
               saving || JSON.stringify(data) === JSON.stringify(initialData)
             }
           >
-            {saving ? "Saving..." : "💾 Save Changes"}
+            {saving ? "Saving..." : "Save Changes"}
           </button>
         </div>
       )}

@@ -108,7 +108,7 @@ export default function ServiceDetailModal({
           y: 0,
           scale: 1,
           transition: {
-            type: "spring",
+            type: "spring" as const,
             damping: 25,
             stiffness: 300,
           },

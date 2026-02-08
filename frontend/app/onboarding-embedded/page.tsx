@@ -30,8 +30,8 @@ const PLANS = [
   {
     id: "starter" as PlanName,
     name: "Starter",
-    price: 1,
-    priceDisplay: "₹1",
+    price: 799,
+    priceDisplay: "₹799",
     description: "Perfect for solo entrepreneurs",
     features: [
       "2,500 AI Responses / month",

@@ -3889,7 +3889,7 @@
   /* Reset mobileContent margin since header is now relative */
   .mobileContent {
     margin-top: 0;
-    padding: 1rem;
+    /* padding: 1rem; */
   }
 
   .mobileHeaderRow {

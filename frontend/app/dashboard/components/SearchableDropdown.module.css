@@ -43,9 +43,9 @@
 
 .input:focus {
   outline: none;
-  border-color: #22c15a;
+  border-color: rgba(255, 255, 255, 0.3);
   background: rgba(255, 255, 255, 0.06);
-  box-shadow: 0 0 0 3px rgba(34, 193, 90, 0.15);
+  box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.05);
 }
 
 .input::placeholder {
@@ -58,8 +58,8 @@
   align-items: center;
   gap: 12px;
   padding: 14px 16px;
-  background: rgba(34, 193, 90, 0.1);
-  border: 1px solid rgba(34, 193, 90, 0.3);
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: 14px;
   min-height: 56px;
 }
