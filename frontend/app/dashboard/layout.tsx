@@ -434,6 +434,7 @@ export default function DashboardLayout({
                       <span>Messages</span>
                     </button>
                     {/* Bulk Messages - hideable */}
+                    {/* Commented out as requested
                     {(mobileHideMode ||
                       !mobileHiddenItems.includes("bulk-messages")) && (
                       <div className={styles.mobileNavItemWrapper}>
@@ -507,7 +508,9 @@ export default function DashboardLayout({
                         </button>
                       </div>
                     )}
+                    */}
                     {/* Templates - hideable */}
+                    {/* Commented out as requested
                     {(mobileHideMode ||
                       !mobileHiddenItems.includes("templates")) && (
                       <div className={styles.mobileNavItemWrapper}>
@@ -566,7 +569,9 @@ export default function DashboardLayout({
                         </button>
                       </div>
                     )}
+                    */}
                     {/* Contacts - hideable */}
+                    {/* Commented out as requested
                     {(mobileHideMode ||
                       !mobileHiddenItems.includes("contacts")) && (
                       <div className={styles.mobileNavItemWrapper}>
@@ -627,7 +632,9 @@ export default function DashboardLayout({
                         </button>
                       </div>
                     )}
+                    */}
                     {/* Campaigns - hideable */}
+                    {/* Commented out as requested
                     {(mobileHideMode ||
                       !mobileHiddenItems.includes("campaigns")) && (
                       <div className={styles.mobileNavItemWrapper}>
@@ -681,6 +688,7 @@ export default function DashboardLayout({
                         </button>
                       </div>
                     )}
+                    */}
                     {appointmentBookingEnabled && (
                       <button
                         className={`${styles.mobileNavLink} ${

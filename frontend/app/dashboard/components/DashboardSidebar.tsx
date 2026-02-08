@@ -489,6 +489,7 @@ export default function DashboardSidebar({
       badge: userCount > 0 ? userCount : undefined,
       href: "/dashboard/messages",
     },
+    /* Commented out as requested
     {
       id: "bulk-messages",
       label: "Bulk Messages",
@@ -513,6 +514,7 @@ export default function DashboardSidebar({
       icon: <CampaignsIcon />,
       href: "/dashboard/campaigns",
     },
+    */
     // Appointments - only show when toggle is enabled
     ...(aiCapabilities.appointment_booking_enabled
       ? [
