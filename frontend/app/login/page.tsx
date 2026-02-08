@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useState, useCallback, memo } from "react";
+import { useState, useCallback, memo, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import dynamic from "next/dynamic";
 import Image from "next/image";
@@ -77,7 +77,7 @@ GoogleIcon.displayName = "GoogleIcon";
 // Helper function to create session with retry logic
 async function createSessionWithRetry(
   idToken: string,
-  retries = 2
+  retries = 2,
 ): Promise<boolean> {
   for (let i = 0; i <= retries; i++) {
     try {
@@ -115,21 +115,97 @@ export default function LoginPage() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
+  const [checkingSession, setCheckingSession] = useState(true);
   const router = useRouter();
+
+  /**
+   * Enterprise-grade session validation on mount
+   *
+   * Flow:
+   * 1. Check Firebase auth state
+   * 2. If authenticated → verify user exists in DB
+   * 3. If user exists in DB → redirect to dashboard/onboarding
+   * 4. If user NOT in DB (deleted account) → sign out Firebase, show login
+   * 5. If not authenticated → show login form
+   */
+  useEffect(() => {
+    let isMounted = true;
+
+    const validateSession = async () => {
+      const unsubscribe = auth.onAuthStateChanged(async (firebaseUser) => {
+        if (!isMounted) return;
+
+        if (firebaseUser) {
+          try {
+            // Get fresh token
+            const idToken = await firebaseUser.getIdToken(true);
+
+            // CRITICAL: Verify user exists in database
+            const checkResponse = await fetch("/api/auth/check-user-exists", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ idToken }),
+            });
+
+            if (checkResponse.ok) {
+              const { exists } = await checkResponse.json();
+
+              if (exists) {
+                // User exists in DB - safe to redirect
+                const onboardingDone = await checkOnboardingStatus();
+                if (isMounted) {
+                  router.replace(onboardingDone ? "/dashboard" : "/onboarding");
+                }
+                return;
+              } else {
+                // User deleted from DB but Firebase session exists
+                // Clear stale session
+                console.log("User not found in DB, clearing stale session");
+                await auth.signOut();
+              }
+            } else {
+              // API error - allow login attempt
+              console.warn("Failed to verify user, allowing login");
+            }
+          } catch (error) {
+            console.error("Session validation error:", error);
+            // On error, clear potentially corrupted session
+            try {
+              await auth.signOut();
+            } catch {} // Ignore signOut errors
+          }
+        }
+
+        // Show login form
+        if (isMounted) {
+          setCheckingSession(false);
+        }
+      });
+
+      return unsubscribe;
+    };
+
+    const unsubscribePromise = validateSession();
+
+    return () => {
+      isMounted = false;
+      unsubscribePromise.then((unsub) => unsub?.());
+    };
+  }, [router]);
 
   // Memoized handlers to prevent unnecessary re-renders
   const handleEmailChange = useCallback(
     (e: React.ChangeEvent<HTMLInputElement>) => {
       setEmail(e.target.value);
     },
-    []
+    [],
   );
 
   const handlePasswordChange = useCallback(
     (e: React.ChangeEvent<HTMLInputElement>) => {
       setPassword(e.target.value);
     },
-    []
+    [],
   );
 
   const togglePassword = useCallback(() => {
@@ -169,7 +245,7 @@ export default function LoginPage() {
         setLoading(false);
       }
     },
-    [email, password, router]
+    [email, password, router],
   );
 
   const handleGoogleSignIn = useCallback(async () => {
@@ -294,90 +370,110 @@ export default function LoginPage() {
           </div>
 
           <div className={styles.formContainer}>
-            <div className={styles.formHeader}>
-              <h2>Welcome Back</h2>
-              <p>Enter your email and password to access your account</p>
-            </div>
-
-            {error && (
-              <Toast message={error} type="error" onClose={clearError} />
-            )}
-
-            <form className={styles.authForm} onSubmit={handleSubmit}>
-              <div className={styles.formGroup}>
-                <label htmlFor="email">Email</label>
-                <input
-                  type="email"
-                  id="email"
-                  placeholder="Enter your email"
-                  value={email}
-                  onChange={handleEmailChange}
-                  required
-                  autoComplete="email"
-                />
+            {checkingSession ? (
+              <div
+                style={{
+                  display: "flex",
+                  flexDirection: "column",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  minHeight: "300px",
+                  gap: "16px",
+                }}
+              >
+                <ButtonSpinner size={32} />
+                <p style={{ color: "#666", fontSize: "14px" }}>
+                  Checking session...
+                </p>
               </div>
+            ) : (
+              <>
+                <div className={styles.formHeader}>
+                  <h2>Welcome Back</h2>
+                  <p>Enter your email and password to access your account</p>
+                </div>
 
-              <div className={styles.formGroup}>
-                <label htmlFor="password">Password</label>
-                <div className={styles.passwordWrapper}>
-                  <input
-                    type={showPassword ? "text" : "password"}
-                    id="password"
-                    placeholder="Enter your password"
-                    value={password}
-                    onChange={handlePasswordChange}
-                    required
-                    autoComplete="current-password"
-                  />
+                {error && (
+                  <Toast message={error} type="error" onClose={clearError} />
+                )}
+
+                <form className={styles.authForm} onSubmit={handleSubmit}>
+                  <div className={styles.formGroup}>
+                    <label htmlFor="email">Email</label>
+                    <input
+                      type="email"
+                      id="email"
+                      placeholder="Enter your email"
+                      value={email}
+                      onChange={handleEmailChange}
+                      required
+                      autoComplete="email"
+                    />
+                  </div>
+
+                  <div className={styles.formGroup}>
+                    <label htmlFor="password">Password</label>
+                    <div className={styles.passwordWrapper}>
+                      <input
+                        type={showPassword ? "text" : "password"}
+                        id="password"
+                        placeholder="Enter your password"
+                        value={password}
+                        onChange={handlePasswordChange}
+                        required
+                        autoComplete="current-password"
+                      />
+                      <button
+                        type="button"
+                        className={styles.togglePassword}
+                        onClick={togglePassword}
+                        aria-label="Toggle password visibility"
+                      >
+                        {showPassword ? <EyeIcon /> : <EyeOffIcon />}
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className={styles.formOptions}>
+                    <label className={styles.checkboxLabel}>
+                      <input type="checkbox" />
+                      <span>Remember me</span>
+                    </label>
+                    <Link href="/forgot-password" className={styles.forgotLink}>
+                      Forgot Password
+                    </Link>
+                  </div>
+
+                  <button
+                    type="submit"
+                    className={styles.btnPrimary}
+                    disabled={loading || checkingSession}
+                  >
+                    {loading ? <ButtonSpinner size={20} /> : "Sign In"}
+                  </button>
+
                   <button
                     type="button"
-                    className={styles.togglePassword}
-                    onClick={togglePassword}
-                    aria-label="Toggle password visibility"
+                    className={styles.btnGoogle}
+                    onClick={handleGoogleSignIn}
+                    disabled={googleLoading || checkingSession}
                   >
-                    {showPassword ? <EyeIcon /> : <EyeOffIcon />}
+                    {googleLoading ? (
+                      <ButtonSpinner size={20} />
+                    ) : (
+                      <>
+                        <GoogleIcon />
+                        <span>Sign In with Google</span>
+                      </>
+                    )}
                   </button>
-                </div>
-              </div>
+                </form>
 
-              <div className={styles.formOptions}>
-                <label className={styles.checkboxLabel}>
-                  <input type="checkbox" />
-                  <span>Remember me</span>
-                </label>
-                <Link href="/forgot-password" className={styles.forgotLink}>
-                  Forgot Password
-                </Link>
-              </div>
-
-              <button
-                type="submit"
-                className={styles.btnPrimary}
-                disabled={loading}
-              >
-                {loading ? <ButtonSpinner size={20} /> : "Sign In"}
-              </button>
-
-              <button
-                type="button"
-                className={styles.btnGoogle}
-                onClick={handleGoogleSignIn}
-                disabled={googleLoading}
-              >
-                {googleLoading ? (
-                  <ButtonSpinner size={20} />
-                ) : (
-                  <>
-                    <GoogleIcon />
-                    <span>Sign In with Google</span>
-                  </>
-                )}
-              </button>
-            </form>
-
-            <p className={styles.authFooter}>
-              Don't have an account? <Link href="/signup">Sign Up</Link>
-            </p>
+                <p className={styles.authFooter}>
+                  Don't have an account? <Link href="/signup">Sign Up</Link>
+                </p>
+              </>
+            )}
           </div>
         </div>
       </div>

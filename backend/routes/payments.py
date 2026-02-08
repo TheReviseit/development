@@ -22,7 +22,11 @@ import hashlib
 import logging
 import uuid
 import time
-import gevent
+try:
+    import gevent
+    HAS_GEVENT = True
+except ImportError:
+    HAS_GEVENT = False
 import requests
 from functools import wraps
 from flask import Blueprint, request, jsonify, g
@@ -228,7 +232,10 @@ def retry_api_call(max_retries=3, initial_delay=1):
                         raise e
                     
                     logger.warning(f"Razorpay ServerError (attempt {retries}/{max_retries}): {e}. Retrying in {delay}s...")
-                    gevent.sleep(delay)  # GEVENT SAFE - does not block greenlet
+                    if HAS_GEVENT:
+                        gevent.sleep(delay)  # GEVENT SAFE - does not block greenlet
+                    else:
+                        time.sleep(delay)  # Fallback for dev mode
                     delay *= 2  # Exponential backoff
                 except Exception as e:
                     # Detect network-related errors
@@ -246,7 +253,10 @@ def retry_api_call(max_retries=3, initial_delay=1):
                         raise e
                     
                     logger.warning(f"API connection error (attempt {retries}/{max_retries}): {e}. Retrying in {delay}s...")
-                    gevent.sleep(delay)  # GEVENT SAFE
+                    if HAS_GEVENT:
+                        gevent.sleep(delay)  # GEVENT SAFE
+                    else:
+                        time.sleep(delay)  # Fallback for dev mode
                     delay *= 2  # Exponential backoff
         return wrapper
     return decorator

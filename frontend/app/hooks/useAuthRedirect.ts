@@ -81,9 +81,33 @@ export function useAuthRedirect() {
     // Subscribe to Firebase auth state changes
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
       if (user) {
-        // User is authenticated
         try {
-          // Check onboarding status in parallel with state update
+          // CRITICAL: Verify user exists in database before treating as authenticated
+          const idToken = await user.getIdToken(true);
+          const checkResponse = await fetch("/api/auth/check-user-exists", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ idToken }),
+          });
+
+          if (checkResponse.ok) {
+            const { exists } = await checkResponse.json();
+
+            if (!exists) {
+              // User deleted from DB but Firebase session exists - sign out
+              console.log("User not found in DB, clearing stale session");
+              await auth.signOut();
+              setAuthState({
+                isAuthenticated: false,
+                isLoading: false,
+                onboardingCompleted: null,
+                userId: null,
+              });
+              return;
+            }
+          }
+
+          // User exists - check onboarding status
           const onboardingCompleted = await checkOnboardingStatus(user.uid);
 
           setAuthState({
@@ -94,11 +118,15 @@ export function useAuthRedirect() {
           });
         } catch (error) {
           console.error("Error loading auth state:", error);
+          // On error, clear session to be safe
+          try {
+            await auth.signOut();
+          } catch {}
           setAuthState({
-            isAuthenticated: true,
+            isAuthenticated: false,
             isLoading: false,
-            onboardingCompleted: false,
-            userId: user.uid,
+            onboardingCompleted: null,
+            userId: null,
           });
         }
       } else {
