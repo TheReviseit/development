@@ -721,18 +721,44 @@ def create_subscription():
                 'contact': data.customer_phone or '',
                 'notes': {'user_id': user_id}
             }
+            logger.info(f"[{request_id}] Creating Razorpay customer for email: {data.customer_email}")
             customer = create_razorpay_customer(customer_data)
             customer_id = customer['id']
+            logger.info(f"[{request_id}] Created customer: {customer_id}")
         except razorpay.errors.BadRequestError as e:
-            if 'already exists' in str(e).lower():
-                # Find existing customer
-                customers = razorpay_client.customer.all({'count': 100})
-                for c in customers.get('items', []):
-                    if c.get('email') == data.customer_email:
-                        customer_id = c['id']
-                        break
+            error_msg = str(e)
+            if 'already exists' in error_msg.lower():
+                # Find existing customer by email
+                logger.info(f"[{request_id}] Customer exists, looking up by email")
+                try:
+                    customers = razorpay_client.customer.all({'count': 100})
+                    for c in customers.get('items', []):
+                        if c.get('email') == data.customer_email:
+                            customer_id = c['id']
+                            logger.info(f"[{request_id}] Found existing customer: {customer_id}")
+                            break
+                except Exception as lookup_err:
+                    logger.error(f"[{request_id}] Customer lookup failed: {lookup_err}")
             if not customer_id:
+                logger.error(f"[{request_id}] Customer creation failed: {error_msg}")
                 return error_response('Failed to create customer', 'CUSTOMER_ERROR', 500)
+        except razorpay.errors.ServerError as e:
+            # Razorpay server error during customer creation
+            logger.error(f"[{request_id}] Razorpay ServerError during customer creation: {e}")
+            return error_response(
+                'Payment service temporarily unavailable. Please try again.',
+                'RAZORPAY_CUSTOMER_ERROR',
+                503
+            )
+        except Exception as e:
+            # Catch-all for unexpected errors
+            logger.error(f"[{request_id}] Unexpected error creating customer: {e}")
+            return error_response('Failed to create customer', 'CUSTOMER_ERROR', 500)
+        
+        # CRITICAL: Validate customer_id before proceeding
+        if not customer_id:
+            logger.error(f"[{request_id}] customer_id is None - cannot create subscription")
+            return error_response('Customer creation failed', 'CUSTOMER_ERROR', 500)
         
         # Create subscription
         subscription_data = {
