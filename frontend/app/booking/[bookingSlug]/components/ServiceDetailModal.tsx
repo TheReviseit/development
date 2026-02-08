@@ -96,7 +96,11 @@ export default function ServiceDetailModal({
       };
 
   const modalVariants = prefersReducedMotion
-    ? { visible: { opacity: 1 }, hidden: { opacity: 0 } }
+    ? {
+        visible: { opacity: 1 },
+        hidden: { opacity: 0 },
+        exit: { opacity: 0 },
+      }
     : {
         hidden: { opacity: 0, y: 50, scale: 0.95 },
         visible: {
