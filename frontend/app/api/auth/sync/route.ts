@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { verifyIdToken } from "@/lib/firebase-admin";
+import { verifyIdToken, adminAuth } from "@/lib/firebase-admin";
 import { createClient } from "@supabase/supabase-js";
+import { cookies } from "next/headers";
 import { sendEmail } from "@/lib/email/resend";
 import { generateEmailHtml } from "@/lib/email/email-templates";
 import type {
@@ -32,10 +33,14 @@ export async function POST(request: NextRequest) {
     const body: SyncUserRequest = await request.json();
     const { idToken } = body;
 
+    // CRITICAL: Explicit allowCreate blocking (fail closed, not open)
+    // If not explicitly set to true, user creation is BLOCKED
+    const allowCreate = body.allowCreate === true;
+
     if (!idToken) {
       return NextResponse.json(
         { success: false, error: "Missing idToken in request body" },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
@@ -43,9 +48,16 @@ export async function POST(request: NextRequest) {
     const verificationResult = await verifyIdToken(idToken);
 
     if (!verificationResult.success || !verificationResult.data) {
+      const firebaseUid = "UNKNOWN";
+      console.info("[AUTH_SYNC_VERDICT]", {
+        firebaseUid,
+        allowCreate,
+        result: "TOKEN_INVALID",
+        timestamp: new Date().toISOString(),
+      });
       return NextResponse.json(
         { success: false, error: "Invalid or expired Firebase token" },
-        { status: 401 }
+        { status: 401 },
       );
     }
 
@@ -68,7 +80,7 @@ export async function POST(request: NextRequest) {
       console.error("Missing Supabase environment variables");
       return NextResponse.json(
         { success: false, error: "Server configuration error" },
-        { status: 500 }
+        { status: 500 },
       );
     }
 
@@ -79,7 +91,7 @@ export async function POST(request: NextRequest) {
       },
     });
 
-    // Upsert user in Supabase
+    // CRITICAL: Check if user exists in DB BEFORE creating session cookie
     const { data: existingUser, error: fetchError } = await supabase
       .from("users")
       .select("*")
@@ -89,6 +101,30 @@ export async function POST(request: NextRequest) {
     let userData: Partial<SupabaseUser>;
 
     if (existingUser) {
+      // User exists - create session cookie and update record
+      try {
+        const expiresInMs = 60 * 60 * 24 * 5 * 1000; // 5 days
+        const expiresInSeconds = 60 * 60 * 24 * 5;
+
+        const sessionCookie = await adminAuth.createSessionCookie(idToken, {
+          expiresIn: expiresInMs,
+        });
+
+        const cookieStore = await cookies();
+        cookieStore.set("session", sessionCookie, {
+          maxAge: expiresInSeconds,
+          httpOnly: true,
+          secure: process.env.NODE_ENV === "production",
+          path: "/",
+          sameSite: "lax",
+        });
+
+        console.log("[AUTH] Session cookie established for existing user");
+      } catch (cookieError) {
+        console.error("[AUTH] Failed to create session cookie:", cookieError);
+        // Don't fail sync if cookie creation fails
+      }
+
       // Update existing user - only update columns that exist in public.users table
       userData = {
         full_name: fullName,
@@ -118,9 +154,18 @@ export async function POST(request: NextRequest) {
             details: updateError.message,
             code: updateError.code,
           },
-          { status: 500 }
+          { status: 500 },
         );
       }
+
+      console.info("[AUTH_SYNC_VERDICT]", {
+        firebaseUid,
+        email,
+        allowCreate,
+        result: "AUTHENTICATED",
+        userAction: "UPDATED",
+        timestamp: new Date().toISOString(),
+      });
 
       console.log("✅ User synced successfully to Supabase");
       return NextResponse.json<SyncUserResponse>({
@@ -128,6 +173,65 @@ export async function POST(request: NextRequest) {
         user: updatedUser as SupabaseUser,
       });
     } else {
+      // User does NOT exist in database
+      // CRITICAL: Only create if allowCreate === true (fail closed)
+      if (!allowCreate) {
+        console.warn(
+          `[AUTH] User not found in DB and allowCreate=false. Firebase UID: ${firebaseUid}, Email: ${email}`,
+        );
+
+        console.info("[AUTH_SYNC_VERDICT]", {
+          firebaseUid,
+          email,
+          allowCreate,
+          result: "USER_NOT_FOUND",
+          timestamp: new Date().toISOString(),
+        });
+
+        // Clear session cookie on server side
+        const cookieStore = await cookies();
+        cookieStore.delete("session");
+        console.log("[AUTH] Session cookie cleared (user not found)");
+
+        const response = NextResponse.json(
+          {
+            success: false,
+            error: "User account not found in database",
+            code: "USER_NOT_FOUND",
+            message:
+              "Your account was not fully created. Please sign up again to complete setup.",
+          },
+          { status: 404 },
+        );
+
+        // Ensure cookie is cleared in response as well
+        response.cookies.delete("session");
+        return response;
+      }
+      // allowCreate === true, proceed with user creation
+      // Create session cookie for new user
+      try {
+        const expiresInMs = 60 * 60 * 24 * 5 * 1000; // 5 days
+        const expiresInSeconds = 60 * 60 * 24 * 5;
+
+        const sessionCookie = await adminAuth.createSessionCookie(idToken, {
+          expiresIn: expiresInMs,
+        });
+
+        const cookieStore = await cookies();
+        cookieStore.set("session", sessionCookie, {
+          maxAge: expiresInSeconds,
+          httpOnly: true,
+          secure: process.env.NODE_ENV === "production",
+          path: "/",
+          sameSite: "lax",
+        });
+
+        console.log("[AUTH] Session cookie established for new user");
+      } catch (cookieError) {
+        console.error("[AUTH] Failed to create session cookie:", cookieError);
+      }
+
       // Insert new user - only use columns that exist in public.users table
       userData = {
         firebase_uid: firebaseUid,
@@ -158,15 +262,38 @@ export async function POST(request: NextRequest) {
           details: insertError.details,
           hint: insertError.hint,
         });
+
+        // Check if it's a duplicate key error (user exists with different firebase_uid)
+        if (insertError.code === "23505") {
+          return NextResponse.json(
+            {
+              success: false,
+              error: "User already exists with a different account",
+              code: "DUPLICATE_USER",
+            },
+            { status: 409 },
+          );
+        }
+
         return NextResponse.json(
           {
             success: false,
             error: "Failed to create user record",
+            code: "INSERT_FAILED",
             details: insertError.message,
           },
-          { status: 500 }
+          { status: 500 },
         );
       }
+
+      console.info("[AUTH_SYNC_VERDICT]", {
+        firebaseUid,
+        email,
+        allowCreate,
+        result: "AUTHENTICATED",
+        userAction: "CREATED",
+        timestamp: new Date().toISOString(),
+      });
 
       console.log(`🎉 New user created: ${email} (${fullName})`);
 
@@ -194,7 +321,7 @@ export async function POST(request: NextRequest) {
               } else {
                 console.error(
                   `❌ Failed to send welcome email to ${email}:`,
-                  result.error
+                  result.error,
                 );
               }
             })
@@ -218,7 +345,7 @@ export async function POST(request: NextRequest) {
     console.error("Sync API error:", error);
     return NextResponse.json(
       { success: false, error: error.message || "Internal server error" },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

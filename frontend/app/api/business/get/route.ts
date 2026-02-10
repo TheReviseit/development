@@ -65,6 +65,9 @@ export async function GET(request: NextRequest) {
         razorpayKeySecret: supabaseData.razorpay_key_secret,
         paymentsEnabled: supabaseData.payments_enabled,
         brandColor: supabaseData.brand_color,
+        // ✅ URL slug for canonical store URLs
+        urlSlug: supabaseData.url_slug,
+        banners: supabaseData.banners,
       };
       return NextResponse.json({ data: frontendData, source: "supabase" });
     }

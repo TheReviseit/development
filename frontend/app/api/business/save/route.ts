@@ -153,6 +153,29 @@ export async function POST(request: NextRequest) {
         .join(", ")}]`,
     );
 
+    // ✅ EXPLICIT CONSENT: Check if user confirmed slug update in UI
+    const allowSlugUpdate = businessData.allow_slug_update === true;
+
+    // Set session variable for database trigger (if slug update allowed)
+    if (
+      allowSlugUpdate &&
+      ("businessName" in businessData || "business_name" in businessData)
+    ) {
+      try {
+        // Set PostgreSQL session variable for this transaction
+        // This allows the trigger to regenerate slug
+        await supabase.rpc("set_config", {
+          setting: "app.allow_slug_regeneration",
+          value: "true",
+          is_local: true,
+        });
+        console.log("✅ Slug regeneration ALLOWED for this transaction");
+      } catch (configError) {
+        console.warn("⚠️ Could not set session variable:", configError);
+        // Continue anyway - worst case slug won't update
+      }
+    }
+
     // Upsert to Supabase businesses table
     const { error: supabaseError } = await supabase
       .from("businesses")
@@ -167,6 +190,44 @@ export async function POST(request: NextRequest) {
     }
 
     console.log(`✅ Saved business data to Supabase for user: ${userId}`);
+
+    // ✅ CACHE INVALIDATION: Clear slug resolver cache if business_name changed
+    if ("businessName" in businessData || "business_name" in businessData) {
+      try {
+        const backendUrl = process.env.BACKEND_URL || "http://localhost:5000";
+        const internalApiKey = process.env.INTERNAL_API_KEY;
+
+        if (!internalApiKey) {
+          console.info(
+            "ℹ️ INTERNAL_API_KEY not set - cache invalidation skipped",
+          );
+        } else {
+          const response = await fetch(
+            `${backendUrl}/api/invalidate-slug-cache`,
+            {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                "X-Internal-API-Key": internalApiKey,
+              },
+              body: JSON.stringify({ user_id: userId }),
+            },
+          );
+
+          if (response.ok) {
+            console.log("✅ Slug cache invalidated");
+          } else {
+            console.info(
+              "ℹ️ Cache invalidation failed (non-critical):",
+              await response.text(),
+            );
+          }
+        }
+      } catch (error) {
+        console.info("ℹ️ Cache invalidation error (non-critical):", error);
+        // Don't fail the save if cache invalidation fails
+      }
+    }
 
     // NOTE: Products now saved directly via /api/products endpoints
     // No sync needed here

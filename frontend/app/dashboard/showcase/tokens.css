@@ -1,0 +1,246 @@
+/**
+ * Showcase Design Token System - DARK THEME
+ * Single source of truth for colors, typography, spacing, and component styles
+ * Import this file in all showcase CSS modules for consistency
+ */
+
+/* ==================== Color Palette - DARK THEME ==================== */
+
+:root {
+  /* Primary Gradient (Accent) */
+  --showcase-primary-start: #667eea;
+  --showcase-primary-end: #764ba2;
+  --showcase-primary-gradient: linear-gradient(
+    135deg,
+    #667eea 0%,
+    #764ba2 100%
+  );
+
+  /* Neutrals - PURE BLACK Theme */
+  --showcase-bg-primary: #000000;
+  --showcase-bg-secondary: #080808;
+  --showcase-bg-tertiary: #111111;
+  --showcase-bg-hover: rgba(255, 255, 255, 0.04);
+  --showcase-bg-card: #050505;
+
+  /* Text Colors - Light on Dark */
+  --showcase-text-primary: #ffffff;
+  --showcase-text-secondary: rgba(255, 255, 255, 0.9);
+  --showcase-text-tertiary: rgba(255, 255, 255, 0.7);
+  --showcase-text-muted: rgba(255, 255, 255, 0.5);
+
+  /* Borders - Subtle on Dark */
+  --showcase-border-light: rgba(255, 255, 255, 0.08);
+  --showcase-border-medium: rgba(255, 255, 255, 0.15);
+  --showcase-border-dark: rgba(255, 255, 255, 0.25);
+
+  /* Semantic Colors */
+  --showcase-success: #00c853;
+  --showcase-success-bg: rgba(0, 200, 83, 0.15);
+  --showcase-success-text: #4caf50;
+
+  --showcase-error: #ef4444;
+  --showcase-error-bg: rgba(239, 68, 68, 0.15);
+  --showcase-error-text: #fca5a5;
+
+  --showcase-warning: #f59e0b;
+  --showcase-warning-bg: rgba(245, 158, 11, 0.15);
+  --showcase-warning-text: #fbbf24;
+
+  --showcase-info: #3b82f6;
+  --showcase-info-bg: rgba(59, 130, 246, 0.15);
+  --showcase-info-text: #60a5fa;
+
+  /* Shadows - Subtle on Dark */
+  --showcase-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
+  --showcase-shadow: 0 2px 8px rgba(0, 0, 0, 0.5);
+  --showcase-shadow-md: 0 4px 12px rgba(0, 0, 0, 0.6);
+  --showcase-shadow-lg: 0 8px 16px rgba(0, 0, 0, 0.7);
+  --showcase-shadow-primary: 0 4px 12px rgba(102, 126, 234, 0.4);
+
+  /* ==================== Typography ==================== */
+
+  --showcase-font-size-xs: 0.75rem; /* 12px */
+  --showcase-font-size-sm: 0.875rem; /* 14px */
+  --showcase-font-size-base: 0.95rem; /* 15.2px */
+  --showcase-font-size-md: 1rem; /* 16px */
+  --showcase-font-size-lg: 1.125rem; /* 18px */
+  --showcase-font-size-xl: 1.25rem; /* 20px */
+  --showcase-font-size-2xl: 1.5rem; /* 24px */
+  --showcase-font-size-3xl: 1.75rem; /* 28px */
+  --showcase-font-size-4xl: 2rem; /* 32px */
+
+  --showcase-font-weight-normal: 400;
+  --showcase-font-weight-medium: 500;
+  --showcase-font-weight-semibold: 600;
+  --showcase-font-weight-bold: 700;
+
+  --showcase-line-height-tight: 1.25;
+  --showcase-line-height-normal: 1.5;
+  --showcase-line-height-relaxed: 1.75;
+
+  /* ==================== Spacing Scale ==================== */
+
+  --showcase-space-xs: 0.25rem; /* 4px */
+  --showcase-space-sm: 0.5rem; /* 8px */
+  --showcase-space-md: 0.75rem; /* 12px */
+  --showcase-space-base: 1rem; /* 16px */
+  --showcase-space-lg: 1.25rem; /* 20px */
+  --showcase-space-xl: 1.5rem; /* 24px */
+  --showcase-space-2xl: 2rem; /* 32px */
+  --showcase-space-3xl: 2.5rem; /* 40px */
+  --showcase-space-4xl: 3rem; /* 48px */
+
+  /* ==================== Border Radius ==================== */
+
+  --showcase-radius-sm: 4px;
+  --showcase-radius: 6px;
+  --showcase-radius-md: 8px;
+  --showcase-radius-lg: 12px;
+  --showcase-radius-xl: 14px;
+  --showcase-radius-full: 9999px;
+
+  /* ==================== Transitions ==================== */
+
+  --showcase-transition-fast: 0.15s ease;
+  --showcase-transition-base: 0.2s ease;
+  --showcase-transition-slow: 0.3s ease;
+}
+
+/* ==================== Component Styles ==================== */
+
+/* Buttons */
+.showcase-btn {
+  padding: 0.65rem 1.25rem;
+  border-radius: var(--showcase-radius);
+  font-weight: var(--showcase-font-weight-semibold);
+  font-size: var(--showcase-font-size-sm);
+  cursor: pointer;
+  transition: all var(--showcase-transition-base);
+  border: none;
+  outline: none;
+}
+
+.showcase-btn-primary {
+  background: var(--showcase-primary-gradient);
+  color: white;
+  box-shadow: var(--showcase-shadow);
+}
+
+.showcase-btn-primary:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: var(--showcase-shadow-primary);
+}
+
+.showcase-btn-secondary {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--showcase-text-primary);
+  border: 1px solid var(--showcase-border-medium);
+}
+
+.showcase-btn-secondary:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.12);
+  border-color: var(--showcase-border-dark);
+}
+
+.showcase-btn-ghost {
+  background: transparent;
+  color: var(--showcase-text-secondary);
+  border: 1px solid var(--showcase-border-light);
+}
+
+.showcase-btn-ghost:hover:not(:disabled) {
+  background: var(--showcase-bg-hover);
+  border-color: var(--showcase-border-medium);
+}
+
+.showcase-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Form Elements */
+.showcase-input,
+.showcase-textarea,
+.showcase-select {
+  width: 100%;
+  padding: 0.7rem;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--showcase-border-medium);
+  border-radius: var(--showcase-radius);
+  font-size: var(--showcase-font-size-base);
+  color: var(--showcase-text-primary);
+  transition: all var(--showcase-transition-base);
+  font-family: inherit;
+}
+
+.showcase-input::placeholder,
+.showcase-textarea::placeholder {
+  color: var(--showcase-text-muted);
+}
+
+.showcase-input:focus,
+.showcase-textarea:focus,
+.showcase-select:focus {
+  outline: none;
+  border-color: var(--showcase-primary-start);
+  background: rgba(255, 255, 255, 0.08);
+  box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.2);
+}
+
+.showcase-textarea {
+  resize: vertical;
+  min-height: 90px;
+  line-height: var(--showcase-line-height-normal);
+}
+
+/* Labels */
+.showcase-label {
+  display: block;
+  font-weight: var(--showcase-font-weight-medium);
+  color: var(--showcase-text-secondary);
+  margin-bottom: var(--showcase-space-sm);
+  font-size: var(--showcase-font-size-sm);
+}
+
+.showcase-hint {
+  display: block;
+  margin-top: var(--showcase-space-xs);
+  font-size: var(--showcase-font-size-xs);
+  color: var(--showcase-text-muted);
+}
+
+/* Cards */
+.showcase-card {
+  background: var(--showcase-bg-card);
+  border-radius: var(--showcase-radius-lg);
+  border: 1px solid var(--showcase-border-light);
+  box-shadow: var(--showcase-shadow);
+  transition: all var(--showcase-transition-slow);
+}
+
+.showcase-card:hover {
+  transform: translateY(-4px);
+  box-shadow: var(--showcase-shadow-lg);
+  border-color: var(--showcase-border-medium);
+}
+
+/* Error Messages */
+.showcase-error {
+  padding: 0.875rem;
+  background: var(--showcase-error-bg);
+  color: var(--showcase-error-text);
+  border-radius: var(--showcase-radius);
+  border: 1px solid var(--showcase-error);
+  font-size: var(--showcase-font-size-sm);
+}
+
+/* Success Messages */
+.showcase-success {
+  padding: 0.875rem;
+  background: var(--showcase-success-bg);
+  color: var(--showcase-success-text);
+  border-radius: var(--showcase-radius);
+  border: 1px solid var(--showcase-success);
+  font-size: var(--showcase-font-size-sm);
+}

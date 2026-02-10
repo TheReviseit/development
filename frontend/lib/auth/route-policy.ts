@@ -40,6 +40,8 @@ export const PUBLIC_ROUTES: string[] = [
   "/payment-success",
   "/error",
   "/offline",
+  "/booking", // Customer-facing booking pages
+  "/showcase", // Public showcase pages
 ];
 
 /**

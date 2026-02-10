@@ -89,6 +89,8 @@ const SHARED_PUBLIC_ROUTES = [
   "/verify-email",
   "/reset-password",
   "/forgot-password",
+  "/booking", // Customer-facing booking pages
+  "/showcase", // Public showcase pages
 ];
 
 // =============================================================================

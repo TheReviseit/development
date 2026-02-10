@@ -60,6 +60,7 @@ const PUBLIC_ROUTES = [
   "/offline",
   "/docs",
   "/booking", // Customer-facing booking pages
+  "/showcase", // Public showcase pages
   "/onboarding-embedded",
   "/manifest.webmanifest",
   "/sw.js",
@@ -84,6 +85,7 @@ const PUBLIC_API_ROUTES = [
   "/api/v1", // OTP API proxy routes
   "/api/whatsapp", // WhatsApp webhook and public endpoints
   "/api/booking", // Public booking page APIs
+  "/api/showcase", // Public showcase page APIs
 ];
 
 // =============================================================================
@@ -161,6 +163,36 @@ function redirectToDashboard(
 }
 
 // =============================================================================
+// USERNAME 301 REDIRECT HELPERS (SEO-Critical)
+// =============================================================================
+
+const BACKEND_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
+const UUID_PATTERN = /^[a-zA-Z0-9-]{20,}$/; // Detect Firebase UIDs (20+ chars)
+
+async function getUsernameByUserId(userId: string): Promise<string | null> {
+  try {
+    const response = await fetch(
+      `${BACKEND_URL}/api/username/resolve/${userId}`,
+      {
+        headers: {
+          "Cache-Control": "max-age=300", // Cache for 5 minutes
+        },
+      },
+    );
+
+    if (!response.ok) {
+      return null;
+    }
+
+    const data = await response.json();
+    return data.username || null;
+  } catch (error) {
+    console.error("Failed to resolve username:", error);
+    return null;
+  }
+}
+
+// =============================================================================
 // PROXY (Main export - Next.js 16+ auto-detects this)
 // =============================================================================
 
@@ -169,6 +201,39 @@ export async function proxy(request: NextRequest) {
   const hostname = request.nextUrl.hostname;
   // Only match actual API endpoints (/api/...), NOT /apis (which is a page)
   const isApiPath = pathname.startsWith("/api/") || pathname === "/api";
+
+  // ==========================================================================
+  // STEP 0: Username-based 301 redirects (SEO-Critical)
+  // ==========================================================================
+  const storeMatch = pathname.match(/^\/store\/([^\/]+)/);
+  const showcaseMatch = pathname.match(/^\/showcase\/([^\/]+)/);
+
+  if (storeMatch || showcaseMatch) {
+    const identifier = storeMatch?.[1] || showcaseMatch?.[1];
+    const routeType = storeMatch ? "store" : "showcase";
+
+    // Check if identifier looks like a Firebase UID (long, 20+ chars)
+    if (identifier && UUID_PATTERN.test(identifier)) {
+      console.log(`🔍 Detected old UID URL: /${routeType}/${identifier}`);
+
+      // Resolve to username
+      const username = await getUsernameByUserId(identifier);
+
+      if (username) {
+        // Build new URL with username
+        const newPath = pathname.replace(identifier, username);
+        const newUrl = new URL(newPath, request.url);
+
+        // Preserve query params
+        newUrl.search = request.nextUrl.search;
+
+        console.log(`✅ 301 Redirect: ${pathname} → ${newPath}`);
+
+        // ✅ SERVER-SIDE 301 (SEO-friendly permanent redirect)
+        return NextResponse.redirect(newUrl, 301);
+      }
+    }
+  }
 
   // ==========================================================================
   // STEP 1: Domain-aware routing (delegated to domain-policy.ts)

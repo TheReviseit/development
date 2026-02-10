@@ -22,7 +22,7 @@ export async function GET(request: NextRequest) {
     if (!authResult.success) {
       const response = NextResponse.json(
         { error: authResult.error || "Unauthorized" },
-        { status: 401 }
+        { status: 401 },
       );
       // Clear invalid session cookie
       if (authResult.shouldClearSession) {
@@ -35,11 +35,18 @@ export async function GET(request: NextRequest) {
 
     const user = await getUserByFirebaseUID(firebaseUID);
 
+    // CRITICAL FIX: Return 404 when user not found
+    // Frontend distinguishes "onboarding incomplete" from "user doesn't exist"
     if (!user) {
-      return NextResponse.json({
-        onboardingCompleted: false,
-        whatsappConnected: false,
-      });
+      return NextResponse.json(
+        {
+          error: "USER_NOT_FOUND",
+          code: "USER_NOT_FOUND",
+          userExists: false,
+          message: "User account not found in database",
+        },
+        { status: 404 },
+      );
     }
 
     // Check if user has WhatsApp accounts connected

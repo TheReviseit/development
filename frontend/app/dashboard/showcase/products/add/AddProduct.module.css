@@ -1,0 +1,185 @@
+@import "../../tokens.css";
+
+.container {
+  padding: 0;
+  max-width: 100%;
+  margin: 0;
+  background: var(--showcase-bg-primary);
+  min-height: 100vh;
+}
+
+.header {
+  margin-bottom: 1rem;
+  padding: 0 1.5rem;
+}
+
+.backButton {
+  padding: 0.5rem 1rem;
+  background: transparent;
+  color: var(--showcase-text-tertiary);
+  border: 1px solid var(--showcase-border-medium);
+  border-radius: var(--showcase-radius);
+  font-size: var(--showcase-font-size-sm);
+  cursor: pointer;
+  margin-bottom: 1rem;
+  transition: all var(--showcase-transition-base);
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.backButton:hover {
+  background: var(--showcase-bg-hover);
+  color: var(--showcase-text-primary);
+  border-color: var(--showcase-border-dark);
+}
+
+.title {
+  font-size: var(--showcase-font-size-3xl);
+  font-weight: var(--showcase-font-weight-bold);
+  color: var(--showcase-text-primary);
+  margin: 0;
+}
+
+.form {
+  background: var(--showcase-bg-card);
+  padding: 1.5rem;
+  border-radius: var(--showcase-radius-lg);
+  border: 1px solid var(--showcase-border-light);
+}
+
+.error {
+  padding: 0.875rem;
+  background: var(--showcase-error-bg);
+  color: var(--showcase-error-text);
+  border-radius: var(--showcase-radius);
+  margin-bottom: 1.25rem;
+  font-size: var(--showcase-font-size-sm);
+  border: 1px solid var(--showcase-error);
+}
+
+.loading {
+  padding: 2rem;
+  text-align: center;
+  color: var(--showcase-text-tertiary);
+  font-size: var(--showcase-font-size-base);
+}
+
+.formGroup {
+  margin-bottom: 1.25rem;
+}
+
+.label {
+  display: block;
+  font-weight: var(--showcase-font-weight-medium);
+  color: var(--showcase-text-secondary);
+  margin-bottom: 0.5rem;
+  font-size: var(--showcase-font-size-sm);
+}
+
+.hint {
+  display: block;
+  margin-top: 0.4rem;
+  font-size: var(--showcase-font-size-xs);
+  color: var(--showcase-text-muted);
+}
+
+.input,
+.textarea {
+  width: 100%;
+  padding: 0.7rem;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--showcase-border-medium);
+  border-radius: var(--showcase-radius);
+  font-size: var(--showcase-font-size-base);
+  transition: all var(--showcase-transition-base);
+  color: var(--showcase-text-primary);
+  font-family: inherit;
+}
+
+.input::placeholder,
+.textarea::placeholder {
+  color: var(--showcase-text-muted);
+}
+
+.input:focus,
+.textarea:focus {
+  outline: none;
+  border-color: var(--showcase-primary-start);
+  background: rgba(255, 255, 255, 0.08);
+  box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.2);
+}
+
+.textarea {
+  resize: vertical;
+  min-height: 90px;
+  line-height: var(--showcase-line-height-normal);
+}
+
+.checkboxLabel {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  cursor: pointer;
+  font-size: var(--showcase-font-size-sm);
+  color: var(--showcase-text-secondary);
+}
+
+.checkboxLabel input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  cursor: pointer;
+  accent-color: var(--showcase-primary-start);
+}
+
+.actions {
+  display: flex;
+  gap: 0.75rem;
+  justify-content: flex-end;
+  padding-top: 1.25rem;
+  border-top: 1px solid var(--showcase-border-light);
+  margin-top: 1.25rem;
+}
+
+.cancelButton,
+.submitButton {
+  padding: 0.65rem 1.25rem;
+  border-radius: var(--showcase-radius);
+  font-weight: var(--showcase-font-weight-semibold);
+  cursor: pointer;
+  transition: all var(--showcase-transition-base);
+  font-size: var(--showcase-font-size-sm);
+  border: none;
+}
+
+.cancelButton {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--showcase-text-primary);
+  border: 1px solid var(--showcase-border-medium);
+}
+
+.cancelButton:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.12);
+  border-color: var(--showcase-border-dark);
+}
+
+.cancelButton:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.submitButton {
+  background: var(--showcase-primary-gradient);
+  color: white;
+  box-shadow: var(--showcase-shadow);
+}
+
+.submitButton:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: var(--showcase-shadow-primary);
+}
+
+.submitButton:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}

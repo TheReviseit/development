@@ -447,6 +447,7 @@ export default function BotSettingsView() {
     useState(false);
   const [orderBookingEnabled, setOrderBookingEnabled] = useState(false);
   const [productsEnabled, setProductsEnabled] = useState(false);
+  const [showcaseEnabled, setShowcaseEnabled] = useState(false);
   const [capabilitiesLoading, setCapabilitiesLoading] = useState(false);
   const [capabilityExpanded, setCapabilityExpanded] = useState(false);
   const [alertToast, setAlertToast] = useState<{
@@ -711,6 +712,10 @@ export default function BotSettingsView() {
             if (result.data.products_enabled !== undefined) {
               setProductsEnabled(result.data.products_enabled);
             }
+            // Load showcase enabled state
+            if (result.data.showcase_enabled !== undefined) {
+              setShowcaseEnabled(result.data.showcase_enabled);
+            }
           }
         }
       } catch (error) {
@@ -854,6 +859,60 @@ export default function BotSettingsView() {
           show: true,
           variant: "success",
           title: newValue ? "Products Enabled!" : "Products Disabled!",
+          description: "",
+        });
+      } else {
+        setAlertToast({
+          show: true,
+          variant: "warning",
+          title: newValue ? "Enabled Locally" : "Disabled Locally",
+          description: "",
+        });
+      }
+    } catch (error) {
+      setAlertToast({
+        show: true,
+        variant: "warning",
+        title: newValue ? "Enabled Locally" : "Disabled Locally",
+        description: "",
+      });
+    } finally {
+      setCapabilitiesLoading(false);
+    }
+  };
+
+  // Handle showcase toggle
+  const handleShowcaseToggle = async () => {
+    const newValue = !showcaseEnabled;
+    setCapabilitiesLoading(true);
+
+    // Immediately update local state for instant UI feedback
+    setShowcaseEnabled(newValue);
+
+    // Immediately dispatch event to update sidebar (don't wait for API)
+    window.dispatchEvent(
+      new CustomEvent("ai-capabilities-updated", {
+        detail: {
+          appointment_booking_enabled: appointmentBookingEnabled,
+          order_booking_enabled: orderBookingEnabled,
+          products_enabled: productsEnabled,
+          showcase_enabled: newValue,
+        },
+      }),
+    );
+
+    try {
+      const response = await fetch("/api/ai-capabilities", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ showcase_enabled: newValue }),
+      });
+
+      if (response.ok) {
+        setAlertToast({
+          show: true,
+          variant: "success",
+          title: newValue ? "Showcase Enabled!" : "Showcase Disabled!",
           description: "",
         });
       } else {
@@ -3284,6 +3343,55 @@ export default function BotSettingsView() {
                   can manage your product catalog. Your AI assistant can
                   recommend products to customers.
                 </p>
+              </div>
+            </div>
+
+            {/* Showcase Toggle */}
+            <div
+              className={`${styles.capabilitiesSection}`}
+              style={{ cursor: "auto" }}
+            >
+              <div className={styles.capabilityRow}>
+                <div className={styles.capabilityInfo}>
+                  <div className={styles.capabilityTitle}>
+                    <svg
+                      width="20"
+                      height="20"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                    >
+                      <path
+                        d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      />
+                      <polyline
+                        points="9 22 9 12 15 12 15 22"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      />
+                    </svg>
+                    <span>Showcase</span>
+                  </div>
+                  <p className={styles.capabilityDesc}>
+                    Create a public showcase of your products with customizable
+                    display settings
+                  </p>
+                </div>
+                <label
+                  className={styles.toggleSwitch}
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <input
+                    type="checkbox"
+                    checked={showcaseEnabled}
+                    onChange={handleShowcaseToggle}
+                    disabled={capabilitiesLoading}
+                  />
+                  <span className={styles.toggleSlider}></span>
+                </label>
               </div>
             </div>
           </div>

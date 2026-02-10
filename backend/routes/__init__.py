@@ -14,6 +14,8 @@ from .messaging import register_messaging_routes
 from .orders import orders_bp
 from .payments import payments_bp
 from .inventory import inventory_bp
+from .showcase_api import showcase_bp
+from .slug_cache import slug_cache_bp  # ✅ Slug cache invalidation
 
 __all__ = [
     'templates_bp',
@@ -27,6 +29,8 @@ __all__ = [
     'orders_bp',
     'payments_bp',
     'inventory_bp',
+    'showcase_bp',
+    'slug_cache_bp',  # ✅ Export slug cache
 ]
 
 
@@ -41,9 +45,11 @@ def register_routes(app):
     app.register_blueprint(orders_bp)
     app.register_blueprint(payments_bp)
     app.register_blueprint(inventory_bp)
+    app.register_blueprint(showcase_bp)  # Enterprise showcase system
+    app.register_blueprint(slug_cache_bp)  # ✅ Slug cache invalidation
     register_test_routes(app)  # Register test push endpoint
     register_messaging_routes(app)  # Register messaging endpoint
-    print("✅ Registered API routes: templates, contacts, analytics, campaigns, bulk-campaigns, appointments, orders, payments, inventory, test-push, messaging")
+    print("✅ Registered API routes: templates, contacts, analytics, campaigns, bulk-campaigns, appointments, orders, payments, inventory, showcase, slug-cache, test-push, messaging")
 
 
 

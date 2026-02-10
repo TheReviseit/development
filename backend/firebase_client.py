@@ -50,7 +50,8 @@ def initialize_firebase():
         else:
             # Option 2: Look for credential file in common locations
             credential_paths = [
-                os.path.join(os.path.dirname(__file__), '..', 'frontend', 'credentials', 'reviseit-def4c-firebase-adminsdk-fbsvc-02f67295ed.json'),
+                # UPDATED: Use flowauxi credentials (correct project)
+                os.path.join(os.path.dirname(__file__), 'flowauxi-659d62acabdc.json'),
                 os.path.join(os.path.dirname(__file__), 'credentials', 'firebase-credentials.json'),
                 os.getenv('FIREBASE_CREDENTIALS_PATH', ''),
             ]

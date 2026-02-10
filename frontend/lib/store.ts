@@ -103,6 +103,7 @@ export interface StoreBanner {
 export interface PublicStore {
   id: string;
   businessName: string;
+  canonicalSlug?: string; // ✅ Canonical URL slug for SEO and redirects
   logoUrl?: string;
   bannerUrl?: string;
   storeActive: boolean;
@@ -202,11 +203,71 @@ export async function getStoreBySlug(
   try {
     const supabase = getSupabase();
 
+    // ✅ ENTERPRISE SLUG RESOLUTION
+    // Normalize input for case-insensitive matching
+    const normalized = storeSlug.toLowerCase().trim();
+    let userId: string;
+    let canonicalSlug: string = storeSlug;
+
+    // STEP 1: Try businesses.url_slug_lower (PRIMARY - canonical URL)
+    const { data: businessBySlug } = await supabase
+      .from("businesses")
+      .select("user_id, url_slug")
+      .eq("url_slug_lower", normalized)
+      .limit(1)
+      .maybeSingle();
+
+    if (businessBySlug && businessBySlug.url_slug) {
+      userId = businessBySlug.user_id;
+      canonicalSlug = businessBySlug.url_slug; // Use actual slug (not normalized)
+      console.log(
+        `[store.ts] ✅ Resolved via business slug: ${normalized} → ${canonicalSlug}`,
+      );
+    } else {
+      // STEP 2: Try users.username_lower (LEGACY fallback)
+      const { data: userByUsername } = await supabase
+        .from("users")
+        .select("firebase_uid, username")
+        .eq("username_lower", normalized)
+        .limit(1)
+        .maybeSingle();
+
+      if (userByUsername) {
+        userId = userByUsername.firebase_uid;
+
+        // Check if this user has a business slug
+        const { data: bizData } = await supabase
+          .from("businesses")
+          .select("url_slug")
+          .eq("user_id", userId)
+          .limit(1)
+          .maybeSingle();
+
+        if (bizData && bizData.url_slug) {
+          // User has a slug - this should be the canonical URL
+          canonicalSlug = bizData.url_slug;
+          console.log(
+            `[store.ts] 🔀 Resolved via username, canonical is slug: ${normalized} → ${canonicalSlug}`,
+          );
+        } else {
+          // No slug yet, username is canonical for now
+          canonicalSlug = userByUsername.username.toLowerCase();
+          console.log(
+            `[store.ts] 📛 Resolved via username (no slug): ${normalized}`,
+          );
+        }
+      } else {
+        // STEP 3: Fallback - treat as user_id (Firebase UID) for backward compatibility
+        userId = storeSlug;
+        console.log(`[store.ts] 🆔 Treating as Firebase UID: ${storeSlug}`);
+      }
+    }
+
     // Query Supabase businesses table by user_id
     const { data: businessData, error: businessError } = await supabase
       .from("businesses")
       .select("*")
-      .eq("user_id", storeSlug)
+      .eq("user_id", userId)
       .maybeSingle();
 
     if (businessError) {
@@ -236,7 +297,7 @@ export async function getStoreBySlug(
         variants:product_variants(*)
       `,
       )
-      .eq("user_id", storeSlug)
+      .eq("user_id", userId)
       .eq("is_deleted", false)
       .eq("is_available", true)
       .order("created_at", { ascending: false });
@@ -250,6 +311,7 @@ export async function getStoreBySlug(
       return {
         id: storeSlug,
         businessName: businessData.business_name || "Store",
+        canonicalSlug, // ✅ Include canonical slug in fallback too
         logoUrl: businessData.logo_url,
         bannerUrl: businessData.banner_url,
         storeActive: true,
@@ -329,6 +391,7 @@ export async function getStoreBySlug(
     return {
       id: storeSlug,
       businessName: businessData.business_name || "Store",
+      canonicalSlug, // ✅ Include canonical slug for redirect detection
       logoUrl: businessData.logo_url,
       bannerUrl: businessData.banner_url,
       storeActive: true,

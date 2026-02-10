@@ -118,6 +118,16 @@ export default function LoginPage() {
   const [checkingSession, setCheckingSession] = useState(true);
   const router = useRouter();
 
+  // Timeout protection: if session check takes >8s, show login form anyway
+  useEffect(() => {
+    if (!checkingSession) return;
+    const timeout = setTimeout(() => {
+      console.warn("[LOGIN] Session check timeout — showing login form");
+      setCheckingSession(false);
+    }, 8000);
+    return () => clearTimeout(timeout);
+  }, [checkingSession]);
+
   /**
    * Enterprise-grade session validation on mount
    *
