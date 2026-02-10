@@ -37,6 +37,24 @@ const PRODUCT_SEO = {
       "AI-powered WhatsApp automation platform. Automate messaging, manage leads, and scale your business.",
     ogImage: "https://flowauxi.com/og-image.png",
   },
+  shop: {
+    titleSuffix: "Flowauxi Shop",
+    defaultDescription:
+      "Manage your products, orders, and inventory with Flowauxi's e-commerce platform. Streamline your online business.",
+    ogImage: "https://shop.flowauxi.com/og-shop.png",
+  },
+  showcase: {
+    titleSuffix: "Flowauxi Showcase",
+    defaultDescription:
+      "Create beautiful product catalogs and portfolios. Showcase your products with style.",
+    ogImage: "https://showcase.flowauxi.com/og-showcase.png",
+  },
+  marketing: {
+    titleSuffix: "Flowauxi Marketing",
+    defaultDescription:
+      "Run powerful campaigns and bulk messaging. Reach your customers at scale with Flowauxi's marketing tools.",
+    ogImage: "https://marketing.flowauxi.com/og-marketing.png",
+  },
 };
 
 // =============================================================================
@@ -103,6 +121,42 @@ export function getProductStructuredData(product: ProductContext) {
     };
   }
 
+  if (product === "shop") {
+    return {
+      "@context": "https://schema.org",
+      "@type": "SoftwareApplication",
+      name: "Flowauxi Shop",
+      applicationCategory: "BusinessApplication",
+      operatingSystem: "Any",
+      url: "https://shop.flowauxi.com",
+      description: "E-commerce platform for managing products and orders",
+    };
+  }
+
+  if (product === "showcase") {
+    return {
+      "@context": "https://schema.org",
+      "@type": "SoftwareApplication",
+      name: "Flowauxi Showcase",
+      applicationCategory: "BusinessApplication",
+      operatingSystem: "Any",
+      url: "https://showcase.flowauxi.com",
+      description: "Product catalog and portfolio platform",
+    };
+  }
+
+  if (product === "marketing") {
+    return {
+      "@context": "https://schema.org",
+      "@type": "SoftwareApplication",
+      name: "Flowauxi Marketing",
+      applicationCategory: "BusinessApplication",
+      operatingSystem: "Any",
+      url: "https://marketing.flowauxi.com",
+      description: "Campaign and bulk messaging platform",
+    };
+  }
+
   return {
     "@context": "https://schema.org",
     "@type": "SoftwareApplication",
@@ -125,8 +179,22 @@ export function getProductOgTags(
   const productSeo = PRODUCT_SEO[product];
   const config = getDomainConfig(product);
 
+  // Determine site name based on product
+  let siteName = "Flowauxi";
+  if (product === "api") siteName = "Flowauxi OTP API";
+  else if (product === "shop") siteName = "Flowauxi Shop";
+  else if (product === "showcase") siteName = "Flowauxi Showcase";
+  else if (product === "marketing") siteName = "Flowauxi Marketing";
+
+  // Determine alt text based on product
+  let altText = "Flowauxi WhatsApp Automation";
+  if (product === "api") altText = "Flowauxi OTP API";
+  else if (product === "shop") altText = "Flowauxi Shop";
+  else if (product === "showcase") altText = "Flowauxi Showcase";
+  else if (product === "marketing") altText = "Flowauxi Marketing";
+
   return {
-    siteName: product === "api" ? "Flowauxi OTP API" : "Flowauxi",
+    siteName,
     type: "website",
     locale: "en_US",
     url: config.seoBase,
@@ -137,10 +205,7 @@ export function getProductOgTags(
         url: productSeo.ogImage,
         width: 1200,
         height: 630,
-        alt:
-          product === "api"
-            ? "Flowauxi OTP API"
-            : "Flowauxi WhatsApp Automation",
+        alt: altText,
       },
     ],
   };
