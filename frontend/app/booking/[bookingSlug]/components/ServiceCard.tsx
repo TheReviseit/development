@@ -34,7 +34,11 @@ interface ServiceCardProps {
 // ============================================================
 // Helper Functions
 // ============================================================
-function formatPrice(price: number, currency: string = "INR"): string {
+function formatPrice(
+  price: number | undefined | null,
+  currency: string = "INR",
+): string {
+  if (price === undefined || price === null) return "FREE";
   if (price === 0) return "FREE";
   if (currency === "INR") {
     return `₹${price.toLocaleString("en-IN")}`;

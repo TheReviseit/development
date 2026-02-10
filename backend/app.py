@@ -214,26 +214,38 @@ if PRODUCTION_CONFIG_AVAILABLE and prod_config:
     app.config.update(prod_config.to_flask_config())
 
 # Configure CORS
+# Allow requests from frontend and handle credentials (for Firebase auth)
 frontend_url = os.getenv('FRONTEND_URL', 'http://localhost:3000')
-allowed_origins = [
-    # Development URLs
-    'http://localhost:3000',
-    'http://localhost:3001',
-    # Production frontend URLs
-    'https://flowauxi.com',
-    'https://www.flowauxi.com',
-]
-# Add FRONTEND_URL from env if not already in list
-if frontend_url and frontend_url not in allowed_origins:
-    allowed_origins.append(frontend_url)
 
-CORS(app, resources={
+# Split multiple origins if comma-separated
+if ',' in frontend_url:
+    origins = [url.strip() for url in frontend_url.split(',')]
+else:
+    origins = [frontend_url]
+
+# CORS Resource configuration for all API routes
+cors_resources = {
     r"/api/*": {
-        "origins": allowed_origins,
-        "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-        "allow_headers": ["Content-Type", "Authorization", "X-User-ID", "X-User-Id", "X-Request-Id"]
+        "origins": origins,
+        "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
+        "allow_headers": [
+            "Content-Type", 
+            "Authorization", 
+            "X-Requested-With",
+            "X-User-Id",           # Frontend user identification
+            "X-Correlation-Id",    # Request tracing
+            "X-Request-Id",        # Request identification
+            "Accept",
+            "Origin",
+            "Cache-Control",
+        ],
+        "expose_headers": ["Content-Type", "Authorization"],
+        "supports_credentials": True,  # CRITICAL: Enable for Firebase auth tokens
+        "max_age": 3600
     }
-})
+}
+
+CORS(app, resources=cors_resources)
 
 # Initialize WhatsApp service
 whatsapp_service = WhatsAppService()
@@ -279,6 +291,22 @@ try:
     logger.info("💳 Console Billing routes registered (/console/billing/*)")
 except ImportError as e:
     logger.warning(f"Console Billing routes not available: {e}")
+
+# Register Username API routes
+try:
+    from routes.username_api import username_bp
+    app.register_blueprint(username_bp)
+    logger.info("👤 Username API routes registered (/api/username/*)")
+except ImportError as e:
+    logger.warning(f"Username API routes not available: {e}")
+
+# Register Username Resolve routes (for 301 redirects)
+try:
+    from routes.username_resolve import resolve_bp
+    app.register_blueprint(resolve_bp)
+    logger.info("🔗 Username Resolve routes registered (/api/username/resolve/*)")
+except ImportError as e:
+    logger.warning(f"Username Resolve routes not available: {e}")
 
 # Initialize webhook security
 webhook_security = None

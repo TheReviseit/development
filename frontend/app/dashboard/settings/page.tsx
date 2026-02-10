@@ -1,19 +1,49 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useAuth } from "@/app/components/auth/AuthProvider";
 import styles from "./settings.module.css";
 
 export default function SettingsPage() {
   const { firebaseUser, loading } = useAuth();
   const [copied, setCopied] = useState(false);
+  const [urlSlug, setUrlSlug] = useState("");
+  const [loadingSlug, setLoadingSlug] = useState(true);
 
-  // Generate store URL using user's Firebase UID
-  const storeSlug = firebaseUser?.uid || "";
+  // ✅ Fetch canonical slug from business API
+  useEffect(() => {
+    const fetchSlug = async () => {
+      try {
+        const response = await fetch("/api/business/get");
+        if (response.ok) {
+          const result = await response.json();
+          if (result.data?.urlSlug) {
+            setUrlSlug(result.data.urlSlug);
+          } else if (firebaseUser?.uid) {
+            // Fallback to UID if no slug yet
+            setUrlSlug(firebaseUser.uid);
+          }
+        }
+      } catch (error) {
+        console.error("Error fetching slug:", error);
+        if (firebaseUser?.uid) {
+          setUrlSlug(firebaseUser.uid);
+        }
+      } finally {
+        setLoadingSlug(false);
+      }
+    };
+
+    if (!loading && firebaseUser) {
+      fetchSlug();
+    }
+  }, [loading, firebaseUser]);
+
+  // ✅ Generate store URL using canonical slug
   const storeUrl =
-    typeof window !== "undefined"
-      ? `${window.location.origin}/store/${storeSlug}`
-      : `/store/${storeSlug}`;
+    typeof window !== "undefined" && urlSlug
+      ? `${window.location.origin}/store/${urlSlug}`
+      : `/store/${urlSlug || "your-store-name"}`;
 
   const handleCopyLink = async () => {
     try {
@@ -29,8 +59,8 @@ export default function SettingsPage() {
     window.open(storeUrl, "_blank");
   };
 
-  // Show loading while auth is initializing
-  if (loading) {
+  // Show loading while auth or slug is loading
+  if (loading || loadingSlug) {
     return (
       <div className={styles.settingsContainer}>
         <div className={styles.settingsHeader}>
@@ -76,7 +106,7 @@ export default function SettingsPage() {
           </div>
         </div>
 
-        {storeSlug ? (
+        {urlSlug ? (
           <div className={styles.storeLinkContainer}>
             <div className={styles.storeLinkBox}>
               <span className={styles.storeLinkText}>{storeUrl}</span>

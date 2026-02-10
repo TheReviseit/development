@@ -149,6 +149,9 @@ class InventoryService:
         Validate stock + create reservations atomically.
         Uses batch RPC for best performance.
         
+        SHOWCASE ITEMS: Items from showcase_items table are validated directly
+        without using the RPC (which only knows about products table).
+        
         Args:
             user_id: Business owner ID
             items: List of items to reserve
@@ -163,6 +166,50 @@ class InventoryService:
             return ReservationResult(success=True, message="No items to reserve")
         
         try:
+            # ═══════════════════════════════════════════════════════════════════
+            # SHOWCASE ITEM DETECTION & VALIDATION
+            # Showcase items store stock in showcase_items.commerce.inventory
+            # They don't use the products/product_variants tables at all
+            # ═══════════════════════════════════════════════════════════════════
+            showcase_items = []
+            regular_items = []
+            
+            for item in items:
+                # Check if this is a showcase item (not in products table)
+                is_showcase = self._is_showcase_item(user_id, item.product_id)
+                if is_showcase:
+                    showcase_items.append(item)
+                else:
+                    regular_items.append(item)
+            
+            # Validate showcase items directly (no RPC)
+            if showcase_items:
+                logger.info(
+                    f"📦 [Showcase] Validating {len(showcase_items)} showcase items directly"
+                )
+                showcase_validation = self._validate_showcase_items(
+                    user_id, showcase_items, correlation_id
+                )
+                if not showcase_validation.success:
+                    return ReservationResult.failed(showcase_validation.insufficient_items)
+            
+            # If NO regular items, skip the RPC entirely
+            if not regular_items:
+                logger.info(
+                    f"✅ [Showcase] All {len(showcase_items)} items validated successfully (no RPC needed)"
+                )
+                # Return success WITHOUT reservation IDs (showcase doesn't use reservations)
+                return ReservationResult(
+                    success=True,
+                    reservation_ids=[],
+                    message=f"Validated {len(showcase_items)} showcase items"
+                )
+            
+            # ═══════════════════════════════════════════════════════════════════
+            # REGULAR PRODUCT FLOW (using RPC)
+            # For items in products table, use the batch RPC for reservations
+            # ═══════════════════════════════════════════════════════════════════
+            
             # CRITICAL: Map source to valid DB values
             # DB constraint allows: 'website', 'whatsapp', 'admin', 'api'
             source_mapping = {
@@ -188,7 +235,7 @@ class InventoryService:
                     "name": item.name,
                     "quantity": item.quantity
                 }
-                for item in items
+                for item in regular_items  # Only regular items go to RPC
             ]
             
             result = self.db.rpc('reserve_stock_batch', {
@@ -335,6 +382,121 @@ class InventoryService:
                 message=f"Failed to reserve stock: {str(e)}",
                 correlation_id=correlation_id
             )
+    
+    # =========================================================================
+    # SHOWCASE ITEM HELPERS
+    # =========================================================================
+    
+    def _is_showcase_item(self, user_id: str, product_id: str) -> bool:
+        """
+        Check if a product_id is a showcase item (not in products table).
+        
+        Returns True if the item is NOT found in products table,
+        meaning it's a showcase item stored in showcase_items table.
+        """
+        try:
+            result = self.db.table('products').select('id').eq(
+                'id', product_id
+            ).eq('user_id', user_id).single().execute()
+            
+            # If product exists in products table, it's NOT a showcase item
+            return result.data is None
+        except Exception as e:
+            # If query fails, assume it's a showcase item (safer for stock validation)
+            logger.warning(f"Error checking if showcase item: {e}, assuming showcase=True")
+            return True
+    
+    def _validate_showcase_items(
+        self,
+        user_id: str,
+        items: List[StockItem],
+        correlation_id: Optional[str] = None
+    ) -> ValidationResult:
+        """
+        Validate stock for showcase items directly from showcase_items table.
+        This bypasses the RPC which only knows about products table.
+        
+        Reads stock from showcase_items.commerce.inventory.quantity
+        """
+        insufficient = []
+        
+        for item in items:
+            try:
+                # Query showcase_items table
+                result = self.db.table('showcase_items').select(
+                    'id, title, commerce'
+                ).eq('id', item.product_id).single().execute()
+                
+                if not result.data:
+                    # Item not found - treat as 0 stock
+                    logger.warning(f"Showcase item not found: {item.product_id}")
+                    insufficient.append(InsufficientStockItem(
+                        product_id=item.product_id,
+                        variant_id=None,
+                        size=None,
+                        color=None,
+                        name=item.name or "Unknown",
+                        requested=item.quantity,
+                        available=0
+                    ))
+                    continue
+                
+                # Parse commerce.inventory
+                commerce = result.data.get('commerce') or {}
+                if isinstance(commerce, str):
+                    import json
+                    try:
+                        commerce = json.loads(commerce)
+                    except:
+                        commerce = {}
+                
+                inventory = commerce.get('inventory') or {}
+                
+                # Get available stock
+                if inventory.get('status') == 'out_of_stock':
+                    available = 0
+                else:
+                    available = inventory.get('quantity', 0)
+                
+                name = result.data.get('title', item.name or 'Unknown')
+                
+                logger.info(
+                    f"🎯 [Showcase Validation] Item '{name}': {available} available, "
+                    f"{item.quantity} requested"
+                )
+                
+                # Check if sufficient stock
+                if available < item.quantity:
+                    insufficient.append(InsufficientStockItem(
+                        product_id=item.product_id,
+                        variant_id=None,
+                        size=None,
+                        color=None,
+                        name=name,
+                        requested=item.quantity,
+                        available=available
+                    ))
+                
+            except Exception as e:
+                logger.error(
+                    f"Error validating showcase item {item.product_id}: {e}",
+                    exc_info=True
+                )
+                # Treat errors as 0 stock (fail safe)
+                insufficient.append(InsufficientStockItem(
+                    product_id=item.product_id,
+                    variant_id=None,
+                    size=None,
+                    color=None,
+                    name=item.name or "Unknown",
+                    requested=item.quantity,
+                    available=0
+                ))
+        
+        if insufficient:
+            return ValidationResult.insufficient(insufficient)
+        
+        return ValidationResult.all_available(items)
     
     # =========================================================================
     # CONFIRM RESERVATION (Payment Success)

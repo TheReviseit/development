@@ -61,6 +61,7 @@ class InventoryRepository:
     AUDIT_TABLE = "inventory_audit_log"
     PRODUCTS_TABLE = "products"
     VARIANTS_TABLE = "product_variants"
+    SHOWCASE_ITEMS_TABLE = "showcase_items"  # For Showcase checkout
     
     def __init__(self, supabase_client):
         self.db = supabase_client
@@ -80,11 +81,12 @@ class InventoryRepository:
         Get available stock for a product/variant/size.
         Accounts for pending reservations.
         
-        Handles THREE cases:
+        Handles FIVE cases:
         1. variant_id + size -> check product_variants.size_stocks[size]
         2. variant_id only -> check product_variants.stock_quantity
         3. product_id + size -> check products.size_stocks[size] (no variant)
         4. product_id only -> check products.stock_quantity
+        5. FALLBACK: Check showcase_items.commerce.inventory (for Showcase checkout)
         """
         try:
             if variant_id and size:
@@ -150,6 +152,18 @@ class InventoryRepository:
                 ).eq("id", product_id).eq("user_id", user_id).single().execute()
                 
                 if not result.data:
+                    # ═══════════════════════════════════════════════════════════
+                    # Case 5: FALLBACK to showcase_items table
+                    # For Showcase checkout, items are in showcase_items, not products
+                    # ═══════════════════════════════════════════════════════════
+                    showcase_result = self._get_showcase_item_stock(product_id)
+                    if showcase_result:
+                        logger.info(
+                            f"📦 [Showcase Fallback] Found item in showcase_items: "
+                            f"{showcase_result.name} = {showcase_result.available}"
+                        )
+                        return showcase_result
+                    
                     return StockLookupResult(
                         product_id=product_id, variant_id=None, size=None,
                         name="Unknown", available=0, reserved=0
@@ -176,6 +190,58 @@ class InventoryRepository:
                 product_id=product_id, variant_id=variant_id, size=size,
                 name="Unknown", available=0, reserved=0
             )
+    
+    def _get_showcase_item_stock(self, item_id: str) -> Optional[StockLookupResult]:
+        """
+        Get stock from showcase_items table for Showcase checkout.
+        Reads commerce.inventory JSONB for stock quantity.
+        """
+        try:
+            result = self.db.table(self.SHOWCASE_ITEMS_TABLE).select(
+                "id, title, commerce, user_id"
+            ).eq("id", item_id).single().execute()
+            
+            if not result.data:
+                return None
+            
+            item = result.data
+            name = item.get("title", "Unknown")
+            
+            # Parse commerce JSONB
+            commerce = item.get("commerce") or {}
+            if isinstance(commerce, str):
+                import json
+                try:
+                    commerce = json.loads(commerce)
+                except:
+                    commerce = {}
+            
+            # Get inventory from commerce
+            inventory = commerce.get("inventory") or {}
+            
+            # Check inventory status and quantity
+            if inventory.get("status") == "out_of_stock":
+                available = 0
+            else:
+                available = inventory.get("quantity", 0)
+            
+            logger.info(
+                f"🎯 [Showcase Stock] Item '{name}': {available} available "
+                f"(inventory: {inventory})"
+            )
+            
+            return StockLookupResult(
+                product_id=item_id,
+                variant_id=None,
+                size=None,
+                name=name,
+                available=available,
+                reserved=0  # No reservations for showcase items yet
+            )
+            
+        except Exception as e:
+            logger.warning(f"Error getting showcase item stock: {e}")
+            return None
     
     def _get_reserved_count(
         self,

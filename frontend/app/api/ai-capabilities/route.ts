@@ -116,7 +116,7 @@ const DEFAULT_ORDER_FIELDS: OrderField[] = [
   },
 ];
 
-// Helper to get user ID from Firebase token
+// Helper to get Supabase user ID from Firebase session
 async function getUserId(request: NextRequest): Promise<string | null> {
   try {
     const cookieStore = await cookies();
@@ -131,7 +131,26 @@ async function getUserId(request: NextRequest): Promise<string | null> {
       // Don't log routine session expiry/invalid errors
       return null;
     }
-    return result.data!.uid;
+
+    const firebaseUid = result.data!.uid;
+
+    // Look up Supabase user ID from Firebase UID
+    const supabase = getSupabase();
+    const { data: user, error } = await supabase
+      .from("users")
+      .select("id")
+      .eq("firebase_uid", firebaseUid)
+      .single();
+
+    if (error || !user) {
+      console.error(
+        "User not found in database for Firebase UID:",
+        firebaseUid,
+      );
+      return null;
+    }
+
+    return user.id;
   } catch (error) {
     console.error("Error verifying session:", error);
     return null;
@@ -178,6 +197,7 @@ export async function GET(request: NextRequest) {
       order_sheet_url: null,
       order_sheet_sync_enabled: false,
       products_enabled: false,
+      showcase_enabled: false,
     };
 
     // Ensure defaults are set for any missing fields
@@ -209,6 +229,10 @@ export async function GET(request: NextRequest) {
     // Ensure products defaults
     if (capabilities.products_enabled === undefined) {
       capabilities.products_enabled = false;
+    }
+    // Ensure showcase defaults
+    if (capabilities.showcase_enabled === undefined) {
+      capabilities.showcase_enabled = false;
     }
 
     return NextResponse.json({
@@ -246,6 +270,7 @@ export async function POST(request: NextRequest) {
       order_sheet_url,
       order_sheet_sync_enabled,
       products_enabled,
+      showcase_enabled,
     } = body;
 
     // Build update object with only provided fields
@@ -346,6 +371,11 @@ export async function POST(request: NextRequest) {
     // Validate and add products_enabled
     if (typeof products_enabled === "boolean") {
       updateData.products_enabled = products_enabled;
+    }
+
+    // Validate and add showcase_enabled
+    if (typeof showcase_enabled === "boolean") {
+      updateData.showcase_enabled = showcase_enabled;
     }
 
     // Check if we have at least one valid field to update

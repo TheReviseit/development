@@ -1,0 +1,1345 @@
+@import "../tokens.css";
+
+.container {
+  padding: 2rem;
+  max-width: 1400px;
+  margin: 0 auto;
+  background: var(--showcase-bg-primary);
+  min-height: 100vh;
+}
+
+.header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1.5rem;
+}
+
+.title {
+  font-size: 1.5rem;
+  font-weight: 600;
+  color: var(--showcase-text-primary);
+  margin: 0;
+}
+
+.headerActions {
+  display: flex;
+  gap: 0.75rem;
+  align-items: center;
+}
+
+.exportButton {
+  padding: 0.625rem 1rem;
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--showcase-text-secondary);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 8px;
+  font-size: 0.875rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.exportButton:hover {
+  background: rgba(255, 255, 255, 0.12);
+  border-color: rgba(255, 255, 255, 0.25);
+}
+
+.newProductButton {
+  padding: 0.625rem 1.25rem;
+  background: rgba(255, 255, 255, 0.12);
+  color: var(--showcase-text-primary);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 8px;
+  font-size: 0.875rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.newProductButton:hover {
+  background: rgba(255, 255, 255, 0.2);
+  border-color: rgba(255, 255, 255, 0.3);
+}
+
+/* Add Product Button - White Background */
+.addButton {
+  padding: 0.625rem 1.25rem;
+  background: #ffffff;
+  color: #1a1a1a;
+  border: none;
+  border-radius: 8px;
+  font-size: 0.875rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+}
+
+.addButton:hover {
+  background: #f5f5f5;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+}
+
+.addButton:active {
+  transform: translateY(0);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
+}
+
+.controls {
+  display: flex;
+  gap: 0.75rem;
+  margin-bottom: 1.5rem;
+  align-items: center;
+}
+
+.searchContainer {
+  display: flex;
+  gap: 0.5rem;
+  flex: 1;
+}
+
+.searchInput {
+  flex: 1;
+  max-width: 450px;
+  padding: 0.5rem 1rem;
+  background: #111111;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 8px;
+  color: var(--showcase-text-primary);
+  font-size: 0.875rem;
+}
+
+.searchInput::placeholder {
+  color: var(--showcase-text-tertiary);
+}
+
+.filterButton {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  padding: 0.625rem 1.25rem;
+  background: #111111;
+  color: var(--showcase-text-secondary);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 10px;
+  font-size: 0.875rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.filterButton:hover {
+  background: #181818;
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
+.filterChip {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.375rem 0.75rem;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 6px;
+  color: var(--showcase-text-secondary);
+  font-size: 0.75rem;
+}
+
+.closeChip {
+  background: none;
+  border: none;
+  color: var(--showcase-text-tertiary);
+  font-size: 1.25rem;
+  cursor: pointer;
+  padding: 0;
+  line-height: 1;
+}
+
+.closeChip:hover {
+  color: var(--showcase-text-primary);
+}
+
+.loading,
+.error {
+  text-align: center;
+  padding: 3rem;
+  font-size: 1.1rem;
+  color: var(--showcase-text-tertiary);
+}
+
+.error {
+  color: var(--showcase-error-text);
+}
+
+.emptyState {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 4rem 2rem;
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: 12px;
+  border: 2px dashed rgba(255, 255, 255, 0.1);
+}
+
+.emptyState p {
+  font-size: 1.1rem;
+  color: var(--showcase-text-tertiary);
+  margin-bottom: 1.5rem;
+}
+
+/* Table Styles */
+.tableWrapper {
+  overflow: visible; /* ✅ Changed from overflow-x: auto */
+  margin-bottom: 1.5rem;
+  -webkit-overflow-scrolling: touch;
+}
+
+.tableContainer {
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: 0; /* ✅ Remove border-radius to prevent clipping */
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  overflow: visible; /* ✅ Must be visible */
+  position: relative;
+  min-width: 100%;
+}
+
+.table {
+  width: 100%;
+  border-collapse: separate; /* ✅ Changed from collapse */
+  border-spacing: 0;
+  position: relative;
+  border-radius: 12px; /* ✅ Moved border-radius here */
+  overflow: visible; /* ✅ Allow overflow */
+}
+
+.tableHeader {
+  background: rgba(255, 255, 255, 0.05);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.tableHeader th:first-child {
+  border-top-left-radius: 12px;
+}
+
+.tableHeader th:last-child {
+  border-top-right-radius: 12px;
+}
+
+.tableHeader th {
+  padding: 0.875rem 1rem;
+  text-align: left;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--showcase-text-tertiary);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.tableRow {
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  transition: background 0.15s ease;
+}
+
+.tableRow:hover {
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.tableRow:last-child td:first-child {
+  border-bottom-left-radius: 12px;
+}
+
+.tableRow:last-child td:last-child {
+  border-bottom-right-radius: 12px;
+}
+
+.tableRow td {
+  padding: 0.875rem 1rem;
+  color: var(--showcase-text-secondary);
+  font-size: 0.875rem;
+}
+
+.sinoCell {
+  width: 60px;
+  text-align: center;
+  font-size: 0.875rem;
+  color: var(--showcase-text-tertiary);
+  font-weight: 500;
+}
+
+.sinoNumber {
+  display: inline-block;
+  padding: 0.25rem 0.5rem;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 4px;
+  color: var(--showcase-text-secondary);
+}
+
+.imageCell {
+  width: 80px;
+  text-align: center;
+}
+
+.productImage {
+  width: 48px;
+  height: 48px;
+  border-radius: 6px;
+  object-fit: cover;
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.placeholderImage {
+  width: 48px;
+  height: 48px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.nameCell {
+  min-width: 200px;
+}
+
+.productName {
+  font-weight: 500;
+  color: var(--showcase-text-primary);
+}
+
+.categoryCell {
+  min-width: 120px;
+}
+
+.categoryBadge {
+  display: inline-block;
+  padding: 0.25rem 0.625rem;
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 4px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--showcase-text-secondary);
+}
+
+.priceCell {
+  min-width: 100px;
+  font-weight: 500;
+}
+
+.statusCell {
+  min-width: 120px;
+}
+
+.statusBadge {
+  display: inline-block;
+  padding: 0.375rem 0.75rem;
+  border-radius: 12px;
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.statusActive {
+  background: rgba(76, 217, 100, 0.15);
+  color: #4cd964;
+}
+
+.statusOutOfStock {
+  background: rgba(255, 69, 58, 0.15);
+  color: #ff453a;
+}
+
+.actionsCell {
+  width: 60px;
+  text-align: center;
+}
+
+/* Action menu - FIXED for visibility */
+.actionMenuContainer {
+  position: relative;
+  z-index: 10; /* ✅ Ensure container is above table rows */
+}
+
+.menuButton {
+  width: 32px;
+  height: 32px;
+  border-radius: 6px;
+  background: transparent;
+  border: none;
+  color: var(--showcase-text-tertiary);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s ease;
+  position: relative;
+  z-index: 1;
+  padding: 0;
+}
+
+.menuButton svg {
+  width: 16px;
+  height: 16px;
+  fill: currentColor;
+  transition: transform 0.2s ease;
+}
+
+.menuButton:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: var(--showcase-text-primary);
+}
+
+.actionMenu {
+  position: absolute;
+  right: 0;
+  bottom: auto;
+  top: calc(100% + 4px);
+  min-width: 160px;
+  background: rgba(25, 25, 35, 0.98);
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 8px;
+  box-shadow:
+    0 8px 24px rgba(0, 0, 0, 0.6),
+    0 0 0 1px rgba(255, 255, 255, 0.05);
+  z-index: 99999;
+  overflow: visible;
+  animation: slideDown 0.15s ease-out;
+}
+
+/* Alternative positioning when near bottom of screen */
+.actionMenu[data-position="top"] {
+  top: auto;
+  bottom: calc(100% + 4px);
+}
+
+@keyframes slideDown {
+  from {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.menuItem {
+  display: block;
+  width: 100%;
+  padding: 0.75rem 1rem;
+  background: transparent;
+  border: none;
+  color: var(--showcase-text-secondary);
+  font-size: 0.875rem;
+  text-align: left;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.menuItem:last-child {
+  border-bottom: none;
+}
+
+.menuItem:hover {
+  background: rgba(255, 255, 255, 0.12);
+  color: var(--showcase-text-primary);
+}
+
+.menuItem:active {
+  background: rgba(255, 255, 255, 0.15);
+}
+
+.menuItemDelete {
+  color: #ff453a;
+}
+
+.menuItemDelete:hover {
+  background: rgba(255, 69, 58, 0.15);
+  color: #ff453a;
+}
+
+/* Pagination */
+.pagination {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 1.5rem;
+  padding: 1rem;
+}
+
+.pageButton {
+  min-width: 36px;
+  height: 36px;
+  padding: 0 0.75rem;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 6px;
+  color: var(--showcase-text-secondary);
+  font-size: 0.875rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.pageButton:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.12);
+  border-color: rgba(255, 255, 255, 0.2);
+  color: var(--showcase-text-primary);
+}
+
+.pageButton:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.pageActive {
+  background: rgba(255, 255, 255, 0.15);
+  border-color: rgba(255, 255, 255, 0.25);
+  color: var(--showcase-text-primary);
+  font-weight: 600;
+}
+
+.pageActive:hover {
+  background: #0052cc;
+  border-color: #0052cc;
+}
+
+/* Delete Confirmation Modal */
+.deleteModalOverlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.85);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10000;
+  animation: fadeIn 0.2s ease;
+  padding: 1rem;
+}
+
+.deleteModal {
+  background: #ffffff;
+  border-radius: 16px;
+  max-width: 480px;
+  width: 100%;
+  border: 1px solid #e0e0e0;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.15);
+  animation: scaleIn 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
+  overflow: hidden;
+}
+
+.deleteModalHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1.5rem 2rem;
+  border-bottom: 1px solid #e0e0e0;
+}
+
+.deleteModalHeader h3 {
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: #1a1a1a;
+  margin: 0;
+}
+
+.closeButton {
+  width: 32px;
+  height: 32px;
+  border-radius: 6px;
+  background: transparent;
+  border: none;
+  color: #666666;
+  cursor: pointer;
+  font-size: 1.5rem;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+  padding: 0;
+}
+
+.closeButton:hover {
+  background: #f5f5f5;
+  color: #1a1a1a;
+}
+
+.deleteModalBody {
+  padding: 2rem;
+}
+
+.deleteModalBody p {
+  margin: 0 0 0.75rem 0;
+  color: #333333;
+  font-size: 0.9375rem;
+  line-height: 1.6;
+}
+
+.deleteModalBody p:last-child {
+  margin-bottom: 0;
+  color: #666666;
+  font-size: 0.875rem;
+}
+
+.deleteModalFooter {
+  display: flex;
+  gap: 0.75rem;
+  justify-content: flex-end;
+  padding: 1.5rem 2rem;
+  border-top: 1px solid #e0e0e0;
+  background: #f8f9fa;
+}
+
+.cancelButton {
+  padding: 0.75rem 1.5rem;
+  background: #f5f5f5;
+  color: #1a1a1a;
+  border: 1px solid #e0e0e0;
+  border-radius: 8px;
+  font-size: 0.9375rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.cancelButton:hover {
+  background: #eeeeee;
+  border-color: #d0d0d0;
+  transform: translateY(-1px);
+}
+
+.cancelButton:active {
+  transform: translateY(0);
+}
+
+.modalOverlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.8);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+  animation: fadeIn 0.2s ease;
+}
+
+.modalContent {
+  background: var(--showcase-bg-secondary);
+  border-radius: 12px;
+  padding: 2rem;
+  max-width: 450px;
+  width: 90%;
+  border: 1px solid var(--showcase-border-light);
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.9);
+  animation: scaleIn 0.2s ease;
+}
+
+.modalTitle {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: var(--showcase-text-primary);
+  margin: 0 0 1rem 0;
+}
+
+.modalMessage {
+  font-size: 1rem;
+  color: var(--showcase-text-tertiary);
+  margin: 0 0 2rem 0;
+  line-height: 1.6;
+}
+
+.modalActions {
+  display: flex;
+  gap: 1rem;
+  justify-content: flex-end;
+}
+
+.modalButtonNo,
+.modalButtonYes {
+  padding: 0.75rem 2rem;
+  border-radius: 8px;
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  border: none;
+}
+
+.modalButtonNo {
+  background: rgba(255, 255, 255, 0.1);
+  color: var(--showcase-text-primary);
+  border: 1px solid var(--showcase-border-medium);
+}
+
+.modalButtonNo:hover {
+  background: rgba(255, 255, 255, 0.15);
+  border-color: var(--showcase-border-dark);
+}
+
+.modalButtonYes {
+  background: #1a1a1a;
+  color: white;
+}
+
+.modalButtonYes:hover {
+  background: #0a0a0a;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes scaleIn {
+  from {
+    opacity: 0;
+    transform: scale(0.9);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+/* Edit Side Panel */
+.editPanel {
+  position: fixed;
+  top: 0;
+  right: 0;
+  width: 500px;
+  max-width: 90vw;
+  height: 100vh;
+  background: #0a0a0a;
+  border-left: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: -4px 0 24px rgba(0, 0, 0, 0.8);
+  z-index: 10001;
+  transform: translateX(100%);
+  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  overflow-y: auto;
+}
+
+.editPanel.open {
+  transform: translateX(0);
+}
+
+.editPanelOverlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.6);
+  z-index: 10000;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+  pointer-events: none;
+}
+
+.editPanelOverlay.open {
+  opacity: 1;
+  pointer-events: all;
+}
+
+.editPanelHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1.5rem 2rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  position: sticky;
+  top: 0;
+  background: #0a0a0a;
+  z-index: 10;
+}
+
+.editPanelHeader h2 {
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: var(--showcase-text-primary);
+  margin: 0;
+}
+
+.editPanelClose {
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.05);
+  border: none;
+  color: var(--showcase-text-secondary);
+  cursor: pointer;
+  font-size: 1.5rem;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+}
+
+.editPanelClose:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: var(--showcase-text-primary);
+}
+
+.editPanelContent {
+  padding: 2rem;
+}
+
+/* Edit Panel Form Styles */
+.editFormGroup {
+  margin-bottom: 1.25rem;
+}
+
+.editLabel {
+  display: block;
+  font-weight: 500;
+  color: var(--showcase-text-secondary);
+  margin-bottom: 0.5rem;
+  font-size: 0.875rem;
+}
+
+.editInput,
+.editTextarea,
+.editSelect {
+  width: 100%;
+  padding: 0.7rem;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 8px;
+  font-size: 0.875rem;
+  transition: all 0.2s ease;
+  color: var(--showcase-text-primary);
+  font-family: inherit;
+}
+
+.editInput::placeholder,
+.editTextarea::placeholder {
+  color: var(--showcase-text-tertiary);
+}
+
+.editInput:focus,
+.editTextarea:focus,
+.editSelect:focus {
+  outline: none;
+  border-color: #0066ff;
+  background: rgba(255, 255, 255, 0.08);
+  box-shadow: 0 0 0 3px rgba(0, 102, 255, 0.2);
+}
+
+.editTextarea {
+  resize: vertical;
+  min-height: 90px;
+  line-height: 1.5;
+}
+
+.editCheckboxLabel {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  cursor: pointer;
+  font-size: 0.875rem;
+  color: var(--showcase-text-secondary);
+}
+
+.editCheckboxLabel input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  cursor: pointer;
+  accent-color: #0066ff;
+}
+
+.editActions {
+  display: flex;
+  gap: 0.75rem;
+  justify-content: flex-end;
+  padding-top: 1.25rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  margin-top: 1.25rem;
+  position: sticky;
+  bottom: 0;
+  background: #0a0a0a;
+  padding-bottom: 1rem;
+}
+
+.editCancelButton,
+.editSaveButton {
+  padding: 0.65rem 1.25rem;
+  border-radius: 8px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  font-size: 0.875rem;
+  border: none;
+}
+
+.editCancelButton {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--showcase-text-primary);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+}
+
+.editCancelButton:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.12);
+  border-color: rgba(255, 255, 255, 0.25);
+}
+
+.editCancelButton:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.editSaveButton {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
+}
+
+.editSaveButton:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(102, 126, 234, 0.4);
+}
+
+.editSaveButton:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.editHint {
+  display: block;
+  margin-top: 0.4rem;
+  font-size: 0.75rem;
+  color: var(--showcase-text-tertiary);
+}
+
+.editError {
+  padding: 0.875rem;
+  background: rgba(255, 69, 58, 0.1);
+  color: #ff453a;
+  border-radius: 8px;
+  margin-bottom: 1.25rem;
+  font-size: 0.875rem;
+  border: 1px solid rgba(255, 69, 58, 0.3);
+}
+
+/* Filter Dropdown Menu */
+.filterMenu {
+  position: absolute;
+  top: calc(100% + 12px);
+  right: 0;
+  min-width: 260px;
+  background: #080808;
+  backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 16px;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.8);
+  z-index: 1000;
+  padding: 1.25rem;
+  animation: slideDown 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.filterSection {
+  margin-bottom: 1.25rem;
+}
+
+.filterSection:last-child {
+  margin-bottom: 0;
+}
+
+.filterSectionTitle {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--showcase-text-tertiary);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 0.75rem;
+}
+
+.filterOption {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 0.75rem;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.filterOption:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: #ffffff;
+}
+
+.filterOption input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  cursor: pointer;
+  accent-color: #0066ff;
+}
+
+.filterOption label {
+  font-size: 0.875rem;
+  color: var(--showcase-text-secondary);
+  cursor: pointer;
+  user-select: none;
+}
+
+.filterActions {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 1rem;
+  padding-top: 1rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.filterApplyButton,
+.filterClearButton {
+  flex: 1;
+  padding: 0.5rem 1rem;
+  border-radius: 6px;
+  font-size: 0.875rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  border: none;
+}
+
+.filterApplyButton {
+  background: #0066ff;
+  color: #ffffff;
+}
+
+.filterApplyButton:hover {
+  background: #0052cc;
+}
+
+.filterClearButton {
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--showcase-text-secondary);
+}
+
+.filterClearButton:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+/* ================================================== */
+/* MOBILE RESPONSIVE STYLES - WORLD CLASS */
+/* ==================================================  */
+
+/* Tablet (1024px and below) */
+@media (max-width: 1024px) {
+  .container {
+    padding: 1.5rem;
+  }
+
+  .header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 1rem;
+  }
+
+  .headerActions {
+    width: 100%;
+    justify-content: flex-start;
+  }
+
+  .title {
+    font-size: 1.25rem;
+  }
+}
+
+/* Mobile Large (768px and below) */
+@media (max-width: 768px) {
+  .container {
+    padding: 1rem;
+  }
+
+  .header {
+    gap: 0.75rem;
+  }
+
+  .headerActions {
+    flex-direction: column;
+    width: 100%;
+  }
+
+  .exportButton,
+  .addButton,
+  .newProductButton {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .controls {
+    flex-direction: column;
+    gap: 0.75rem;
+  }
+
+  .searchContainer {
+    width: 100%;
+  }
+
+  .searchInput {
+    max-width: 100%;
+  }
+
+  .filterButton {
+    width: 100%;
+    justify-content: center;
+  }
+
+  /* Table scroll on mobile */
+  .tableWrapper {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .table {
+    min-width: 700px;
+  }
+
+  /* Pagination */
+  .pagination {
+    flex-wrap: wrap;
+    gap: 0.375rem;
+  }
+
+  .pageButton {
+    min-width: 32px;
+    height: 32px;
+    padding: 0 0.5rem;
+    font-size: 0.8125rem;
+  }
+
+  /* Modals */
+  .deleteModal {
+    max-width: 90%;
+    margin: 1rem;
+  }
+
+  .deleteModalHeader,
+  .deleteModalBody,
+  .deleteModalFooter {
+    padding: 1.25rem 1.5rem;
+  }
+
+  .deleteModalHeader h3 {
+    font-size: 1.125rem;
+  }
+}
+
+/* Mobile Small (480px and below) */
+@media (max-width: 480px) {
+  .container {
+    padding: 0.75rem;
+  }
+
+  .title {
+    font-size: 1.125rem;
+  }
+
+  .headerActions {
+    gap: 0.5rem;
+  }
+
+  .exportButton,
+  .addButton,
+  .newProductButton {
+    padding: 0.5rem 1rem;
+    font-size: 0.8125rem;
+  }
+
+  .searchInput,
+  .filterButton {
+    padding: 0.5rem 0.875rem;
+    font-size: 0.8125rem;
+  }
+
+  /* Compact table styles */
+  .table {
+    min-width: 600px;
+    font-size: 0.8125rem;
+  }
+
+  .tableHeader th,
+  .tableRow td {
+    padding: 0.625rem 0.75rem;
+  }
+
+  .tableHeader th {
+    font-size: 0.6875rem;
+  }
+
+  .productImage,
+  .placeholderImage {
+    width: 40px;
+    height: 40px;
+  }
+
+  .sinoCell {
+    width: 50px;
+  }
+
+  .imageCell {
+    width: 60px;
+  }
+
+  .nameCell {
+    min-width: 140px;
+  }
+
+  .categoryCell {
+    min-width: 100px;
+  }
+
+  .priceCell {
+    min-width: 80px;
+  }
+
+  .statusCell {
+    min-width: 100px;
+  }
+
+  .actionsCell {
+    width: 50px;
+  }
+
+  .categoryBadge,
+  .statusBadge {
+    padding: 0.25rem 0.5rem;
+    font-size: 0.6875rem;
+  }
+
+  .menuButton {
+    width: 28px;
+    height: 28px;
+  }
+
+  .menuButton svg {
+    width: 14px;
+    height: 14px;
+  }
+
+  .actionMenu {
+    min-width: 140px;
+    font-size: 0.8125rem;
+  }
+
+  .menuItem {
+    padding: 0.625rem 0.875rem;
+    font-size: 0.8125rem;
+  }
+
+  /* Ultra compact pagination */
+  .pagination {
+    padding: 0.75rem;
+    gap: 0.25rem;
+  }
+
+  .pageButton {
+    min-width: 28px;
+    height: 28px;
+    padding: 0 0.375rem;
+    font-size: 0.75rem;
+  }
+
+  /* Mobile modals */
+  .deleteModal {
+    max-width: 95%;
+    margin: 0.5rem;
+    border-radius: 12px;
+  }
+
+  .deleteModalHeader,
+  .deleteModalFooter {
+    padding: 1rem 1.25rem;
+  }
+
+  .deleteModalBody {
+    padding: 1.25rem;
+  }
+
+  .deleteModalHeader h3 {
+    font-size: 1rem;
+  }
+
+  .deleteModalBody p {
+    font-size: 0.875rem;
+  }
+
+  .cancelButton,
+  .modalButtonYes {
+    padding: 0.625rem 1.25rem;
+    font-size: 0.875rem;
+  }
+
+  .deleteModalFooter {
+    flex-direction: column-reverse;
+    gap: 0.5rem;
+  }
+
+  .cancelButton,
+  .modalButtonYes {
+    width: 100%;
+  }
+}
+
+/* Mobile Extra Small (360px and below) */
+@media (max-width: 360px) {
+  .container {
+    padding: 0.5rem;
+  }
+
+  .title {
+    font-size: 1rem;
+  }
+
+  .table {
+    min-width: 550px;
+  }
+
+  .tableHeader th,
+  .tableRow td {
+    padding: 0.5rem 0.625rem;
+    font-size: 0.75rem;
+  }
+
+  .productImage,
+  .placeholderImage {
+    width: 36px;
+    height: 36px;
+  }
+
+  .sinoNumber {
+    padding: 0.1875rem 0.375rem;
+    font-size: 0.75rem;
+  }
+}
+
+/* ============================================
+   NOVA Product Card - Store Design System
+   Clean Light Theme Card Pattern
+   ============================================ */

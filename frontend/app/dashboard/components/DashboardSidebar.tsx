@@ -24,6 +24,7 @@ interface AICapabilities {
   appointment_booking_enabled: boolean;
   order_booking_enabled: boolean;
   products_enabled: boolean;
+  showcase_enabled: boolean;
 }
 
 interface DashboardSidebarProps {
@@ -337,6 +338,29 @@ const ServicesIcon = () => (
   </svg>
 );
 
+// Store/Storefront icon for Showcase
+const ShowcaseIcon = () => (
+  <svg
+    width="20"
+    height="20"
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2"
+  >
+    <path
+      d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+    <polyline
+      points="9 22 9 12 15 12 15 22"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+  </svg>
+);
+
 const CollapseIcon = ({ collapsed }: { collapsed: boolean }) => (
   <svg
     width="18"
@@ -375,11 +399,15 @@ export default function DashboardSidebar({
     appointment_booking_enabled: false,
     order_booking_enabled: false,
     products_enabled: false,
+    showcase_enabled: false,
   });
   const [showProfileMenu, setShowProfileMenu] = useState(false);
   const [hiddenItems, setHiddenItems] = useState<string[]>([]);
   const [showHiddenMenu, setShowHiddenMenu] = useState(false);
-  const [expandedItems, setExpandedItems] = useState<string[]>(["products"]);
+  const [expandedItems, setExpandedItems] = useState<string[]>([
+    "products",
+    "showcase",
+  ]);
 
   // Load hidden items from localStorage
   useEffect(() => {
@@ -437,6 +465,7 @@ export default function DashboardSidebar({
         appointment_booking_enabled: boolean;
         order_booking_enabled: boolean;
         products_enabled: boolean;
+        showcase_enabled: boolean;
       }>;
       if (customEvent.detail) {
         console.log("Sidebar: Received capability update:", customEvent.detail);
@@ -576,6 +605,40 @@ export default function DashboardSidebar({
                 id: "options",
                 label: "Add Size and Colors",
                 href: "/dashboard/products/options",
+              },
+            ],
+          },
+        ]
+      : []),
+    // Showcase - only show when toggle is enabled
+    ...(aiCapabilities.showcase_enabled
+      ? [
+          {
+            id: "showcase",
+            label: "Showcase",
+            icon: <ShowcaseIcon />,
+            href: "/dashboard/showcase/products",
+            subItems: [
+              {
+                id: "showcase-products",
+                label: "Products",
+                href: "/dashboard/showcase/products",
+              },
+              {
+                id: "showcase-add-product",
+                label: "Add Products",
+                href: "/dashboard/showcase/products/add",
+              },
+              // Settings commented out for photography/makeup mode
+              // {
+              //   id: "showcase-settings",
+              //   label: "Settings",
+              //   href: "/dashboard/showcase/settings",
+              // },
+              {
+                id: "showcase-bookings",
+                label: "Bookings",
+                href: "/dashboard/showcase/bookings",
               },
             ],
           },

@@ -294,3 +294,277 @@
     height: 140px;
   }
 }
+
+/* ============================================
+   Slug Preview Styles
+   ============================================ */
+
+.slugPreview {
+  margin-top: 0.75rem;
+  padding: 0.875rem 1rem;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.slugIcon {
+  font-size: 1.125rem;
+}
+
+.slugLabel {
+  font-size: 0.8125rem;
+  color: #888;
+}
+
+.slugUrl {
+  font-size: 0.8125rem;
+  padding: 0.25rem 0.5rem;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 4px;
+  color: #fff;
+  font-family:
+    "SF Mono", Monaco, "Cascadia Code", "Roboto Mono", Consolas, "Courier New",
+    monospace;
+  flex: 1;
+  min-width: 200px;
+}
+
+.slugStatus {
+  margin-left: auto;
+  font-size: 0.8125rem;
+  font-weight: 500;
+}
+
+.checking {
+  color: #888;
+}
+
+.available {
+  color: #10b981;
+}
+
+.taken {
+  color: #fbbf24;
+}
+
+/* ============================================
+   Warning Modal Styles
+   ============================================ */
+
+.modalOverlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.85);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+  animation: fadeIn 0.2s ease;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.modal {
+  background: #0f0f0f;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 16px;
+  max-width: 500px;
+  width: calc(100% - 2rem);
+  max-height: 90vh;
+  overflow-y: auto;
+  animation: slideUp 0.3s ease;
+}
+
+@keyframes slideUp {
+  from {
+    transform: translateY(20px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+.modalHeader {
+  padding: 1.5rem 1.5rem 1rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.modalTitle {
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: #fff;
+  margin: 0;
+}
+
+.modalContent {
+  padding: 1.5rem;
+}
+
+.modalContent p {
+  color: #b0b0b0;
+  font-size: 0.9375rem;
+  line-height: 1.5;
+  margin: 0 0 1rem;
+}
+
+.urlComparison {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+  padding: 1.25rem;
+  margin: 1rem 0;
+}
+
+.urlRow {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin: 0.5rem 0;
+}
+
+.urlLabel {
+  font-size: 0.875rem;
+  color: #888;
+  min-width: 40px;
+}
+
+.oldUrl,
+.newUrl {
+  padding: 0.5rem 0.75rem;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 6px;
+  color: #fff;
+  font-size: 0.875rem;
+  font-family:
+    "SF Mono", Monaco, "Cascadia Code", "Roboto Mono", Consolas, "Courier New",
+    monospace;
+  flex: 1;
+}
+
+.oldUrl {
+  text-decoration: line-through;
+  opacity: 0.6;
+}
+
+.newUrl {
+  background: linear-gradient(
+    135deg,
+    rgba(16, 185, 129, 0.1),
+    rgba(5, 150, 105, 0.1)
+  );
+  border: 1px solid rgb a(16, 185, 129, 0.2);
+}
+
+.arrow {
+  font-size: 1.25rem;
+  color: #888;
+  text-align: center;
+  width: 100%;
+  margin: 0.5rem 0;
+}
+
+.warningText {
+  background: rgba(251, 191, 36, 0.1);
+  border-left: 3px solid #fbbf24;
+  padding: 0.75rem 1rem;
+  border-radius: 6px;
+  margin: 1rem 0 !important;
+}
+
+.warningText strong {
+  color: #fbbf24;
+}
+
+.impactList {
+  list-style: none;
+  padding: 0;
+  margin: 0.75rem 0 0 1.5rem;
+}
+
+.impactList li {
+  color: #888;
+  font-size: 0.875rem;
+  margin: 0.25rem 0;
+  position: relative;
+}
+
+.impactList li::before {
+  content: "•";
+  position: absolute;
+  left: -1rem;
+  color: #fbbf24;
+}
+
+.modalActions {
+  display: flex;
+  gap: 0.75rem;
+  padding: 1rem 1.5rem 1.5rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.cancelBtn,
+.confirmBtn {
+  flex: 1;
+  padding: 0.75rem 1.5rem;
+  border-radius: 10px;
+  font-size: 0.9375rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  border: none;
+}
+
+.cancelBtn {
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  color: #fff;
+}
+
+.cancelBtn:hover {
+  background: rgba(255, 255, 255, 0.05);
+  border-color: rgba(255, 255, 255, 0.3);
+}
+
+.confirmBtn {
+  background: linear-gradient(135deg, #fbbf24, #f59e0b);
+  color: #000;
+}
+
+.confirmBtn:hover {
+  background: linear-gradient(135deg, #f59e0b, #d97706);
+  transform: translateY(-1px);
+}
+
+@media (max-width: 640px) {
+  .urlComparison {
+    padding: 1rem;
+  }
+
+  .urlRow {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .modalActions {
+    flex-direction: column-reverse;
+  }
+
+  .cancelBtn,
+  .confirmBtn {
+    width: 100%;
+  }
+}

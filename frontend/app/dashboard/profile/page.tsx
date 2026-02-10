@@ -13,6 +13,12 @@ interface BusinessProfile {
   logoPublicId: string;
 }
 
+interface SlugCheckResponse {
+  available: boolean;
+  suggested: string;
+  checked: string;
+}
+
 export default function ProfilePage() {
   const { firebaseUser, loading: authLoading } = useAuth();
   const [profile, setProfile] = useState<BusinessProfile>({
@@ -38,6 +44,13 @@ export default function ProfilePage() {
   } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // ✅ Slug management state
+  const [originalBusinessName, setOriginalBusinessName] = useState("");
+  const [urlSlug, setUrlSlug] = useState("");
+  const [showSlugWarning, setShowSlugWarning] = useState(false);
+  const [slugAvailable, setSlugAvailable] = useState<boolean | null>(null);
+  const [suggestedSlug, setSuggestedSlug] = useState("");
+
   // Load profile data
   useEffect(() => {
     const loadProfile = async () => {
@@ -56,6 +69,9 @@ export default function ProfilePage() {
               razorpayKeySecret: result.data.razorpayKeySecret || "",
               paymentsEnabled: result.data.paymentsEnabled || false,
             });
+            // ✅ Store original business name and slug for comparison
+            setOriginalBusinessName(result.data.businessName || "");
+            setUrlSlug(result.data.urlSlug || "");
           }
         }
       } catch (error) {
@@ -70,18 +86,77 @@ export default function ProfilePage() {
     }
   }, [authLoading]);
 
-  // Save profile
-  const handleSave = async () => {
+  // ✅ Generate URL-safe slug from business name
+  const generateSlug = useCallback((name: string): string => {
+    return name
+      .toLowerCase()
+      .trim()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "")
+      .substring(0, 50);
+  }, []);
+
+  // ✅ Debounced slug availability check
+  const checkSlugDebounceRef = useRef<NodeJS.Timeout | null>(null);
+  const checkSlugAvailability = useCallback(
+    async (businessName: string) => {
+      if (!businessName) {
+        setSlugAvailable(null);
+        return;
+      }
+
+      const slug = generateSlug(businessName);
+
+      try {
+        const response = await fetch(
+          `/api/business/check-slug?slug=${encodeURIComponent(slug)}`,
+        );
+        const data: SlugCheckResponse = await response.json();
+
+        setSlugAvailable(data.available);
+        if (!data.available) {
+          setSuggestedSlug(data.suggested);
+        }
+      } catch (error) {
+        console.error("Error checking slug:", error);
+        setSlugAvailable(null);
+      }
+    },
+    [generateSlug],
+  );
+
+  // ✅ Trigger availability check when business name changes
+  useEffect(() => {
+    if (profile.businessName && profile.businessName !== originalBusinessName) {
+      // Debounce the check
+      if (checkSlugDebounceRef.current) {
+        clearTimeout(checkSlugDebounceRef.current);
+      }
+      checkSlugDebounceRef.current = setTimeout(() => {
+        checkSlugAvailability(profile.businessName);
+      }, 500);
+    } else {
+      setSlugAvailable(null);
+    }
+  }, [profile.businessName, originalBusinessName, checkSlugAvailability]);
+
+  // ✅ Save profile with optional slug update consent
+  const saveProfile = async (allowSlugUpdate: boolean) => {
     setSaving(true);
     try {
       const response = await fetch("/api/business/save", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(profile),
+        body: JSON.stringify({
+          ...profile,
+          allow_slug_update: allowSlugUpdate, // ✅ Explicit consent flag
+        }),
       });
 
       if (response.ok) {
         setMessage({ type: "success", text: "Profile saved successfully!" });
+        // Update original name after successful save
+        setOriginalBusinessName(profile.businessName);
       } else {
         setMessage({ type: "error", text: "Failed to save profile" });
       }
@@ -90,6 +165,22 @@ export default function ProfilePage() {
     } finally {
       setSaving(false);
     }
+  };
+
+  // ✅ Handle save - check if slug will change
+  const handleSave = async () => {
+    // Check if business name changed
+    if (profile.businessName !== originalBusinessName) {
+      setShowSlugWarning(true);
+      return; // Wait for user confirmation
+    }
+    await saveProfile(false); // No slug update
+  };
+
+  // ✅ Confirm slug change
+  const confirmSlugChange = async () => {
+    setShowSlugWarning(false);
+    await saveProfile(true); // ✅ EXPLICIT: User confirmed slug update
   };
 
   // Compress image client-side
@@ -406,6 +497,35 @@ export default function ProfilePage() {
                 }
                 placeholder="Your store name"
               />
+
+              {/* ✅ Live Slug Preview */}
+              {profile.businessName && (
+                <div className={styles.slugPreview}>
+                  <span className={styles.slugIcon}>🔗</span>
+                  <span className={styles.slugLabel}>Your store URL: </span>
+                  <code className={styles.slugUrl}>
+                    {typeof window !== "undefined" &&
+                      `${window.location.origin}/store/${generateSlug(profile.businessName) || "your-store-name"}`}
+                  </code>
+
+                  {/* Availability indicator */}
+                  {profile.businessName !== originalBusinessName && (
+                    <span className={styles.slugStatus}>
+                      {slugAvailable === null && (
+                        <span className={styles.checking}>Checking...</span>
+                      )}
+                      {slugAvailable === true && (
+                        <span className={styles.available}>✅ Available</span>
+                      )}
+                      {slugAvailable === false && (
+                        <span className={styles.taken}>
+                          ⚠️ Taken - will use {suggestedSlug}
+                        </span>
+                      )}
+                    </span>
+                  )}
+                </div>
+              )}
             </div>
           </div>
 
@@ -434,6 +554,65 @@ export default function ProfilePage() {
         <InvoiceSettings
           showToast={(text, type) => setMessage({ text, type })}
         />
+      )}
+
+      {/* ✅ URL Change Warning Modal */}
+      {showSlugWarning && (
+        <div className={styles.modalOverlay}>
+          <div className={styles.modal}>
+            <div className={styles.modalHeader}>
+              <h3 className={styles.modalTitle}>⚠️ Public URL Will Change</h3>
+            </div>
+
+            <div className={styles.modalContent}>
+              <p>Changing your store name will update your public URLs:</p>
+
+              <div className={styles.urlComparison}>
+                <div className={styles.urlRow}>
+                  <span className={styles.urlLabel}>Old:</span>
+                  <code className={styles.oldUrl}>
+                    /store/{generateSlug(originalBusinessName)}
+                  </code>
+                </div>
+                <div className={styles.arrow}>→</div>
+                <div className={styles.urlRow}>
+                  <span className={styles.urlLabel}>New:</span>
+                  <code className={styles.newUrl}>
+                    /store/{generateSlug(profile.businessName)}
+                  </code>
+                </div>
+              </div>
+
+              <p className={styles.warningText}>
+                <strong>This may break existing links.</strong> Old URLs will
+                redirect automatically, but please update any:
+              </p>
+              <ul className={styles.impactList}>
+                <li>Marketing materials</li>
+                <li>Social media bios</li>
+                <li>QR codes</li>
+                <li>Email signatures</li>
+              </ul>
+            </div>
+
+            <div className={styles.modalActions}>
+              <button
+                className={styles.cancelBtn}
+                onClick={() => setShowSlugWarning(false)}
+                type="button"
+              >
+                Cancel
+              </button>
+              <button
+                className={styles.confirmBtn}
+                onClick={confirmSlugChange}
+                type="button"
+              >
+                Confirm URL Change
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

@@ -1,0 +1,1213 @@
+/* Product Booking Page - Light Theme
+   Split layout: Left sidebar with steps, Right content area
+   White background, #22c15a green theme, black buttons */
+
+.bookingPage {
+  display: flex;
+  min-height: 100vh;
+  background: #ffffff;
+}
+
+/* Loading & Error States */
+.loadingContainer,
+.errorContainer {
+  width: 100%;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1rem;
+  padding: 2rem;
+  text-align: center;
+  color: #333;
+}
+
+.spinner {
+  width: 40px;
+  height: 40px;
+  border: 3px solid #e0e0e0;
+  border-top-color: #22c15a;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.backLink {
+  color: #22c15a;
+  text-decoration: none;
+  margin-top: 1rem;
+}
+
+.backLink:hover {
+  text-decoration: underline;
+}
+
+/* Left Sidebar */
+.sidebar {
+  width: 280px;
+  min-width: 280px;
+  background: #ffffff;
+  border-right: 2px solid #000000;
+  display: flex;
+  flex-direction: column;
+  padding: 2rem;
+}
+
+.sidebarHeader {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 3rem;
+}
+
+.logo {
+  width: 40px;
+  height: 40px;
+  border-radius: 8px;
+  object-fit: cover;
+}
+
+.logoPlaceholder {
+  width: 40px;
+  height: 40px;
+  border-radius: 8px;
+  background: linear-gradient(135deg, #22c15a, #1da851);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  font-weight: 700;
+  font-size: 1.25rem;
+}
+
+/* Company name - BLACK */
+.businessName {
+  font-size: 1.125rem;
+  font-weight: 600;
+  color: #1a1a1a;
+  margin: 0;
+}
+
+/* Steps Navigation */
+.stepsNav {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.stepItem {
+  display: flex;
+  align-items: flex-start;
+  gap: 1rem;
+}
+
+.stepIndicatorWrapper {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.stepCircle {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  border: 2px solid #e0e0e0;
+  background: #ffffff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: #9e9e9e;
+  transition: all 0.3s ease;
+}
+
+/* Active step - Green theme */
+.stepCircle.active {
+  border-color: #22c15a;
+  background: #22c15a;
+  color: #ffffff;
+}
+
+.stepCircle.completed {
+  border-color: #22c15a;
+  background: #ffffff;
+  color: #22c15a;
+}
+
+.stepLine {
+  width: 2px;
+  height: 40px;
+  background: #e0e0e0;
+  margin: 4px 0;
+}
+
+.stepLine.completedLine {
+  background: #22c15a;
+}
+
+.stepLabel {
+  font-size: 0.9375rem;
+  color: #9e9e9e;
+  padding-top: 6px;
+  transition: color 0.3s ease;
+}
+
+.stepLabel.activeLabel {
+  color: #1a1a1a;
+  font-weight: 600;
+}
+
+.stepLabel.completedLabel {
+  color: #22c15a;
+}
+
+/* Sidebar Footer */
+.sidebarFooter {
+  margin-top: auto;
+  padding-top: 2rem;
+}
+
+.helpButton {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  background: none;
+  border: none;
+  color: #666;
+  font-size: 0.875rem;
+  cursor: pointer;
+  padding: 0;
+}
+
+.helpButton:hover {
+  color: #22c15a;
+}
+
+/* Main Content */
+.mainContent {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  padding: 2.5rem 3rem;
+  overflow-y: auto;
+  background: #ffffff;
+}
+
+.pageTitle {
+  font-size: 1.75rem;
+  font-weight: 700;
+  color: #1a1a1a;
+  margin: 0 0 2rem;
+}
+
+/* Month Navigation */
+.monthNav {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.75rem;
+  margin-bottom: 1.5rem;
+}
+
+.monthNavBtn {
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  border: 1px solid #e0e0e0;
+  background: #ffffff;
+  color: #666;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+}
+
+.monthNavBtn:hover {
+  border-color: #22c15a;
+  color: #22c15a;
+}
+
+.monthLabel {
+  font-size: 0.9375rem;
+  font-weight: 500;
+  color: #1a1a1a;
+}
+
+/* Week Strip */
+.weekStrip {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 2rem;
+  background: #000000;
+  border-radius: 12px;
+  padding: 1rem;
+}
+
+.weekNavBtn {
+  width: 32px;
+  height: 32px;
+  border-radius: 6px;
+  border: none;
+  background: transparent;
+  color: #ffffff;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+}
+
+.weekNavBtn:hover {
+  color: #22c15a;
+}
+
+.dayButton {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.75rem 0.5rem;
+  background: transparent;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.dayButton:hover:not(:disabled) {
+  background: #ffffff;
+  color: black;
+}
+
+.dayButton:hover:not(:disabled) .dayLabel,
+.dayButton:hover:not(:disabled) .dayNumber {
+  color: #000000;
+}
+
+.dayButton.selectedDay {
+  border-bottom: 3px solid #22c15a;
+}
+
+.dayButton.selectedDay .dayNumber {
+  font-weight: 700;
+}
+
+.dayButton.pastDay {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.dayLabel {
+  font-size: 0.75rem;
+  color: #ffffff;
+  font-weight: 500;
+}
+
+.dayNumber {
+  font-size: 1.25rem;
+  color: #ffffff;
+  font-weight: 500;
+}
+
+/* Time Slots */
+.timeSlotsSection {
+  margin-bottom: 2rem;
+}
+
+.loadingSlots,
+.noSlots {
+  text-align: center;
+  padding: 2rem;
+  color: #9e9e9e;
+}
+
+.timeGrid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+}
+
+.timeSlot {
+  padding: 0.875rem 0.5rem;
+  background: #ffffff;
+  border: 1px solid #e0e0e0;
+  border-radius: 8px;
+  color: #1a1a1a;
+  font-size: 0.875rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.timeSlot:hover:not(:disabled) {
+  border-color: #22c15a;
+}
+
+/* Selected time - Green theme */
+.timeSlot.selectedTime {
+  background: #000000;
+  border-color: #22c15a;
+  color: #ffffff;
+}
+
+.timeSlot.selectedTime:hover {
+  background: #000000;
+  color: #ffffff;
+  border-color: #1da851;
+}
+
+.timeSlot.unavailableTime {
+  background: #f5f5f5;
+  color: #bdbdbd;
+  cursor: not-allowed;
+  text-decoration: line-through;
+}
+
+/* Day Button Selected Hover Fix */
+.dayButton.selectedDay:hover {
+  background: transparent;
+  color: #ffffff;
+}
+
+.dayButton.selectedDay:hover .dayLabel,
+.dayButton.selectedDay:hover .dayNumber {
+  color: #ffffff;
+}
+
+.showMoreBtn {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  background: none;
+  border: none;
+  color: #22c15a;
+  font-size: 0.875rem;
+  font-weight: 500;
+  cursor: pointer;
+  padding: 0;
+}
+
+.showMoreBtn:hover {
+  text-decoration: underline;
+}
+
+.moreCount {
+  color: #9e9e9e;
+  font-weight: 400;
+}
+
+/* Selection Summary - BLACK Background */
+.selectionSummary {
+  background: #1a1a1a;
+  border-radius: 12px;
+  padding: 1rem 1.5rem;
+  margin-bottom: 2rem;
+}
+
+.summaryLabel {
+  font-size: 0.8125rem;
+  color: #b0b0b0;
+  margin-bottom: 0.25rem;
+}
+
+.summaryValue {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.9375rem;
+  color: #ffffff;
+  font-weight: 500;
+}
+
+.summaryValue svg {
+  color: #22c15a;
+}
+
+/* Form Section */
+.formSection {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Split Layout for Form + Summary */
+.formSplitLayout {
+  display: flex;
+  gap: 2rem;
+  flex: 1;
+}
+
+.formColumn {
+  flex: 1;
+}
+
+.summaryColumn {
+  width: 320px;
+  flex-shrink: 0;
+}
+
+.bookingForm {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.formGroup {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.formGroup label {
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: #666;
+}
+
+.formGroup input,
+.formGroup textarea {
+  padding: 0.875rem 1rem;
+  background: #ffffff;
+  border: 2px solid #000000;
+  border-radius: 8px;
+  color: #1a1a1a;
+  font-size: 1rem;
+  transition: all 0.2s;
+}
+
+.formGroup input:focus,
+.formGroup textarea:focus {
+  outline: none;
+  border-color: #22c15a;
+  box-shadow: 0 0 0 3px rgba(34, 193, 90, 0.1);
+}
+
+.formGroup input::placeholder,
+.formGroup textarea::placeholder {
+  color: #bdbdbd;
+}
+
+/* Booking Summary Card - WHITE Background */
+.bookingSummaryCard {
+  background: #ffffff;
+  border-radius: 16px;
+  padding: 1.5rem;
+  /* box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08); */
+  border: 2px solid #000000;
+  position: sticky;
+  top: 2rem;
+}
+
+.bookingSummaryCard h3 {
+  font-size: 1rem;
+  font-weight: 600;
+  color: #1a1a1a;
+  margin: 0 0 1rem;
+}
+
+.summaryRow {
+  display: flex;
+  justify-content: space-between;
+  padding: 0.75rem 0;
+  border-bottom: 1px solid #f0f0f0;
+}
+
+.summaryRow:last-child {
+  border-bottom: none;
+}
+
+.summaryRow span {
+  color: #666;
+  font-size: 0.875rem;
+}
+
+.summaryRow strong {
+  color: #1a1a1a;
+  font-size: 0.875rem;
+}
+
+/* Confirmation Section */
+.confirmationSection {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2rem;
+}
+
+/* Confirmation Card - WHITE Background with Shadow */
+.confirmationCard {
+  background: #ffffff;
+  border-radius: 20px;
+  padding: 3rem;
+  box-shadow: 0 8px 40px rgba(0, 0, 0, 0.1);
+  border: 2px solid #000000;
+  text-align: center;
+  max-width: 500px;
+  width: 100%;
+}
+
+.successIcon {
+  width: 80px;
+  height: 80px;
+  border-radius: 50%;
+  background: rgba(34, 193, 90, 0.1);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #22c15a;
+  margin: 0 auto 1.5rem;
+}
+
+.confirmTitle {
+  font-size: 1.75rem;
+  font-weight: 700;
+  color: #1a1a1a;
+  margin: 0 0 0.75rem;
+}
+
+.confirmMessage {
+  font-size: 1rem;
+  color: #666;
+  margin: 0 0 2rem;
+}
+
+.confirmDetails {
+  background: #f8f9fa;
+  border-radius: 12px;
+  padding: 1.25rem 1.5rem;
+  margin-bottom: 2rem;
+  text-align: left;
+}
+
+.confirmRow {
+  display: flex;
+  justify-content: space-between;
+  padding: 0.75rem 0;
+  border-bottom: 1px solid #e0e0e0;
+}
+
+.confirmRow:last-child {
+  border-bottom: none;
+}
+
+.confirmRow span {
+  color: #666;
+}
+
+.confirmRow strong {
+  color: #1a1a1a;
+}
+
+/* Return Button - BLACK */
+.returnButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.875rem 2rem;
+  background: #1a1a1a;
+  color: #ffffff;
+  border: none;
+  border-radius: 8px;
+  font-size: 0.9375rem;
+  font-weight: 600;
+  text-decoration: none;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.returnButton:hover {
+  background: #333;
+}
+
+/* Footer Actions */
+.footerActions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 1rem;
+  margin-top: auto;
+  padding-top: 2rem;
+  border-top: 1px solid #e0e0e0;
+}
+
+/* Back Button - Light */
+.backBtn {
+  padding: 0.875rem 2rem;
+  background: #f5f5f5;
+  color: #1a1a1a;
+  border: none;
+  border-radius: 8px;
+  font-size: 0.9375rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.backBtn:hover:not(:disabled) {
+  background: #e0e0e0;
+}
+
+.backBtn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Next Button - Green theme */
+.nextBtn {
+  padding: 0.875rem 2.5rem;
+  background: #000000;
+  color: #ffffff;
+  border: none;
+  border-radius: 14px;
+  font-size: 0.9375rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.nextBtn:hover:not(:disabled) {
+  background: #1da851;
+}
+
+.nextBtn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Responsive */
+@media (max-width: 1024px) {
+  .formSplitLayout {
+    flex-direction: column;
+  }
+
+  .summaryColumn {
+    width: 100%;
+  }
+
+  .bookingSummaryCard {
+    position: static;
+  }
+}
+
+@media (max-width: 900px) {
+  .bookingPage {
+    flex-direction: column;
+  }
+
+  .sidebar {
+    width: 100%;
+    min-width: 100%;
+    flex-direction: row;
+    padding: 1rem 1.5rem;
+    overflow-x: auto;
+  }
+
+  .sidebarHeader {
+    display: none;
+  }
+
+  .stepsNav {
+    flex-direction: row;
+    gap: 0;
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .stepItem {
+    flex-direction: column;
+    align-items: center;
+    flex: 1;
+  }
+
+  .stepIndicatorWrapper {
+    flex-direction: row;
+  }
+
+  .stepLine {
+    width: 40px;
+    height: 2px;
+    margin: 0 4px;
+  }
+
+  .stepLabel {
+    font-size: 0.75rem;
+    text-align: center;
+    padding-top: 0.5rem;
+  }
+
+  .sidebarFooter {
+    display: none;
+  }
+
+  .mainContent {
+    padding: 1rem;
+  }
+
+  .timeGrid {
+    grid-template-columns: repeat(4, 1fr);
+  }
+}
+
+@media (max-width: 600px) {
+  .weekStrip {
+    padding: 0.75rem;
+  }
+
+  .dayButton {
+    padding: 0.5rem 0.25rem;
+  }
+
+  .dayNumber {
+    font-size: 1rem;
+  }
+
+  .timeGrid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+
+  .pageTitle {
+    font-size: 1.5rem;
+  }
+
+  .confirmationCard {
+    padding: 2rem 1.5rem;
+  }
+}
+
+/* Full Day Badge */
+.fullDayBadge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.625rem 1rem;
+  background: linear-gradient(135deg, #22c15a, #1da851);
+  color: #ffffff;
+  border-radius: 8px;
+  font-size: 0.875rem;
+  font-weight: 600;
+  margin-bottom: 1.5rem;
+}
+
+.fullDayBadge svg {
+  opacity: 0.9;
+}
+
+/* Advance Row in Summary */
+.summaryRow.advanceRow {
+  background: rgba(34, 193, 90, 0.08);
+  margin: 0.5rem -1rem;
+  padding: 0.75rem 1rem;
+  border-radius: 8px;
+  border-bottom: none;
+}
+
+.advanceAmount {
+  color: #22c15a !important;
+  font-weight: 700 !important;
+}
+
+/* Payment Section */
+.paymentSection {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+.paymentCard {
+  max-width: 500px;
+  background: #ffffff;
+  border: 2px solid #000000;
+  border-radius: 16px;
+  padding: 2rem;
+}
+
+.paymentHeader {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+  padding-bottom: 1rem;
+  border-bottom: 1px solid #e0e0e0;
+}
+
+.paymentHeader svg {
+  color: #22c15a;
+}
+
+.paymentHeader h2 {
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: #1a1a1a;
+  margin: 0;
+}
+
+.paymentDetails {
+  margin-bottom: 1.5rem;
+}
+
+.paymentRow {
+  display: flex;
+  justify-content: space-between;
+  padding: 0.75rem 0;
+}
+
+.paymentRow span {
+  color: #666;
+  font-size: 0.9375rem;
+}
+
+.paymentRow strong {
+  color: #1a1a1a;
+  font-size: 0.9375rem;
+  font-weight: 600;
+}
+
+.paymentDivider {
+  height: 1px;
+  background: #e0e0e0;
+  margin: 0.5rem 0;
+}
+
+.paymentRow.paymentTotal {
+  padding-top: 1rem;
+}
+
+.paymentRow.paymentTotal span {
+  font-weight: 600;
+  color: #1a1a1a;
+}
+
+.paymentRow.paymentTotal strong {
+  font-size: 1.5rem;
+  color: #22c15a;
+  font-weight: 700;
+}
+
+.paymentNote {
+  font-size: 0.875rem;
+  color: #666;
+  background: #f8f9fa;
+  padding: 1rem;
+  border-radius: 8px;
+  margin-bottom: 1.5rem;
+}
+
+.paymentMethods {
+  text-align: center;
+}
+
+.paymentMethodsLabel {
+  font-size: 0.8125rem;
+  color: #9e9e9e;
+  margin: 0;
+}
+
+.paymentIcons {
+  display: flex;
+  justify-content: center;
+  gap: 1.5rem;
+  margin-top: 0.75rem;
+  font-size: 0.875rem;
+  color: #666;
+}
+
+/* =============================================
+   Full Month Calendar - White Theme
+   ============================================= */
+
+.fullCalendarWrapper {
+  background: #ffffff;
+  border: 2px solid #000000;
+  border-radius: 16px;
+  padding: 1.5rem;
+  max-width: 600px;
+  margin: 0 auto;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.calendarHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 1.5rem;
+  padding-bottom: 1rem;
+  border-bottom: 1px solid #e0e0e0;
+}
+
+.calendarMonthLabel {
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: #1a1a1a;
+}
+
+.calendarNavBtn {
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  border: 1px solid #e0e0e0;
+  background: #ffffff;
+  color: #666;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+}
+
+.calendarNavBtn:hover {
+  border-color: #22c15a;
+  color: #22c15a;
+  background: rgba(34, 193, 90, 0.05);
+}
+
+.calendarGrid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 4px;
+}
+
+.calendarDayHeader {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #9e9e9e;
+  text-align: center;
+  padding: 0.5rem;
+  text-transform: uppercase;
+}
+
+.calendarDay {
+  aspect-ratio: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #ffffff;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s;
+  position: relative;
+}
+
+.calendarDay:hover:not(:disabled):not(.pastDay):not(.otherMonth) {
+  background: #f5f5f5;
+  border-color: #e0e0e0;
+}
+
+.calendarDayNumber {
+  font-size: 0.9375rem;
+  font-weight: 500;
+  color: #1a1a1a;
+}
+
+.calendarDay.otherMonth .calendarDayNumber {
+  color: #d0d0d0;
+}
+
+.calendarDay.pastDay {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.calendarDay.pastDay .calendarDayNumber {
+  text-decoration: line-through;
+}
+
+.calendarDay.todayCalendarDay {
+  background: rgba(34, 193, 90, 0.1);
+}
+
+.calendarDay.todayCalendarDay .calendarDayNumber {
+  color: #22c15a;
+  font-weight: 700;
+}
+
+.calendarDay.selectedCalendarDay {
+  background: #22c15a;
+  border-color: #22c15a;
+}
+
+.calendarDay.selectedCalendarDay .calendarDayNumber {
+  color: #ffffff;
+  font-weight: 700;
+}
+
+.calendarDay.selectedCalendarDay:hover {
+  background: #1da851;
+}
+
+/* Selected Date Display */
+.selectedDateDisplay {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  background: #f8f9fa;
+  padding: 1rem 1.25rem;
+  border-radius: 10px;
+  margin-top: 1.5rem;
+}
+
+.selectedDateDisplay svg {
+  color: #22c15a;
+}
+
+.selectedDateDisplay span {
+  font-size: 1rem;
+  font-weight: 600;
+  color: #1a1a1a;
+}
+
+/* Date Time Section */
+.dateTimeSection {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Responsive Calendar & Mobile Optimization */
+@media (max-width: 600px) {
+  .fullCalendarWrapper {
+    padding: 0.75rem;
+    width: 100%;
+    margin: 0;
+    border-radius: 12px;
+    border: 1px solid #e0e0e0;
+    box-shadow: none;
+    box-sizing: border-box;
+  }
+
+  .calendarHeader {
+    margin-bottom: 0.75rem;
+    padding-bottom: 0.5rem;
+  }
+
+  .calendarMonthLabel {
+    font-size: 0.9375rem;
+  }
+
+  .calendarNavBtn {
+    width: 28px;
+    height: 28px;
+    padding: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .calendarGrid {
+    gap: 2px;
+  }
+
+  .calendarDay {
+    border-radius: 4px;
+    font-size: 0.75rem;
+  }
+
+  .calendarDayHeader {
+    font-size: 0.625rem;
+    padding: 0.25rem 0;
+  }
+
+  .calendarDayNumber {
+    font-size: 0.75rem;
+  }
+
+  /* Footer Actions Mobile */
+  .footerActions {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    background: #ffffff;
+    padding: 1rem;
+    border-top: 1px solid #e0e0e0;
+    z-index: 100;
+    gap: 0.75rem;
+    box-shadow: 0 -4px 12px rgba(0, 0, 0, 0.05);
+  }
+
+  /* Add padding to bottom of page content to prevent hiding behind fixed footer */
+  .mainContent {
+    padding-bottom: 80px;
+  }
+
+  .backBtn,
+  .nextBtn {
+    flex: 1;
+    padding: 0.875rem;
+    font-size: 1rem;
+    justify-content: center;
+  }
+
+  /* Full Day Badge Mobile */
+  .fullDayBadge {
+    width: 100%;
+    justify-content: center;
+    font-size: 0.8125rem;
+    padding: 0.5rem;
+  }
+
+  .confirmationSection {
+    padding: 1rem;
+  }
+
+  .confirmationCard {
+    padding: 2rem 1.25rem;
+    border-radius: 16px;
+  }
+
+  .confirmTitle {
+    font-size: 1.5rem;
+  }
+
+  .confirmDetails {
+    padding: 1rem;
+    margin-bottom: 1.5rem;
+  }
+
+  .confirmRow {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.25rem;
+    padding: 0.5rem 0;
+  }
+
+  .confirmRow strong {
+    word-break: break-word;
+  }
+
+  .returnButton {
+    width: 100%;
+    padding: 0.875rem;
+  }
+}
+
+/* Booked Date Styling */
+.calendarDay.bookedDay {
+  background: rgba(128, 128, 128, 0.08);
+  cursor: not-allowed;
+  opacity: 0.5;
+  border-color: transparent;
+}
+
+.calendarDay.bookedDay .calendarDayNumber {
+  color: #999;
+  text-decoration: line-through;
+}
+
+.calendarDay.bookedDay:hover {
+  background: rgba(128, 128, 128, 0.08);
+  transform: none;
+}

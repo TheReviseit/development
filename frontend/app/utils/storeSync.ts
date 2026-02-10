@@ -303,6 +303,44 @@ export function subscribeToStoreUpdates(
             });
           },
         )
+        // Subscribe to showcase_items table changes
+        .on(
+          "postgres_changes",
+          {
+            event: "*",
+            schema: "public",
+            table: "showcase_items",
+            filter: `user_id=eq.${storeId}`,
+          },
+          (
+            payload: RealtimePostgresChangesPayload<Record<string, unknown>>,
+          ) => {
+            console.log(
+              "[StoreSync] 📡 Showcase items table change:",
+              payload.eventType,
+            );
+
+            const eventType =
+              payload.eventType === "INSERT"
+                ? "PRODUCT_INSERTED"
+                : payload.eventType === "DELETE"
+                  ? "PRODUCT_DELETED"
+                  : "PRODUCT_UPDATED";
+
+            handleEvent({
+              type: eventType,
+              storeId,
+              productId:
+                ((payload.new as Record<string, unknown>)?.id as string) ||
+                ((payload.old as Record<string, unknown>)?.id as string),
+              timestamp: Date.now(),
+              version: Date.now(),
+              payload:
+                (payload.new as Record<string, unknown>) ||
+                (payload.old as Record<string, unknown>),
+            });
+          },
+        )
         .subscribe((status, err) => {
           if (status === "SUBSCRIBED") {
             setConnectionStatus("connected");
