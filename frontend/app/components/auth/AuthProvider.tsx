@@ -82,17 +82,55 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
    * CRITICAL: This is called when Firebase session exists but DB user doesn't
    */
   const clearSession = useCallback(async () => {
+    console.warn("[AUTH] Clearing full auth session (Firebase + cookies + storage)");
     try {
-      console.warn(
-        "[AUTH] Clearing stale session - user not found in database",
-      );
+      // Best-effort: clear server-side session cookie
+      try {
+        const response = await fetch("/api/auth/logout", { method: "POST" });
+        if (!response.ok) {
+          console.error(
+            "[AUTH] Failed to clear session cookie via /api/auth/logout",
+            response.status,
+          );
+        } else {
+          console.info("[AUTH] Session cookie cleared via /api/auth/logout");
+        }
+      } catch (apiErr) {
+        console.error("[AUTH] Error calling /api/auth/logout:", apiErr);
+      }
+
+      // Best-effort: clear browser storage to avoid zombie sessions
+      try {
+        if (typeof window !== "undefined") {
+          // Clear only app-scoped keys to avoid nuking unrelated data
+          const keysToClear = [
+            "sidebar-hidden-items",
+            "pending_onboarding",
+            "ai-capabilities-cache",
+          ];
+          keysToClear.forEach((key) => {
+            try {
+              window.localStorage.removeItem(key);
+              window.sessionStorage.removeItem(key);
+            } catch {
+              // Ignore storage access errors per-key
+            }
+          });
+        }
+      } catch (storageErr) {
+        console.error("[AUTH] Error clearing local storage:", storageErr);
+      }
+
+      // Always sign out from Firebase last so onAuthStateChanged sees a clean state
       await auth.signOut();
       setUser(null);
       setFirebaseUser(null);
       updateAuthState("UNAUTHENTICATED" as AuthState, "SESSION_CLEARED");
     } catch (err: any) {
-      console.error("[AUTH] Error clearing session:", err);
+      console.error("[AUTH] Error during clearSession:", err);
       setError(err);
+      // Even on failure, ensure we don't stay in a loading state forever
+      updateAuthState("AUTH_ERROR" as AuthState, "CLEAR_SESSION_FAILED");
     }
   }, [updateAuthState]);
 
@@ -254,16 +292,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const handleSignOut = useCallback(async () => {
     try {
       console.info("[AUTH] User initiated signout");
-      await auth.signOut();
-      setUser(null);
-      setFirebaseUser(null);
-      updateAuthState("UNAUTHENTICATED" as AuthState, "USER_SIGNOUT");
+      await clearSession();
     } catch (err: any) {
       console.error("[AUTH] Sign out error:", err);
       setError(err);
       throw err;
     }
-  }, [updateAuthState]);
+  }, [clearSession]);
 
   /**
    * Listen to Firebase auth state changes
@@ -322,15 +357,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           } catch (err: any) {
             console.error("[AUTH] ❌ Auto-sync failed:", err);
 
-            // CRITICAL: Sync failure = signout
-            console.warn("[AUTH] Signing out due to sync failure");
+            // CRITICAL: Sync failure = full session clear (Firebase + cookies)
+            console.warn("[AUTH] Sync failure detected — clearing session");
             try {
-              await auth.signOut();
-              setUser(null);
-              setFirebaseUser(null);
+              await clearSession();
               updateAuthState(
                 "UNAUTHENTICATED" as AuthState,
-                "SYNC_FAILED_SIGNOUT",
+                "SYNC_FAILED_SESSION_CLEARED",
               );
             } catch (signOutErr) {
               console.error("[AUTH] Error during forced signout:", signOutErr);

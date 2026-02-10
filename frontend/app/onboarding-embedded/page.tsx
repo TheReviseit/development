@@ -17,6 +17,7 @@ import WhatsAppEmbeddedSignupForm from "../components/onboarding/WhatsAppEmbedde
 import SpaceshipLoader from "../components/loading/SpaceshipLoader";
 import {
   createSubscription,
+  createSubscriptionWithRetry,
   openRazorpayCheckout,
   verifyPayment,
 } from "../../lib/api/razorpay";
@@ -172,17 +173,36 @@ export default function OnboardingPageEmbedded() {
     setPaymentError(null);
 
     try {
-      // Create subscription order
-      const order = await createSubscription(
+      // Create subscription order with automatic retry for transient errors
+      const order = await createSubscriptionWithRetry(
         planId,
         user.email,
         user.displayName || undefined,
         undefined,
         user.uid,
+        2, // Max 2 retries (total 3 attempts)
       );
 
       if (!order.success) {
-        setPaymentError(order.error || "Failed to create subscription");
+        // Provide user-friendly error messages based on error code
+        const errorCode = order.error_code;
+        let errorMessage = order.error || "Failed to create subscription";
+
+        // Customize message based on error type
+        if (errorCode === "DUPLICATE_SUBSCRIPTION") {
+          errorMessage =
+            "You already have an active subscription for this plan. Please check your account.";
+        } else if (errorCode === "DATABASE_ERROR") {
+          errorMessage =
+            "We're experiencing technical difficulties. Please contact support.";
+        } else if (errorCode === "RAZORPAY_SERVER_ERROR") {
+          errorMessage =
+            "Payment service is temporarily busy. Please try again in a moment.";
+        } else if (errorCode === "RAZORPAY_BAD_REQUEST") {
+          errorMessage = "Invalid payment information. Please contact support.";
+        }
+
+        setPaymentError(errorMessage);
         setPaymentLoading(null);
         return;
       }

@@ -4,6 +4,10 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
+    "dev:shop": "next dev -p 3001",
+    "dev:showcase": "next dev -p 3002",
+    "dev:marketing": "next dev -p 3003",
+    "dev:api": "next dev -p 3004",
     "build": "next build",
     "start": "next start",
     "lint": "eslint",

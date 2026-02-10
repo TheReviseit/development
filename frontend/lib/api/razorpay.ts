@@ -172,6 +172,94 @@ export async function createSubscription(
 }
 
 /**
+ * Create subscription with automatic retry for transient errors.
+ *
+ * Retry Logic:
+ * - Retryable errors: 503 (server unavailable), 504 (timeout), network errors
+ * - Non-retryable errors: 400 (bad request), 409 (duplicate), DATABASE_ERROR
+ * - Exponential backoff: 1s, 2s, 4s
+ *
+ * This is payment-safe because the backend uses idempotency keys.
+ */
+export async function createSubscriptionWithRetry(
+  planName: "starter" | "business" | "pro",
+  customerEmail: string,
+  customerName?: string,
+  customerPhone?: string,
+  userId?: string,
+  maxRetries: number = 2,
+): Promise<RazorpayOrder> {
+  let lastError: any;
+
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      const result = await createSubscription(
+        planName,
+        customerEmail,
+        customerName,
+        customerPhone,
+        userId,
+      );
+
+      // Success or idempotency hit - return immediately
+      if (result.success || result.idempotency_hit) {
+        return result;
+      }
+
+      // Check if error is retryable
+      const errorCode = result.error_code;
+      const isRetryable =
+        errorCode === "RAZORPAY_SERVER_ERROR" || // 503 from Razorpay
+        errorCode === "TIMEOUT" || // Network timeout
+        errorCode === "NETWORK_ERROR"; // Network issue
+
+      // Non-retryable errors - return immediately
+      const isNonRetryable =
+        errorCode === "RAZORPAY_BAD_REQUEST" || // 400 - bad data
+        errorCode === "DUPLICATE_SUBSCRIPTION" || // 409 - already exists
+        errorCode === "DATABASE_ERROR" || // DB constraint violation
+        errorCode === "UNAUTHORIZED"; // Auth failure
+
+      if (isNonRetryable) {
+        console.log(
+          `[Payment] Non-retryable error: ${errorCode}, returning immediately`,
+        );
+        return result;
+      }
+
+      // If retryable and we have retries left, wait and try again
+      if (isRetryable && attempt < maxRetries) {
+        const delayMs = Math.pow(2, attempt) * 1000; // 1s, 2s, 4s
+        console.log(
+          `[Payment] Retrying after ${delayMs}ms (attempt ${attempt + 1}/${maxRetries})`,
+        );
+        await new Promise((resolve) => setTimeout(resolve, delayMs));
+        continue;
+      }
+
+      // Not clearly retryable or non-retryable - return result
+      return result;
+    } catch (error) {
+      lastError = error;
+      console.error(`[Payment] Request error (attempt ${attempt + 1}):`, error);
+
+      // Network errors are retryable
+      if (attempt < maxRetries) {
+        const delayMs = Math.pow(2, attempt) * 1000;
+        console.log(`[Payment] Network error, retrying after ${delayMs}ms`);
+        await new Promise((resolve) => setTimeout(resolve, delayMs));
+        continue;
+      }
+    }
+  }
+
+  // All retries exhausted
+  throw (
+    lastError || new Error("Subscription creation failed after all retries")
+  );
+}
+
+/**
  * Verify a successful payment
  * Note: This sets status to PROCESSING, not COMPLETED
  * Only webhooks can set COMPLETED

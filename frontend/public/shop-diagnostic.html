@@ -1,0 +1,221 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Shop Domain Diagnostic Tool</title>
+    <style>
+      body {
+        font-family: "Seg UI", system-ui, sans-serif;
+        max-width: 800px;
+        margin: 50px auto;
+        padding: 20px;
+        background: #0f0f0f;
+        color: #fff;
+      }
+      h1 {
+        color: #6366f1;
+        margin-bottom: 30px;
+      }
+      .section {
+        background: #1a1a1a;
+        padding: 20px;
+        margin: 20px 0;
+        border-radius: 8px;
+        border: 1px solid #333;
+      }
+      .success {
+        color: #10b981;
+      }
+      .error {
+        color: #ef4444;
+      }
+      .warning {
+        color: #f59e0b;
+      }
+      button {
+        background: #6366f1;
+        color: white;
+        border: none;
+        padding: 12px 24px;
+        border-radius: 6px;
+        cursor: pointer;
+        margin: 5px;
+        font-size: 14px;
+      }
+      button:hover {
+        background: #4f46e5;
+      }
+      pre {
+        background: #0a0a0a;
+        padding: 15px;
+        border-radius: 4px;
+        overflow-x: auto;
+        border: 1px solid #333;
+      }
+      .status {
+        display: inline-block;
+        width: 10px;
+        height: 10px;
+        border-radius: 50%;
+        margin-right: 8px;
+      }
+      .status.ok {
+        background: #10b981;
+      }
+      .status.fail {
+        background: #ef4444;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>🛍️ Shop Domain Diagnostic Tool</h1>
+
+    <div class="section">
+      <h2>1. Current Environment</h2>
+      <div id="env-info">Loading...</div>
+    </div>
+
+    <div class="section">
+      <h2>2. Backend Connection Test</h2>
+      <button onclick="testBackend()">Test Backend</button>
+      <div id="backend-test"></div>
+    </div>
+
+    <div class="section">
+      <h2>3. Domain Detection</h2>
+      <button onclick="setShopDomain()">Set Shop Domain</button>
+      <button onclick="clearDomain()">Clear Domain</button>
+      <button onclick="checkDomain()">Check Current Domain</button>
+      <div id="domain-info"></div>
+    </div>
+
+    <div class="section">
+      <h2>4. API Capability Check</h2>
+      <button onclick="testCapabilities()">
+        Test /api/domain/capabilities
+      </button>
+      <div id="capabilities-test"></div>
+    </div>
+
+    <script>
+      // Display environment info
+      function displayEnvInfo() {
+        const info = {
+          Hostname: window.location.hostname,
+          Port: window.location.port,
+          Pathname: window.location.pathname,
+          "Dev Domain Override": localStorage.getItem("DEV_DOMAIN") || "none",
+          "Full URL": window.location.href,
+        };
+
+        let html = "<pre>";
+        for (const [key, value] of Object.entries(info)) {
+          html += `${key}: ${value}\n`;
+        }
+        html += "</pre>";
+
+        document.getElementById("env-info").innerHTML = html;
+      }
+
+      // Test backend connection
+      async function testBackend() {
+        const result = document.getElementById("backend-test");
+        result.innerHTML = "<p>Testing backend connection...</p>";
+
+        try {
+          const response = await fetch("http://localhost:5000/api/health");
+          const data = await response.json();
+
+          if (data.status === "ok") {
+            result.innerHTML = `
+                        <p class="success"><span class="status ok"></span>Backend is reachable!</p>
+                        <pre>${JSON.stringify(data, null, 2)}</pre>
+                    `;
+          } else {
+            result.innerHTML = `<p class="warning">Backend responded but status is: ${data.status}</p>`;
+          }
+        } catch (error) {
+          result.innerHTML = `
+                    <p class="error"><span class="status fail"></span>Backend NOT reachable</p>
+                    <pre>Error: ${error.message}</pre>
+                    <p class="warning">⚠️ Make sure backend is running: py app.py</p>
+                `;
+        }
+      }
+
+      // Set shop domain
+      function setShopDomain() {
+        localStorage.setItem("DEV_DOMAIN", "shop");
+        document.getElementById("domain-info").innerHTML = `
+                <p class="success">✅ Shop domain set!</p>
+                <p class="warning">🔄 Reload page to apply: <button onclick="location.reload()">Reload Now</button></p>
+            `;
+      }
+
+      // Clear domain
+      function clearDomain() {
+        localStorage.removeItem("DEV_DOMAIN");
+        document.getElementById("domain-info").innerHTML = `
+                <p class="success">✅ Domain override cleared!</p>
+                <p class="warning">🔄 Reload page to apply: <button onclick="location.reload()">Reload Now</button></p>
+            `;
+      }
+
+      // Check current domain
+      function checkDomain() {
+        const override = localStorage.getItem("DEV_DOMAIN");
+        const hostname = window.location.hostname;
+        const pathname = window.location.pathname;
+
+        document.getElementById("domain-info").innerHTML = `
+                <pre>
+Current Domain Override: ${override || "none"}
+Hostname: ${hostname}
+Pathname: ${pathname}
+
+${override ? `✅ Domain is set to: ${override}` : "⚠️ No domain override set"}
+                </pre>
+            `;
+      }
+
+      // Test capabilities API
+      async function testCapabilities() {
+        const result = document.getElementById("capabilities-test");
+        result.innerHTML = "<p>Testing capabilities endpoint...</p>";
+
+        try {
+          const response = await fetch(
+            "http://localhost:5000/api/domain/capabilities",
+            {
+              headers: {
+                "Content-Type": "application/json",
+              },
+            },
+          );
+          const data = await response.json();
+
+          if (data.success) {
+            result.innerHTML = `
+                        <p class="success"><span class="status ok"></span>Capabilities API works!</p>
+                        <pre>${JSON.stringify(data, null, 2)}</pre>
+                    `;
+          } else {
+            result.innerHTML = `
+                        <p class="error">API returned error</p>
+                        <pre>${JSON.stringify(data, null, 2)}</pre>
+                    `;
+          }
+        } catch (error) {
+          result.innerHTML = `
+                    <p class="error"><span class="status fail"></span>Failed to call API</p>
+                    <pre>Error: ${error.message}</pre>
+                `;
+        }
+      }
+
+      // Run on load
+      displayEnvInfo();
+    </script>
+  </body>
+</html>

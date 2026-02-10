@@ -35,10 +35,10 @@ export async function GET(request: NextRequest) {
 
     const user = await getUserByFirebaseUID(firebaseUID);
 
-    // CRITICAL FIX: Return 404 when user not found
+    // CRITICAL FIX: Return 404 when user not found AND clear stale session cookie
     // Frontend distinguishes "onboarding incomplete" from "user doesn't exist"
     if (!user) {
-      return NextResponse.json(
+      const response = NextResponse.json(
         {
           error: "USER_NOT_FOUND",
           code: "USER_NOT_FOUND",
@@ -47,6 +47,10 @@ export async function GET(request: NextRequest) {
         },
         { status: 404 },
       );
+      // Defensive: ensure any invalid session cookie is removed so middleware
+      // does not treat the user as authenticated on subsequent requests.
+      response.cookies.delete("session");
+      return response;
     }
 
     // Check if user has WhatsApp accounts connected

@@ -3,6 +3,11 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import {
+  detectProductDomain,
+  getDomainVisibility,
+  type ProductDomain,
+} from "@/lib/domain-navigation";
 import styles from "../dashboard.module.css";
 
 interface SubNavItem {
@@ -395,6 +400,8 @@ export default function DashboardSidebar({
 }: DashboardSidebarProps) {
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [userCount, setUserCount] = useState<number>(0);
+  const [currentDomain, setCurrentDomain] =
+    useState<ProductDomain>("dashboard");
   const [aiCapabilities, setAiCapabilities] = useState<AICapabilities>({
     appointment_booking_enabled: false,
     order_booking_enabled: false,
@@ -408,6 +415,35 @@ export default function DashboardSidebar({
     "products",
     "showcase",
   ]);
+
+  // Detect current domain on mount (enterprise-grade detection)
+  useEffect(() => {
+    const domain = detectProductDomain();
+    setCurrentDomain(domain);
+    const visibility = getDomainVisibility(domain);
+    console.log("🌐 [Sidebar] Domain detected:", domain);
+    console.log("📋 [Sidebar] Visibility rules:", visibility);
+  }, []);
+
+  // Clean up legacy UI state when domain changes (prevents ghost menus)
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      // Clear sidebar-specific localStorage that could cause conflicts
+      const legacyKeys = [
+        "hiddenSidebarItems",
+        "collapsedSidebarGroups",
+        "sidebar-state", // Generic old key
+      ];
+
+      legacyKeys.forEach((key) => {
+        try {
+          localStorage.removeItem(key);
+        } catch (err) {
+          // Ignore localStorage access errors
+        }
+      });
+    }
+  }, [currentDomain]);
 
   // Load hidden items from localStorage
   useEffect(() => {
@@ -503,6 +539,9 @@ export default function DashboardSidebar({
     fetchUserCount();
   }, []);
 
+  // Get visibility rules for current domain (enterprise domain-based navigation)
+  const visibility = getDomainVisibility(currentDomain);
+
   // Build nav items dynamically based on AI capabilities
   const navItems: NavItem[] = [
     {
@@ -518,34 +557,15 @@ export default function DashboardSidebar({
       badge: userCount > 0 ? userCount : undefined,
       href: "/dashboard/messages",
     },
-    /* Commented out as requested
-    {
-      id: "bulk-messages",
-      label: "Bulk Messages",
-      icon: <BulkMessagesIcon />,
-      href: "/dashboard/bulk-messages",
-    },
-    {
-      id: "templates",
-      label: "Templates",
-      icon: <TemplatesIcon />,
-      href: "/dashboard/templates",
-    },
-    {
-      id: "contacts",
-      label: "Contacts",
-      icon: <ContactsIcon />,
-      href: "/dashboard/contacts",
-    },
-    {
-      id: "campaigns",
-      label: "Campaigns",
-      icon: <CampaignsIcon />,
-      href: "/dashboard/campaigns",
-    },
-    */
-    // Appointments - only show when toggle is enabled
-    ...(aiCapabilities.appointment_booking_enabled
+    /*
+     * ENTERPRISE DOMAIN-BASED NAVIGATION
+     *
+     * Features are shown/hidden based on domain visibility matrix
+     * defined in domain-navigation.ts
+     */
+
+    // Appointments - show based on domain visibility + capability toggle
+    ...(visibility.appointments && aiCapabilities.appointment_booking_enabled
       ? [
           {
             id: "appointments",
@@ -561,8 +581,9 @@ export default function DashboardSidebar({
           },
         ]
       : []),
-    // Orders - only show when toggle is enabled
-    ...(aiCapabilities.order_booking_enabled
+
+    // Orders - show based on domain visibility (shop or dashboard)
+    ...(visibility.orders
       ? [
           {
             id: "orders",
@@ -572,8 +593,9 @@ export default function DashboardSidebar({
           },
         ]
       : []),
-    // Products - only show when toggle is enabled
-    ...(aiCapabilities.products_enabled
+
+    // Products - show based on domain visibility (shop or dashboard)
+    ...(visibility.products
       ? [
           {
             id: "products",
@@ -610,8 +632,9 @@ export default function DashboardSidebar({
           },
         ]
       : []),
-    // Showcase - only show when toggle is enabled
-    ...(aiCapabilities.showcase_enabled
+
+    // Showcase - show based on domain visibility (showcase or dashboard)
+    ...(visibility.showcase
       ? [
           {
             id: "showcase",
@@ -629,12 +652,6 @@ export default function DashboardSidebar({
                 label: "Add Products",
                 href: "/dashboard/showcase/products/add",
               },
-              // Settings commented out for photography/makeup mode
-              // {
-              //   id: "showcase-settings",
-              //   label: "Settings",
-              //   href: "/dashboard/showcase/settings",
-              // },
               {
                 id: "showcase-bookings",
                 label: "Bookings",
@@ -644,6 +661,68 @@ export default function DashboardSidebar({
           },
         ]
       : []),
+
+    // ========================================================================
+    // MARKETING FEATURES (marketing domain or dashboard)
+    // ========================================================================
+    // ENTERPRISE PATTERN: Each menu rendered independently for:
+    // - Granular feature flag control
+    // - Easier auditing and testing
+    // - Prevention of cascading failures
+    // ========================================================================
+
+    // Campaigns
+    ...(visibility.campaigns
+      ? [
+          {
+            id: "campaigns",
+            label: "Campaigns",
+            icon: <CampaignsIcon />,
+            href: "/dashboard/campaigns",
+          },
+        ]
+      : []),
+
+    // Bulk Messages
+    ...(visibility.bulkMessages
+      ? [
+          {
+            id: "bulk-messages",
+            label: "Bulk Messages",
+            icon: <BulkMessagesIcon />,
+            href: "/dashboard/bulk-messages",
+          },
+        ]
+      : []),
+
+    // Templates
+    ...(visibility.templates
+      ? [
+          {
+            id: "templates",
+            label: "Templates",
+            icon: <TemplatesIcon />,
+            href: "/dashboard/templates",
+          },
+        ]
+      : []),
+
+    // Contacts (future - when contacts_enabled capability is added)
+    // Note: Contacts is a shared feature across all domains
+    // Uncomment when backend capability is ready
+    /*
+    ...(visibility.contacts
+      ? [
+          {
+            id: "contacts",
+            label: "Contacts",
+            icon: <ContactsIcon />,
+            href: "/dashboard/contacts",
+          },
+        ]
+      : []),
+    */
+
     {
       id: "bot-settings",
       label: "AI Settings",
@@ -657,6 +736,40 @@ export default function DashboardSidebar({
       href: "/dashboard/preview-bot",
     },
   ];
+
+  // ========================================================================
+  // ENTERPRISE GUARDRAIL: Detect missing marketing menus on marketing domain
+  // ========================================================================
+  // This catches regressions where domain detection works but menus don't render
+  // Common causes: commented code, broken conditionals, wrong visibility flags
+  // ========================================================================
+  if (typeof window !== "undefined" && currentDomain === "marketing") {
+    const marketingMenuIds = ["campaigns", "bulk-messages", "templates"];
+    const renderedMarketingMenus = navItems.filter((item) =>
+      marketingMenuIds.includes(item.id),
+    );
+
+    if (renderedMarketingMenus.length === 0) {
+      console.error(
+        "🚨 [REGRESSION DETECTED] Marketing domain loaded without marketing menus",
+        {
+          domain: currentDomain,
+          visibility: {
+            campaigns: visibility.campaigns,
+            bulkMessages: visibility.bulkMessages,
+            templates: visibility.templates,
+          },
+          totalNavItems: navItems.length,
+          navItemIds: navItems.map((i) => i.id),
+        },
+      );
+    } else {
+      console.info(
+        `✅ [Marketing Domain] ${renderedMarketingMenus.length}/3 marketing menus rendered`,
+        renderedMarketingMenus.map((i) => i.id),
+      );
+    }
+  }
 
   const displayName = userName || userEmail?.split("@")[0] || "User";
   const initials = displayName.substring(0, 2).toUpperCase();

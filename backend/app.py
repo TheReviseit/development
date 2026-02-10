@@ -223,6 +223,14 @@ if ',' in frontend_url:
 else:
     origins = [frontend_url]
 
+# Add all localhost development ports for domain testing
+# This allows dev:shop (3001), dev:showcase (3002), dev:marketing (3003), dev:api (3004)
+localhost_ports = [3000, 3001, 3002, 3003, 3004]
+for port in localhost_ports:
+    localhost_origin = f'http://localhost:{port}'
+    if localhost_origin not in origins:
+        origins.append(localhost_origin)
+
 # CORS Resource configuration for all API routes
 cors_resources = {
     r"/api/*": {
@@ -307,6 +315,15 @@ try:
     logger.info("🔗 Username Resolve routes registered (/api/username/resolve/*)")
 except ImportError as e:
     logger.warning(f"Username Resolve routes not available: {e}")
+
+# Register Domain routes (for domain-based capability validation)
+try:
+    from routes.domain import domain_bp
+    app.register_blueprint(domain_bp)
+    logger.info("🌐 Domain routes registered (/api/domain/*)")
+except ImportError as e:
+    logger.warning(f"Domain routes not available: {e}")
+
 
 # Initialize webhook security
 webhook_security = None

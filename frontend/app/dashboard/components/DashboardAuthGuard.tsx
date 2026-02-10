@@ -63,6 +63,10 @@ export function DashboardAuthGuard({
         console.info(
           "[DASHBOARD] User not authenticated, redirecting to login",
         );
+        // Defensive: ensure any stray cookies/storage are cleared
+        clearSession().catch((err) =>
+          console.error("[DASHBOARD] clearSession error on UNAUTHENTICATED:", err),
+        );
         hardRedirect("/login");
         break;
 
@@ -71,7 +75,9 @@ export function DashboardAuthGuard({
         console.error(
           "[DASHBOARD] CRITICAL: SESSION_ONLY state detected in dashboard",
         );
-        clearSession();
+        clearSession().catch((err) =>
+          console.error("[DASHBOARD] clearSession error on SESSION_ONLY:", err),
+        );
         hardRedirect(
           "/signup?error=account_not_found&message=Your account was not fully created. Please sign up again to complete setup.",
         );
