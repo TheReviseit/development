@@ -231,6 +231,18 @@ for port in localhost_ports:
     if localhost_origin not in origins:
         origins.append(localhost_origin)
 
+# Add production subdomain origins
+production_subdomains = [
+    'https://marketing.flowauxi.com',
+    'https://shop.flowauxi.com',
+    'https://pages.flowauxi.com',
+    'https://flowauxi.com',
+    'https://api.flowauxi.com',
+]
+for subdomain in production_subdomains:
+    if subdomain not in origins:
+        origins.append(subdomain)
+
 # CORS Resource configuration for all API routes
 cors_resources = {
     r"/api/*": {

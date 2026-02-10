@@ -114,7 +114,7 @@ interface ApiResponse<T> {
 async function apiRequest<T>(
   endpoint: string,
   userId: string,
-  options: RequestInit = {}
+  options: RequestInit = {},
 ): Promise<T> {
   const url = `${API_BASE}${endpoint}`;
 
@@ -132,7 +132,7 @@ async function apiRequest<T>(
     // Network error - backend is likely not running
     if (err.name === "TypeError" && err.message === "Failed to fetch") {
       console.error(
-        `❌ Cannot reach backend at ${API_BASE}. Make sure the Flask server is running.`
+        `❌ Cannot reach backend at ${API_BASE}. Make sure the Flask server is running.`,
       );
       throw new Error(`Backend server not reachable`);
     }
@@ -154,7 +154,7 @@ async function apiRequest<T>(
 
 export async function fetchTemplates(
   userId: string,
-  params?: { status?: string; category?: string; search?: string }
+  params?: { status?: string; category?: string; search?: string },
 ): Promise<Template[]> {
   const queryParams = new URLSearchParams();
   if (params?.status) queryParams.append("status", params.status);
@@ -166,25 +166,25 @@ export async function fetchTemplates(
   }`;
   const response = await apiRequest<{ templates: Template[] }>(
     endpoint,
-    userId
+    userId,
   );
   return response.templates;
 }
 
 export async function syncTemplates(
-  userId: string
+  userId: string,
 ): Promise<{ synced_count: number; message: string }> {
   const response = await apiRequest<{ synced_count: number; message: string }>(
     "/api/templates/sync",
     userId,
-    { method: "POST" }
+    { method: "POST" },
   );
   return response;
 }
 
 export async function deleteTemplate(
   userId: string,
-  templateId: string
+  templateId: string,
 ): Promise<void> {
   await apiRequest(`/api/templates/${templateId}`, userId, {
     method: "DELETE",
@@ -212,7 +212,7 @@ export interface CreateTemplateData {
 
 export async function createTemplate(
   userId: string,
-  template: CreateTemplateData
+  template: CreateTemplateData,
 ): Promise<{ template_id: string; message: string }> {
   const response = await apiRequest<{
     template_id: string;
@@ -233,7 +233,7 @@ export interface SendTemplateData {
 
 export async function sendTemplateMessage(
   userId: string,
-  data: SendTemplateData
+  data: SendTemplateData,
 ): Promise<{ success: boolean; message_id?: string; message?: string }> {
   const response = await apiRequest<{
     success: boolean;
@@ -258,7 +258,7 @@ export async function fetchContacts(
     search?: string;
     tags?: string;
     opted_in?: boolean;
-  }
+  },
 ): Promise<{
   contacts: Contact[];
   pagination: {
@@ -289,19 +289,19 @@ export async function createContact(
     name?: string;
     email?: string;
     tags?: string[];
-  }
+  },
 ): Promise<Contact> {
   const response = await apiRequest<{ contact: Contact }>(
     "/api/contacts",
     userId,
-    { method: "POST", body: JSON.stringify(contact) }
+    { method: "POST", body: JSON.stringify(contact) },
   );
   return response.contact;
 }
 
 export async function deleteContact(
   userId: string,
-  contactId: string
+  contactId: string,
 ): Promise<void> {
   await apiRequest(`/api/contacts/${contactId}`, userId, { method: "DELETE" });
 }
@@ -312,23 +312,42 @@ export async function deleteContact(
 
 export async function fetchAnalyticsOverview(
   userId: string,
-  period: "7d" | "30d" | "90d" = "7d"
-): Promise<AnalyticsOverview> {
-  return apiRequest(`/api/analytics/overview?period=${period}`, userId);
+  period: "7d" | "30d" | "90d" = "7d",
+): Promise<AnalyticsOverview | null> {
+  try {
+    return await apiRequest(`/api/analytics/overview?period=${period}`, userId);
+  } catch (error) {
+    // Gracefully handle analytics service unavailability
+    console.warn(`⚠️ Analytics service unavailable: ${error}`);
+    return null;
+  }
 }
 
 export async function fetchMessageAnalytics(
   userId: string,
-  period: "7d" | "30d" | "90d" = "7d"
-): Promise<any> {
-  return apiRequest(`/api/analytics/messages?period=${period}`, userId);
+  period: "7d" | "30d" | "90d" = "7d",
+): Promise<any | null> {
+  try {
+    return await apiRequest(`/api/analytics/messages?period=${period}`, userId);
+  } catch (error) {
+    console.warn(`⚠️ Message analytics unavailable: ${error}`);
+    return null;
+  }
 }
 
 export async function fetchConversationAnalytics(
   userId: string,
-  period: "7d" | "30d" | "90d" = "7d"
-): Promise<any> {
-  return apiRequest(`/api/analytics/conversations?period=${period}`, userId);
+  period: "7d" | "30d" | "90d" = "7d",
+): Promise<any | null> {
+  try {
+    return await apiRequest(
+      `/api/analytics/conversations?period=${period}`,
+      userId,
+    );
+  } catch (error) {
+    console.warn(`⚠️ Conversation analytics unavailable: ${error}`);
+    return null;
+  }
 }
 
 // =====================================================
@@ -338,7 +357,7 @@ export async function fetchConversationAnalytics(
 export async function fetchCampaigns(userId: string): Promise<Campaign[]> {
   const response = await apiRequest<{ campaigns: Campaign[] }>(
     "/api/campaigns",
-    userId
+    userId,
   );
   return response.campaigns;
 }
@@ -354,19 +373,19 @@ export async function createCampaign(
     target_filters?: Record<string, any>;
     variable_mapping?: Record<string, string>;
     scheduled_at?: string;
-  }
+  },
 ): Promise<Campaign> {
   const response = await apiRequest<{ campaign: Campaign }>(
     "/api/campaigns",
     userId,
-    { method: "POST", body: JSON.stringify(campaign) }
+    { method: "POST", body: JSON.stringify(campaign) },
   );
   return response.campaign;
 }
 
 export async function startCampaign(
   userId: string,
-  campaignId: string
+  campaignId: string,
 ): Promise<void> {
   await apiRequest(`/api/campaigns/${campaignId}/send`, userId, {
     method: "POST",
@@ -375,7 +394,7 @@ export async function startCampaign(
 
 export async function pauseCampaign(
   userId: string,
-  campaignId: string
+  campaignId: string,
 ): Promise<void> {
   await apiRequest(`/api/campaigns/${campaignId}/pause`, userId, {
     method: "POST",
@@ -384,7 +403,7 @@ export async function pauseCampaign(
 
 export async function cancelCampaign(
   userId: string,
-  campaignId: string
+  campaignId: string,
 ): Promise<void> {
   await apiRequest(`/api/campaigns/${campaignId}/cancel`, userId, {
     method: "POST",
@@ -393,7 +412,7 @@ export async function cancelCampaign(
 
 export async function getCampaignStats(
   userId: string,
-  campaignId: string
+  campaignId: string,
 ): Promise<any> {
   return apiRequest(`/api/campaigns/${campaignId}/stats`, userId);
 }
@@ -430,7 +449,7 @@ export interface BulkCampaign {
 
 export async function createBulkCampaign(
   userId: string,
-  name: string
+  name: string,
 ): Promise<BulkCampaign> {
   const response = await apiRequest<{
     campaign?: BulkCampaign;
@@ -450,7 +469,7 @@ export async function createBulkCampaign(
 export async function addBulkCampaignContacts(
   userId: string,
   campaignId: string,
-  contacts: BulkContact[]
+  contacts: BulkContact[],
 ): Promise<{ success: boolean; count: number }> {
   return apiRequest(`/api/bulk-campaigns/${campaignId}/contacts`, userId, {
     method: "POST",
@@ -463,7 +482,7 @@ export async function sendBulkCampaign(
   campaignId: string,
   message_text: string,
   media_url?: string,
-  media_type?: string
+  media_type?: string,
 ): Promise<{ success: boolean; message: string }> {
   return apiRequest(`/api/bulk-campaigns/${campaignId}/send`, userId, {
     method: "POST",
@@ -472,11 +491,11 @@ export async function sendBulkCampaign(
 }
 
 export async function fetchBulkCampaigns(
-  userId: string
+  userId: string,
 ): Promise<BulkCampaign[]> {
   const response = await apiRequest<{ campaigns: BulkCampaign[] }>(
     "/api/bulk-campaigns",
-    userId
+    userId,
   );
   return response.campaigns || [];
 }
