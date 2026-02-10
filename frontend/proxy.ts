@@ -236,6 +236,60 @@ export async function proxy(request: NextRequest) {
   }
 
   // ==========================================================================
+  // STEP 0.5: flowauxi.com → shop.flowauxi.com redirect (301 Permanent)
+  // Product Hygiene: Prevent "broken link" perception
+  // ==========================================================================
+  if (hostname === "flowauxi.com" || hostname === "www.flowauxi.com") {
+    const shopRoutes = [
+      "/dashboard",
+      "/products",
+      "/orders",
+      "/messages",
+      "/bot-settings",
+      "/profile",
+    ];
+
+    for (const route of shopRoutes) {
+      if (pathname === route || pathname.startsWith(`${route}/`)) {
+        // 301 Permanent Redirect to shop subdomain
+        const shopUrl = new URL(request.url);
+        shopUrl.hostname = "shop.flowauxi.com";
+        console.log(
+          `📦 [SHOP REDIRECT] ${pathname} → shop.flowauxi.com${pathname}`,
+        );
+        return NextResponse.redirect(shopUrl, 301);
+      }
+    }
+  }
+
+  // ==========================================================================
+  // STEP 0.6: shop.flowauxi.com fast-fail enforcement (server-side blocking)
+  // Enterprise Trust Rule: Server-side blocking is mandatory
+  // ==========================================================================
+  if (hostname === "shop.flowauxi.com") {
+    const blockedRoutes = [
+      "/showcase",
+      "/campaigns",
+      "/bulk-messages",
+      "/templates",
+      "/contacts",
+      "/appointments",
+      "/services",
+      "/whatsapp-admin",
+    ];
+
+    for (const route of blockedRoutes) {
+      if (pathname === route || pathname.startsWith(`${route}/`)) {
+        console.warn(
+          `🚫 [SHOP DOMAIN] Blocked access to ${pathname} - redirecting to dashboard`,
+        );
+        // 307 Temporary Redirect (preserves POST if any)
+        return NextResponse.redirect(new URL("/dashboard", request.url), 307);
+      }
+    }
+  }
+
+  // ==========================================================================
   // STEP 1: Domain-aware routing (delegated to domain-policy.ts)
   // ==========================================================================
   const domainDecision = evaluateDomainAccess(request);

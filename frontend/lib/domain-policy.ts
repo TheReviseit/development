@@ -17,7 +17,12 @@ import { NextRequest, NextResponse } from "next/server";
 // TYPES
 // =============================================================================
 
-export type ProductContext = "api" | "dashboard";
+export type ProductContext =
+  | "api"
+  | "dashboard"
+  | "shop"
+  | "showcase"
+  | "marketing";
 
 export interface DomainConfig {
   product: ProductContext;
@@ -44,6 +49,33 @@ export interface DomainDecision {
 // =============================================================================
 
 export const DOMAIN_CONFIG: Record<string, DomainConfig> = {
+  "shop.flowauxi.com": {
+    product: "shop",
+    allowedRoutes: [
+      "/dashboard",
+      "/products",
+      "/orders",
+      "/messages",
+      "/bot-settings", // AI Settings
+      "/profile",
+      "/settings",
+      "/payment",
+      "/payment-success",
+    ],
+    blockedRoutes: [
+      "/showcase",
+      "/campaigns",
+      "/bulk-messages",
+      "/templates",
+      "/contacts",
+      "/appointments",
+      "/services",
+      "/whatsapp-admin",
+    ],
+    defaultHome: "/dashboard",
+    loginPath: "/login",
+    seoBase: "https://shop.flowauxi.com",
+  },
   "api.flowauxi.com": {
     product: "api",
     allowedRoutes: ["/apis", "/console", "/docs", "/pricing"],
@@ -115,12 +147,29 @@ export function getProductFromDomain(
   pathname?: string,
 ): ProductContext {
   // Production domains - hostname determines product
+  if (hostname === "shop.flowauxi.com") return "shop";
+  if (hostname === "showcase.flowauxi.com") return "showcase";
+  if (hostname === "marketing.flowauxi.com") return "marketing";
   if (hostname === "api.flowauxi.com") return "api";
   if (hostname === "flowauxi.com" || hostname === "www.flowauxi.com")
     return "dashboard";
 
   // Dev/Preview: Auto-detect from pathname (no manual URL param needed)
   if (isDevOrPreview(hostname) && pathname) {
+    // Shop routes (check first - more specific)
+    const shopRoutes = [
+      "/dashboard",
+      "/products",
+      "/orders",
+      "/messages",
+      "/bot-settings",
+    ];
+    for (const route of shopRoutes) {
+      if (pathname === route || pathname.startsWith(`${route}/`)) {
+        return "shop";
+      }
+    }
+
     // API product routes
     const apiRoutes = ["/apis", "/console", "/docs"];
     for (const route of apiRoutes) {
@@ -128,8 +177,23 @@ export function getProductFromDomain(
         return "api";
       }
     }
+
+    // Showcase routes
+    if (pathname === "/showcase" || pathname.startsWith("/showcase/")) {
+      return "showcase";
+    }
+
+    // Marketing routes
+    const marketingRoutes = ["/campaigns", "/bulk-messages", "/templates"];
+    for (const route of marketingRoutes) {
+      if (pathname === route || pathname.startsWith(`${route}/`)) {
+        return "marketing";
+      }
+    }
+
     // Allow URL param override for edge cases
     if (searchParams?.get("product") === "api") return "api";
+    if (searchParams?.get("product") === "shop") return "shop";
     return "dashboard";
   }
 
