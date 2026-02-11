@@ -29,7 +29,7 @@ async function getAuthToken(
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } },
+  context: { params: Promise<{ id: string }> },
 ) {
   try {
     const auth = await getAuthToken(request);
@@ -37,15 +37,13 @@ export async function GET(
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const response = await fetch(
-      `${BACKEND_URL}/api/showcase/items/${params.id}`,
-      {
-        headers: {
-          Authorization: `Bearer ${auth.token}`,
-          ...(auth.uid && { "X-User-ID": auth.uid }),
-        },
+    const { id } = await context.params;
+    const response = await fetch(`${BACKEND_URL}/api/showcase/items/${id}`, {
+      headers: {
+        Authorization: `Bearer ${auth.token}`,
+        ...(auth.uid && { "X-User-ID": auth.uid }),
       },
-    );
+    });
 
     const data = await response.json();
     return NextResponse.json(data, { status: response.status });
@@ -60,7 +58,7 @@ export async function GET(
 
 export async function PATCH(
   request: NextRequest,
-  { params }: { params: { id: string } },
+  context: { params: Promise<{ id: string }> },
 ) {
   try {
     const auth = await getAuthToken(request);
@@ -69,19 +67,17 @@ export async function PATCH(
     }
 
     const body = await request.json();
+    const { id } = await context.params;
 
-    const response = await fetch(
-      `${BACKEND_URL}/api/showcase/items/${params.id}`,
-      {
-        method: "PATCH",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${auth.token}`,
-          ...(auth.uid && { "X-User-ID": auth.uid }),
-        },
-        body: JSON.stringify(body),
+    const response = await fetch(`${BACKEND_URL}/api/showcase/items/${id}`, {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${auth.token}`,
+        ...(auth.uid && { "X-User-ID": auth.uid }),
       },
-    );
+      body: JSON.stringify(body),
+    });
 
     const data = await response.json();
     return NextResponse.json(data, { status: response.status });
@@ -96,7 +92,7 @@ export async function PATCH(
 
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { id: string } },
+  context: { params: Promise<{ id: string }> },
 ) {
   try {
     const auth = await getAuthToken(request);
@@ -104,16 +100,14 @@ export async function DELETE(
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const response = await fetch(
-      `${BACKEND_URL}/api/showcase/items/${params.id}`,
-      {
-        method: "DELETE",
-        headers: {
-          Authorization: `Bearer ${auth.token}`,
-          ...(auth.uid && { "X-User-ID": auth.uid }),
-        },
+    const { id } = await context.params;
+    const response = await fetch(`${BACKEND_URL}/api/showcase/items/${id}`, {
+      method: "DELETE",
+      headers: {
+        Authorization: `Bearer ${auth.token}`,
+        ...(auth.uid && { "X-User-ID": auth.uid }),
       },
-    );
+    });
 
     const data = await response.json();
     return NextResponse.json(data, { status: response.status });
