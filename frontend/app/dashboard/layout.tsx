@@ -421,143 +421,144 @@ export default function DashboardLayout({
                         </svg>
                         <span>Messages</span>
                       </button>
-                      {/* Bulk Messages - hideable */}
-                      {/* Commented out as requested
-                    {(mobileHideMode ||
-                      !mobileHiddenItems.includes("bulk-messages")) && (
-                      <div className={styles.mobileNavItemWrapper}>
-                        {mobileHideMode && canHideItem("bulk-messages") && (
-                          <button
-                            className={`${styles.mobileHideCheckbox} ${mobileHiddenItems.includes("bulk-messages") ? styles.mobileHideCheckboxChecked : ""}`}
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              toggleMobileHideItem("bulk-messages");
-                            }}
-                          >
-                            {mobileHiddenItems.includes("bulk-messages") && (
+                      {/* Bulk Messages - Domain-based visibility */}
+                      {visibility.bulkMessages &&
+                        (mobileHideMode ||
+                          !mobileHiddenItems.includes("bulk-messages")) && (
+                          <div className={styles.mobileNavItemWrapper}>
+                            {mobileHideMode && canHideItem("bulk-messages") && (
+                              <button
+                                className={`${styles.mobileHideCheckbox} ${mobileHiddenItems.includes("bulk-messages") ? styles.mobileHideCheckboxChecked : ""}`}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  toggleMobileHideItem("bulk-messages");
+                                }}
+                              >
+                                {mobileHiddenItems.includes(
+                                  "bulk-messages",
+                                ) && (
+                                  <svg
+                                    width="14"
+                                    height="14"
+                                    viewBox="0 0 24 24"
+                                    fill="none"
+                                    stroke="currentColor"
+                                    strokeWidth="3"
+                                  >
+                                    <path
+                                      d="M5 13l4 4L19 7"
+                                      strokeLinecap="round"
+                                      strokeLinejoin="round"
+                                    />
+                                  </svg>
+                                )}
+                              </button>
+                            )}
+                            <button
+                              className={`${styles.mobileNavLink} ${
+                                activeSection === "bulk-messages"
+                                  ? styles.mobileNavLinkActive
+                                  : ""
+                              } ${mobileHiddenItems.includes("bulk-messages") ? styles.mobileNavLinkHidden : ""}`}
+                              onClick={() =>
+                                !mobileHideMode &&
+                                handleSectionChange("bulk-messages")
+                              }
+                            >
                               <svg
-                                width="14"
-                                height="14"
-                                viewBox="0 0 24 24"
+                                width="20"
+                                height="20"
                                 fill="none"
                                 stroke="currentColor"
-                                strokeWidth="3"
+                                viewBox="0 0 24 24"
                               >
                                 <path
-                                  d="M5 13l4 4L19 7"
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                  strokeWidth={2}
+                                  d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"
+                                />
+                                <path
+                                  d="M8 12h8"
+                                  strokeLinecap="round"
+                                  strokeWidth={2}
+                                />
+                                <path
+                                  d="M8 8h8"
+                                  strokeLinecap="round"
+                                  strokeWidth={2}
+                                />
+                                <path
+                                  d="M8 16h4"
+                                  strokeLinecap="round"
+                                  strokeWidth={2}
+                                />
+                              </svg>
+                              <span>Bulk Messages</span>
+                            </button>
+                          </div>
+                        )}
+                      {/* Templates - Domain-based visibility */}
+                      {visibility.templates &&
+                        (mobileHideMode ||
+                          !mobileHiddenItems.includes("templates")) && (
+                          <div className={styles.mobileNavItemWrapper}>
+                            {mobileHideMode && canHideItem("templates") && (
+                              <button
+                                className={`${styles.mobileHideCheckbox} ${mobileHiddenItems.includes("templates") ? styles.mobileHideCheckboxChecked : ""}`}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  toggleMobileHideItem("templates");
+                                }}
+                              >
+                                {mobileHiddenItems.includes("templates") && (
+                                  <svg
+                                    width="14"
+                                    height="14"
+                                    viewBox="0 0 24 24"
+                                    fill="none"
+                                    stroke="currentColor"
+                                    strokeWidth="3"
+                                  >
+                                    <path
+                                      d="M5 13l4 4L19 7"
+                                      strokeLinecap="round"
+                                      strokeLinejoin="round"
+                                    />
+                                  </svg>
+                                )}
+                              </button>
+                            )}
+                            <button
+                              className={`${styles.mobileNavLink} ${activeSection === "templates" ? styles.mobileNavLinkActive : ""} ${mobileHiddenItems.includes("templates") ? styles.mobileNavLinkHidden : ""}`}
+                              onClick={() =>
+                                !mobileHideMode &&
+                                handleSectionChange("templates")
+                              }
+                            >
+                              <svg
+                                width="20"
+                                height="20"
+                                fill="none"
+                                stroke="currentColor"
+                                viewBox="0 0 24 24"
+                              >
+                                <path
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                  strokeWidth={2}
+                                  d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"
+                                />
+                                <polyline
+                                  points="14 2 14 8 20 8"
                                   strokeLinecap="round"
                                   strokeLinejoin="round"
                                 />
                               </svg>
-                            )}
-                          </button>
+                              <span>Templates</span>
+                            </button>
+                          </div>
                         )}
-                        <button
-                          className={`${styles.mobileNavLink} ${
-                            activeSection === "bulk-messages"
-                              ? styles.mobileNavLinkActive
-                              : ""
-                          } ${mobileHiddenItems.includes("bulk-messages") ? styles.mobileNavLinkHidden : ""}`}
-                          onClick={() =>
-                            !mobileHideMode &&
-                            handleSectionChange("bulk-messages")
-                          }
-                        >
-                          <svg
-                            width="20"
-                            height="20"
-                            fill="none"
-                            stroke="currentColor"
-                            viewBox="0 0 24 24"
-                          >
-                            <path
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                              strokeWidth={2}
-                              d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"
-                            />
-                            <path
-                              d="M8 12h8"
-                              strokeLinecap="round"
-                              strokeWidth={2}
-                            />
-                            <path
-                              d="M8 8h8"
-                              strokeLinecap="round"
-                              strokeWidth={2}
-                            />
-                            <path
-                              d="M8 16h4"
-                              strokeLinecap="round"
-                              strokeWidth={2}
-                            />
-                          </svg>
-                          <span>Bulk Messages</span>
-                        </button>
-                      </div>
-                    )}
-                    */}
-                      {/* Templates - hideable */}
-                      {/* Commented out as requested
-                    {(mobileHideMode ||
-                      !mobileHiddenItems.includes("templates")) && (
-                      <div className={styles.mobileNavItemWrapper}>
-                        {mobileHideMode && canHideItem("templates") && (
-                          <button
-                            className={`${styles.mobileHideCheckbox} ${mobileHiddenItems.includes("templates") ? styles.mobileHideCheckboxChecked : ""}`}
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              toggleMobileHideItem("templates");
-                            }}
-                          >
-                            {mobileHiddenItems.includes("templates") && (
-                              <svg
-                                width="14"
-                                height="14"
-                                viewBox="0 0 24 24"
-                                fill="none"
-                                stroke="currentColor"
-                                strokeWidth="3"
-                              >
-                                <path
-                                  d="M5 13l4 4L19 7"
-                                  strokeLinecap="round"
-                                  strokeLinejoin="round"
-                                />
-                              </svg>
-                            )}
-                          </button>
-                        )}
-                        <button
-                          className={`${styles.mobileNavLink} ${activeSection === "templates" ? styles.mobileNavLinkActive : ""} ${mobileHiddenItems.includes("templates") ? styles.mobileNavLinkHidden : ""}`}
-                          onClick={() =>
-                            !mobileHideMode && handleSectionChange("templates")
-                          }
-                        >
-                          <svg
-                            width="20"
-                            height="20"
-                            fill="none"
-                            stroke="currentColor"
-                            viewBox="0 0 24 24"
-                          >
-                            <path
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                              strokeWidth={2}
-                              d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"
-                            />
-                            <polyline
-                              points="14 2 14 8 20 8"
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                            />
-                          </svg>
-                          <span>Templates</span>
-                        </button>
-                      </div>
-                    )}
-                    */}
                       {/* Contacts - hideable */}
                       {/* Commented out as requested
                     {(mobileHideMode ||
@@ -621,62 +622,62 @@ export default function DashboardLayout({
                       </div>
                     )}
                     */}
-                      {/* Campaigns - hideable */}
-                      {/* Commented out as requested
-                    {(mobileHideMode ||
-                      !mobileHiddenItems.includes("campaigns")) && (
-                      <div className={styles.mobileNavItemWrapper}>
-                        {mobileHideMode && canHideItem("campaigns") && (
-                          <button
-                            className={`${styles.mobileHideCheckbox} ${mobileHiddenItems.includes("campaigns") ? styles.mobileHideCheckboxChecked : ""}`}
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              toggleMobileHideItem("campaigns");
-                            }}
-                          >
-                            {mobileHiddenItems.includes("campaigns") && (
+                      {/* Campaigns - Domain-based visibility */}
+                      {visibility.campaigns &&
+                        (mobileHideMode ||
+                          !mobileHiddenItems.includes("campaigns")) && (
+                          <div className={styles.mobileNavItemWrapper}>
+                            {mobileHideMode && canHideItem("campaigns") && (
+                              <button
+                                className={`${styles.mobileHideCheckbox} ${mobileHiddenItems.includes("campaigns") ? styles.mobileHideCheckboxChecked : ""}`}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  toggleMobileHideItem("campaigns");
+                                }}
+                              >
+                                {mobileHiddenItems.includes("campaigns") && (
+                                  <svg
+                                    width="14"
+                                    height="14"
+                                    viewBox="0 0 24 24"
+                                    fill="none"
+                                    stroke="currentColor"
+                                    strokeWidth="3"
+                                  >
+                                    <path
+                                      d="M5 13l4 4L19 7"
+                                      strokeLinecap="round"
+                                      strokeLinejoin="round"
+                                    />
+                                  </svg>
+                                )}
+                              </button>
+                            )}
+                            <button
+                              className={`${styles.mobileNavLink} ${activeSection === "campaigns" ? styles.mobileNavLinkActive : ""} ${mobileHiddenItems.includes("campaigns") ? styles.mobileNavLinkHidden : ""}`}
+                              onClick={() =>
+                                !mobileHideMode &&
+                                handleSectionChange("campaigns")
+                              }
+                            >
                               <svg
-                                width="14"
-                                height="14"
-                                viewBox="0 0 24 24"
+                                width="20"
+                                height="20"
                                 fill="none"
                                 stroke="currentColor"
-                                strokeWidth="3"
+                                viewBox="0 0 24 24"
                               >
-                                <path
-                                  d="M5 13l4 4L19 7"
+                                <polygon
+                                  points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"
                                   strokeLinecap="round"
                                   strokeLinejoin="round"
+                                  strokeWidth={2}
                                 />
                               </svg>
-                            )}
-                          </button>
+                              <span>Campaigns</span>
+                            </button>
+                          </div>
                         )}
-                        <button
-                          className={`${styles.mobileNavLink} ${activeSection === "campaigns" ? styles.mobileNavLinkActive : ""} ${mobileHiddenItems.includes("campaigns") ? styles.mobileNavLinkHidden : ""}`}
-                          onClick={() =>
-                            !mobileHideMode && handleSectionChange("campaigns")
-                          }
-                        >
-                          <svg
-                            width="20"
-                            height="20"
-                            fill="none"
-                            stroke="currentColor"
-                            viewBox="0 0 24 24"
-                          >
-                            <polygon
-                              points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                              strokeWidth={2}
-                            />
-                          </svg>
-                          <span>Campaigns</span>
-                        </button>
-                      </div>
-                    )}
-                    */}
                       {/* Appointments - domain-aware only */}
                       {visibility.appointments && (
                         <button

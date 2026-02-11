@@ -66,11 +66,11 @@ export const DOMAIN_VISIBILITY: Record<ProductDomain, DomainVisibilityRules> = {
     messages: true,
     aiSettings: true,
     previewBot: true,
-    orders: false, //
-    products: false, //
-    appointments: false, //
-    services: false, //
-    showcase: true, //
+    orders: false,
+    products: false,
+    appointments: false,
+    services: false,
+    showcase: true,
     campaigns: false,
     bulkMessages: false,
     templates: false,
