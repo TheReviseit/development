@@ -89,7 +89,7 @@ const nextConfig: NextConfig = {
               "img-src 'self' data: https: blob:",
               "font-src 'self' https://fonts.gstatic.com",
               "connect-src 'self' http://localhost:5000 http://127.0.0.1:5000 https://revsieit.onrender.com https://*.onrender.com https://*.supabase.co https://*.firebase.googleapis.com https://identitytoolkit.googleapis.com https://securetoken.googleapis.com https://api.cloudinary.com https://res.cloudinary.com https://firebaseinstallations.googleapis.com https://fcmregistrations.googleapis.com https://fcm.googleapis.com https://accounts.google.com https://*.firebaseapp.com wss://*.supabase.co https://connect.facebook.net https://graph.facebook.com https://*.facebook.com https://fonts.googleapis.com https://fonts.gstatic.com https://va.vercel-scripts.com https://api.web3forms.com https://api.razorpay.com https://*.razorpay.com https://lumberjack.razorpay.com https://*.r2.dev",
-              "frame-src 'self' https://vercel.live https://accounts.google.com https://*.firebaseapp.com https://www.facebook.com https://web.facebook.com https://api.razorpay.com https://*.razorpay.com",
+              "frame-src 'self' https://vercel.live https://accounts.google.com https://*.firebaseapp.com https://www.facebook.com https://web.facebook.com https://api.razorpay.com https://*.razorpay.com https://www.youtube.com https://www.youtube-nocookie.com",
               "frame-ancestors 'self'",
               "base-uri 'self'",
               "form-action 'self'",

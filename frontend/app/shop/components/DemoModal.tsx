@@ -15,8 +15,6 @@ interface DemoModalProps {
  * Closes on overlay click, X button, or Escape key.
  */
 export default function DemoModal({ open, onClose }: DemoModalProps) {
-  const videoRef = useRef<HTMLVideoElement>(null);
-
   // Close on Escape
   useEffect(() => {
     if (!open) return;
@@ -27,19 +25,6 @@ export default function DemoModal({ open, onClose }: DemoModalProps) {
     document.addEventListener("keydown", handleKey);
     return () => document.removeEventListener("keydown", handleKey);
   }, [open, onClose]);
-
-  // Autoplay when opened, pause when closed
-  useEffect(() => {
-    if (open && videoRef.current) {
-      videoRef.current.currentTime = 0;
-      videoRef.current.play().catch(() => {
-        // Autoplay blocked by browser — user can click play manually
-      });
-    }
-    if (!open && videoRef.current) {
-      videoRef.current.pause();
-    }
-  }, [open]);
 
   // Prevent body scroll when modal is open
   useEffect(() => {
@@ -70,14 +55,16 @@ export default function DemoModal({ open, onClose }: DemoModalProps) {
         >
           <X size={20} />
         </button>
-        <video
-          ref={videoRef}
-          className={styles.video}
-          src="/demo.mp4"
-          controls
-          autoPlay
-          playsInline
-        />
+        <div className={styles.videoWrapper}>
+          <iframe
+            className={styles.video}
+            src="https://www.youtube-nocookie.com/embed/rgGwedovVXQ?autoplay=1&mute=1&rel=0&modestbranding=0"
+            title="Flowauxi Demo"
+            frameBorder="0"
+            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+            allowFullScreen
+          ></iframe>
+        </div>
       </div>
     </div>
   );
