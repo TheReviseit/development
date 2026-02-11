@@ -65,7 +65,10 @@ export function DashboardAuthGuard({
         );
         // Defensive: ensure any stray cookies/storage are cleared
         clearSession().catch((err) =>
-          console.error("[DASHBOARD] clearSession error on UNAUTHENTICATED:", err),
+          console.error(
+            "[DASHBOARD] clearSession error on UNAUTHENTICATED:",
+            err,
+          ),
         );
         hardRedirect("/login");
         break;
@@ -143,7 +146,6 @@ export function DashboardAuthGuard({
       case "VERIFYING_SESSION":
       case "SYNCING_TO_DB":
         // Loading states - do nothing, wait for state to resolve
-        console.info(`[DASHBOARD] Auth in progress: ${authState}`);
         break;
 
       default:

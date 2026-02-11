@@ -183,6 +183,221 @@ const SettingsIcon = () => (
   </svg>
 );
 
+// Showcase grid icon for pages/showcase
+const ShowcaseIcon = () => (
+  <svg
+    width="20"
+    height="20"
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2"
+  >
+    <rect
+      x="3"
+      y="3"
+      width="7"
+      height="7"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+    <rect
+      x="14"
+      y="3"
+      width="7"
+      height="7"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+    <rect
+      x="14"
+      y="14"
+      width="7"
+      height="7"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+    <rect
+      x="3"
+      y="14"
+      width="7"
+      height="7"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+  </svg>
+);
+
+// Plus icon for Add Product
+const PlusIcon = () => (
+  <svg
+    width="20"
+    height="20"
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2"
+  >
+    <circle
+      cx="12"
+      cy="12"
+      r="10"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+    <line x1="12" y1="8" x2="12" y2="16" strokeLinecap="round" />
+    <line x1="8" y1="12" x2="16" y2="12" strokeLinecap="round" />
+  </svg>
+);
+
+// Image icon for Banners
+const ImageIcon = () => (
+  <svg
+    width="20"
+    height="20"
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2"
+  >
+    <rect
+      x="3"
+      y="3"
+      width="18"
+      height="18"
+      rx="2"
+      ry="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+    <circle cx="8.5" cy="8.5" r="1.5" fill="currentColor" />
+    <polyline
+      points="21 15 16 10 5 21"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+  </svg>
+);
+
+// Tag icon for Categories
+const TagIcon = () => (
+  <svg
+    width="20"
+    height="20"
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2"
+  >
+    <path
+      d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+    <line x1="7" y1="7" x2="7.01" y2="7" strokeLinecap="round" />
+  </svg>
+);
+
+// Palette icon for Sizes and Colors
+const SizesIcon = () => (
+  <svg
+    width="20"
+    height="20"
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2"
+  >
+    <circle cx="13.5" cy="6.5" r="0.5" fill="currentColor" />
+    <circle cx="17.5" cy="10.5" r="0.5" fill="currentColor" />
+    <circle cx="8.5" cy="7.5" r="0.5" fill="currentColor" />
+    <circle cx="6.5" cy="12.5" r="0.5" fill="currentColor" />
+    <path
+      d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.926 0 1.648-.746 1.648-1.688 0-.437-.18-.835-.437-1.125-.29-.289-.438-.652-.438-1.125a1.64 1.64 0 0 1 1.668-1.668h1.996c3.051 0 5.555-2.503 5.555-5.554C21.965 6.012 17.461 2 12 2z"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+  </svg>
+);
+
+// Layout icon for Pages Products
+const LayoutIcon = () => (
+  <svg
+    width="20"
+    height="20"
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2"
+  >
+    <rect
+      x="3"
+      y="3"
+      width="18"
+      height="18"
+      rx="2"
+      ry="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+    <line x1="3" y1="9" x2="21" y2="9" strokeLinecap="round" />
+    <line x1="9" y1="21" x2="9" y2="9" strokeLinecap="round" />
+  </svg>
+);
+
+// Calendar check icon for Pages Bookings
+const CalendarCheckIcon = () => (
+  <svg
+    width="20"
+    height="20"
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2"
+  >
+    <rect
+      x="3"
+      y="4"
+      width="18"
+      height="18"
+      rx="2"
+      ry="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+    <line x1="16" y1="2" x2="16" y2="6" strokeLinecap="round" />
+    <line x1="8" y1="2" x2="8" y2="6" strokeLinecap="round" />
+    <line x1="3" y1="10" x2="21" y2="10" strokeLinecap="round" />
+    <polyline
+      points="9 16 11 18 15 14"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+  </svg>
+);
+
+// Sliders icon for Pages Settings
+const SettingsGearIcon = () => (
+  <svg
+    width="20"
+    height="20"
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2"
+  >
+    <line x1="4" y1="21" x2="4" y2="14" strokeLinecap="round" />
+    <line x1="4" y1="10" x2="4" y2="3" strokeLinecap="round" />
+    <line x1="12" y1="21" x2="12" y2="12" strokeLinecap="round" />
+    <line x1="12" y1="8" x2="12" y2="3" strokeLinecap="round" />
+    <line x1="20" y1="21" x2="20" y2="16" strokeLinecap="round" />
+    <line x1="20" y1="12" x2="20" y2="3" strokeLinecap="round" />
+    <line x1="1" y1="14" x2="7" y2="14" strokeLinecap="round" />
+    <line x1="9" y1="8" x2="15" y2="8" strokeLinecap="round" />
+    <line x1="17" y1="16" x2="23" y2="16" strokeLinecap="round" />
+  </svg>
+);
+
 const BotIcon = () => (
   <svg
     width="20"
@@ -343,29 +558,6 @@ const ServicesIcon = () => (
   </svg>
 );
 
-// Store/Storefront icon for Showcase
-const ShowcaseIcon = () => (
-  <svg
-    width="20"
-    height="20"
-    viewBox="0 0 24 24"
-    fill="none"
-    stroke="currentColor"
-    strokeWidth="2"
-  >
-    <path
-      d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    />
-    <polyline
-      points="9 22 9 12 15 12 15 22"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    />
-  </svg>
-);
-
 const CollapseIcon = ({ collapsed }: { collapsed: boolean }) => (
   <svg
     width="18"
@@ -398,6 +590,7 @@ export default function DashboardSidebar({
   userName,
   isSidebarOpen,
 }: DashboardSidebarProps) {
+  const pathname = usePathname();
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [userCount, setUserCount] = useState<number>(0);
   const [currentDomain, setCurrentDomain] =
@@ -416,13 +609,31 @@ export default function DashboardSidebar({
     "showcase",
   ]);
 
+  // Helper function to determine if a nav item is active
+  const isItemActive = (item: NavItem, allItems: NavItem[]) => {
+    // First, check if ANY other item has an exact pathname match
+    // If yes, and this item is NOT that exact match, return false
+    const exactMatch = allItems.find((navItem) => pathname === navItem.href);
+
+    if (exactMatch) {
+      // There's an exact match - only highlight that item
+      return pathname === item.href;
+    }
+
+    // No exact match found - fall back to activeSection from parent
+    // (for backwards compatibility with parent component)
+    if (activeSection === item.id) {
+      return true;
+    }
+
+    return false;
+  };
+
   // Detect current domain on mount (enterprise-grade detection)
   useEffect(() => {
     const domain = detectProductDomain();
     setCurrentDomain(domain);
     const visibility = getDomainVisibility(domain);
-    console.log("🌐 [Sidebar] Domain detected:", domain);
-    console.log("📋 [Sidebar] Visibility rules:", visibility);
   }, []);
 
   // Clean up legacy UI state when domain changes (prevents ghost menus)
@@ -484,7 +695,6 @@ export default function DashboardSidebar({
       try {
         const response = await fetch("/api/ai-capabilities");
         const data = await response.json();
-        console.log("Sidebar: Fetched AI capabilities:", data);
         if (data.success && data.data) {
           setAiCapabilities(data.data);
         }
@@ -602,33 +812,30 @@ export default function DashboardSidebar({
             label: "Products",
             icon: <ProductsIcon />,
             href: "/dashboard/products",
-            subItems: [
-              {
-                id: "products-list",
-                label: "Product",
-                href: "/dashboard/products",
-              },
-              {
-                id: "add-product",
-                label: "Add Product",
-                href: "/dashboard/products/add",
-              },
-              {
-                id: "banners",
-                label: "Add Banners",
-                href: "/dashboard/products/banners",
-              },
-              {
-                id: "categories",
-                label: "Add Category",
-                href: "/dashboard/products/categories",
-              },
-              {
-                id: "options",
-                label: "Add Size and Colors",
-                href: "/dashboard/products/options",
-              },
-            ],
+          },
+          {
+            id: "add-product",
+            label: "Add Product",
+            icon: <PlusIcon />,
+            href: "/dashboard/products/add",
+          },
+          {
+            id: "banners",
+            label: "Add Banners",
+            icon: <ImageIcon />,
+            href: "/dashboard/products/banners",
+          },
+          {
+            id: "categories",
+            label: "Add Category",
+            icon: <TagIcon />,
+            href: "/dashboard/products/categories",
+          },
+          {
+            id: "options",
+            label: "Add Sizes & Colors",
+            icon: <SizesIcon />,
+            href: "/dashboard/products/options",
           },
         ]
       : []),
@@ -637,28 +844,30 @@ export default function DashboardSidebar({
     ...(visibility.showcase
       ? [
           {
-            id: "showcase",
-            label: "Showcase",
-            icon: <ShowcaseIcon />,
+            id: "showcase-products",
+            label: "Products",
+            icon: <LayoutIcon />,
             href: "/dashboard/showcase/products",
-            subItems: [
-              {
-                id: "showcase-products",
-                label: "Products",
-                href: "/dashboard/showcase/products",
-              },
-              {
-                id: "showcase-add-product",
-                label: "Add Products",
-                href: "/dashboard/showcase/products/add",
-              },
-              {
-                id: "showcase-bookings",
-                label: "Bookings",
-                href: "/dashboard/showcase/bookings",
-              },
-            ],
           },
+          {
+            id: "showcase-add-product",
+            label: "Add Product",
+            icon: <PlusIcon />,
+            href: "/dashboard/showcase/products/add",
+          },
+          {
+            id: "showcase-bookings",
+            label: "Bookings",
+            icon: <CalendarCheckIcon />,
+            href: "/dashboard/showcase/bookings",
+          },
+          // Pages Settings - hidden for now
+          // {
+          //   id: "showcase-settings",
+          //   label: "Pages Settings",
+          //   icon: <SettingsGearIcon />,
+          //   href: "/dashboard/showcase/settings",
+          // },
         ]
       : []),
 
@@ -814,7 +1023,7 @@ export default function DashboardSidebar({
                   // Expandable parent with sub-items
                   <button
                     className={`${styles.navItem} ${
-                      activeSection === item.id ||
+                      isItemActive(item, navItems) ||
                       expandedItems.includes(item.id)
                         ? styles.navItemActive
                         : ""
@@ -861,7 +1070,7 @@ export default function DashboardSidebar({
                   <Link
                     href={item.href}
                     className={`${styles.navItem} ${
-                      activeSection === item.id ? styles.navItemActive : ""
+                      isItemActive(item, navItems) ? styles.navItemActive : ""
                     }`}
                     title={isCollapsed ? item.label : undefined}
                   >

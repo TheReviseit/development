@@ -4,8 +4,15 @@ import { verifySessionCookieSafe } from "@/lib/firebase-admin";
 
 const BACKEND_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
 
-async function getAuthToken(): Promise<string | null> {
+async function getAuthToken(
+  request: NextRequest,
+): Promise<{ token: string; uid: string } | null> {
   try {
+    const authHeader = request.headers.get("authorization");
+    if (authHeader?.startsWith("Bearer ")) {
+      return { token: authHeader.substring(7), uid: "" };
+    }
+
     const cookieStore = await cookies();
     const sessionCookie = cookieStore.get("session")?.value;
     if (!sessionCookie) return null;
@@ -13,40 +20,37 @@ async function getAuthToken(): Promise<string | null> {
     const result = await verifySessionCookieSafe(sessionCookie, true);
     if (!result.success || !result.data) return null;
 
-    return sessionCookie;
+    return { token: sessionCookie, uid: result.data.uid };
   } catch (error) {
-    console.error("Error getting auth token:", error);
+    console.error("Showcase API auth error:", error);
     return null;
   }
 }
 
-// PATCH - Update showcase item
-export async function PATCH(
+export async function GET(
   request: NextRequest,
-  { params }: { params: Promise<{ id: string }> },
+  { params }: { params: { id: string } },
 ) {
   try {
-    const token = await getAuthToken();
-    if (!token) {
+    const auth = await getAuthToken(request);
+    if (!auth) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const { id } = await params;
-    const body = await request.json();
-
-    const response = await fetch(`${BACKEND_URL}/api/showcase/items/${id}`, {
-      method: "PATCH",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${token}`,
+    const response = await fetch(
+      `${BACKEND_URL}/api/showcase/items/${params.id}`,
+      {
+        headers: {
+          Authorization: `Bearer ${auth.token}`,
+          ...(auth.uid && { "X-User-ID": auth.uid }),
+        },
       },
-      body: JSON.stringify(body),
-    });
+    );
 
     const data = await response.json();
     return NextResponse.json(data, { status: response.status });
   } catch (error) {
-    console.error("Error updating showcase item:", error);
+    console.error("Showcase API error:", error);
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 },
@@ -54,30 +58,67 @@ export async function PATCH(
   }
 }
 
-// DELETE - Delete showcase item
-export async function DELETE(
+export async function PATCH(
   request: NextRequest,
-  { params }: { params: Promise<{ id: string }> },
+  { params }: { params: { id: string } },
 ) {
   try {
-    const token = await getAuthToken();
-    if (!token) {
+    const auth = await getAuthToken(request);
+    if (!auth) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const { id } = await params;
+    const body = await request.json();
 
-    const response = await fetch(`${BACKEND_URL}/api/showcase/items/${id}`, {
-      method: "DELETE",
-      headers: {
-        Authorization: `Bearer ${token}`,
+    const response = await fetch(
+      `${BACKEND_URL}/api/showcase/items/${params.id}`,
+      {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${auth.token}`,
+          ...(auth.uid && { "X-User-ID": auth.uid }),
+        },
+        body: JSON.stringify(body),
       },
-    });
+    );
 
     const data = await response.json();
     return NextResponse.json(data, { status: response.status });
   } catch (error) {
-    console.error("Error deleting showcase item:", error);
+    console.error("Showcase API error:", error);
+    return NextResponse.json(
+      { error: "Internal server error" },
+      { status: 500 },
+    );
+  }
+}
+
+export async function DELETE(
+  request: NextRequest,
+  { params }: { params: { id: string } },
+) {
+  try {
+    const auth = await getAuthToken(request);
+    if (!auth) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    const response = await fetch(
+      `${BACKEND_URL}/api/showcase/items/${params.id}`,
+      {
+        method: "DELETE",
+        headers: {
+          Authorization: `Bearer ${auth.token}`,
+          ...(auth.uid && { "X-User-ID": auth.uid }),
+        },
+      },
+    );
+
+    const data = await response.json();
+    return NextResponse.json(data, { status: response.status });
+  } catch (error) {
+    console.error("Showcase API error:", error);
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 },

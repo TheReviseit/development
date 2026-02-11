@@ -6,6 +6,11 @@ import SpaceshipLoader from "@/app/components/loading/SpaceshipLoader";
 import DashboardSidebar from "./components/DashboardSidebar";
 import { AuthProvider } from "@/app/components/auth/AuthProvider";
 import { DashboardAuthGuard } from "./components/DashboardAuthGuard";
+import {
+  detectProductDomain,
+  getDomainVisibility,
+  type ProductDomain,
+} from "@/lib/domain-navigation";
 import styles from "./dashboard.module.css";
 
 type Section =
@@ -70,10 +75,13 @@ export default function DashboardLayout({
   const [isMobile, setIsMobile] = useState(false);
   const [showMobileMenu, setShowMobileMenu] = useState(false);
   const [expandedMobileItems, setExpandedMobileItems] = useState<string[]>([]);
+  const [currentDomain, setCurrentDomain] =
+    useState<ProductDomain>("dashboard");
   const [appointmentBookingEnabled, setAppointmentBookingEnabled] =
     useState(false);
   const [orderBookingEnabled, setOrderBookingEnabled] = useState(false);
   const [productsEnabled, setProductsEnabled] = useState(false);
+  const [showcaseEnabled, setShowcaseEnabled] = useState(false);
   // Mobile menu hide feature state
   const [mobileHideMode, setMobileHideMode] = useState(false);
   const [mobileHiddenItems, setMobileHiddenItems] = useState<string[]>([]);
@@ -85,6 +93,15 @@ export default function DashboardLayout({
   const pathname = usePathname();
 
   const activeSection = getActiveSection(pathname);
+
+  // Detect current domain on mount (enterprise-grade detection)
+  useEffect(() => {
+    const domain = detectProductDomain();
+    setCurrentDomain(domain);
+  }, []);
+
+  // Get visibility rules for current domain
+  const visibility = getDomainVisibility(currentDomain);
 
   // Fetch AI capabilities for mobile menu
   useEffect(() => {
@@ -98,6 +115,7 @@ export default function DashboardLayout({
           );
           setOrderBookingEnabled(data.data.order_booking_enabled || false);
           setProductsEnabled(data.data.products_enabled || false);
+          setShowcaseEnabled(data.data.showcase_enabled || false);
         }
       } catch (error) {
         console.log("Error fetching AI capabilities");
@@ -121,6 +139,9 @@ export default function DashboardLayout({
         }
         if (customEvent.detail.products_enabled !== undefined) {
           setProductsEnabled(customEvent.detail.products_enabled);
+        }
+        if ((customEvent.detail as any).showcase_enabled !== undefined) {
+          setShowcaseEnabled((customEvent.detail as any).showcase_enabled);
         }
       } else {
         fetchCapabilities();
@@ -656,7 +677,8 @@ export default function DashboardLayout({
                       </div>
                     )}
                     */}
-                      {appointmentBookingEnabled && (
+                      {/* Appointments - domain-aware only */}
+                      {visibility.appointments && (
                         <button
                           className={`${styles.mobileNavLink} ${
                             activeSection === "appointments"
@@ -711,7 +733,46 @@ export default function DashboardLayout({
                           <span>Appointments</span>
                         </button>
                       )}
-                      {orderBookingEnabled && (
+                      {/* Services - domain-aware only */}
+                      {visibility.services && (
+                        <button
+                          className={`${styles.mobileNavLink} ${
+                            activeSection === "services"
+                              ? styles.mobileNavLinkActive
+                              : ""
+                          }`}
+                          onClick={() => handleSectionChange("services")}
+                        >
+                          <svg
+                            width="20"
+                            height="20"
+                            fill="none"
+                            stroke="currentColor"
+                            viewBox="0 0 24 24"
+                          >
+                            <rect
+                              x="2"
+                              y="7"
+                              width="20"
+                              height="14"
+                              rx="2"
+                              ry="2"
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              strokeWidth={2}
+                            />
+                            <path
+                              d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              strokeWidth={2}
+                            />
+                          </svg>
+                          <span>Services</span>
+                        </button>
+                      )}
+                      {/* Orders - domain-aware only */}
+                      {visibility.orders && (
                         <button
                           className={`${styles.mobileNavLink} ${
                             activeSection === "orders"
@@ -747,7 +808,8 @@ export default function DashboardLayout({
                           <span>Orders</span>
                         </button>
                       )}
-                      {productsEnabled && (
+                      {/* Products - domain-aware only */}
+                      {visibility.products && (
                         <div className={styles.mobileNavItemWrapper}>
                           <button
                             className={`${styles.mobileNavLink} ${
@@ -863,6 +925,148 @@ export default function DashboardLayout({
                               >
                                 Add Size and Colors
                               </button>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                      {/* Showcase - domain-aware only */}
+                      {visibility.showcase && (
+                        <div className={styles.mobileNavItemWrapper}>
+                          <button
+                            className={`${styles.mobileNavLink} ${
+                              activeSection === "showcase" ||
+                              expandedMobileItems.includes("showcase")
+                                ? styles.mobileNavLinkActive
+                                : ""
+                            }`}
+                            onClick={() => {
+                              setExpandedMobileItems((prev) =>
+                                prev.includes("showcase")
+                                  ? prev.filter((id) => id !== "showcase")
+                                  : [...prev, "showcase"],
+                              );
+                            }}
+                          >
+                            <svg
+                              width="20"
+                              height="20"
+                              fill="none"
+                              stroke="currentColor"
+                              viewBox="0 0 24 24"
+                            >
+                              <rect
+                                x="3"
+                                y="3"
+                                width="7"
+                                height="7"
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                strokeWidth={2}
+                              />
+                              <rect
+                                x="14"
+                                y="3"
+                                width="7"
+                                height="7"
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                strokeWidth={2}
+                              />
+                              <rect
+                                x="14"
+                                y="14"
+                                width="7"
+                                height="7"
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                strokeWidth={2}
+                              />
+                              <rect
+                                x="3"
+                                y="14"
+                                width="7"
+                                height="7"
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                strokeWidth={2}
+                              />
+                            </svg>
+                            <span>Showcase</span>
+                            <svg
+                              className={`${styles.mobileChevron} ${
+                                expandedMobileItems.includes("showcase")
+                                  ? styles.mobileChevronRotated
+                                  : ""
+                              }`}
+                              width="16"
+                              height="16"
+                              viewBox="0 0 24 24"
+                              fill="none"
+                              stroke="currentColor"
+                              strokeWidth="2"
+                            >
+                              <polyline points="6 9 12 15 18 9" />
+                            </svg>
+                          </button>
+
+                          {expandedMobileItems.includes("showcase") && (
+                            <div className={styles.mobileSubNavContainer}>
+                              <button
+                                className={`${styles.mobileSubNavLink} ${
+                                  pathname === "/dashboard/showcase/products"
+                                    ? styles.mobileSubNavLinkActive
+                                    : ""
+                                }`}
+                                onClick={() => {
+                                  router.push("/dashboard/showcase/products");
+                                  setShowMobileMenu(false);
+                                }}
+                              >
+                                Products
+                              </button>
+                              <button
+                                className={`${styles.mobileSubNavLink} ${
+                                  pathname ===
+                                  "/dashboard/showcase/products/add"
+                                    ? styles.mobileSubNavLinkActive
+                                    : ""
+                                }`}
+                                onClick={() => {
+                                  router.push(
+                                    "/dashboard/showcase/products/add",
+                                  );
+                                  setShowMobileMenu(false);
+                                }}
+                              >
+                                Add Product
+                              </button>
+                              <button
+                                className={`${styles.mobileSubNavLink} ${
+                                  pathname === "/dashboard/showcase/bookings"
+                                    ? styles.mobileSubNavLinkActive
+                                    : ""
+                                }`}
+                                onClick={() => {
+                                  router.push("/dashboard/showcase/bookings");
+                                  setShowMobileMenu(false);
+                                }}
+                              >
+                                Bookings
+                              </button>
+                              {/* Pages Settings - hidden for now */}
+                              {/* <button
+                                className={`${styles.mobileSubNavLink} ${
+                                  pathname === "/dashboard/showcase/settings"
+                                    ? styles.mobileSubNavLinkActive
+                                    : ""
+                                }`}
+                                onClick={() => {
+                                  router.push("/dashboard/showcase/settings");
+                                  setShowMobileMenu(false);
+                                }}
+                              >
+                                Pages Settings
+                              </button> */}
                             </div>
                           )}
                         </div>

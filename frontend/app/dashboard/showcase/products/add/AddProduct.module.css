@@ -169,14 +169,16 @@
 }
 
 .submitButton {
-  background: var(--showcase-primary-gradient);
-  color: white;
+  background: white;
+  color: #1a1a1a;
   box-shadow: var(--showcase-shadow);
+  border: 1px solid rgba(255, 255, 255, 0.1);
 }
 
 .submitButton:hover:not(:disabled) {
   transform: translateY(-2px);
-  box-shadow: var(--showcase-shadow-primary);
+  box-shadow: 0 4px 12px rgba(255, 255, 255, 0.3);
+  background: rgba(255, 255, 255, 0.95);
 }
 
 .submitButton:disabled {

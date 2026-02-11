@@ -47,19 +47,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const firebaseUserRef = useRef<FirebaseUserType | null>(null);
 
   /**
-   * Structured logging for auth state transitions
+   * Structured logging for auth state transitions (disabled for production)
    */
   const logAuthTransition = useCallback(
     (from: AuthState, to: AuthState, reason?: string, userId?: string) => {
-      console.info("[AUTH]", {
-        from,
-        to,
-        reason,
-        timestamp: Date.now(),
-        userId: userId || firebaseUserRef.current?.uid || "unknown",
-      });
+      // Logging disabled for cleaner console
     },
-    [], // No deps — uses ref for stable access
+    [],
   );
 
   /**
@@ -82,7 +76,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
    * CRITICAL: This is called when Firebase session exists but DB user doesn't
    */
   const clearSession = useCallback(async () => {
-    console.warn("[AUTH] Clearing full auth session (Firebase + cookies + storage)");
+    console.warn(
+      "[AUTH] Clearing full auth session (Firebase + cookies + storage)",
+    );
     try {
       // Best-effort: clear server-side session cookie
       try {
@@ -141,10 +137,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const syncUser = useCallback(
     async (idToken: string): Promise<SupabaseUser> => {
       try {
-        console.info("[AUTH] Starting DB sync (session restoration)...");
-        console.info(
-          "[AUTH] allowCreate will NOT be passed (defaults to false)",
-        );
         updateAuthState("SYNCING_TO_DB" as AuthState, "SYNC_INITIATED");
 
         const response = await fetch("/api/auth/sync", {
@@ -155,8 +147,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           // CRITICAL: allowCreate NOT passed, defaults to false (fail closed)
           body: JSON.stringify({ idToken }),
         });
-
-        console.info("[AUTH] Sync response status:", response.status);
 
         if (!response.ok) {
           // Try to get the actual error message from the response
@@ -195,7 +185,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         if (data.success && data.user) {
           setUser(data.user);
           updateAuthState("AUTHENTICATED" as AuthState, "SYNC_SUCCESS");
-          console.log("[AUTH] ✅ User synced successfully to Supabase");
+
           return data.user;
         } else {
           throw new Error(data.error || "Sync failed");
@@ -232,7 +222,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const syncUserForSignup = useCallback(
     async (idToken: string): Promise<SupabaseUser> => {
       try {
-        console.info("[AUTH] Starting DB sync (new user signup)...");
         updateAuthState("SYNCING_TO_DB" as AuthState, "SIGNUP_SYNC_INITIATED");
 
         const response = await fetch("/api/auth/sync", {
@@ -271,7 +260,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         if (data.success && data.user) {
           setUser(data.user);
           updateAuthState("AUTHENTICATED" as AuthState, "SIGNUP_SYNC_SUCCESS");
-          console.log("[AUTH] ✅ New user created and synced to Supabase");
+
           return data.user;
         } else {
           throw new Error(data.error || "Signup sync failed");
@@ -291,7 +280,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
    */
   const handleSignOut = useCallback(async () => {
     try {
-      console.info("[AUTH] User initiated signout");
       await clearSession();
     } catch (err: any) {
       console.error("[AUTH] Sign out error:", err);
@@ -336,14 +324,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         if (firebaseUserData) {
           // Re-entrance guard: skip if sync already in progress
           if (syncInProgressRef.current) {
-            console.info(
-              "[AUTH] Sync already in progress, skipping duplicate onAuthStateChanged fire",
-            );
             return;
           }
           syncInProgressRef.current = true;
 
-          console.info("[AUTH] Firebase user detected, verifying...");
           updateAuthState(
             "VERIFYING_SESSION" as AuthState,
             "FIREBASE_USER_FOUND",
@@ -374,7 +358,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           }
         } else {
           // User signed out
-          console.info("[AUTH] No Firebase user, setting unauthenticated");
+
           setUser(null);
           syncInProgressRef.current = false;
           updateAuthState("UNAUTHENTICATED" as AuthState, "NO_FIREBASE_USER");
@@ -411,10 +395,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const refreshInterval = setInterval(
       async () => {
         try {
-          console.info("[AUTH] Refreshing token...");
           const idToken = await firebaseUser.getIdToken(true); // Force refresh
           await syncUser(idToken);
-          console.log("[AUTH] Token refreshed and user re-synced");
         } catch (err) {
           console.error("[AUTH] Token refresh failed:", err);
           // Token refresh failure = signout

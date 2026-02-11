@@ -258,19 +258,19 @@ export default function AddProductPage() {
 
         <div className={styles.actions}>
           <button
-            type="submit"
-            className={styles.submitButton}
-            disabled={submitting}
-          >
-            {submitting ? "Creating..." : "Create Product"}
-          </button>
-          <button
             type="button"
             className={styles.cancelButton}
             onClick={() => router.push("/dashboard/showcase/products")}
             disabled={submitting}
           >
             Cancel
+          </button>
+          <button
+            type="submit"
+            className={styles.submitButton}
+            disabled={submitting}
+          >
+            {submitting ? "Creating..." : "Create Product"}
           </button>
         </div>
       </form>

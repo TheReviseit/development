@@ -27,71 +27,46 @@ def get_user_from_token() -> Optional[str]:
     Sets g.user_id for downstream use.
     Returns user_id (Firebase UID) if valid, None otherwise.
     
-    ✅ ENTERPRISE PRODUCTION FIX: Smart authentication
-    Handles BOTH ID tokens AND session cookies automatically!
-    Frontend sends different token types from different parts of the app.
+    ✅ ENTERPRISE PRODUCTION FIX: Trusted Next.js API Route
+    Next.js API route already verifies session cookies, so we trust X-User-ID header.
+    Falls back to token verification if header not present.
     """
     from flask import g
+    
+    # Trust X-User-ID from Next.js API route
+    user_id_header = request.headers.get('X-User-ID')
+    if user_id_header:
+        g.user_id = user_id_header
+        return user_id_header
+    
+    # Fallback: verify token directly
     auth_header = request.headers.get('Authorization', '')
-    
-    logger.info(f'🔍 Auth header present: {bool(auth_header)}, starts with Bearer: {auth_header.startswith("Bearer ")}')
-    
     if not auth_header.startswith('Bearer '):
-        logger.warning(f'❌ No Bearer token in Authorization header. Header: {auth_header[:50] if auth_header else "EMPTY"}...')
         return None
     
-    token = auth_header[7:]  # Remove 'Bearer ' prefix
-    logger.info(f'🔑 Token extracted (first 20 chars): {token[:20]}...')
+    token = auth_header[7:]
     
-    # ✅ ENTERPRISE FIX: Try both verification methods
-    # 1. Try as session cookie first (more secure, preferred)
-    # 2. Fall back to ID token if session cookie fails
-    
-    user_id = None
-    
-    # Attempt 1: Session Cookie
+    # Try session cookie first
     try:
-        logger.info(f'🔐 Attempting to verify as Firebase session cookie...')
         decoded_token = firebase_auth.verify_session_cookie(token, check_revoked=True)
         user_id = decoded_token.get('uid')
-        logger.info(f'✅ Session cookie verified successfully! User ID: {user_id}')
         g.user_id = user_id
         return user_id
     except firebase_auth.InvalidSessionCookieError:
-        logger.info(f'ℹ️ Not a valid session cookie, trying ID token verification...')
-    except firebase_auth.RevokedSessionCookieError as e:
-        logger.error(f'❌ Session cookie revoked: {e}')
+        pass  # Try ID token next
+    except (firebase_auth.RevokedSessionCookieError, firebase_auth.ExpiredIdTokenError):
         return None
-    except firebase_auth.ExpiredIdTokenError as e:
-        logger.error(f'❌ Session cookie expired: {e}')
-        return None
-    except Exception as e:
-        logger.debug(f'Session cookie verification failed (will try ID token): {e}')
+    except Exception:
+        pass  # Try ID token next
     
-    # Attempt 2: ID Token
+    # Try ID token
     try:
-        logger.info(f'🔐 Attempting to verify as Firebase ID token...')
         decoded_token = firebase_auth.verify_id_token(token, check_revoked=True)
         user_id = decoded_token.get('uid')
-        logger.info(f'✅ ID token verified successfully! User ID: {user_id}')
         g.user_id = user_id
         return user_id
-    except firebase_auth.InvalidIdTokenError as e:
-        logger.error(f'❌ ID token verification failed - Invalid token: {e}')
-        return None
-    except firebase_auth.ExpiredIdTokenError as e:
-        logger.error(f'❌ ID token verification failed - Expired token: {e}')
-        return None
-    except firebase_auth.RevokedIdTokenError as e:
-        logger.error(f'❌ ID token verification failed - Revoked token: {e}')
-        return None
-    except ValueError as e:
-        logger.error(f'❌ ID token verification failed - Invalid format: {e}')
-        return None
     except Exception as e:
-        logger.error(f'❌ Token verification failed completely: {type(e).__name__}: {e}')
-        import traceback
-        logger.error(f'Traceback: {traceback.format_exc()}')
+        logger.error(f'Token verification failed: {type(e).__name__}')
         return None
 
 

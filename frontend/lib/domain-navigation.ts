@@ -66,11 +66,11 @@ export const DOMAIN_VISIBILITY: Record<ProductDomain, DomainVisibilityRules> = {
     messages: true,
     aiSettings: true,
     previewBot: true,
-    orders: false, // ❌ Not relevant for showcase
-    products: false, // ❌ Not relevant for showcase
-    appointments: true, // ✅ Booking for services
-    services: true, // ✅ Service catalog
-    showcase: true, // ✅ Showcase-specific
+    orders: false, //
+    products: false, //
+    appointments: false, //
+    services: false, //
+    showcase: true, //
     campaigns: false,
     bulkMessages: false,
     templates: false,
@@ -152,30 +152,15 @@ export function detectProductDomain(): ProductDomain {
     const port = window.location.port;
 
     // Priority 1: Port-based detection (from npm scripts)
-    if (port === "3001") {
-      console.log(`🔧 [Domain Detection] Port 3001 → shop`);
-      return "shop";
-    }
-    if (port === "3002") {
-      console.log(`🔧 [Domain Detection] Port 3002 → showcase`);
-      return "showcase";
-    }
-    if (port === "3003") {
-      console.log(`🔧 [Domain Detection] Port 3003 → marketing`);
-      return "marketing";
-    }
-    if (port === "3004") {
-      console.log(`🔧 [Domain Detection] Port 3004 → api`);
-      return "api";
-    }
+    if (port === "3001") return "shop";
+    if (port === "3002") return "showcase";
+    if (port === "3003") return "marketing";
+    if (port === "3004") return "api";
 
     // Priority 2: Check query param (?product=shop)
     const productParam = searchParams.get("product") as ProductDomain | null;
     if (productParam && isValidProductDomain(productParam)) {
       localStorage.setItem("DEV_DOMAIN", productParam);
-      console.log(
-        `🔧 [Domain Detection] Query param override: ${productParam}`,
-      );
       return productParam;
     }
 
@@ -184,21 +169,16 @@ export function detectProductDomain(): ProductDomain {
       "DEV_DOMAIN",
     ) as ProductDomain | null;
     if (devDomain && isValidProductDomain(devDomain)) {
-      console.log(`🔧 [Domain Detection] localStorage override: ${devDomain}`);
       return devDomain;
     }
 
     // Priority 4: Path-based detection (localhost fallback)
     const pathDomain = detectFromPath(pathname);
     if (pathDomain) {
-      console.log(`🔧 [Domain Detection] Path-based: ${pathDomain}`);
       return pathDomain;
     }
 
     // Default localhost to dashboard (port 3000)
-    console.log(
-      `🔧 [Domain Detection] Localhost default (port ${port}): dashboard`,
-    );
     return "dashboard";
   }
 
