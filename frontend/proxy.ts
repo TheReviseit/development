@@ -1,16 +1,17 @@
 /**
- * Next.js Proxy - Enterprise Auth & Domain Gateway
- *
- * Server-side route protection with:
- * - Domain-aware multi-product routing
- * - Declarative policy-based auth
- * - Cross-auth detection and blocking
- * - Standardized error redirects
- * - Zero client-side flash
+ * Next.js 16 Proxy - Enterprise Multi-Domain Router
  *
  * Architecture:
- * - proxy.ts: Orchestrator only
- * - lib/domain-policy.ts: All domain decision logic
+ * - Production: Domain-based routing (shop.flowauxi.com → /shop)
+ * - Development: Port-based routing (localhost:3001 → /shop)
+ * - Explicit segments (NOT route groups) for deterministic routing
+ * - Preserves all existing auth middleware logic
+ *
+ * Products:
+ * - shop.flowauxi.com (port 3001) → /shop
+ * - marketing.flowauxi.com (port 3002) → /marketing
+ * - showcase.flowauxi.com (port 3003) → /showcase
+ * - flowauxi.com (port 3000) → /dashboard-home (main product)
  */
 
 import { NextResponse } from "next/server";
@@ -18,16 +19,18 @@ import type { NextRequest } from "next/server";
 import {
   evaluateDomainAccess,
   applyDecision,
-  getProductFromDomain,
-  isDevOrPreview,
   type ProductContext,
 } from "@/lib/domain-policy";
+import { resolveDomain, getLandingRoute } from "@/lib/domain/config";
 
 // =============================================================================
 // TYPES
 // =============================================================================
 
 type UserType = "normal" | "console" | null;
+
+// Domain resolution now delegated to lib/domain/config.ts (single source of truth)
+// DOMAIN_TO_LANDING and PORT_TO_LANDING maps removed — use resolveDomain() + getLandingRoute()
 
 // =============================================================================
 // AUTH ROUTE POLICY (Declarative - Which routes require which auth)
@@ -59,14 +62,17 @@ const PUBLIC_ROUTES = [
   "/error",
   "/offline",
   "/docs",
-  "/booking", // Customer-facing booking pages
-  "/showcase", // Public showcase pages
+  "/booking",
+  "/showcase",
   "/onboarding-embedded",
   "/manifest.webmanifest",
   "/sw.js",
   "/sitemap.xml",
   "/robots.txt",
   "/pricing",
+  // Product landing pages
+  "/shop",
+  "/marketing",
 ];
 
 const PUBLIC_API_ROUTES = [
@@ -82,10 +88,10 @@ const PUBLIC_API_ROUTES = [
   "/api/store",
   "/api/orders/track",
   "/api/console",
-  "/api/v1", // OTP API proxy routes
-  "/api/whatsapp", // WhatsApp webhook and public endpoints
-  "/api/booking", // Public booking page APIs
-  "/api/showcase", // Public showcase page APIs
+  "/api/v1",
+  "/api/whatsapp",
+  "/api/booking",
+  "/api/showcase",
 ];
 
 // =============================================================================
@@ -93,7 +99,6 @@ const PUBLIC_API_ROUTES = [
 // =============================================================================
 
 function getUserTypeFromCookies(request: NextRequest): UserType {
-  // Updated cookie names for shared domain strategy
   const hasNormalSession =
     request.cookies.has("session") || request.cookies.has("flowauxi_session");
   const hasConsoleSession =
@@ -101,7 +106,7 @@ function getUserTypeFromCookies(request: NextRequest): UserType {
     request.cookies.has("flowauxi_console_session");
 
   if (hasNormalSession && hasConsoleSession) {
-    return null; // Let route handler decide
+    return null;
   }
 
   if (hasConsoleSession) return "console";
@@ -167,7 +172,7 @@ function redirectToDashboard(
 // =============================================================================
 
 const BACKEND_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
-const UUID_PATTERN = /^[a-zA-Z0-9-]{20,}$/; // Detect Firebase UIDs (20+ chars)
+const UUID_PATTERN = /^[a-zA-Z0-9-]{20,}$/;
 
 async function getUsernameByUserId(userId: string): Promise<string | null> {
   try {
@@ -175,7 +180,7 @@ async function getUsernameByUserId(userId: string): Promise<string | null> {
       `${BACKEND_URL}/api/username/resolve/${userId}`,
       {
         headers: {
-          "Cache-Control": "max-age=300", // Cache for 5 minutes
+          "Cache-Control": "max-age=300",
         },
       },
     );
@@ -193,12 +198,14 @@ async function getUsernameByUserId(userId: string): Promise<string | null> {
 }
 
 // =============================================================================
-// PROXY (Main export - Next.js 16+ auto-detects this)
+// PROXY FUNCTION (Next.js 16 required signature)
 // =============================================================================
 
 export async function proxy(request: NextRequest) {
   const pathname = request.nextUrl.pathname;
   const hostname = request.nextUrl.hostname;
+  const port = request.nextUrl.port;
+
   // Only match actual API endpoints (/api/...), NOT /apis (which is a page)
   const isApiPath = pathname.startsWith("/api/") || pathname === "/api";
 
@@ -212,31 +219,53 @@ export async function proxy(request: NextRequest) {
     const identifier = storeMatch?.[1] || showcaseMatch?.[1];
     const routeType = storeMatch ? "store" : "showcase";
 
-    // Check if identifier looks like a Firebase UID (long, 20+ chars)
     if (identifier && UUID_PATTERN.test(identifier)) {
       console.log(`🔍 Detected old UID URL: /${routeType}/${identifier}`);
 
-      // Resolve to username
       const username = await getUsernameByUserId(identifier);
 
       if (username) {
-        // Build new URL with username
         const newPath = pathname.replace(identifier, username);
         const newUrl = new URL(newPath, request.url);
-
-        // Preserve query params
         newUrl.search = request.nextUrl.search;
 
         console.log(`✅ 301 Redirect: ${pathname} → ${newPath}`);
-
-        // ✅ SERVER-SIDE 301 (SEO-friendly permanent redirect)
         return NextResponse.redirect(newUrl, 301);
       }
     }
   }
 
   // ==========================================================================
-  // STEP 1: Domain-aware routing (delegated to domain-policy.ts)
+  // STEP 1: Multi-Domain Product Landing Pages (Enterprise Feature)
+  // ==========================================================================
+  // CRITICAL: Only rewrite root "/" path, not nested routes
+  // Example: shop.flowauxi.com/ → /shop (rewrite)
+  //          shop.flowauxi.com/products → no rewrite (let it route normally)
+
+  if (pathname === "/") {
+    const domain = resolveDomain(hostname, port);
+    const targetLanding = getLandingRoute(domain);
+
+    // Perform rewrite to explicit segment (e.g., /shop, /marketing)
+    if (targetLanding && targetLanding !== "/") {
+      const rewriteUrl = request.nextUrl.clone();
+      rewriteUrl.pathname = targetLanding;
+
+      const response = NextResponse.rewrite(rewriteUrl);
+      // Set product domain header (single source of truth)
+      response.headers.set("x-product-domain", domain);
+      response.headers.set("x-landing-page", targetLanding);
+      // CDN cache headers for landing pages (enterprise-grade performance)
+      response.headers.set(
+        "Cache-Control",
+        "public, s-maxage=3600, stale-while-revalidate=86400",
+      );
+      return response;
+    }
+  }
+
+  // ==========================================================================
+  // STEP 2: Domain-aware routing (delegated to domain-policy.ts)
   // ==========================================================================
   const domainDecision = evaluateDomainAccess(request);
 
@@ -251,7 +280,7 @@ export async function proxy(request: NextRequest) {
   }
 
   // ==========================================================================
-  // STEP 2: API Routes - Let them handle their own auth
+  // STEP 3: API Routes - Let them handle their own auth
   // ==========================================================================
   if (isApiPath) {
     if (isPublicApiRoute(pathname)) {
@@ -273,7 +302,7 @@ export async function proxy(request: NextRequest) {
   }
 
   // ==========================================================================
-  // STEP 3: Auth checks for page routes
+  // STEP 4: Auth checks for page routes
   // ==========================================================================
   const userType = getUserTypeFromCookies(request);
   const requiredType = getRequiredUserType(pathname);
@@ -331,6 +360,7 @@ function addProductHeaders(
   canonical: string,
 ): NextResponse {
   response.headers.set("x-product-context", product);
+  response.headers.set("x-product-domain", product);
   response.headers.set("x-canonical-url", canonical);
   return response;
 }
@@ -351,3 +381,6 @@ export const config = {
     "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:jpg|jpeg|gif|png|svg|ico|css|js|webp|woff|woff2|webmanifest|json|xml|txt)).*)",
   ],
 };
+
+// Default export for Next.js 16 compatibility
+export default proxy;

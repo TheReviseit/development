@@ -1,0 +1,139 @@
+/* =============================================================================
+   SHOP SHOWCASE — Product Demo / Benefits Section
+   ============================================================================= */
+
+.showcase {
+  padding: 100px 24px;
+  background: #fff;
+}
+
+.showcaseInner {
+  max-width: 1280px;
+  margin: 0 auto;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 80px;
+  align-items: center;
+}
+
+.showcaseContent h2 {
+  font-size: 2.75rem;
+  font-weight: 700;
+  color: #000;
+  letter-spacing: -0.03em;
+  line-height: 1.1;
+  margin: 0 0 20px;
+}
+
+.showcaseContent p {
+  font-size: 1.0625rem;
+  color: #6b7280;
+  line-height: 1.7;
+  margin: 0 0 36px;
+}
+
+.benefitsList {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.benefitItem {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+}
+
+.benefitCheck {
+  flex-shrink: 0;
+  width: 24px;
+  height: 24px;
+  background: #000;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-top: 2px;
+}
+
+.benefitText {
+  font-size: 1rem;
+  color: #374151;
+  line-height: 1.5;
+}
+
+/* ---- Visual Side ---- */
+
+.showcaseVisual {
+  position: relative;
+}
+
+.visualCard {
+  background: #fafafa;
+  border: 1px solid #f0f0f0;
+  border-radius: 16px;
+  aspect-ratio: 4 / 3;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  overflow: hidden;
+}
+
+.visualGraphRow {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+  height: 120px;
+  padding: 0 40px;
+  width: 100%;
+  justify-content: center;
+}
+
+.graphBar {
+  width: 32px;
+  border-radius: 6px 6px 0 0;
+  background: #000;
+  transition: height 0.4s ease;
+}
+
+.graphBar:nth-child(2) {
+  background: #374151;
+}
+
+.graphBar:nth-child(4) {
+  background: #374151;
+}
+
+.graphBar:nth-child(6) {
+  background: #6b7280;
+}
+
+.visualLabel {
+  font-size: 0.875rem;
+  color: #9ca3af;
+  font-weight: 500;
+}
+
+/* ---- Responsive ---- */
+
+@media (max-width: 1024px) {
+  .showcaseInner {
+    grid-template-columns: 1fr;
+    gap: 48px;
+  }
+}
+
+@media (max-width: 640px) {
+  .showcase {
+    padding: 64px 16px;
+  }
+
+  .showcaseContent h2 {
+    font-size: 2rem;
+  }
+}

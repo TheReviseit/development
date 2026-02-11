@@ -1,0 +1,111 @@
+/* =============================================================================
+   SHOP STEPS — How it Works Section
+   ============================================================================= */
+
+.steps {
+  padding: 100px 24px;
+  background: #fafafa;
+}
+
+.stepsInner {
+  max-width: 1280px;
+  margin: 0 auto;
+}
+
+.sectionHeader {
+  text-align: center;
+  margin-bottom: 64px;
+}
+
+.sectionTitle {
+  font-size: 2.75rem;
+  font-weight: 700;
+  color: #000;
+  letter-spacing: -0.03em;
+  line-height: 1.1;
+  margin: 0 0 14px;
+}
+
+.sectionDesc {
+  font-size: 1.125rem;
+  color: #6b7280;
+  margin: 0;
+}
+
+.stepsGrid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 32px;
+  position: relative;
+}
+
+/* Connecting line */
+.stepsGrid::before {
+  content: "";
+  position: absolute;
+  top: 40px;
+  left: calc(16.67% + 16px);
+  right: calc(16.67% + 16px);
+  height: 2px;
+  background: #e5e7eb;
+}
+
+.stepCard {
+  text-align: center;
+  position: relative;
+}
+
+.stepNumber {
+  width: 80px;
+  height: 80px;
+  background: #000;
+  border-radius: 20px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 2rem;
+  font-weight: 700;
+  color: #fff;
+  margin-bottom: 28px;
+  position: relative;
+  z-index: 1;
+}
+
+.stepTitle {
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: #000;
+  margin: 0 0 12px;
+  letter-spacing: -0.02em;
+}
+
+.stepDesc {
+  font-size: 0.9375rem;
+  color: #6b7280;
+  line-height: 1.6;
+  margin: 0;
+  max-width: 300px;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+/* ---- Responsive ---- */
+
+@media (max-width: 768px) {
+  .stepsGrid {
+    grid-template-columns: 1fr;
+    gap: 48px;
+  }
+
+  .stepsGrid::before {
+    display: none;
+  }
+
+  .steps {
+    padding: 64px 16px;
+  }
+
+  .sectionTitle {
+    font-size: 2rem;
+  }
+}

@@ -6,6 +6,16 @@ const nextConfig: NextConfig = {
   // Security and SEO Headers
   async headers() {
     return [
+      // Immutable caching for Next.js static assets (hashed filenames)
+      {
+        source: "/_next/static/:path*",
+        headers: [
+          {
+            key: "Cache-Control",
+            value: "public, max-age=31536000, immutable",
+          },
+        ],
+      },
       // PWA-specific cache headers for service worker
       {
         source: "/sw.js",
@@ -108,8 +118,10 @@ const nextConfig: NextConfig = {
   // Compression
   compress: true,
 
-  // Empty turbopack config (Next.js 16 uses Turbopack by default)
-  turbopack: {},
+  // Explicitly set Turbopack root to resolve workspace inference issues and fix HMR
+  turbopack: {
+    root: ".",
+  },
 };
 
 export default nextConfig;

@@ -1,0 +1,73 @@
+/* =============================================================================
+   SHOP TRUST — Trust / Social Proof Section
+   ============================================================================= */
+
+.trust {
+  padding: 100px 24px;
+  background: #fff;
+}
+
+.trustInner {
+  max-width: 1280px;
+  margin: 0 auto;
+}
+
+.trustGrid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 32px;
+}
+
+.trustCard {
+  text-align: center;
+  padding: 40px 32px;
+  border: 1px solid #f0f0f0;
+  border-radius: 16px;
+  transition:
+    box-shadow 0.3s ease,
+    transform 0.3s ease;
+}
+
+.trustCard:hover {
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.06);
+  transform: translateY(-4px);
+}
+
+.trustIconWrap {
+  width: 64px;
+  height: 64px;
+  background: #000;
+  border-radius: 16px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 24px;
+}
+
+.trustTitle {
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: #000;
+  margin: 0 0 12px;
+  letter-spacing: -0.02em;
+}
+
+.trustDesc {
+  font-size: 0.9375rem;
+  color: #6b7280;
+  line-height: 1.6;
+  margin: 0;
+}
+
+/* ---- Responsive ---- */
+
+@media (max-width: 768px) {
+  .trustGrid {
+    grid-template-columns: 1fr;
+    gap: 20px;
+  }
+
+  .trust {
+    padding: 64px 16px;
+  }
+}

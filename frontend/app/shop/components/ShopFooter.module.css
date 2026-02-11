@@ -1,0 +1,152 @@
+/* =============================================================================
+   SHOP FOOTER — Clean Minimal Footer
+   ============================================================================= */
+
+.footer {
+  padding: 64px 24px 32px;
+  background: #fafafa;
+  border-top: 1px solid #f0f0f0;
+}
+
+.footerInner {
+  max-width: 1280px;
+  margin: 0 auto;
+}
+
+.footerGrid {
+  display: grid;
+  grid-template-columns: 2fr 1fr 1fr 1fr;
+  gap: 48px;
+  margin-bottom: 48px;
+}
+
+/* ---- Brand Column ---- */
+
+.footerBrand {
+  max-width: 280px;
+}
+
+.footerLogo {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 16px;
+  text-decoration: none;
+}
+
+.footerLogoIcon {
+  width: 32px;
+  height: 32px;
+  background: #000;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.footerLogoText {
+  font-size: 1rem;
+  font-weight: 700;
+  color: #000;
+}
+
+.footerTagline {
+  font-size: 0.875rem;
+  color: #9ca3af;
+  line-height: 1.6;
+  margin: 0;
+}
+
+/* ---- Link Columns ---- */
+
+.footerColTitle {
+  font-size: 0.8125rem;
+  font-weight: 700;
+  color: #000;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  margin: 0 0 16px;
+}
+
+.footerLinks {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.footerLink {
+  font-size: 0.875rem;
+  color: #6b7280;
+  text-decoration: none;
+  transition: color 0.2s;
+}
+
+.footerLink:hover {
+  color: #000;
+}
+
+/* ---- Bottom Bar ---- */
+
+.footerBottom {
+  border-top: 1px solid #f0f0f0;
+  padding-top: 24px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.footerCopy {
+  font-size: 0.8125rem;
+  color: #9ca3af;
+  margin: 0;
+}
+
+.footerBottomLinks {
+  display: flex;
+  gap: 20px;
+}
+
+.footerBottomLink {
+  font-size: 0.8125rem;
+  color: #9ca3af;
+  text-decoration: none;
+  transition: color 0.2s;
+}
+
+.footerBottomLink:hover {
+  color: #000;
+}
+
+/* ---- Responsive ---- */
+
+@media (max-width: 768px) {
+  .footerGrid {
+    grid-template-columns: 1fr 1fr;
+    gap: 32px;
+  }
+
+  .footerBrand {
+    grid-column: 1 / -1;
+    max-width: 100%;
+  }
+
+  .footer {
+    padding: 48px 16px 24px;
+  }
+
+  .footerBottom {
+    flex-direction: column;
+    gap: 12px;
+    text-align: center;
+  }
+}
+
+@media (max-width: 480px) {
+  .footerGrid {
+    grid-template-columns: 1fr;
+    gap: 24px;
+  }
+}

@@ -3,11 +3,7 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import {
-  detectProductDomain,
-  getDomainVisibility,
-  type ProductDomain,
-} from "@/lib/domain-navigation";
+import { getDomainVisibility, type ProductDomain } from "@/lib/domain/config";
 import styles from "../dashboard.module.css";
 
 interface SubNavItem {
@@ -593,8 +589,9 @@ export default function DashboardSidebar({
   const pathname = usePathname();
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [userCount, setUserCount] = useState<number>(0);
-  const [currentDomain, setCurrentDomain] =
-    useState<ProductDomain>("dashboard");
+  // Dashboard sidebar always runs in "dashboard" product context
+  // Domain detection is handled by middleware, not client-side useEffect
+  const currentDomain: ProductDomain = "dashboard";
   const [aiCapabilities, setAiCapabilities] = useState<AICapabilities>({
     appointment_booking_enabled: false,
     order_booking_enabled: false,
@@ -628,13 +625,6 @@ export default function DashboardSidebar({
 
     return false;
   };
-
-  // Detect current domain on mount (enterprise-grade detection)
-  useEffect(() => {
-    const domain = detectProductDomain();
-    setCurrentDomain(domain);
-    const visibility = getDomainVisibility(domain);
-  }, []);
 
   // Clean up legacy UI state when domain changes (prevents ghost menus)
   useEffect(() => {
@@ -945,40 +935,6 @@ export default function DashboardSidebar({
       href: "/dashboard/preview-bot",
     },
   ];
-
-  // ========================================================================
-  // ENTERPRISE GUARDRAIL: Detect missing marketing menus on marketing domain
-  // ========================================================================
-  // This catches regressions where domain detection works but menus don't render
-  // Common causes: commented code, broken conditionals, wrong visibility flags
-  // ========================================================================
-  if (typeof window !== "undefined" && currentDomain === "marketing") {
-    const marketingMenuIds = ["campaigns", "bulk-messages", "templates"];
-    const renderedMarketingMenus = navItems.filter((item) =>
-      marketingMenuIds.includes(item.id),
-    );
-
-    if (renderedMarketingMenus.length === 0) {
-      console.error(
-        "🚨 [REGRESSION DETECTED] Marketing domain loaded without marketing menus",
-        {
-          domain: currentDomain,
-          visibility: {
-            campaigns: visibility.campaigns,
-            bulkMessages: visibility.bulkMessages,
-            templates: visibility.templates,
-          },
-          totalNavItems: navItems.length,
-          navItemIds: navItems.map((i) => i.id),
-        },
-      );
-    } else {
-      console.info(
-        `✅ [Marketing Domain] ${renderedMarketingMenus.length}/3 marketing menus rendered`,
-        renderedMarketingMenus.map((i) => i.id),
-      );
-    }
-  }
 
   const displayName = userName || userEmail?.split("@")[0] || "User";
   const initials = displayName.substring(0, 2).toUpperCase();

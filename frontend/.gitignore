@@ -49,3 +49,5 @@ next-env.d.ts
 
 # firebase functions
 /functions/
+demo.mp4
+public/demo.mp4

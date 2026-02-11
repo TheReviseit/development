@@ -25,7 +25,7 @@ export function DashboardAuthGuard({
   user,
 }: DashboardAuthGuardProps) {
   const router = useRouter();
-  const { authState, user: authUser, clearSession } = useAuth();
+  const { authState, user: authUser, clearSession, currentProduct } = useAuth();
   // Prevent duplicate redirects (React Strict Mode fires effects twice)
   const redirectInProgressRef = useRef(false);
 
@@ -84,6 +84,14 @@ export function DashboardAuthGuard({
         hardRedirect(
           "/signup?error=account_not_found&message=Your account was not fully created. Please sign up again to complete setup.",
         );
+        break;
+
+      case "PRODUCT_NOT_ENABLED":
+        // NEW (Option B): User exists but doesn't have product membership
+        console.warn(
+          "[DASHBOARD] Product not enabled, redirecting to activation",
+        );
+        hardRedirect(`/activate?product=${currentProduct || "dashboard"}`);
         break;
 
       case "AUTH_ERROR":

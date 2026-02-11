@@ -6,11 +6,7 @@ import SpaceshipLoader from "@/app/components/loading/SpaceshipLoader";
 import DashboardSidebar from "./components/DashboardSidebar";
 import { AuthProvider } from "@/app/components/auth/AuthProvider";
 import { DashboardAuthGuard } from "./components/DashboardAuthGuard";
-import {
-  detectProductDomain,
-  getDomainVisibility,
-  type ProductDomain,
-} from "@/lib/domain-navigation";
+import { getDomainVisibility, type ProductDomain } from "@/lib/domain/config";
 import styles from "./dashboard.module.css";
 
 type Section =
@@ -75,8 +71,9 @@ export default function DashboardLayout({
   const [isMobile, setIsMobile] = useState(false);
   const [showMobileMenu, setShowMobileMenu] = useState(false);
   const [expandedMobileItems, setExpandedMobileItems] = useState<string[]>([]);
-  const [currentDomain, setCurrentDomain] =
-    useState<ProductDomain>("dashboard");
+  // Dashboard layout always runs in "dashboard" product context
+  // Domain detection is handled by middleware, not client-side useEffect
+  const currentDomain: ProductDomain = "dashboard";
   const [appointmentBookingEnabled, setAppointmentBookingEnabled] =
     useState(false);
   const [orderBookingEnabled, setOrderBookingEnabled] = useState(false);
@@ -94,13 +91,7 @@ export default function DashboardLayout({
 
   const activeSection = getActiveSection(pathname);
 
-  // Detect current domain on mount (enterprise-grade detection)
-  useEffect(() => {
-    const domain = detectProductDomain();
-    setCurrentDomain(domain);
-  }, []);
-
-  // Get visibility rules for current domain
+  // Get visibility rules for current domain (static, no useEffect needed)
   const visibility = getDomainVisibility(currentDomain);
 
   // Fetch AI capabilities for mobile menu

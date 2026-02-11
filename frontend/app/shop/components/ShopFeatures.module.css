@@ -1,0 +1,604 @@
+/* =============================================================================
+   SHOP FEATURES — Bento Grid Redesign
+   ============================================================================= */
+
+.features {
+  padding: 120px 24px;
+  background: #fdfdfd;
+}
+
+.featuresInner {
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+.premiumTag {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 24px;
+  font-size: 1.5rem; /* Increased from 1.25rem for global dominance */
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.4em; /* Even wider for elite enterprise look */
+  color: #000;
+  margin: 0 auto 80px;
+  position: relative;
+  z-index: 10;
+}
+
+.tagLine {
+  width: 80px;
+  height: 1px;
+  background: #000;
+  opacity: 0.15;
+}
+
+/* --- Enterprise Hero Bento --- */
+
+.heroSplitContainer {
+  display: flex;
+  gap: 80px;
+  align-items: center;
+  margin-bottom: 120px;
+  position: relative;
+  z-index: 5;
+}
+
+.heroVisualBento {
+  flex: 1.2;
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  grid-template-rows: repeat(2, 220px);
+  gap: 20px;
+}
+
+.heroMainImageCard {
+  grid-column: span 1;
+  grid-row: span 2;
+  border-radius: 40px;
+  position: relative;
+  overflow: hidden;
+  box-shadow: 0 40px 80px rgba(0, 0, 0, 0.1);
+  background: #f0f0f0; /* Fallback */
+}
+
+.heroImage {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.heroImageOverlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(
+    to bottom right,
+    rgba(255, 255, 255, 0.1),
+    rgba(255, 255, 255, 0)
+  );
+}
+
+.heroAccentCard {
+  background: white;
+  border-radius: 32px;
+  padding: 30px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  border: 1px solid rgba(0, 0, 0, 0.04);
+  box-shadow: 0 15px 35px rgba(0, 0, 0, 0.03);
+  transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.heroAccentCard:hover {
+  transform: translateY(-8px);
+  box-shadow: 0 25px 50px rgba(0, 0, 0, 0.05);
+  border-color: rgba(16, 185, 129, 0.1);
+}
+
+.accentActive:hover {
+  background: #044d3c !important; /* Prevent turning white in the hero cluster */
+  box-shadow: 0 25px 50px rgba(2, 44, 34, 0.2);
+}
+
+.accentHeader {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.accentIcon {
+  color: #10b981;
+  background: rgba(16, 185, 129, 0.08);
+  padding: 8px;
+  border-radius: 12px;
+}
+
+.accentLabel {
+  font-size: 0.875rem;
+  color: #71717a;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.accentData {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.accentValue {
+  font-size: 2.25rem;
+  font-weight: 700;
+  color: #1a1a1a;
+  letter-spacing: -0.04em;
+  line-height: 1;
+}
+
+.accentPara {
+  font-size: 0.875rem;
+  color: #a1a1aa;
+  margin: 4px 0 0;
+}
+
+.accentActive {
+  background: #022c22;
+  border: none;
+}
+
+.accentActive .accentIcon {
+  background: rgba(255, 255, 255, 0.1);
+  color: #10b981;
+}
+
+.accentActive .accentValue {
+  color: white;
+}
+
+.accentActive .accentLabel {
+  color: rgba(255, 255, 255, 0.5);
+}
+
+.accentActive .accentPara {
+  color: rgba(255, 255, 255, 0.4);
+}
+
+.heroTextColumn {
+  flex: 1;
+  padding-left: 20px;
+}
+
+.headerText {
+  text-align: left;
+  align-items: flex-start;
+  display: flex;
+  flex-direction: column;
+}
+
+.sectionTitle {
+  font-size: 4rem;
+  font-weight: 700;
+  color: #1a1a1a;
+  letter-spacing: -0.05em;
+  line-height: 1.1;
+  margin: 0 0 24px;
+}
+
+.heroSubDescription {
+  font-size: 1.25rem;
+  color: #71717a;
+  line-height: 1.6;
+  max-width: 480px;
+  margin: 0;
+}
+
+/* --- Bento Grid --- */
+
+.bentoGrid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  grid-auto-rows: 280px;
+  gap: 24px;
+  margin-top: 40px; /* Removed negative overlap, added standard spacing */
+  position: relative;
+  z-index: 10;
+  padding: 0;
+}
+
+/* Card Variations */
+
+.tall {
+  grid-row: span 2;
+}
+
+.wide {
+  grid-column: span 2;
+}
+
+.card {
+  background: rgba(
+    255,
+    255,
+    255,
+    0.85
+  ); /* Increased opacity for thicker glass */
+  backdrop-filter: blur(20px); /* Increased blur */
+  -webkit-backdrop-filter: blur(20px);
+  border-radius: 32px;
+  padding: 40px;
+  position: relative;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.5); /* Lighter border for inner glow */
+  display: flex;
+  flex-direction: column;
+  transition:
+    transform 0.4s cubic-bezier(0.2, 0, 0, 1),
+    box-shadow 0.4s ease;
+  box-shadow:
+    0 4px 6px rgba(0, 0, 0, 0.02),
+    0 10px 30px rgba(0, 0, 0, 0.08); /* Stronger shadow contrast */
+}
+
+.card:hover {
+  transform: translateY(-8px);
+  background: rgba(255, 255, 255, 0.95);
+  box-shadow: 0 30px 60px rgba(0, 0, 0, 0.12);
+}
+
+.darkGreen:hover {
+  background: #044d3c !important; /* Prevents turning white in the bento grid */
+  transform: translateY(-8px);
+  box-shadow: 0 30px 60px rgba(2, 44, 34, 0.3);
+}
+
+.cardInfo {
+  position: relative;
+  z-index: 2;
+}
+
+.cardTitle {
+  font-size: 1.5rem;
+  font-weight: 600;
+  color: #111;
+  margin: 0 0 12px;
+  letter-spacing: -0.02em;
+}
+
+.cardDesc {
+  font-size: 1rem;
+  color: #666;
+  line-height: 1.5;
+  margin: 0;
+  max-width: 280px;
+}
+
+/* --- Visual Elements --- */
+
+.cardVisual {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+}
+
+/* Smart Research Visual */
+.researchCircle {
+  width: 200px;
+  height: 200px;
+  border: 1px dashed #eee;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+}
+
+.mainIcon {
+  width: 80px;
+  height: 80px;
+  background: #022c22;
+  color: #fff;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 10px 30px rgba(2, 44, 34, 0.3);
+}
+
+.orbitalIcon {
+  position: absolute;
+  width: 36px;
+  height: 36px;
+  background: #fff;
+  border: 1px solid #f0f0f0;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+}
+
+/* Drafting Preview Visual */
+.draftingPreview {
+  width: 100%;
+  max-width: 400px;
+  background: #fafafa;
+  border-radius: 12px;
+  padding: 24px;
+  border: 1px solid #eee;
+  font-family: inherit;
+}
+
+.docHeader {
+  font-weight: 600;
+  font-size: 0.875rem;
+  margin-bottom: 12px;
+  color: #888;
+}
+
+.docBody {
+  font-size: 1.125rem;
+  line-height: 1.6;
+  color: #333;
+}
+
+.highlight {
+  background: #e5e7eb;
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+.docCursor {
+  width: 2px;
+  height: 20px;
+  background: #000;
+  display: inline-block;
+  vertical-align: middle;
+  margin-left: 4px;
+  animation: blink 1s infinite;
+}
+
+@keyframes blink {
+  50% {
+    opacity: 0;
+  }
+}
+
+/* Insights Visual */
+.insightsVisual {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+}
+
+.insightBox {
+  padding: 16px;
+  background: #fbfbfb;
+  border: 1px solid #eee;
+  border-radius: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font-size: 0.75rem;
+  color: #888;
+}
+
+.fileIcon {
+  font-weight: 700;
+  color: #000;
+  font-size: 1rem;
+}
+
+.insightDivider {
+  flex: 1;
+  height: 1px;
+  background: #eee;
+  position: relative;
+  min-width: 60px;
+}
+
+.insightNode {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 32px;
+  height: 32px;
+  background: #022c22;
+  color: #fff;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.summaryLines {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.line {
+  height: 4px;
+  background: #eee;
+  border-radius: 2px;
+  width: 40px;
+}
+.line:nth-child(2) {
+  width: 30px;
+}
+
+/* Dark Green Card */
+.darkGreen {
+  background: #022c22;
+  color: #fff;
+  border: none;
+}
+
+.darkGreen .cardTitle {
+  color: #fff;
+}
+
+.darkGreen .cardDesc {
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.managementVisual {
+  width: 140px;
+  height: 140px;
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.managementPulse {
+  position: absolute;
+  width: 100%;
+  height: 100%;
+  background: rgba(16, 185, 129, 0.15);
+  border-radius: 50%;
+  filter: blur(20px);
+}
+
+.managementContent {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+}
+
+.managementIcon {
+  color: #10b981;
+}
+
+.managementLines {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  align-items: center;
+}
+
+.managementLines .line {
+  height: 2px;
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 1px;
+  width: 32px;
+}
+
+.managementLines .line:nth-child(2) {
+  width: 20px;
+}
+
+/* Lavender Card */
+.lavender {
+  background: #dbeafe;
+  border: none;
+}
+
+.starCircle {
+  width: 120px;
+  height: 120px;
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.star {
+  position: absolute;
+  top: 0;
+  left: 50%;
+  transform-origin: 0 60px;
+  font-size: 14px;
+  color: #022c22;
+}
+
+/* --- Responsive --- */
+
+@media (max-width: 1200px) {
+  .heroSplitContainer {
+    gap: 40px;
+  }
+  .sectionTitle {
+    font-size: 3.5rem;
+  }
+}
+
+@media (max-width: 1024px) {
+  .heroSplitContainer {
+    grid-template-columns: 1fr;
+    text-align: center;
+    gap: 60px;
+    margin-bottom: 80px;
+  }
+
+  .heroTextColumn {
+    padding: 0;
+    order: -1; /* Text on top for tablet */
+  }
+
+  .headerText {
+    align-items: center;
+    text-align: center;
+    margin: 0 auto;
+  }
+
+  .heroSubDescription {
+    margin: 0 auto;
+  }
+
+  .heroVisualBento {
+    max-width: 800px;
+    margin: 0 auto;
+    width: 100%;
+  }
+
+  .bentoGrid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 640px) {
+  .features {
+    padding: 80px 16px;
+  }
+
+  .premiumTag {
+    font-size: 0.875rem;
+    margin-bottom: 24px;
+  }
+
+  .sectionTitle {
+    font-size: 2.75rem;
+  }
+
+  .heroVisualBento {
+    grid-template-columns: 1fr;
+    grid-template-rows: repeat(3, 300px);
+  }
+
+  .heroMainImageCard {
+    grid-row: span 1;
+  }
+
+  .bentoGrid {
+    grid-template-columns: 1fr;
+    grid-auto-rows: auto;
+  }
+
+  .card {
+    min-height: 350px;
+  }
+}

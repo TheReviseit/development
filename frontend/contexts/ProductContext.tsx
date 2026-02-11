@@ -1,15 +1,17 @@
 "use client";
 
 /**
- * Product Context Provider
- * Single source of truth for product context across the app.
+ * Product Context Provider — STATIC (No client-side detection)
+ *
+ * Product is determined by middleware (x-product-domain header),
+ * passed from server layout as a prop. Zero useEffect, zero useState,
+ * zero window.location, zero re-renders.
  *
  * Usage:
- *   const product = useProduct() // 'api' | 'dashboard'
- *   const navItems = product === 'api' ? apiNavItems : dashboardNavItems
+ *   const { product } = useProduct() // 'api' | 'dashboard'
  */
 
-import React, { createContext, useContext, useEffect, useState } from "react";
+import React, { createContext, useContext } from "react";
 
 export type ProductContext = "api" | "dashboard";
 
@@ -40,49 +42,22 @@ export function useIsApiProduct(): boolean {
 }
 
 /**
- * Provider component for product context
+ * Static Provider — product is passed from server, never re-detected.
+ *
+ * In layout.tsx (server component):
+ *   const product = (await headers()).get("x-product-domain") || "dashboard";
+ *   <ProductProvider product={product as ProductContext}>
+ *     {children}
+ *   </ProductProvider>
  */
 export function ProductProvider({
   children,
-  initialProduct,
+  product = "dashboard",
 }: {
   children: React.ReactNode;
-  initialProduct?: ProductContext;
+  product?: ProductContext;
 }) {
-  const [product, setProduct] = useState<ProductContext>(
-    initialProduct || "dashboard",
-  );
-
-  useEffect(() => {
-    // Get product from URL params or hostname
-    const hostname = window.location.hostname;
-    const searchParams = new URLSearchParams(window.location.search);
-
-    // Check URL override for development
-    if (searchParams.get("product") === "api") {
-      setProduct("api");
-      return;
-    }
-
-    // Check hostname
-    if (hostname === "api.flowauxi.com") {
-      setProduct("api");
-    } else if (
-      hostname.includes("localhost") ||
-      hostname.includes("vercel.app")
-    ) {
-      // Dev/preview: check if on API routes
-      const pathname = window.location.pathname;
-      if (
-        pathname.startsWith("/apis") ||
-        pathname.startsWith("/console") ||
-        pathname.startsWith("/docs")
-      ) {
-        setProduct("api");
-      }
-    }
-  }, []);
-
+  // Static value — no useState, no useEffect, no re-renders
   const value: ProductContextValue = {
     product,
     isApiProduct: product === "api",
