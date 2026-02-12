@@ -85,7 +85,7 @@
   font-family: var(--font-secondary);
   font-size: clamp(36px, 5vw, 58px);
   font-weight: 600;
-  color: var(--card-bg);
+  color: white;
   line-height: 1;
   margin: 0 0 18px;
   letter-spacing: -2px;
@@ -94,7 +94,7 @@
 .subText {
   font-family: var(--font-primary);
   font-size: 14px;
-  color: var(--white-80);
+  color: white;
   line-height: 1.5;
   margin: 0;
 }
@@ -180,10 +180,12 @@
 .formGroup input {
   font-family: var(--font-primary);
   padding: 12px 15px;
-  border: 1px solid var(--border-light);
+  border: 1px solid black;
   border-radius: 8px;
   font-size: 14px;
-  transition: border-color 0.2s, background 0.2s;
+  transition:
+    border-color 0.2s,
+    background 0.2s;
   background: var(--input-bg-light);
   width: 100%;
   color: var(--text-secondary);
@@ -270,12 +272,14 @@
   padding: 13px;
   background: var(--primary-color);
   color: var(--white);
-  border: none;
+  border: 1.5px solid black;
   border-radius: 8px;
   font-size: 15px;
   font-weight: 600;
   cursor: pointer;
-  transition: background 0.2s, transform 0.2s;
+  transition:
+    background 0.2s,
+    transform 0.2s;
   margin-top: 4px;
   width: 100%;
 }
@@ -295,7 +299,7 @@
   padding: 12px;
   background: var(--card-bg);
   color: var(--text-secondary);
-  border: 1px solid var(--black);
+  border: 1.5px solid black;
   border-radius: 8px;
   font-size: 14px;
   font-weight: 500;
@@ -304,7 +308,9 @@
   align-items: center;
   justify-content: center;
   gap: 10px;
-  transition: background 0.2s, transform 0.2s;
+  transition:
+    background 0.2s,
+    transform 0.2s;
   width: 100%;
 }
 

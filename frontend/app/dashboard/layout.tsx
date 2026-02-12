@@ -7,6 +7,7 @@ import DashboardSidebar from "./components/DashboardSidebar";
 import { AuthProvider } from "@/app/components/auth/AuthProvider";
 import { DashboardAuthGuard } from "./components/DashboardAuthGuard";
 import { getDomainVisibility, type ProductDomain } from "@/lib/domain/config";
+import { getProductDomainFromBrowser } from "@/lib/domain/client";
 import styles from "./dashboard.module.css";
 
 type Section =
@@ -71,9 +72,10 @@ export default function DashboardLayout({
   const [isMobile, setIsMobile] = useState(false);
   const [showMobileMenu, setShowMobileMenu] = useState(false);
   const [expandedMobileItems, setExpandedMobileItems] = useState<string[]>([]);
-  // Dashboard layout always runs in "dashboard" product context
-  // Domain detection is handled by middleware, not client-side useEffect
-  const currentDomain: ProductDomain = "dashboard";
+  // Product domain is resolved from the middleware-set cookie
+  // This replaces the hardcoded "dashboard" that was causing feature leakage
+  const [currentDomain, setCurrentDomain] =
+    useState<ProductDomain>("dashboard");
   const [appointmentBookingEnabled, setAppointmentBookingEnabled] =
     useState(false);
   const [orderBookingEnabled, setOrderBookingEnabled] = useState(false);
@@ -91,7 +93,13 @@ export default function DashboardLayout({
 
   const activeSection = getActiveSection(pathname);
 
-  // Get visibility rules for current domain (static, no useEffect needed)
+  // Read product domain using resolveDomain() — same function as middleware
+  useEffect(() => {
+    const domain = getProductDomainFromBrowser();
+    setCurrentDomain(domain);
+  }, []);
+
+  // Get visibility rules for current domain (re-computed when domain is resolved)
   const visibility = getDomainVisibility(currentDomain);
 
   // Fetch AI capabilities for mobile menu
@@ -271,6 +279,7 @@ export default function DashboardLayout({
               userEmail={user?.email || undefined}
               userName={user?.displayName || undefined}
               isSidebarOpen={isSidebarOpen}
+              productDomain={currentDomain}
             />
           )}
 

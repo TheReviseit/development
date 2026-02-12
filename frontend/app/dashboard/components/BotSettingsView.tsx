@@ -1601,12 +1601,12 @@ export default function BotSettingsView() {
           },
         ]
       : []),
-    // Always show Capabilities
-    {
-      id: "capabilities",
-      label: "Capabilities",
-      iconPath: "/icons/ai_settings/preview.svg",
-    },
+    // COMMENTED OUT: Capabilities tab hidden
+    // {
+    //   id: "capabilities",
+    //   label: "Capabilities",
+    //   iconPath: "/icons/ai_settings/preview.svg",
+    // },
   ];
 
   // Check if a tab's required fields are complete
@@ -1643,8 +1643,9 @@ export default function BotSettingsView() {
           data.faqs.length > 0 &&
           data.faqs.every((f) => f.question.trim() && f.answer.trim())
         );
-      case "capabilities":
-        return true; // Capabilities is always "complete"
+      // COMMENTED OUT: Capabilities tab hidden
+      // case "capabilities":
+      //   return true;
       default:
         return false;
     }
@@ -2583,7 +2584,8 @@ export default function BotSettingsView() {
           <div className={styles.section}>{renderFAQContent()}</div>
         )}
 
-        {activeTab === "capabilities" && (
+        {/* COMMENTED OUT: Entire AI Capabilities section hidden */}
+        {false && activeTab === "capabilities" && (
           <div className={styles.section}>
             {/* Appointment Booking Toggle */}
             <div

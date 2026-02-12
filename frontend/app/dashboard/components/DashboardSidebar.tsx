@@ -34,6 +34,8 @@ interface DashboardSidebarProps {
   userEmail?: string;
   userName?: string;
   isSidebarOpen?: boolean;
+  /** Product domain resolved by middleware — drives sidebar feature isolation */
+  productDomain?: ProductDomain;
 }
 
 // SVG Icons as components
@@ -585,13 +587,14 @@ export default function DashboardSidebar({
   userEmail,
   userName,
   isSidebarOpen,
+  productDomain = "dashboard",
 }: DashboardSidebarProps) {
   const pathname = usePathname();
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [userCount, setUserCount] = useState<number>(0);
-  // Dashboard sidebar always runs in "dashboard" product context
-  // Domain detection is handled by middleware, not client-side useEffect
-  const currentDomain: ProductDomain = "dashboard";
+  // Product domain is received from parent layout (resolved by middleware cookie)
+  // This replaces the hardcoded "dashboard" that was causing feature leakage
+  const currentDomain: ProductDomain = productDomain;
   const [aiCapabilities, setAiCapabilities] = useState<AICapabilities>({
     appointment_booking_enabled: false,
     order_booking_enabled: false,
