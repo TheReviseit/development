@@ -1,9 +1,9 @@
 /* =============================================================================
-   SHOP CTA — Final Call-to-Action Banner
+   SHOP CTA — Final Call-to-Action (Mobile-First)
    ============================================================================= */
 
 .cta {
-  padding: 100px 24px;
+  padding: var(--shop-section-py-mobile, 64px) var(--shop-px-mobile, 16px);
   background: #000;
   position: relative;
   overflow: hidden;
@@ -30,28 +30,29 @@
 }
 
 .ctaTitle {
-  font-size: 3.25rem;
+  font-size: clamp(1.75rem, 4vw + 0.5rem, 3.25rem);
   font-weight: 700;
   color: #fff;
   letter-spacing: -0.035em;
   line-height: 1.1;
-  margin: 0 0 20px;
+  margin: 0 0 16px;
 }
 
 .ctaDesc {
-  font-size: 1.125rem;
+  font-size: clamp(0.9375rem, 1.2vw + 0.25rem, 1.125rem);
   color: rgba(255, 255, 255, 0.6);
   line-height: 1.6;
-  margin: 0 0 40px;
+  margin: 0 0 32px;
 }
 
 .ctaBtn {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 8px;
   background: #fff;
   color: #000;
-  padding: 16px 36px;
+  padding: 16px 32px;
   border-radius: 12px;
   font-size: 1rem;
   font-weight: 700;
@@ -61,6 +62,8 @@
     transform 0.2s,
     box-shadow 0.2s;
   letter-spacing: -0.01em;
+  min-height: 44px;
+  width: 100%;
 }
 
 .ctaBtn:hover {
@@ -70,24 +73,36 @@
 }
 
 .ctaNote {
-  margin-top: 20px;
+  margin-top: 16px;
   font-size: 0.8125rem;
   color: rgba(255, 255, 255, 0.35);
 }
 
 /* ---- Responsive ---- */
 
-@media (max-width: 640px) {
+/* Tablet (768px+) */
+@media (min-width: 768px) {
   .cta {
-    padding: 64px 16px;
+    padding: var(--shop-section-py-tablet, 80px) var(--shop-px-tablet, 24px);
   }
 
-  .ctaTitle {
-    font-size: 2rem;
+  .ctaDesc {
+    margin-bottom: 40px;
   }
 
   .ctaBtn {
-    width: 100%;
-    justify-content: center;
+    width: auto;
+    padding: 16px 36px;
+  }
+
+  .ctaNote {
+    margin-top: 20px;
+  }
+}
+
+/* Desktop (1024px+) */
+@media (min-width: 1024px) {
+  .cta {
+    padding: var(--shop-section-py-desktop, 100px) var(--shop-px-desktop, 40px);
   }
 }

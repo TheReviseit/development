@@ -1,36 +1,37 @@
 /* =============================================================================
-   SHOP FOOTER — Clean Minimal Footer
+   SHOP FOOTER — Clean Minimal Footer (Mobile-First)
    ============================================================================= */
 
 .footer {
-  padding: 64px 24px 32px;
+  padding: 48px var(--shop-px-mobile, 16px) 24px;
   background: #fafafa;
   border-top: 1px solid #f0f0f0;
+  overflow-x: clip;
 }
 
 .footerInner {
-  max-width: 1280px;
+  max-width: var(--shop-container, 1200px);
   margin: 0 auto;
 }
 
 .footerGrid {
   display: grid;
-  grid-template-columns: 2fr 1fr 1fr 1fr;
-  gap: 48px;
-  margin-bottom: 48px;
+  grid-template-columns: 1fr;
+  gap: 24px;
+  margin-bottom: 32px;
 }
 
 /* ---- Brand Column ---- */
 
 .footerBrand {
-  max-width: 280px;
+  max-width: 100%;
 }
 
 .footerLogo {
   display: flex;
   align-items: center;
   gap: 12px;
-  margin-bottom: 20px;
+  margin-bottom: 16px;
   text-decoration: none;
 }
 
@@ -60,7 +61,7 @@
   font-size: 0.9375rem;
   color: #6b7280;
   line-height: 1.6;
-  margin: 0 0 32px; /* Increased spacing */
+  margin: 0 0 24px;
 }
 
 .socialLinks {
@@ -80,6 +81,8 @@
   color: #6b7280;
   transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
   text-decoration: none;
+  min-height: 44px;
+  min-width: 44px;
 }
 
 .socialIcon:hover {
@@ -97,7 +100,7 @@
   color: #000;
   text-transform: uppercase;
   letter-spacing: 0.06em;
-  margin: 0 0 16px;
+  margin: 0 0 12px;
 }
 
 .footerLinks {
@@ -114,6 +117,7 @@
   color: #6b7280;
   text-decoration: none;
   transition: color 0.2s;
+  padding: 2px 0;
 }
 
 .footerLink:hover {
@@ -124,10 +128,11 @@
 
 .footerBottom {
   border-top: 1px solid #f0f0f0;
-  padding-top: 24px;
+  padding-top: 20px;
   display: flex;
-  justify-content: space-between;
-  align-items: center;
+  flex-direction: column;
+  gap: 12px;
+  text-align: center;
 }
 
 .footerCopy {
@@ -139,6 +144,7 @@
 .footerBottomLinks {
   display: flex;
   gap: 20px;
+  justify-content: center;
 }
 
 .footerBottomLink {
@@ -154,31 +160,53 @@
 
 /* ---- Responsive ---- */
 
-@media (max-width: 768px) {
+/* Tablet (768px+) */
+@media (min-width: 768px) {
+  .footer {
+    padding: 48px var(--shop-px-tablet, 24px) 24px;
+  }
+
   .footerGrid {
     grid-template-columns: 1fr 1fr;
     gap: 32px;
+    margin-bottom: 40px;
   }
 
   .footerBrand {
     grid-column: 1 / -1;
-    max-width: 100%;
-  }
-
-  .footer {
-    padding: 48px 16px 24px;
+    max-width: 320px;
   }
 
   .footerBottom {
-    flex-direction: column;
-    gap: 12px;
-    text-align: center;
+    flex-direction: row;
+    justify-content: space-between;
+    align-items: center;
+    text-align: left;
   }
 }
 
-@media (max-width: 480px) {
+/* Desktop (1024px+) */
+@media (min-width: 1024px) {
+  .footer {
+    padding: 64px var(--shop-px-desktop, 40px) 32px;
+  }
+
   .footerGrid {
-    grid-template-columns: 1fr;
-    gap: 24px;
+    grid-template-columns: 2fr 1fr 1fr 1fr;
+    gap: 48px;
+    margin-bottom: 48px;
+  }
+
+  .footerBrand {
+    grid-column: auto;
+    max-width: 280px;
+  }
+
+  .footerColTitle {
+    margin-bottom: 16px;
+  }
+
+  .footerBottom {
+    padding-top: 24px;
   }
 }

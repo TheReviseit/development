@@ -1,5 +1,5 @@
 /* =============================================================================
-   SHOP NAVBAR — reel.ai-Inspired Clean Navigation
+   SHOP NAVBAR — Clean Navigation (Mobile-First)
    ============================================================================= */
 
 .navbar {
@@ -16,13 +16,13 @@
 }
 
 .navInner {
-  max-width: 1280px;
+  max-width: var(--shop-container, 1200px);
   margin: 0 auto;
-  padding: 0 40px;
+  padding: 0 var(--shop-px-mobile, 16px);
   display: flex;
   justify-content: space-between;
   align-items: center;
-  height: 72px;
+  height: 64px;
 }
 
 /* Logo */
@@ -44,9 +44,9 @@
   letter-spacing: -0.02em;
 }
 
-/* Center Navigation */
+/* Center Navigation — hidden on mobile, shown on desktop */
 .navLinks {
-  display: flex;
+  display: none;
   align-items: center;
   gap: 36px;
 }
@@ -63,9 +63,9 @@
   color: #000;
 }
 
-/* Right Actions */
+/* Right Actions — hidden on mobile */
 .navActions {
-  display: flex;
+  display: none;
   align-items: center;
   gap: 16px;
 }
@@ -104,14 +104,18 @@
   transform: translateY(-1px);
 }
 
-/* Mobile Menu Button */
+/* Mobile Menu Button — shown by default */
 .menuBtn {
-  display: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   background: none;
   border: none;
   cursor: pointer;
   padding: 8px;
   color: #000;
+  min-height: 44px;
+  min-width: 44px;
 }
 
 /* Mobile Nav Dropdown */
@@ -121,14 +125,14 @@
   opacity: 0;
   transform: translateY(-10px);
   position: fixed;
-  top: 72px;
+  top: 64px;
   left: 0;
   right: 0;
   background: rgba(255, 255, 255, 0.95);
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
   border-bottom: 1px solid rgba(0, 0, 0, 0.1);
-  padding: 20px 24px 28px;
+  padding: 20px var(--shop-px-mobile, 16px) 28px;
   box-shadow: 0 12px 40px rgba(0, 0, 0, 0.08);
   flex-direction: column;
   gap: 4px;
@@ -177,6 +181,7 @@
   border-radius: 100px;
   cursor: pointer;
   transition: background 0.2s;
+  min-height: 44px;
 }
 
 .mobileDemoBtn:hover {
@@ -193,30 +198,41 @@
   border-radius: 100px;
   text-decoration: none;
   transition: background 0.2s;
+  min-height: 44px;
 }
 
 .mobileStartBtn:hover {
   background: #1a1a1a;
 }
 
-/* ---- Responsive ---- */
+/* ---- Tablet (768px+) ---- */
+@media (min-width: 768px) {
+  .navInner {
+    padding: 0 var(--shop-px-tablet, 24px);
+    height: 72px;
+  }
 
-@media (max-width: 900px) {
+  .mobileNav {
+    top: 72px;
+    padding: 20px var(--shop-px-tablet, 24px) 28px;
+  }
+}
+
+/* ---- Desktop (901px+) — show full nav ---- */
+@media (min-width: 901px) {
+  .navInner {
+    padding: 0 var(--shop-px-desktop, 40px);
+  }
+
   .navLinks {
-    display: none;
+    display: flex;
   }
 
   .navActions {
-    display: none;
+    display: flex;
   }
 
   .menuBtn {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-  }
-
-  .navInner {
-    padding: 0 20px;
+    display: none;
   }
 }

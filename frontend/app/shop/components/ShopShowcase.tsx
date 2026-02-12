@@ -87,36 +87,13 @@ export default function ShopShowcase() {
               designed for efficiency.
             </p>
             <div
-              style={{
-                marginTop: "auto",
-                background: "#fff",
-                padding: "12px",
-                borderRadius: "12px",
-                border: "1px solid #fee2e2",
-              }}
+              className={`${styles.miniCardContainer} ${styles.miniCardBorderPeach}`}
             >
-              <div
-                style={{ display: "flex", gap: "8px", alignItems: "center" }}
-              >
-                <div
-                  style={{
-                    width: "24px",
-                    height: "24px",
-                    background: "#fee2e2",
-                    borderRadius: "6px",
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    fontSize: "10px",
-                  }}
-                >
-                  AI
-                </div>
+              <div className={styles.miniCardInner}>
+                <div className={styles.miniCardIconAI}>AI</div>
                 <div>
-                  <div style={{ fontSize: "10px", fontWeight: "bold" }}>
-                    Auto-Parsing Data
-                  </div>
-                  <div style={{ fontSize: "8px", color: "#666" }}>
+                  <div className={styles.miniCardTitle}>Auto-Parsing Data</div>
+                  <div className={styles.miniCardSubtitle}>
                     Processed 143 invoices in 2s
                   </div>
                 </div>
@@ -135,36 +112,13 @@ export default function ShopShowcase() {
               real-time webhooks.
             </p>
             <div
-              style={{
-                marginTop: "auto",
-                background: "#fff",
-                padding: "12px",
-                borderRadius: "12px",
-                border: "1px solid #e6fffa",
-              }}
+              className={`${styles.miniCardContainer} ${styles.miniCardBorderMint}`}
             >
-              <div
-                style={{ display: "flex", gap: "8px", alignItems: "center" }}
-              >
-                <div
-                  style={{
-                    width: "24px",
-                    height: "24px",
-                    background: "#e6fffa",
-                    borderRadius: "6px",
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    fontSize: "10px",
-                  }}
-                >
-                  API
-                </div>
+              <div className={styles.miniCardInner}>
+                <div className={styles.miniCardIconAPI}>API</div>
                 <div>
-                  <div style={{ fontSize: "10px", fontWeight: "bold" }}>
-                    Endpoint Connected
-                  </div>
-                  <div style={{ fontSize: "8px", color: "#666" }}>
+                  <div className={styles.miniCardTitle}>Endpoint Connected</div>
+                  <div className={styles.miniCardSubtitle}>
                     Status: 200 OK — Ready
                   </div>
                 </div>

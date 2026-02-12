@@ -43,7 +43,6 @@ export default function ShopSteps() {
     offset: ["start start", "end end"],
   });
 
-  // Balanced spring for "buttery smooth" progress filling
   const scaleX = useSpring(scrollYProgress, {
     stiffness: 80,
     damping: 40,
@@ -58,10 +57,13 @@ export default function ShopSteps() {
 
   return (
     <section id="how-it-works" className={styles.steps}>
+      {/* scrollWrapper creates the scroll distance (300vh) */}
       <div ref={containerRef} className={styles.scrollWrapper}>
+        {/* stickyContainer pins to viewport while user scrolls */}
         <div className={styles.stickyContainer}>
+          {/* Vertical layout: header → description → timeline */}
           <div className={styles.stepsInner}>
-            {/* Header stays at top */}
+            {/* Top: Section header */}
             <div className={styles.sectionHeader}>
               <h2 className={styles.sectionTitle}>
                 Launch in minutes, not months
@@ -71,17 +73,18 @@ export default function ShopSteps() {
               </p>
             </div>
 
-            {/* Description is now the CENTERpiece */}
+            {/* Center: Animated description that changes on scroll */}
             <div className={styles.descContainer}>
               <AnimatePresence mode="wait">
                 <motion.p
                   key={activeStep}
+                  className={styles.descText}
                   initial={{ opacity: 0, y: 30, filter: "blur(10px)" }}
                   animate={{ opacity: 1, y: 0, filter: "blur(0px)" }}
                   exit={{ opacity: 0, y: -30, filter: "blur(10px)" }}
                   transition={{
                     duration: 0.8,
-                    ease: [0.22, 1, 0.36, 1], // Quentin ease for smoothness
+                    ease: [0.22, 1, 0.36, 1],
                   }}
                 >
                   {STEPS[activeStep].description}
@@ -89,12 +92,12 @@ export default function ShopSteps() {
               </AnimatePresence>
             </div>
 
-            {/* Timeline is now at the BOTTOM */}
+            {/* Bottom: Timeline with progress bar + step markers */}
             <div className={styles.timelineContainer}>
               <div className={styles.progressTrack}>
                 <motion.div
                   className={styles.progressBar}
-                  style={{ scaleX, originX: 0 }}
+                  style={{ scaleX, transformOrigin: "left" }}
                 />
               </div>
 

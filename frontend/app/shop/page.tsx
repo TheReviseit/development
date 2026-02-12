@@ -17,17 +17,17 @@ import ShopFooter from "./components/ShopFooter";
 
 export default function ShopLandingPage() {
   return (
-    <>
+    <div className="mainLayoutWrapper">
       <ShopNavbar />
       <main>
         <ShopHero />
         <ShopFeatures />
         <ShopShowcase />
         <ShopSteps />
-        <ShopTrust />
+        {/* <ShopTrust /> */}
         <ShopCTA />
       </main>
       <ShopFooter />
-    </>
+    </div>
   );
 }

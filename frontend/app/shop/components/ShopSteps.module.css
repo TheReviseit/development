@@ -1,103 +1,113 @@
 /* =============================================================================
-   SHOP STEPS — Interactive Progress Design (Flipped & Refined)
+   SHOP STEPS — Scroll-Driven Interactive Timeline (Sticky Pass)
+   
+   Fixes:
+   1. position: sticky needs a top offset to account for the fixed navbar.
+   2. overflow-x: clip on root prevents leaks without breaking sticky.
+   3. Proper vertical distribution: content centered in remaining viewport space.
    ============================================================================= */
 
 .steps {
   background: #fff;
+  overflow-x: clip;
 }
 
+/* 300vh scroll distance for the 3 steps */
 .scrollWrapper {
   position: relative;
-  height: 300vh; /* Increased scroll room for smoother steps */
+  height: 300vh;
 }
 
+/* Pins to viewport below the navbar */
 .stickyContainer {
   position: sticky;
-  top: 0;
-  height: 100vh;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  top: 64px; /* Matches mobile navbar height */
+  height: calc(100vh - 64px);
+  height: calc(100dvh - 64px);
   overflow: hidden;
+  display: flex;
+  flex-direction: column;
 }
 
 .stepsInner {
-  max-width: 1100px;
+  max-width: var(--shop-container, 1200px);
   margin: 0 auto;
   width: 100%;
-  padding: 0 24px;
+  height: 100%;
+  padding: 40px var(--shop-px-mobile, 16px) 24px;
   display: flex;
   flex-direction: column;
-  height: 100%;
-  justify-content: center;
+  box-sizing: border-box;
 }
 
+/* ---- Header (Top) ---- */
 .sectionHeader {
   text-align: center;
-  margin-bottom: 40px;
+  flex: 0 0 auto;
 }
 
 .sectionTitle {
-  font-size: 3.5rem;
+  font-size: clamp(1.75rem, 4vw + 0.5rem, 3.5rem);
   font-weight: 800;
   color: #000;
   letter-spacing: -0.04em;
   line-height: 1.1;
-  margin-bottom: 16px;
+  margin: 0 0 12px;
 }
 
 .sectionDesc {
-  font-size: 1.25rem;
+  font-size: clamp(0.9375rem, 1.2vw + 0.25rem, 1.125rem);
   color: #666;
+  margin: 0;
 }
 
-/* ---- Description Grid (Centered Focus) ---- */
+/* ---- Animated Description (Center) ---- */
 .descContainer {
-  text-align: center;
-  max-width: 800px;
-  margin: 0 auto;
-  flex: 1; /* Take up center space */
+  flex: 1 1 auto;
   display: flex;
   align-items: center;
   justify-content: center;
-}
-
-.descContainer p {
-  font-family: var(--font-outfit), sans-serif;
-  font-size: 2.8rem; /* High-impact size */
-  font-weight: 800; /* Extra bold for "attractive" feel */
-  color: #000;
-  line-height: 1.25;
-  letter-spacing: -0.04em; /* Tight letter spacing for premium look */
-  margin: 0;
-  max-width: 900px;
-}
-
-/* ---- Progress Timeline (Moved to Bottom) ---- */
-.timelineContainer {
+  text-align: center;
+  padding: 20px 8px;
+  min-height: 0;
   position: relative;
-  padding: 80px 0 40px; /* Space at the bottom */
+}
+
+.descText {
+  font-family: var(--font-outfit), sans-serif;
+  font-size: clamp(1.25rem, 3vw + 0.5rem, 2.6rem);
+  font-weight: 800;
+  color: #000;
+  line-height: 1.2;
+  letter-spacing: -0.04em;
+  margin: 0;
+  max-width: 850px;
+  width: 100%;
+}
+
+/* ---- Timeline (Bottom) ---- */
+.timelineContainer {
+  flex: 0 0 auto;
+  position: relative;
+  padding: 32px 0 8px;
   width: 100%;
 }
 
 .progressTrack {
   position: absolute;
-  top: 102px; /* Precision centering for 44px markers starting at 80px padding */
-  left: 50px;
-  right: 50px;
+  top: 54px;
+  left: 24px;
+  right: 24px;
   height: 2px;
-  background: #e5e7eb; /* Slightly darker for visibility */
+  background: #e5e7eb;
   z-index: 0;
+  overflow: hidden;
 }
 
 .progressBar {
-  position: absolute;
-  top: 0;
-  left: 0;
+  width: 100%;
   height: 100%;
   background: #000;
-  width: 100%; /* Must be 100% for scaleX to work */
-  z-index: 1;
 }
 
 .stepsList {
@@ -114,32 +124,32 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  width: 150px;
+  width: clamp(80px, 25vw, 150px);
+  min-width: 0;
 }
 
 .marker {
-  width: 44px;
-  height: 44px;
+  width: 36px;
+  height: 36px;
   background: #fff;
-  border: 2px solid #f0f0f0;
+  border: 2px solid #e5e7eb;
   border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
   font-weight: 800;
-  font-size: 1.125rem;
+  font-size: 0.9375rem;
   color: #999;
-  margin-bottom: 20px;
-  transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+  margin-bottom: 12px;
   position: relative;
   box-shadow: 0 0 0 4px #fff;
+  transition: all 0.3s ease;
 }
 
 .marker.active {
   background: #000;
   border-color: #000;
   color: #fff;
-  transform: scale(1.1);
 }
 
 .marker.completed {
@@ -148,53 +158,62 @@
   color: #fff;
 }
 
-.checkIcon {
-  color: #fff;
-}
-
-.stepLabel {
-  text-align: center;
-}
-
 .stepNumberLabel {
   display: block;
-  font-size: 0.8125rem;
+  font-size: 0.625rem;
   font-weight: 700;
   color: #999;
   text-transform: uppercase;
   letter-spacing: 0.08em;
-  margin-bottom: 6px;
+  margin-bottom: 2px;
 }
 
 .stepTitle {
   display: block;
-  font-size: 1.35rem;
+  font-size: clamp(0.75rem, 1.2vw + 0.2rem, 1.125rem);
   font-weight: 700;
   color: #000;
 }
 
-/* ---- Responsive ---- */
-
-@media (max-width: 768px) {
-  .sectionTitle {
-    font-size: 2.5rem;
+/* ---- Tablet (768px+) ---- */
+@media (min-width: 768px) {
+  .stickyContainer {
+    top: 72px; /* Matches desktop navbar height */
+    height: calc(100vh - 72px);
+    height: calc(100dvh - 72px);
   }
 
-  .descContainer p {
-    font-size: 1.5rem; /* Better fit for mobile */
-    max-width: 100%;
+  .stepsInner {
+    padding: 60px var(--shop-px-tablet, 24px) 40px;
   }
 
-  .stepWrapper {
-    width: 100px;
+  .marker {
+    width: 44px;
+    height: 44px;
+    font-size: 1.125rem;
+    margin-bottom: 16px;
+  }
+
+  .progressTrack {
+    top: 70px;
+    left: 40px;
+    right: 40px;
+  }
+
+  .stepNumberLabel {
+    font-size: 0.75rem;
   }
 }
 
-@media (max-width: 480px) {
-  .timelineContainer {
-    display: none;
+/* ---- Desktop (1024px+) ---- */
+@media (min-width: 1024px) {
+  .stepsInner {
+    padding: 80px var(--shop-px-desktop, 40px) 60px;
   }
-  .descContainer {
-    padding-bottom: 60px;
+
+  .progressTrack {
+    top: 70px;
+    left: 60px;
+    right: 60px;
   }
 }

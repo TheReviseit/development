@@ -3,6 +3,15 @@
 :root {
   --background: 0 0% 100%;
   --foreground: 222.2 84% 4.9%;
+
+  /* Shop Container System — Unified across all sections */
+  --shop-container: 1200px;
+  --shop-px-mobile: 16px;
+  --shop-px-tablet: 24px;
+  --shop-px-desktop: 40px;
+  --shop-section-py-mobile: 64px;
+  --shop-section-py-tablet: 80px;
+  --shop-section-py-desktop: 100px;
   --card: 0 0% 100%;
   --card-foreground: 222.2 84% 4.9%;
   --popover: 0 0% 100%;
@@ -91,6 +100,19 @@ body {
 /* Smooth Scroll Behavior */
 html {
   scroll-behavior: smooth;
+}
+
+body {
+  width: 100%;
+  min-height: 100vh;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Root layout safety for horizontal overflow */
+.mainLayoutWrapper {
+  overflow-x: clip;
+  width: 100%;
 }
 
 /* ============================================================================

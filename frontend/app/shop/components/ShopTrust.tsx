@@ -8,7 +8,6 @@ interface TrustItem {
 }
 
 const TRUST_ITEMS: TrustItem[] = [
-  /*
   {
     icon: <Shield size={28} color="#fff" />,
     title: "Enterprise security",
@@ -27,7 +26,6 @@ const TRUST_ITEMS: TrustItem[] = [
     description:
       "Handle millions of products and orders without performance degradation. Grow without limits.",
   },
-  */
 ];
 
 export default function ShopTrust() {

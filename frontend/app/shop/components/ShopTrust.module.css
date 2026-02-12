@@ -1,26 +1,27 @@
 /* =============================================================================
-   SHOP TRUST — Trust / Social Proof Section
+   SHOP TRUST — Trust / Social Proof (Mobile-First)
    ============================================================================= */
 
 .trust {
-  padding: 100px 24px;
+  padding: var(--shop-section-py-mobile, 64px) var(--shop-px-mobile, 16px);
   background: #fff;
+  overflow-x: clip;
 }
 
 .trustInner {
-  max-width: 1280px;
+  max-width: var(--shop-container, 1200px);
   margin: 0 auto;
 }
 
 .trustGrid {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 32px;
+  grid-template-columns: 1fr;
+  gap: 20px;
 }
 
 .trustCard {
   text-align: center;
-  padding: 40px 32px;
+  padding: 32px 24px;
   border: 1px solid #f0f0f0;
   border-radius: 16px;
   transition:
@@ -34,21 +35,21 @@
 }
 
 .trustIconWrap {
-  width: 64px;
-  height: 64px;
+  width: 56px;
+  height: 56px;
   background: #000;
   border-radius: 16px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  margin-bottom: 24px;
+  margin-bottom: 20px;
 }
 
 .trustTitle {
-  font-size: 1.25rem;
+  font-size: 1.125rem;
   font-weight: 700;
   color: #000;
-  margin: 0 0 12px;
+  margin: 0 0 10px;
   letter-spacing: -0.02em;
 }
 
@@ -61,13 +62,44 @@
 
 /* ---- Responsive ---- */
 
-@media (max-width: 768px) {
-  .trustGrid {
-    grid-template-columns: 1fr;
-    gap: 20px;
+/* Tablet (768px+) */
+@media (min-width: 768px) {
+  .trust {
+    padding: var(--shop-section-py-tablet, 80px) var(--shop-px-tablet, 24px);
   }
 
+  .trustGrid {
+    grid-template-columns: 1fr 1fr;
+    gap: 24px;
+  }
+
+  .trustCard {
+    padding: 36px 28px;
+  }
+
+  .trustIconWrap {
+    width: 64px;
+    height: 64px;
+  }
+
+  .trustTitle {
+    font-size: 1.25rem;
+    margin-bottom: 12px;
+  }
+}
+
+/* Desktop (1024px+) */
+@media (min-width: 1024px) {
   .trust {
-    padding: 64px 16px;
+    padding: var(--shop-section-py-desktop, 100px) var(--shop-px-desktop, 40px);
+  }
+
+  .trustGrid {
+    grid-template-columns: repeat(3, 1fr);
+    gap: 32px;
+  }
+
+  .trustCard {
+    padding: 40px 32px;
   }
 }
