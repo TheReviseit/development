@@ -1,7 +1,14 @@
 import { Shield, Clock, Lock } from "lucide-react";
 import styles from "./ShopTrust.module.css";
 
-const TRUST_ITEMS = [
+interface TrustItem {
+  icon: React.ReactNode;
+  title: string;
+  description: string;
+}
+
+const TRUST_ITEMS: TrustItem[] = [
+  /*
   {
     icon: <Shield size={28} color="#fff" />,
     title: "Enterprise security",
@@ -20,6 +27,7 @@ const TRUST_ITEMS = [
     description:
       "Handle millions of products and orders without performance degradation. Grow without limits.",
   },
+  */
 ];
 
 export default function ShopTrust() {

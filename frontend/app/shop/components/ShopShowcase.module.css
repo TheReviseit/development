@@ -1,130 +1,229 @@
 /* =============================================================================
-   SHOP SHOWCASE — Product Demo / Benefits Section
+   SHOP SHOWCASE — Bento Grid Design (Refined)
    ============================================================================= */
 
 .showcase {
-  padding: 100px 24px;
+  padding: 120px 24px;
   background: #fff;
-}
-
-.showcaseInner {
-  max-width: 1280px;
-  margin: 0 auto;
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 80px;
-  align-items: center;
-}
-
-.showcaseContent h2 {
-  font-size: 2.75rem;
-  font-weight: 700;
-  color: #000;
-  letter-spacing: -0.03em;
-  line-height: 1.1;
-  margin: 0 0 20px;
-}
-
-.showcaseContent p {
-  font-size: 1.0625rem;
-  color: #6b7280;
-  line-height: 1.7;
-  margin: 0 0 36px;
-}
-
-.benefitsList {
-  list-style: none;
-  padding: 0;
-  margin: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 18px;
-}
-
-.benefitItem {
-  display: flex;
-  align-items: flex-start;
-  gap: 14px;
-}
-
-.benefitCheck {
-  flex-shrink: 0;
-  width: 24px;
-  height: 24px;
-  background: #000;
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  margin-top: 2px;
-}
-
-.benefitText {
-  font-size: 1rem;
-  color: #374151;
-  line-height: 1.5;
-}
-
-/* ---- Visual Side ---- */
-
-.showcaseVisual {
-  position: relative;
-}
-
-.visualCard {
-  background: #fafafa;
-  border: 1px solid #f0f0f0;
-  border-radius: 16px;
-  aspect-ratio: 4 / 3;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 16px;
   overflow: hidden;
 }
 
-.visualGraphRow {
+.showcaseInner {
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+.header {
+  text-align: center;
+  max-width: 800px;
+  margin: 0 auto 64px;
+}
+
+.badge {
+  display: inline-block;
+  padding: 6px 16px;
+  background: #fdf2ff;
+  color: #c084fc;
+  font-size: 0.875rem;
+  font-weight: 600;
+  border-radius: 100px;
+  margin-bottom: 24px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.title {
+  font-size: 3.5rem;
+  font-weight: 800;
+  color: #000;
+  letter-spacing: -0.04em;
+  line-height: 1.1;
+  margin-bottom: 24px;
+}
+
+.subtitle {
+  font-size: 1.125rem;
+  color: #666;
+  line-height: 1.6;
+  max-width: 650px;
+  margin: 0 auto;
+}
+
+/* ---- Bento Grid ---- */
+
+.grid {
+  display: grid;
+  grid-template-columns: 1.4fr 1fr 1fr; /* Fixed widths to prevent squishing */
+  grid-template-rows: 320px 320px;
+  gap: 24px;
+}
+
+.card {
+  background: #fff;
+  border-radius: 32px;
+  position: relative;
+  overflow: hidden;
+  border: 1px solid rgba(0, 0, 0, 0.05);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.02);
+  transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
   display: flex;
-  align-items: flex-end;
-  gap: 8px;
-  height: 120px;
-  padding: 0 40px;
-  width: 100%;
+  flex-direction: column;
+}
+
+.card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.06);
+  border-color: rgba(0, 0, 0, 0.1);
+}
+
+/* Main Card (Left, Spans 2 rows) */
+.mainCard {
+  grid-column: 1;
+  grid-row: span 2;
+  background: #000;
+  display: flex;
+  align-items: center;
   justify-content: center;
 }
 
-.graphBar {
-  width: 32px;
-  border-radius: 6px 6px 0 0;
-  background: #000;
-  transition: height 0.4s ease;
+.mainCardImage {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  opacity: 0.5; /* Reduced slightly for text contrast */
 }
 
-.graphBar:nth-child(2) {
-  background: #374151;
+.mainCardContent {
+  position: relative;
+  z-index: 1;
+  padding: 40px;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
 }
 
-.graphBar:nth-child(4) {
-  background: #374151;
+.bigText10x {
+  display: block;
+  font-size: 6rem;
+  font-weight: 900;
+  color: #fff;
+  line-height: 1;
+  letter-spacing: -0.05em;
+  text-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
 }
 
-.graphBar:nth-child(6) {
-  background: #6b7280;
+.subtitleWorkflows {
+  display: block;
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.95);
+  letter-spacing: -0.02em;
 }
 
-.visualLabel {
-  font-size: 0.875rem;
-  color: #9ca3af;
-  font-weight: 500;
+.mainCardContent p {
+  color: rgba(255, 255, 255, 0.8);
+  font-size: 1rem;
+  line-height: 1.5;
+  max-width: 280px;
+  margin: 12px auto 0;
+}
+
+/* Secondary Cards */
+.secondaryCard {
+  padding: 32px;
+  gap: 12px;
+}
+
+.secondaryCard.peach {
+  background: #fff5f2;
+}
+.secondaryCard.mint {
+  background: #f2fffb;
+}
+
+.secondaryCard h3 {
+  font-size: 1.4rem;
+  font-weight: 700;
+  color: #000;
+  line-height: 1.2;
+}
+
+.secondaryCard p {
+  font-size: 0.95rem;
+  color: #555;
+  line-height: 1.5;
+}
+
+/* Bottom Wide Card */
+.wideCard {
+  grid-column: 2 / span 2;
+  padding: 32px 40px;
+  background: #f8f9fa;
+  gap: 20px;
+}
+
+.wideCard h3 {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: #000;
+}
+
+.wideCard p {
+  color: #666;
+  font-size: 1rem;
+}
+
+.tagCloud {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: auto;
+}
+
+.tag {
+  padding: 8px 18px;
+  background: #fff;
+  border-radius: 100px;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: #333;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.04);
+  border: 1px solid rgba(0, 0, 0, 0.05);
+  transition: all 0.2s;
+}
+
+.tag:hover {
+  transform: translateY(-2px);
+  background: #fdf2ff;
+  color: #c084fc;
 }
 
 /* ---- Responsive ---- */
 
-@media (max-width: 1024px) {
-  .showcaseInner {
+@media (max-width: 1100px) {
+  .grid {
     grid-template-columns: 1fr;
-    gap: 48px;
+    grid-template-rows: auto;
+  }
+
+  .mainCard,
+  .wideCard {
+    grid-column: span 1;
+    grid-row: auto;
+    min-height: 350px;
+  }
+
+  .secondaryCard {
+    min-height: 250px;
+  }
+
+  .title {
+    font-size: 2.75rem;
   }
 }
 
@@ -133,7 +232,11 @@
     padding: 64px 16px;
   }
 
-  .showcaseContent h2 {
-    font-size: 2rem;
+  .title {
+    font-size: 2.125rem;
+  }
+
+  .header {
+    margin-bottom: 40px;
   }
 }

@@ -1,6 +1,8 @@
 import Link from "next/link";
-import { ShoppingBag } from "lucide-react";
+import Image from "next/image";
+import { Instagram } from "lucide-react";
 import styles from "./ShopFooter.module.css";
+import logo from "@/public/logo.png";
 
 const PRODUCT_LINKS = [
   { href: "#features", label: "Features" },
@@ -28,14 +30,34 @@ export default function ShopFooter() {
           {/* Brand */}
           <div className={styles.footerBrand}>
             <Link href="/" className={styles.footerLogo}>
-              <div className={styles.footerLogoIcon}>
-                <ShoppingBag size={16} color="#fff" />
+              <div className={styles.footerLogoImgWrap}>
+                <Image
+                  src={logo}
+                  alt="Flowauxi Logo"
+                  width={32}
+                  height={32}
+                  className={styles.logoImg}
+                />
               </div>
               <span className={styles.footerLogoText}>Flowauxi</span>
             </Link>
             <p className={styles.footerTagline}>
-              Enterprise commerce platform built for modern businesses.
+              Transform your business with the most powerful AI-driven commerce
+              platform. Automate your workflows, engage customers, and scale
+              globally with ease.
             </p>
+
+            <div className={styles.socialLinks}>
+              <a
+                href="https://instagram.com/flowauxi"
+                target="_blank"
+                rel="noopener noreferrer"
+                className={styles.socialIcon}
+                aria-label="Follow us on Instagram"
+              >
+                <Instagram size={20} />
+              </a>
+            </div>
           </div>
 
           {/* Product */}
