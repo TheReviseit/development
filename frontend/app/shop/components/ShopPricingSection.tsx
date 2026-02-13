@@ -8,44 +8,56 @@ import styles from "./ShopPricingSection.module.css";
 const PLANS = [
   {
     name: "Basic plan",
-    price: 10,
-    tagline: "Basic features for up to 10 users.",
-    featuresTitle: "Everything in our free plan plus...",
+    price: 1999,
+    tagline: "Perfect for getting started with your online store.",
+    featuresTitle: "Everything you need to launch...",
     features: [
-      "Access to basic features",
-      "Basic reporting and analytics",
-      "Up to 10 individual users",
-      "20GB individual data each user",
-      "Basic chat and email support",
+      "Domain: Random domain Name  (e.g. store/abc1234)",
+      "10 products (incl. variants)",
+      "Standard invoice",
+      "10 email invoices",
+      "10 live order update via email",
+      "Normal Dashboard",
+      "Message inbox",
+      "upto 10 days message history",
+      "Email support",
     ],
     featured: false,
   },
   {
     name: "Business plan",
-    price: 20,
-    tagline: "Growing teams up to 20 users.",
+    price: 3999,
+    tagline: "For growing businesses.",
     featuresTitle: "Everything in Basic plus...",
     features: [
-      "200+ integrations",
-      "Advanced reporting and analytics",
-      "Up to 20 individual users",
-      "40GB individual data each user",
-      "Priority chat and email support",
+      "Custom domain name (store/yourstorename)",
+      "50 products (incl. variants)",
+      "50 live order updates (Email & WhatsApp)",
+      "Get order update in google sheets (upto 50 orders)",
+      "Invoice customization",
+      "Analytics dashboard",
+      "Message inbox",
+      "Up to 50 days message history",
+      "Email and call support",
     ],
     featured: true,
     badge: "Popular",
   },
   {
     name: "Enterprise plan",
-    price: 40,
+    price: 6999,
     tagline: "Advanced features + unlimited users.",
     featuresTitle: "Everything in Business plus...",
     features: [
-      "Advanced custom fields",
-      "Audit log and data history",
-      "Unlimited individual users",
-      "Unlimited individual data",
-      "Personalised+priority service",
+      "Custom domain name (store/yourstorename)",
+      "100 products",
+      "100 live order updates (Email & WhatsApp)",
+      "Get order update in google sheets",
+      "Invoice customization",
+      "Analytics dashboard",
+      "Message inbox",
+      "No limit message history",
+      "Email and call support",
     ],
     featured: false,
   },
@@ -97,7 +109,7 @@ export default function ShopPricingSection() {
               <h3 className={styles.planName}>{plan.name}</h3>
 
               <div className={styles.priceWrapper}>
-                <span className={styles.currency}>$</span>
+                <span className={styles.currency}>₹</span>
                 <span className={styles.price}>
                   {billingCycle === "annual"
                     ? Math.floor(plan.price * 0.8)
