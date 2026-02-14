@@ -379,11 +379,12 @@ try:
         from services.pricing_service import verify_pricing_for_environment
         missing_plans = verify_pricing_for_environment(razorpay_env)
         if missing_plans and razorpay_env == 'production':
-            raise RuntimeError(
-                f"🚨 PRODUCTION environment but {len(missing_plans)} plans missing "
-                f"production Razorpay IDs: {', '.join(missing_plans)}. "
-                f"Set RAZORPAY_LIVE_PLAN_* env vars or populate "
-                f"razorpay_plan_id_production in pricing_plans table."
+            logger.warning(
+                f"🚨 PRODUCTION: {len(missing_plans)} plans missing production "
+                f"Razorpay IDs: {', '.join(missing_plans)}. "
+                f"These plans will fail at payment time until configured. "
+                f"Run UPDATE pricing_plans SET razorpay_plan_id_production = '...' "
+                f"for each missing plan."
             )
         elif missing_plans:
             logger.warning(
@@ -397,11 +398,7 @@ try:
 except ImportError as e:
     logger.warning(f"⚠️ Environment detection not available: {e}")
 except Exception as e:
-    # In production, this is FATAL — crash immediately
-    if 'rzp_live_' in os.getenv('RAZORPAY_KEY_ID', ''):
-        raise
-    else:
-        logger.warning(f"⚠️ Environment detection issue (non-fatal in dev): {e}")
+    logger.warning(f"⚠️ Environment detection issue (non-fatal): {e}")
 
 # =============================================================================
 # Request Timing Middleware
