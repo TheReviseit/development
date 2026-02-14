@@ -67,7 +67,7 @@ const FEATURE_ACCESS: Record<string, PlanName[]> = {
   "priority-support": ["pro"],
 };
 
-// Plan hierarchy for feature checks
+// Plan hierarchy for feature checkss
 const PLAN_HIERARCHY: Record<PlanName, number> = {
   starter: 1,
   business: 2,
