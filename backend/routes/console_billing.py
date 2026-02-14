@@ -54,70 +54,37 @@ except ImportError:
 # Used for upgrade/downgrade validation
 PLAN_TIER_ORDER = ['starter', 'growth', 'enterprise']
 
-# Console plan configuration
-CONSOLE_PLAN_CONFIG = {
-    'starter': {
-        'plan_id': os.getenv('RAZORPAY_PLAN_CONSOLE_STARTER', os.getenv('RAZORPAY_PLAN_STARTER')),
-        'amount': 79900,  # ₹799 in paise
-        'currency': 'INR',
-        'interval': 'monthly',
-        'display_name': 'Starter',
-        'entitlement_level': 'live',
-        'tier': 0,
-        'features': [
-            "Live OTP API access",
-            "WhatsApp OTPs at ₹0.75/OTP",
-            "Standard API latency",
-            "1 Webhook integration",
-            "Basic usage analytics",
-            "Email support",
-            "Secure API keys & console access"
-        ]
-    },
-    'growth': {
-        'plan_id': os.getenv('RAZORPAY_PLAN_CONSOLE_GROWTH', os.getenv('RAZORPAY_PLAN_BUSINESS')),
-        'amount': 199900,  # ₹1,999 in paise
-        'currency': 'INR',
-        'interval': 'monthly',
-        'display_name': 'Growth',
-        'entitlement_level': 'live',
-        'tier': 1,
-        'features': [
-            "WhatsApp OTPs at ₹0.60/OTP",
-            "Priority API routing (lower latency)",
-            "Unlimited webhooks",
-            "Production-grade API keys",
-            "Advanced analytics dashboard",
-            "Priority chat support"
-        ]
-    },
-    'enterprise': {
-        'plan_id': None,  # Contact sales only
-        'amount': 0,
-        'currency': 'INR',
-        'interval': 'monthly',
-        'display_name': 'Enterprise',
-        'entitlement_level': 'enterprise',
-        'tier': 2,
-        'action': 'contact_sales',
-        'features': [
-            "Volume OTP pricing (₹0.50/OTP and below)",
-            "Dedicated account manager",
-            "Custom SLA (99.9%+ uptime)",
-            "High throughput & custom rate limits",
-            "White-label & IP-restricted APIs",
-            "Custom integrations",
-            "24/7 premium support"
-        ]
-    }
+# =============================================================================
+# Pricing Service (replaces hardcoded CONSOLE_PLAN_CONFIG)
+# =============================================================================
+# REMOVED: Hardcoded amounts, Razorpay plan IDs, and features.
+# Pricing now comes from pricing_plans database table via PricingService.
+# Tier/entitlement metadata is kept here (not pricing data).
+
+try:
+    from services.pricing_service import (
+        get_pricing_service,
+        PricingNotFoundError,
+        PricingConfigurationError,
+    )
+    PRICING_SERVICE_AVAILABLE = True
+except ImportError as e:
+    logger.warning(f"PricingService not available for console: {e}")
+    PRICING_SERVICE_AVAILABLE = False
+
+# Tier/entitlement metadata (NOT pricing — that comes from DB)
+CONSOLE_TIER_META = {
+    'starter': {'entitlement_level': 'live', 'tier': 0},
+    'growth': {'entitlement_level': 'live', 'tier': 1},
+    'enterprise': {'entitlement_level': 'enterprise', 'tier': 2, 'action': 'contact_sales'},
 }
 
 
 def get_plan_tier(plan_name: str) -> int:
     """Get numeric tier for a plan. Higher = better plan."""
-    plan = CONSOLE_PLAN_CONFIG.get(plan_name.lower())
-    if plan:
-        return plan.get('tier', -1)
+    meta = CONSOLE_TIER_META.get(plan_name.lower())
+    if meta:
+        return meta.get('tier', -1)
     try:
         return PLAN_TIER_ORDER.index(plan_name.lower())
     except ValueError:
@@ -187,16 +154,35 @@ def list_plans():
     No auth required - public endpoint for pricing page.
     """
     plans = []
-    for plan_id, config in CONSOLE_PLAN_CONFIG.items():
+    try:
+        pricing_service = get_pricing_service()
+        db_plans = pricing_service.get_all_plans('api', 'monthly')
+        for plan in db_plans:
+            plan_slug = plan.get('plan_slug')
+            meta = CONSOLE_TIER_META.get(plan_slug, {})
+            plans.append({
+                'id': plan_slug,
+                'name': plan.get('display_name', plan_slug.title()),
+                'amount': plan.get('amount_paise', 0),
+                'amount_display': f"₹{plan.get('amount_paise', 0) // 100}/month",
+                'currency': plan.get('currency', 'INR'),
+                'interval': plan.get('billing_cycle', 'monthly'),
+                'features': plan.get('features_json', []),
+            })
+        # Add enterprise (contact sales — not in pricing_plans)
         plans.append({
-            'id': plan_id,
-            'name': config['display_name'],
-            'amount': config['amount'],
-            'amount_display': f"₹{config['amount'] // 100}/month",
-            'currency': config['currency'],
-            'interval': config['interval'],
-            'features': config['features']
+            'id': 'enterprise',
+            'name': 'Enterprise',
+            'amount': 0,
+            'amount_display': 'Custom',
+            'currency': 'INR',
+            'interval': 'monthly',
+            'features': ['Volume OTP pricing', 'Dedicated account manager', 'Custom SLA', '24/7 premium support'],
+            'action': 'contact_sales',
         })
+    except Exception as e:
+        logger.error(f"Failed to load console plans: {e}")
+        return error_response('Failed to load plans', 'PLANS_ERROR', 500)
     
     return success_response({'plans': plans})
 
@@ -273,21 +259,45 @@ def create_order():
     
     plan_name = data.get('plan_name', '').lower()
     
-    if plan_name not in CONSOLE_PLAN_CONFIG:
+    if plan_name not in CONSOLE_TIER_META:
         return error_response(
             f'Invalid plan: {plan_name}',
             'INVALID_PLAN',
             400
         )
     
-    plan = CONSOLE_PLAN_CONFIG[plan_name]
-    
-    if not plan['plan_id']:
+    tier_meta = CONSOLE_TIER_META[plan_name]
+    if tier_meta.get('action') == 'contact_sales':
         return error_response(
-            f'Plan {plan_name} not configured',
-            'PLAN_NOT_CONFIGURED',
+            'Enterprise plan requires contacting sales',
+            'CONTACT_SALES',
+            400
+        )
+    
+    # Resolve pricing from database
+    try:
+        pricing_service = get_pricing_service()
+        plan_pricing = pricing_service.get_plan('api', plan_name, 'monthly')
+    except PricingNotFoundError:
+        return error_response(
+            f'Plan {plan_name} pricing not found',
+            'PLAN_NOT_FOUND',
+            404
+        )
+    except PricingConfigurationError as e:
+        logger.error(f"Pricing config error for console/{plan_name}: {e}")
+        return error_response(
+            'Pricing configuration error',
+            'PRICING_CONFIG_ERROR',
             500
         )
+    
+    razorpay_plan_id = plan_pricing['razorpay_plan_id']
+    amount_paise = plan_pricing['amount_paise']
+    currency = plan_pricing.get('currency', 'INR')
+    display_name = plan_pricing['display_name']
+    pricing_version = plan_pricing.get('pricing_version', 1)
+    pricing_plan_id = plan_pricing.get('id')
     
     # Check for existing subscription
     existing_sub = get_console_subscription(org_id)
@@ -307,9 +317,9 @@ def create_order():
                 return success_response({
                     'subscription_id': existing_sub['razorpay_subscription_id'],
                     'key_id': RAZORPAY_KEY_ID,
-                    'amount': plan['amount'],
-                    'currency': plan['currency'],
-                    'plan_name': plan['display_name'],
+                    'amount': amount_paise,
+                    'currency': currency,
+                    'plan_name': display_name,
                     'existing_order': True
                 })
             # Different plan while payment_pending - allow upgrade attempt
@@ -320,16 +330,16 @@ def create_order():
             # Same plan - block
             if current_plan == plan_name:
                 return error_response(
-                    f'You are already subscribed to the {plan["display_name"]} plan',
+                    f'You are already subscribed to the {display_name} plan',
                     'ALREADY_ON_PLAN',
                     400
                 )
             
             # Downgrade - block (must contact support)
             if not is_upgrade(current_plan, plan_name):
-                current_display = CONSOLE_PLAN_CONFIG.get(current_plan, {}).get('display_name', current_plan.title())
+                current_display = current_plan.title()  # Simple display name for error msg
                 return error_response(
-                    f'Cannot downgrade from {current_display} to {plan["display_name"]}. Please contact support.',
+                    f'Cannot downgrade from {current_display} to {display_name}. Please contact support.',
                     'DOWNGRADE_NOT_ALLOWED',
                     400
                 )
@@ -397,13 +407,14 @@ def create_order():
         
         # Create Razorpay subscription
         subscription_data = {
-            'plan_id': plan['plan_id'],
+            'plan_id': razorpay_plan_id,  # From pricing_plans table
             'total_count': 12,  # 12 months
             'quantity': 1,
             'customer_notify': 1,
             'notes': {
                 'org_id': str(org_id),
                 'plan_name': plan_name,
+                'pricing_version': str(pricing_version),
                 'idempotency_key': idempotency_key
             }
         }
@@ -447,7 +458,7 @@ def create_order():
             action='create_billing_order',
             razorpay_id=subscription['id'],
             plan_name=plan_name,
-            amount=plan['amount']
+            amount=amount_paise
         )
         
         logger.info(f"Created order {subscription['id']} for org {org_id}, plan {plan_name}")
@@ -455,9 +466,9 @@ def create_order():
         return success_response({
             'subscription_id': subscription['id'],
             'key_id': RAZORPAY_KEY_ID,
-            'amount': plan['amount'],
-            'currency': plan['currency'],
-            'plan_name': plan['display_name']
+            'amount': amount_paise,
+            'currency': currency,
+            'plan_name': display_name
         })
         
     except razorpay.errors.BadRequestError as e:
@@ -650,8 +661,8 @@ def handle_webhook():
             return jsonify({'status': 'ignored', 'reason': 'not_console_subscription'}), 200
         
         sub_record = result.data
-        plan_config = CONSOLE_PLAN_CONFIG.get(sub_record['plan_name'], {})
-        target_entitlement = plan_config.get('entitlement_level', 'live')
+        tier_meta = CONSOLE_TIER_META.get(sub_record['plan_name'], {})
+        target_entitlement = tier_meta.get('entitlement_level', 'live')
         
         # Handle event types
         if event in ('subscription.authenticated', 'subscription.activated'):

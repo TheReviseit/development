@@ -22,11 +22,11 @@ export async function POST(request: NextRequest) {
           error: "Validation failed",
           details: validationResult.error.flatten(),
         },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
-    const { firebase_uid, email, full_name } = validationResult.data;
+    const { firebase_uid, email, full_name, phone } = validationResult.data;
 
     // Check if user already exists by firebase_uid
     const existingUser = await getUserByFirebaseUID(firebase_uid);
@@ -42,7 +42,7 @@ export async function POST(request: NextRequest) {
     const existingUserByEmail = await getUserByEmail(email);
     if (existingUserByEmail) {
       console.log(
-        `[create-user] Email ${email} exists with different firebase_uid. Updating...`
+        `[create-user] Email ${email} exists with different firebase_uid. Updating...`,
       );
       // User exists with different firebase_uid - this happens when switching Firebase projects
       const updatedUser = await updateUserFirebaseUID(email, firebase_uid);
@@ -52,7 +52,7 @@ export async function POST(request: NextRequest) {
       cache.set(updatedUser);
 
       console.log(
-        `[create-user] Successfully migrated user ${email} to new Firebase project`
+        `[create-user] Successfully migrated user ${email} to new Firebase project`,
       );
       return NextResponse.json({
         user: updatedUser,
@@ -66,6 +66,7 @@ export async function POST(request: NextRequest) {
       firebase_uid,
       full_name: full_name || "",
       email,
+      phone,
     });
 
     // Add newly created user to cache for fast future lookups
@@ -100,7 +101,7 @@ export async function POST(request: NextRequest) {
             ? undefined
             : error.message || "Unknown error",
       },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

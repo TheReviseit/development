@@ -277,7 +277,7 @@ export default function SignupPage() {
         }
       }
     },
-    [name, email, password, confirmPassword, router],
+    [name, email, password, confirmPassword, phone, router],
   );
 
   const handleGoogleSignUp = useCallback(async () => {
@@ -329,6 +329,7 @@ export default function SignupPage() {
             firebase_uid: result.user.uid,
             full_name: result.user.displayName || "",
             email: result.user.email || "",
+            phone: "", // Phone not available from Google signup
           }),
         }).catch((err) => console.error("User creation error:", err)),
 
@@ -435,19 +436,17 @@ export default function SignupPage() {
               </div>
 
               <div className={styles.formGroup}>
-                <label htmlFor="phone">
-                  Phone Number{" "}
-                  <span style={{ color: "#888", fontWeight: "normal" }}>
-                    (optional)
-                  </span>
-                </label>
+                <label htmlFor="phone">Phone Number</label>
                 <input
                   type="tel"
                   id="phone"
                   placeholder="+91 XXXXX XXXXX"
                   value={phone}
                   onChange={(e) => setPhone(e.target.value)}
+                  required
                   autoComplete="tel"
+                  pattern="[+]?[0-9]{10,15}"
+                  title="Please enter a valid phone number (10-15 digits)"
                 />
               </div>
 

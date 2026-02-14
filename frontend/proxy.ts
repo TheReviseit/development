@@ -22,6 +22,7 @@ import {
   type ProductContext,
 } from "@/lib/domain-policy";
 import { resolveDomain, getLandingRoute } from "@/lib/domain/config";
+import { getProductByDomain } from "@/lib/product/registry";
 
 // =============================================================================
 // TYPES
@@ -288,6 +289,8 @@ export async function proxy(request: NextRequest) {
         NextResponse.next(),
         domainDecision.product,
         domainDecision.seo.canonical,
+        hostname,
+        port,
       );
     }
     const userType = getUserTypeFromCookies(request);
@@ -298,6 +301,8 @@ export async function proxy(request: NextRequest) {
       NextResponse.next(),
       domainDecision.product,
       domainDecision.seo.canonical,
+      hostname,
+      port,
     );
   }
 
@@ -329,6 +334,8 @@ export async function proxy(request: NextRequest) {
       NextResponse.next(),
       domainDecision.product,
       domainDecision.seo.canonical,
+      hostname,
+      port,
     );
   }
 
@@ -347,6 +354,8 @@ export async function proxy(request: NextRequest) {
     NextResponse.next(),
     domainDecision.product,
     domainDecision.seo.canonical,
+    hostname,
+    port,
   );
 }
 
@@ -358,10 +367,21 @@ function addProductHeaders(
   response: NextResponse,
   product: ProductContext,
   canonical: string,
+  hostname?: string,
+  port?: string,
 ): NextResponse {
+  // Legacy headers (keep for backwards compatibility)
   response.headers.set("x-product-context", product);
   response.headers.set("x-product-domain", product);
   response.headers.set("x-canonical-url", canonical);
+
+  // ✅ NEW: Product Registry Headers (for Server Components)
+  if (hostname) {
+    const productConfig = getProductByDomain(hostname, port);
+    response.headers.set("x-product-id", productConfig.id);
+    response.headers.set("x-product-name", productConfig.name);
+  }
+
   return response;
 }
 

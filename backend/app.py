@@ -276,9 +276,25 @@ if EXTENSIONS_AVAILABLE and init_extensions:
     init_extensions(app, redis_url)
     logger.info("✅ Production extensions initialized")
 
+# Register domain detection middleware (MUST run before all routes)
+try:
+    from middleware.domain_middleware import resolve_product_domain
+    app.before_request(resolve_product_domain)
+    logger.info("🌐 Domain detection middleware registered (request.host → g.product_domain)")
+except ImportError as e:
+    logger.warning(f"Domain middleware not available: {e}")
+
 # Register modular routes
 if ROUTES_AVAILABLE and register_routes:
     register_routes(app)
+
+# Register Pricing API routes
+try:
+    from routes.pricing_api import pricing_bp
+    app.register_blueprint(pricing_bp)
+    logger.info("💰 Pricing API routes registered (/api/pricing/*)")
+except ImportError as e:
+    logger.warning(f"Pricing API routes not available: {e}")
 
 # Register OTP API routes (v1)
 try:
@@ -348,6 +364,44 @@ cache_manager = None
 if ADVANCED_CACHE_AVAILABLE and get_cache_manager:
     cache_manager = get_cache_manager()
     logger.info("💾 Advanced cache manager initialized")
+
+# =============================================================================
+# Razorpay Environment Safety Guard (fail-fast)
+# =============================================================================
+
+try:
+    from services.environment import validate_environment, get_razorpay_environment
+    razorpay_env = validate_environment()
+    logger.info(f"🔐 Razorpay environment: {razorpay_env.upper()}")
+    
+    # Verify pricing plans exist for this environment
+    try:
+        from services.pricing_service import verify_pricing_for_environment
+        missing_plans = verify_pricing_for_environment(razorpay_env)
+        if missing_plans and razorpay_env == 'production':
+            raise RuntimeError(
+                f"🚨 PRODUCTION environment but {len(missing_plans)} plans missing "
+                f"production Razorpay IDs: {', '.join(missing_plans)}. "
+                f"Set RAZORPAY_LIVE_PLAN_* env vars or populate "
+                f"razorpay_plan_id_production in pricing_plans table."
+            )
+        elif missing_plans:
+            logger.warning(
+                f"⚠️ {len(missing_plans)} plans missing {razorpay_env} Razorpay IDs "
+                f"(non-fatal in sandbox): {', '.join(missing_plans)}"
+            )
+        else:
+            logger.info(f"✅ All plans have {razorpay_env} Razorpay IDs configured")
+    except ImportError as e:
+        logger.warning(f"⚠️ Pricing verification skipped: {e}")
+except ImportError as e:
+    logger.warning(f"⚠️ Environment detection not available: {e}")
+except Exception as e:
+    # In production, this is FATAL — crash immediately
+    if 'rzp_live_' in os.getenv('RAZORPAY_KEY_ID', ''):
+        raise
+    else:
+        logger.warning(f"⚠️ Environment detection issue (non-fatal in dev): {e}")
 
 # =============================================================================
 # Request Timing Middleware

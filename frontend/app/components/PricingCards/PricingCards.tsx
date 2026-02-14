@@ -1,12 +1,23 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useMemo } from "react";
 import styles from "./PricingCards.module.css";
 import {
   createSubscription,
   openRazorpayCheckout,
   verifyPayment,
+  clearPaymentRequestId,
 } from "../../../lib/api/razorpay";
+import { getPricingForDomain } from "../../../lib/pricing/pricing-engine";
+import { detectCurrentDomain } from "../../../lib/pricing/domain-detection";
+import {
+  logger,
+  trackFunnelStep,
+  perfMonitor,
+} from "../../../lib/observability/observability";
+import { razorpayCircuitBreaker } from "../../../lib/reliability/circuit-breaker";
+import type { ProductDomain } from "../../../lib/domain/config";
+import type { PlanTier } from "../../../lib/pricing/pricing-config";
 
 interface PricingCardsProps {
   userEmail?: string;
@@ -14,9 +25,10 @@ interface PricingCardsProps {
   userPhone?: string;
   userId?: string;
   onSubscriptionSuccess?: (planName: string) => void;
+  domain?: ProductDomain; // NEW: Domain for pricing
 }
 
-type PlanName = "starter" | "business" | "pro";
+type PlanName = PlanTier;
 
 export default function PricingCards({
   userEmail,
@@ -24,36 +36,111 @@ export default function PricingCards({
   userPhone,
   userId,
   onSubscriptionSuccess,
+  domain: propDomain,
 }: PricingCardsProps) {
   const [isLoading, setIsLoading] = useState<PlanName | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  // Detect domain or use provided one
+  const domain = propDomain || detectCurrentDomain();
+
+  // Load pricing for the current domain
+  const pricingConfig = useMemo(() => getPricingForDomain(domain), [domain]);
+
+  // Track pricing page view (observability)
+  useMemo(() => {
+    trackFunnelStep("pricing_viewed", { domain });
+    logger.info("pricing.page_loaded", {
+      domain,
+      planCount: pricingConfig.plans.length,
+    });
+  }, [domain, pricingConfig.plans.length]);
+
   const handleSubscribe = async (planName: PlanName) => {
+    // Track plan selection
+    trackFunnelStep("plan_selected", { domain, plan: planName });
+    logger.info("pricing.plan_selected", { domain, plan: planName, userId });
+
     // Check if user is logged in
     if (!userEmail) {
-      // Redirect to login or show login modal
+      logger.warn("pricing.auth_required", { domain, plan: planName });
       window.location.href = "/login?redirect=/pricing";
       return;
     }
 
+    // Reset stale payment state for fresh idempotency keys
+    clearPaymentRequestId();
+
     setIsLoading(planName);
     setError(null);
 
+    // Start performance monitoring
+    perfMonitor.startTimer("create_subscription");
+
     try {
-      // Step 1: Create subscription order
-      const order = await createSubscription(
-        planName,
-        userEmail,
-        userName,
-        userPhone,
-        userId,
+      // Step 1: Create subscription order with circuit breaker
+      const order = await razorpayCircuitBreaker.execute(
+        () =>
+          createSubscription(
+            planName,
+            userEmail,
+            userName,
+            userPhone,
+            userId,
+            // Domain resolved server-side from Host header
+          ),
+        () => ({
+          success: false,
+          subscription_id: "",
+          key_id: "",
+          amount: 0,
+          currency: "INR",
+          plan_name: planName,
+          error:
+            "Payment service is temporarily unavailable. Please try again in a moment.",
+          error_code: "SERVICE_UNAVAILABLE",
+        }),
       );
 
+      perfMonitor.endTimer("create_subscription", {
+        success: order.success,
+        domain,
+        plan: planName,
+      });
+
       if (!order.success) {
+        logger.error(
+          "pricing.subscription_creation_failed",
+          new Error(order.error || "Unknown error"),
+          {
+            domain,
+            plan: planName,
+            userId,
+            errorCode: order.error_code,
+          },
+        );
+        trackFunnelStep("payment_failed", {
+          domain,
+          plan: planName,
+          error: order.error,
+        });
         setError(order.error || "Failed to create subscription");
         setIsLoading(null);
         return;
       }
+
+      // Track payment initiation
+      trackFunnelStep("payment_initiated", {
+        domain,
+        plan: planName,
+        amount: order.amount,
+      });
+      logger.info("pricing.payment_initiated", {
+        domain,
+        plan: planName,
+        subscriptionId: order.subscription_id,
+        amount: order.amount,
+      });
 
       // Step 2: Open Razorpay checkout
       await openRazorpayCheckout({
@@ -89,14 +176,92 @@ export default function PricingCards({
           setIsLoading(null);
         },
         onClose: () => {
+          clearPaymentRequestId();
           setIsLoading(null);
         },
       });
     } catch (err) {
-      console.error("Subscription error:", err);
+      const error = err instanceof Error ? err : new Error("Unknown error");
+      logger.error("pricing.subscription_error", error, {
+        domain,
+        plan: planName,
+        userId,
+      });
+      trackFunnelStep("payment_failed", {
+        domain,
+        plan: planName,
+        error: error.message,
+      });
       setError("Something went wrong. Please try again.");
       setIsLoading(null);
+      perfMonitor.endTimer("create_subscription", {
+        success: false,
+        domain,
+        plan: planName,
+      });
     }
+  };
+
+  // Render plan features dynamically
+  const renderFeatures = (features: string[]) => {
+    return features.map((feature, index) => (
+      <li key={index} className={styles.feature}>
+        <svg
+          className={styles.checkIcon}
+          viewBox="0 0 20 20"
+          fill="currentColor"
+        >
+          <path
+            fillRule="evenodd"
+            d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
+            clipRule="evenodd"
+          />
+        </svg>
+        <span>{feature}</span>
+      </li>
+    ));
+  };
+
+  // Render cards dynamically from pricing config
+  const renderPricingCards = () => {
+    return pricingConfig.plans.map((plan) => (
+      <div
+        key={plan.id}
+        className={`${styles.card} ${plan.popular ? styles.featured : ""}`}
+      >
+        {plan.popular && <div className={styles.badge}>Most Popular</div>}
+
+        <div className={styles.cardHeader}>
+          <h3 className={styles.planName}>{plan.name}</h3>
+          <p className={styles.planDescription}>{plan.description}</p>
+        </div>
+
+        <div className={styles.priceContainer}>
+          <div className={styles.price}>
+            <span className={styles.currency}>₹</span>
+            <span className={styles.amount}>
+              {plan.price.toLocaleString("en-IN")}
+            </span>
+            <span className={styles.period}>/mo</span>
+          </div>
+          {plan.tagline && <p className={styles.overageNote}>{plan.tagline}</p>}
+        </div>
+
+        <ul className={styles.featureList}>{renderFeatures(plan.features)}</ul>
+
+        <button
+          className={styles.ctaButton}
+          onClick={() => handleSubscribe(plan.id)}
+          disabled={isLoading !== null}
+        >
+          {isLoading === plan.id ? (
+            <span className={styles.loadingSpinner}>Processing...</span>
+          ) : (
+            "Get Started"
+          )}
+        </button>
+      </div>
+    ));
   };
 
   return (
@@ -106,8 +271,8 @@ export default function PricingCards({
         <div className={styles.header}>
           <h2 className={styles.title}>Choose Your Perfect Plan</h2>
           <p className={styles.subtitle}>
-            AI-powered WhatsApp automation for Indian businesses. Your AI
-            answers customer questions automatically.
+            {pricingConfig.product.name} - AI-powered automation for Indian
+            businesses
           </p>
         </div>
 
@@ -119,443 +284,8 @@ export default function PricingCards({
           </div>
         )}
 
-        {/* Pricing Cards Grid */}
-        <div className={styles.cardsGrid}>
-          {/* Starter Plan - Basic Automation Only */}
-          <div className={styles.card}>
-            <div className={styles.cardHeader}>
-              <h3 className={styles.planName}>Starter</h3>
-              <p className={styles.planDescription}>
-                Perfect for solo entrepreneurs just starting with WhatsApp
-                automation.
-              </p>
-            </div>
-
-            <div className={styles.priceContainer}>
-              <div className={styles.price}>
-                <span className={styles.currency}>₹</span>
-                <span className={styles.amount}>1,499</span>
-                <span className={styles.period}>/mo</span>
-              </div>
-              <p className={styles.overageNote}>Best for 80-100 queries/day</p>
-            </div>
-
-            <ul className={styles.featureList}>
-              <li className={styles.feature}>
-                <svg
-                  className={styles.checkIcon}
-                  viewBox="0 0 20 20"
-                  fill="currentColor"
-                >
-                  <path
-                    fillRule="evenodd"
-                    d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
-                    clipRule="evenodd"
-                  />
-                </svg>
-                <span>2,500 AI Responses / month</span>
-              </li>
-              <li className={styles.feature}>
-                <svg
-                  className={styles.checkIcon}
-                  viewBox="0 0 20 20"
-                  fill="currentColor"
-                >
-                  <path
-                    fillRule="evenodd"
-                    d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
-                    clipRule="evenodd"
-                  />
-                </svg>
-                <span>1 WhatsApp Number</span>
-              </li>
-              <li className={styles.feature}>
-                <svg
-                  className={styles.checkIcon}
-                  viewBox="0 0 20 20"
-                  fill="currentColor"
-                >
-                  <path
-                    fillRule="evenodd"
-                    d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
-                    clipRule="evenodd"
-                  />
-                </svg>
-                <span>Up to 50 FAQs Training</span>
-              </li>
-              <li className={styles.feature}>
-                <svg
-                  className={styles.checkIcon}
-                  viewBox="0 0 20 20"
-                  fill="currentColor"
-                >
-                  <path
-                    fillRule="evenodd"
-                    d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
-                    clipRule="evenodd"
-                  />
-                </svg>
-                <span>Basic Auto-Replies</span>
-              </li>
-              <li className={styles.feature}>
-                <svg
-                  className={styles.checkIcon}
-                  viewBox="0 0 20 20"
-                  fill="currentColor"
-                >
-                  <path
-                    fillRule="evenodd"
-                    d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
-                    clipRule="evenodd"
-                  />
-                </svg>
-                <span>Live Chat Dashboard</span>
-              </li>
-              <li className={styles.feature}>
-                <svg
-                  className={styles.checkIcon}
-                  viewBox="0 0 20 20"
-                  fill="currentColor"
-                >
-                  <path
-                    fillRule="evenodd"
-                    d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
-                    clipRule="evenodd"
-                  />
-                </svg>
-                <span>Email Support</span>
-              </li>
-            </ul>
-
-            <button
-              className={styles.ctaButton}
-              onClick={() => handleSubscribe("starter")}
-              disabled={isLoading !== null}
-            >
-              {isLoading === "starter" ? (
-                <span className={styles.loadingSpinner}>Processing...</span>
-              ) : (
-                "Get Started"
-              )}
-            </button>
-          </div>
-
-          {/* Business Plan - 60% Features */}
-          <div className={`${styles.card} ${styles.featured}`}>
-            <div className={styles.badge}>Most Popular</div>
-
-            <div className={styles.cardHeader}>
-              <h3 className={styles.planName}>Business</h3>
-              <p className={styles.planDescription}>
-                For growing businesses with marketing and broadcast needs.
-              </p>
-            </div>
-
-            <div className={styles.priceContainer}>
-              <div className={styles.price}>
-                <span className={styles.currency}>₹</span>
-                <span className={styles.amount}>3,999</span>
-                <span className={styles.period}>/mo</span>
-              </div>
-              <p className={styles.overageNote}>Best for 250-300 queries/day</p>
-            </div>
-
-            <ul className={styles.featureList}>
-              <li className={styles.feature}>
-                <svg
-                  className={styles.checkIcon}
-                  viewBox="0 0 20 20"
-                  fill="currentColor"
-                >
-                  <path
-                    fillRule="evenodd"
-                    d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
-                    clipRule="evenodd"
-                  />
-                </svg>
-                <span>8,000 AI Responses / month</span>
-              </li>
-              <li className={styles.feature}>
-                <svg
-                  className={styles.checkIcon}
-                  viewBox="0 0 20 20"
-                  fill="currentColor"
-                >
-                  <path
-                    fillRule="evenodd"
-                    d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
-                    clipRule="evenodd"
-                  />
-                </svg>
-                <span>Up to 2 WhatsApp Numbers</span>
-              </li>
-              <li className={styles.feature}>
-                <svg
-                  className={styles.checkIcon}
-                  viewBox="0 0 20 20"
-                  fill="currentColor"
-                >
-                  <path
-                    fillRule="evenodd"
-                    d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
-                    clipRule="evenodd"
-                  />
-                </svg>
-                <span>Up to 200 FAQs Training</span>
-              </li>
-              <li className={styles.feature}>
-                <svg
-                  className={styles.checkIcon}
-                  viewBox="0 0 20 20"
-                  fill="currentColor"
-                >
-                  <path
-                    fillRule="evenodd"
-                    d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
-                    clipRule="evenodd"
-                  />
-                </svg>
-                <span>Broadcast Campaigns</span>
-              </li>
-              <li className={styles.feature}>
-                <svg
-                  className={styles.checkIcon}
-                  viewBox="0 0 20 20"
-                  fill="currentColor"
-                >
-                  <path
-                    fillRule="evenodd"
-                    d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
-                    clipRule="evenodd"
-                  />
-                </svg>
-                <span>Template Message Builder</span>
-              </li>
-              <li className={styles.feature}>
-                <svg
-                  className={styles.checkIcon}
-                  viewBox="0 0 20 20"
-                  fill="currentColor"
-                >
-                  <path
-                    fillRule="evenodd"
-                    d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
-                    clipRule="evenodd"
-                  />
-                </svg>
-                <span>Contact Management</span>
-              </li>
-              <li className={styles.feature}>
-                <svg
-                  className={styles.checkIcon}
-                  viewBox="0 0 20 20"
-                  fill="currentColor"
-                >
-                  <path
-                    fillRule="evenodd"
-                    d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
-                    clipRule="evenodd"
-                  />
-                </svg>
-                <span>Basic Analytics Dashboard</span>
-              </li>
-              <li className={styles.feature}>
-                <svg
-                  className={styles.checkIcon}
-                  viewBox="0 0 20 20"
-                  fill="currentColor"
-                >
-                  <path
-                    fillRule="evenodd"
-                    d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
-                    clipRule="evenodd"
-                  />
-                </svg>
-                <span>Chat Support</span>
-              </li>
-            </ul>
-
-            <button
-              className={`${styles.ctaButton} ${styles.ctaButtonFeatured}`}
-              onClick={() => handleSubscribe("business")}
-              disabled={isLoading !== null}
-            >
-              {isLoading === "business" ? (
-                <span className={styles.loadingSpinner}>Processing...</span>
-              ) : (
-                "Get Started"
-              )}
-            </button>
-          </div>
-
-          {/* Pro Plan - All Features */}
-          <div className={styles.card}>
-            <div className={styles.cardHeader}>
-              <h3 className={styles.planName}>Pro</h3>
-              <p className={styles.planDescription}>
-                For established businesses needing full automation power.
-              </p>
-            </div>
-
-            <div className={styles.priceContainer}>
-              <div className={styles.price}>
-                <span className={styles.currency}>₹</span>
-                <span className={styles.amount}>8,999</span>
-                <span className={styles.period}>/mo</span>
-              </div>
-              <p className={styles.overageNote}>Best for 650+ queries/day</p>
-            </div>
-
-            <ul className={styles.featureList}>
-              <li className={styles.feature}>
-                <svg
-                  className={styles.checkIcon}
-                  viewBox="0 0 20 20"
-                  fill="currentColor"
-                >
-                  <path
-                    fillRule="evenodd"
-                    d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
-                    clipRule="evenodd"
-                  />
-                </svg>
-                <span>25,000 AI Responses / month</span>
-              </li>
-              <li className={styles.feature}>
-                <svg
-                  className={styles.checkIcon}
-                  viewBox="0 0 20 20"
-                  fill="currentColor"
-                >
-                  <path
-                    fillRule="evenodd"
-                    d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
-                    clipRule="evenodd"
-                  />
-                </svg>
-                <span>Unlimited WhatsApp Numbers</span>
-              </li>
-              <li className={styles.feature}>
-                <svg
-                  className={styles.checkIcon}
-                  viewBox="0 0 20 20"
-                  fill="currentColor"
-                >
-                  <path
-                    fillRule="evenodd"
-                    d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
-                    clipRule="evenodd"
-                  />
-                </svg>
-                <span>Unlimited FAQs Training</span>
-              </li>
-              <li className={styles.feature}>
-                <svg
-                  className={styles.checkIcon}
-                  viewBox="0 0 20 20"
-                  fill="currentColor"
-                >
-                  <path
-                    fillRule="evenodd"
-                    d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
-                    clipRule="evenodd"
-                  />
-                </svg>
-                <span>Custom AI Personality Training</span>
-              </li>
-              <li className={styles.feature}>
-                <svg
-                  className={styles.checkIcon}
-                  viewBox="0 0 20 20"
-                  fill="currentColor"
-                >
-                  <path
-                    fillRule="evenodd"
-                    d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
-                    clipRule="evenodd"
-                  />
-                </svg>
-                <span>Multi-Agent Team Inbox</span>
-              </li>
-              <li className={styles.feature}>
-                <svg
-                  className={styles.checkIcon}
-                  viewBox="0 0 20 20"
-                  fill="currentColor"
-                >
-                  <path
-                    fillRule="evenodd"
-                    d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
-                    clipRule="evenodd"
-                  />
-                </svg>
-                <span>Advanced Workflow Automation</span>
-              </li>
-              <li className={styles.feature}>
-                <svg
-                  className={styles.checkIcon}
-                  viewBox="0 0 20 20"
-                  fill="currentColor"
-                >
-                  <path
-                    fillRule="evenodd"
-                    d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
-                    clipRule="evenodd"
-                  />
-                </svg>
-                <span>API Access & Webhooks</span>
-              </li>
-              <li className={styles.feature}>
-                <svg
-                  className={styles.checkIcon}
-                  viewBox="0 0 20 20"
-                  fill="currentColor"
-                >
-                  <path
-                    fillRule="evenodd"
-                    d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
-                    clipRule="evenodd"
-                  />
-                </svg>
-                <span>Advanced Analytics & Reports</span>
-              </li>
-              <li className={styles.feature}>
-                <svg
-                  className={styles.checkIcon}
-                  viewBox="0 0 20 20"
-                  fill="currentColor"
-                >
-                  <path
-                    fillRule="evenodd"
-                    d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
-                    clipRule="evenodd"
-                  />
-                </svg>
-                <span>Priority Support + Onboarding</span>
-              </li>
-            </ul>
-
-            <button
-              className={`${styles.ctaButton} ${styles.ctaButtonFeatured}`}
-              onClick={() => handleSubscribe("pro")}
-              disabled={isLoading !== null}
-            >
-              {isLoading === "pro" ? (
-                <span className={styles.loadingSpinner}>Processing...</span>
-              ) : (
-                "Get Started"
-              )}
-            </button>
-          </div>
-        </div>
-
-        {/* Trust Section */}
-        <div className={styles.trustSection}>
-          <p className={styles.trustText}>
-            🔒 Secure payments by Razorpay • No credit card required for trial •
-            WhatsApp API costs included
-          </p>
-        </div>
+        {/* Pricing Cards Grid - Dynamic from config */}
+        <div className={styles.cardsGrid}>{renderPricingCards()}</div>
       </div>
     </section>
   );

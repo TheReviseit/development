@@ -7,7 +7,11 @@
  * - X-Request-Id propagation for tracing
  * - Stable idempotency key generation
  * - Proper error handling
+ * - Domain awareness for multi-domain pricing
  */
+
+import type { ProductDomain } from "../domain/config";
+import { logger, trackRevenue } from "../observability/observability";
 
 const BACKEND_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
 
@@ -42,37 +46,33 @@ export function getPaymentRequestId(): string {
 }
 
 /**
- * Clear the payment request ID (call after payment success/failure)
+ * Clear the payment request ID (call after payment success/failure/cancel)
  */
 export function clearPaymentRequestId(): void {
   if (typeof window !== "undefined") {
     sessionStorage.removeItem("payment_request_id");
+    // Legacy cleanup — idempotency keys are no longer stored in sessionStorage
     sessionStorage.removeItem("payment_idempotency_key");
   }
 }
 
 /**
- * Generate stable idempotency key for subscription creation
- * Pattern: hash of user_id + plan_name + timestamp_bucket
+ * Generate a deterministic idempotency key for subscription creation.
+ *
+ * CRITICAL: No sessionStorage caching. The backend now handles plan-aware
+ * deduplication by checking existing pending/created subscriptions.
+ * This key is a lightweight first-pass filter only.
+ *
+ * Pattern: btoa(user_id + plan_name + 5-min-bucket), truncated to 24 chars.
+ * Same inputs within the same 5-minute window produce the same key (retry-safe).
+ * Different plans always produce different keys.
  */
 export function getIdempotencyKey(userId: string, planName: string): string {
-  if (typeof window === "undefined") return "";
-
-  const storageKey = "payment_idempotency_key";
-  let key = sessionStorage.getItem(storageKey);
-
-  if (!key) {
-    // Create stable key based on user + plan
-    // Include 5-minute bucket to allow retry after a while
-    const bucket = Math.floor(Date.now() / (5 * 60 * 1000));
-    const data = `${userId}:${planName}:${bucket}`;
-    key = `idem_${btoa(data)
-      .replace(/[^a-zA-Z0-9]/g, "")
-      .substring(0, 24)}`;
-    sessionStorage.setItem(storageKey, key);
-  }
-
-  return key;
+  const bucket = Math.floor(Date.now() / (5 * 60 * 1000));
+  const data = `${userId}:${planName}:${bucket}`;
+  return `idem_${btoa(data)
+    .replace(/[^a-zA-Z0-9]/g, "")
+    .substring(0, 24)}`;
 }
 
 // =============================================================================
@@ -86,6 +86,7 @@ interface RazorpayOrder {
   amount: number;
   currency: string;
   plan_name: string;
+  domain?: string; // NEW: Domain context
   request_id?: string;
   idempotency_hit?: boolean;
   error?: string;
@@ -165,6 +166,7 @@ export async function createSubscription(
       customer_name: customerName,
       customer_phone: customerPhone,
       idempotency_key: idempotencyKey,
+      // Domain resolved server-side from Host header — never sent by client
     }),
   });
 
@@ -199,6 +201,7 @@ export async function createSubscriptionWithRetry(
         customerName,
         customerPhone,
         userId,
+        // Domain resolved server-side — not passed by client
       );
 
       // Success or idempotency hit - return immediately
@@ -424,52 +427,193 @@ export async function openRazorpayCheckout(options: {
 }
 
 // =============================================================================
-// Plan Details
+// PLAN CHANGE API — Enterprise Grade
 // =============================================================================
 
-export const PLAN_DETAILS = {
-  starter: {
-    name: "Starter",
-    price: 1499,
-    aiResponses: 2500,
-    features: [
-      "2,500 AI Responses / month",
-      "1 WhatsApp Number",
-      "Up to 50 FAQs Training",
-      "Basic Auto-Replies",
-      "Live Chat Dashboard",
-      "Email Support",
-    ],
-  },
-  business: {
-    name: "Business",
-    price: 3999,
-    aiResponses: 8000,
-    features: [
-      "8,000 AI Responses / month",
-      "Up to 2 WhatsApp Numbers",
-      "Up to 200 FAQs Training",
-      "Broadcast Campaigns",
-      "Template Message Builder",
-      "Contact Management",
-      "Basic Analytics Dashboard",
-      "Chat Support",
-    ],
-  },
-  pro: {
-    name: "Pro",
-    price: 8999,
-    aiResponses: 25000,
-    features: [
-      "25,000 AI Responses / month",
-      "Unlimited WhatsApp Numbers",
-      "Unlimited FAQs Training",
-      "Custom AI Personality Training",
-      "Multi-Agent Team Inbox",
-      "Advanced Workflow Automation",
-      "API Access & Webhooks",
-      "Advanced Analytics & Reports",
-      "Priority Support + Onboarding",
-    ],
-  },
-} as const;
+export interface PlanChangeResult {
+  success: boolean;
+  change_direction?: "upgrade" | "downgrade";
+  from_plan?: string;
+  to_plan?: string;
+  proration?: {
+    proration_amount_paise: number;
+    unused_value_paise: number;
+    new_cost_remaining_paise: number;
+    ratio: number;
+    is_upgrade: boolean;
+  };
+  scheduled_at?: string;
+  requires_payment?: boolean;
+  order_id?: string;
+  key_id?: string;
+  amount?: number;
+  currency?: string;
+  message?: string;
+  error?: string;
+  error_code?: string;
+}
+
+export interface PendingChange {
+  to_plan: string;
+  direction: "upgrade" | "downgrade";
+  scheduled_at: string;
+  proration_payment_status: string | null;
+  locked: boolean;
+}
+
+/**
+ * Request a plan change (upgrade or downgrade).
+ *
+ * For UPGRADES: Returns order details. Call `openProrationCheckout()` next.
+ * For DOWNGRADES: Schedules at cycle end. No payment required.
+ *
+ * Domain resolved server-side from Host header.
+ */
+export async function changePlan(
+  newPlanSlug: string,
+  authToken: string,
+): Promise<PlanChangeResult> {
+  const response = await fetch(`${BACKEND_URL}/api/subscriptions/change-plan`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "X-User-Id": authToken,
+    },
+    body: JSON.stringify({ new_plan_slug: newPlanSlug }),
+  });
+
+  const data = await response.json();
+
+  if (!response.ok) {
+    throw new Error(data.error || `Plan change failed (${response.status})`);
+  }
+
+  return data;
+}
+
+/**
+ * Open Razorpay checkout for proration payment (upgrades only).
+ *
+ * Call this AFTER `changePlan()` returns `requires_payment: true`.
+ * The backend webhook will handle subscription.update after payment.captured.
+ */
+export function openProrationCheckout(options: {
+  orderId: string;
+  keyId: string;
+  amount: number;
+  currency: string;
+  userName: string;
+  userEmail: string;
+  userPhone?: string;
+  fromPlan: string;
+  toPlan: string;
+  onSuccess: (response: {
+    razorpay_payment_id: string;
+    razorpay_order_id: string;
+    razorpay_signature: string;
+  }) => void;
+  onError: (error: any) => void;
+  onClose?: () => void;
+}): void {
+  const razorpayOptions = {
+    key: options.keyId,
+    amount: options.amount,
+    currency: options.currency,
+    name: "Plan Upgrade",
+    description: `Upgrade: ${options.fromPlan} → ${options.toPlan} (prorated)`,
+    order_id: options.orderId,
+    prefill: {
+      name: options.userName,
+      email: options.userEmail,
+      contact: options.userPhone || "",
+    },
+    method: {
+      netbanking: true,
+      card: true,
+      upi: true,
+      wallet: true,
+    },
+    theme: {
+      color: "#22c15a",
+    },
+    handler: (response: any) => {
+      options.onSuccess({
+        razorpay_payment_id: response.razorpay_payment_id,
+        razorpay_order_id: response.razorpay_order_id,
+        razorpay_signature: response.razorpay_signature,
+      });
+    },
+    modal: {
+      confirm_close: true,
+      escape: false,
+      backdropclose: false,
+      ondismiss: () => {
+        console.log("Proration payment dismissed");
+        options.onClose?.();
+      },
+    },
+  };
+
+  const razorpay = new (window as any).Razorpay(razorpayOptions);
+  razorpay.on("payment.failed", (response: any) => {
+    options.onError(response.error);
+  });
+  razorpay.open();
+}
+
+/**
+ * Cancel a pending plan change.
+ *
+ * Allowed when:
+ * - A pending change exists
+ * - plan_change_locked is FALSE
+ * - Proration payment not yet captured
+ */
+export async function cancelPendingChange(authToken: string): Promise<{
+  cancelled: boolean;
+  was_direction?: string;
+  was_target?: string;
+}> {
+  const response = await fetch(
+    `${BACKEND_URL}/api/subscriptions/cancel-change`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-User-Id": authToken,
+      },
+    },
+  );
+
+  const data = await response.json();
+
+  if (!response.ok) {
+    throw new Error(data.error || "Failed to cancel change");
+  }
+
+  return data;
+}
+
+/**
+ * Get the current pending plan change status.
+ */
+export async function getPendingChange(
+  authToken: string,
+): Promise<PendingChange | null> {
+  const response = await fetch(
+    `${BACKEND_URL}/api/subscriptions/pending-change`,
+    {
+      headers: {
+        "X-User-Id": authToken,
+      },
+    },
+  );
+
+  const data = await response.json();
+
+  if (!response.ok) {
+    throw new Error(data.error || "Failed to get pending change");
+  }
+
+  return data.pending_change || null;
+}

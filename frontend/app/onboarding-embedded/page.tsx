@@ -20,63 +20,26 @@ import {
   createSubscriptionWithRetry,
   openRazorpayCheckout,
   verifyPayment,
+  clearPaymentRequestId,
 } from "../../lib/api/razorpay";
+import { detectDomainFromWindow } from "@/lib/pricing/domain-detection";
+import { getPricingForDomain } from "@/lib/pricing/pricing-engine";
+import type { ProductDomain } from "@/lib/pricing/pricing-config";
 import "../onboarding/onboarding.css";
 import "./onboarding-embedded.css";
 
 type Step = "whatsapp" | "pricing" | "complete";
 type PlanName = "starter" | "business" | "pro";
 
-const PLANS = [
-  {
-    id: "starter" as PlanName,
-    name: "Starter",
-    price: 799,
-    priceDisplay: "₹799",
-    description: "Perfect for solo entrepreneurs",
-    features: [
-      "2,500 AI Responses / month",
-      "1 WhatsApp Number",
-      "Up to 50 FAQs Training",
-      "Basic Auto-Replies",
-      "Live Chat Dashboard",
-      "Email Support",
-    ],
-  },
-  {
-    id: "business" as PlanName,
-    name: "Business",
-    price: 3999,
-    priceDisplay: "₹3,999",
-    description: "For growing businesses",
-    popular: true,
-    features: [
-      "8,000 AI Responses / month",
-      "Up to 2 WhatsApp Numbers",
-      "Up to 200 FAQs Training",
-      "Broadcast Campaigns",
-      "Template Builder",
-      "Basic Analytics",
-      "Chat Support",
-    ],
-  },
-  {
-    id: "pro" as PlanName,
-    name: "Pro",
-    price: 8999,
-    priceDisplay: "₹8,999",
-    description: "Full automation power",
-    features: [
-      "25,000 AI Responses / month",
-      "Unlimited WhatsApp Numbers",
-      "Unlimited FAQs Training",
-      "Multi-Agent Inbox",
-      "Advanced Analytics",
-      "API Access",
-      "Priority Support",
-    ],
-  },
-];
+interface Plan {
+  id: PlanName;
+  name: string;
+  price: number;
+  priceDisplay: string;
+  description: string;
+  popular?: boolean;
+  features: string[];
+}
 
 export default function OnboardingPageEmbedded() {
   const [user, setUser] = useState<User | null>(null);
@@ -89,7 +52,31 @@ export default function OnboardingPageEmbedded() {
     wabaId: string;
     phoneNumberId: string;
   } | null>(null);
+
+  // Domain-based pricing
+  const [currentDomain, setCurrentDomain] =
+    useState<ProductDomain>("dashboard");
+  const [PLANS, setPLANS] = useState<Plan[]>([]);
+
   const router = useRouter();
+
+  // Detect domain and load pricing on mount
+  useEffect(() => {
+    const domain = detectDomainFromWindow();
+    setCurrentDomain(domain);
+
+    const domainPricing = getPricingForDomain(domain);
+    const plans = domainPricing.plans.map((plan) => ({
+      id: plan.id as PlanName,
+      name: plan.name,
+      price: plan.price,
+      priceDisplay: plan.priceDisplay,
+      description: plan.description,
+      popular: plan.popular,
+      features: plan.features as string[],
+    }));
+    setPLANS(plans);
+  }, []);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
@@ -169,6 +156,9 @@ export default function OnboardingPageEmbedded() {
       return;
     }
 
+    // Reset stale payment state so each plan selection gets fresh idempotency keys
+    clearPaymentRequestId();
+
     setPaymentLoading(planId);
     setPaymentError(null);
 
@@ -178,9 +168,9 @@ export default function OnboardingPageEmbedded() {
         planId,
         user.email,
         user.displayName || undefined,
-        undefined,
+        undefined, // customerPhone
         user.uid,
-        2, // Max 2 retries (total 3 attempts)
+        2, // maxRetries - Max 2 retries (total 3 attempts)
       );
 
       if (!order.success) {
@@ -266,10 +256,11 @@ export default function OnboardingPageEmbedded() {
         },
         onClose: () => {
           // User closed the modal without completing payment
-          // This is intentional, not an error - don't show error message
+          // Clear payment state so they can select a different plan
           console.log(
             "Payment modal closed by user without completing payment",
           );
+          clearPaymentRequestId();
           setPaymentLoading(null);
         },
       });

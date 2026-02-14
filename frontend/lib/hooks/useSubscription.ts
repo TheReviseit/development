@@ -12,7 +12,6 @@ import {
   verifyPayment,
   openRazorpayCheckout,
   cancelSubscription,
-  PLAN_DETAILS,
 } from "../api/razorpay";
 
 type PlanName = "starter" | "business" | "pro";
@@ -235,6 +234,3 @@ export function useSubscription(userId?: string): UseSubscriptionReturn {
     canUseFeature,
   };
 }
-
-// Re-export plan details for convenience
-export { PLAN_DETAILS };

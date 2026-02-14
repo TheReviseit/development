@@ -1,64 +1,49 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Check } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import styles from "./ShopPricingSection.module.css";
+import {
+  fetchPricingPlans,
+  formatPrice,
+  type PricingPlan,
+} from "@/lib/pricing/pricing.service";
 
-const PLANS = [
+// Map API plan data to display format
+interface DisplayPlan {
+  name: string;
+  price: number;
+  tagline: string;
+  featuresTitle: string;
+  features: string[];
+  featured: boolean;
+  badge?: string;
+}
+
+function mapToDisplayPlans(plans: PricingPlan[]): DisplayPlan[] {
+  return plans.map((plan, index) => ({
+    name: plan.display_name + " plan",
+    price: plan.amount_paise / 100,
+    tagline: plan.description || "",
+    featuresTitle:
+      index === 0
+        ? "Everything you need to launch..."
+        : `Everything in ${plans[index - 1]?.display_name || "Basic"} plus...`,
+    features: plan.features || [],
+    featured: index === 1, // Middle plan is featured
+    badge: index === 1 ? "Popular" : undefined,
+  }));
+}
+
+// Fallback plans (only shown if API fails to load)
+const FALLBACK_PLANS: DisplayPlan[] = [
   {
     name: "Basic plan",
     price: 1999,
     tagline: "Perfect for getting started with your online store.",
     featuresTitle: "Everything you need to launch...",
-    features: [
-      "Domain: Random domain Name  (e.g. store/abc1234)",
-      "10 products (incl. variants)",
-      "Standard invoice",
-      "10 email invoices",
-      "10 live order update via email",
-      "Normal Dashboard",
-      "Message inbox",
-      "upto 10 days message history",
-      "Email support",
-    ],
-    featured: false,
-  },
-  {
-    name: "Business plan",
-    price: 3999,
-    tagline: "For growing businesses.",
-    featuresTitle: "Everything in Basic plus...",
-    features: [
-      "Custom domain name (store/yourstorename)",
-      "50 products (incl. variants)",
-      "50 live order updates (Email & WhatsApp)",
-      "Get order update in google sheets (upto 50 orders)",
-      "Invoice customization",
-      "Analytics dashboard",
-      "Message inbox",
-      "Up to 50 days message history",
-      "Email and call support",
-    ],
-    featured: true,
-    badge: "Popular",
-  },
-  {
-    name: "Enterprise plan",
-    price: 6999,
-    tagline: "Advanced features + unlimited users.",
-    featuresTitle: "Everything in Business plus...",
-    features: [
-      "Custom domain name (store/yourstorename)",
-      "100 products",
-      "100 live order updates (Email & WhatsApp)",
-      "Get order update in google sheets",
-      "Invoice customization",
-      "Analytics dashboard",
-      "Message inbox",
-      "No limit message history",
-      "Email and call support",
-    ],
+    features: ["Loading pricing..."],
     featured: false,
   },
 ];
@@ -67,6 +52,19 @@ export default function ShopPricingSection() {
   const [billingCycle, setBillingCycle] = useState<"monthly" | "annual">(
     "monthly",
   );
+  const [plans, setPlans] = useState<DisplayPlan[]>(FALLBACK_PLANS);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    fetchPricingPlans()
+      .then((apiPlans) => {
+        if (apiPlans.length > 0) {
+          setPlans(mapToDisplayPlans(apiPlans));
+        }
+      })
+      .catch(console.error)
+      .finally(() => setLoading(false));
+  }, []);
 
   return (
     <section className={styles.pricing}>
@@ -93,7 +91,7 @@ export default function ShopPricingSection() {
         </div>
 
         <div className={styles.grid}>
-          {PLANS.map((plan, idx) => (
+          {plans.map((plan, idx) => (
             <motion.div
               key={plan.name}
               initial={{ opacity: 0, y: 20 }}

@@ -124,33 +124,40 @@ except ImportError:
 except Exception:
     cache_manager = None
 
-# Plan configuration with plan_id for stable idempotency
-PLAN_CONFIG = {
-    'starter': {
-        'plan_id': os.getenv('RAZORPAY_PLAN_STARTER'),
-        'amount': 100,  # ₹1 in paise (for testing)
-        'currency': 'INR',
-        'interval': 'monthly',
-        'ai_responses_limit': 2500,
-        'display_name': 'Starter'
-    },
-    'business': {
-        'plan_id': os.getenv('RAZORPAY_PLAN_BUSINESS'),
-        'amount': 399900,  # ₹3,999 in paise
-        'currency': 'INR',
-        'interval': 'monthly',
-        'ai_responses_limit': 8000,
-        'display_name': 'Business'
-    },
-    'pro': {
-        'plan_id': os.getenv('RAZORPAY_PLAN_PRO'),
-        'amount': 899900,  # ₹8,999 in paise
-        'currency': 'INR',
-        'interval': 'monthly',
-        'ai_responses_limit': 25000,
-        'display_name': 'Pro'
-    }
-}
+# =============================================================================
+# Pricing Service (replaces hardcoded PLAN_CONFIG)
+# =============================================================================
+# REMOVED: Hardcoded PLAN_CONFIG dict with inline amounts.
+# Pricing now comes from pricing_plans database table via PricingService.
+# Domain is resolved from request.host via domain middleware.
+
+try:
+    from services.pricing_service import (
+        get_pricing_service,
+        PricingNotFoundError,
+        PricingConfigurationError,
+    )
+    PRICING_SERVICE_AVAILABLE = True
+except ImportError as e:
+    logger.warning(f"⚠️ PricingService not available: {e}")
+    PRICING_SERVICE_AVAILABLE = False
+
+# Import Plan Change Service
+try:
+    from services.plan_change_service import (
+        get_plan_change_service,
+        PlanChangeError,
+        PlanChangePendingError,
+        PlanChangeLockedError,
+        PaymentPendingError,
+        UsageExceedsLimitError,
+        SamePlanError,
+        SubscriptionNotActiveError,
+    )
+    PLAN_CHANGE_AVAILABLE = True
+except ImportError as e:
+    logger.warning(f"⚠️ PlanChangeService not available: {e}")
+    PLAN_CHANGE_AVAILABLE = False
 
 # Create Blueprint
 payments_bp = Blueprint('payments', __name__, url_prefix='/api')
@@ -618,7 +625,12 @@ def get_subscription_by_razorpay_id(razorpay_subscription_id: str) -> Optional[D
     try:
         supabase = get_supabase_client()
         result = supabase.table('subscriptions').select(
-            'id, user_id, status, last_webhook_event_at, plan_name, ai_responses_limit'
+            'id, user_id, status, last_webhook_event_at, plan_name, '
+            'ai_responses_limit, amount_paise, pricing_version, '
+            'pending_plan_slug, pending_amount_paise, pending_pricing_version, '
+            'pending_pricing_plan_id, proration_order_id, proration_payment_status, '
+            'plan_change_locked, change_direction, last_processed_event_id, '
+            'product_domain'
         ).eq(
             'razorpay_subscription_id', razorpay_subscription_id
         ).limit(1).execute()
@@ -855,31 +867,138 @@ def create_subscription():
         
         plan_name = data.plan_name
         
-        # Validate plan
-        if plan_name not in PLAN_CONFIG:
-            return error_response(f'Invalid plan: {plan_name}', 'INVALID_PLAN', 400)
+        # =================================================================
+        # STEP 0: Resolve pricing from database (domain-aware)
+        # =================================================================
+        # Domain comes from g.product_domain (set by domain middleware)
+        # NEVER from request body — client cannot tell server which product
         
-        plan = PLAN_CONFIG[plan_name]
-        if not plan['plan_id']:
-            return error_response(f'Plan {plan_name} not configured', 'PLAN_NOT_CONFIGURED', 500)
+        product_domain = getattr(g, 'product_domain', None)
+        if not product_domain:
+            return error_response(
+                'Product domain could not be determined. '
+                'Ensure request originates from a known host.',
+                'DOMAIN_REQUIRED',
+                400
+            )
         
-        # Generate stable idempotency key
-        idempotency_key = data.idempotency_key or generate_stable_idempotency_key(
-            user_id, plan['plan_id'], plan['currency'], plan['interval']
+        if not PRICING_SERVICE_AVAILABLE:
+            return error_response(
+                'Pricing service not available',
+                'PRICING_UNAVAILABLE',
+                503
+            )
+        
+        try:
+            pricing_service = get_pricing_service()
+            plan_pricing = pricing_service.get_plan(
+                product_domain=product_domain,
+                plan_slug=plan_name,
+                billing_cycle='monthly',  # TODO: accept from frontend when annual billing launches
+            )
+        except PricingNotFoundError as e:
+            logger.warning(f"[{request_id}] {e}")
+            return error_response(
+                f'Plan "{plan_name}" is not available for this product',
+                'PLAN_NOT_FOUND',
+                404
+            )
+        except PricingConfigurationError as e:
+            logger.error(f"[{request_id}] Pricing configuration error: {e}")
+            return error_response(
+                'Pricing configuration error. Please contact support.',
+                'PRICING_CONFIG_ERROR',
+                500
+            )
+        
+        # Extract pricing fields (locked at creation time for billing immutability)
+        razorpay_plan_id = plan_pricing['razorpay_plan_id']
+        amount_paise = plan_pricing['amount_paise']
+        currency = plan_pricing.get('currency', 'INR')
+        display_name = plan_pricing['display_name']
+        pricing_version = plan_pricing.get('pricing_version', 1)
+        pricing_plan_id = plan_pricing.get('id')  # UUID of the pricing_plans row
+        ai_responses_limit = (plan_pricing.get('limits_json') or {}).get('ai_responses', 2500)
+        
+        logger.info(
+            f"[{request_id}] 💰 Pricing resolved: "
+            f"domain={product_domain}, plan={plan_name}, "
+            f"amount=₹{amount_paise / 100:,.0f}, "
+            f"razorpay_plan={razorpay_plan_id[:12]}..., "
+            f"version={pricing_version}"
         )
         
-        # Check idempotency - return existing subscription if found
-        existing = check_idempotency(idempotency_key)
-        if existing:
-            logger.info(f"[{request_id}] Returning existing subscription for idempotency key")
+        # =================================================================
+        # SINGLE-ROW SUBSCRIPTION MANAGEMENT
+        # =================================================================
+        # Architecture: ONE subscription row per user per product_domain.
+        # - Same plan pending   → reuse (idempotent return)
+        # - Different plan      → cancel old Razorpay sub, create new,
+        #                         UPDATE the same DB row in place
+        # - No existing row     → create Razorpay sub + INSERT one row
+        #
+        # This guarantees: max 1 pending/created sub per user per domain.
+        # =================================================================
+        
+        # Generate idempotency key scoped to user + plan + domain
+        idempotency_key = generate_stable_idempotency_key(
+            user_id, razorpay_plan_id, currency, 'monthly'
+        )
+        
+        # --- Find the user's existing incomplete subscription (if any) ---
+        existing_sub = None
+        if SUPABASE_AVAILABLE:
+            try:
+                supabase = get_supabase_client()
+                result = supabase.table('subscriptions').select('*').eq(
+                    'user_id', user_id
+                ).eq(
+                    'product_domain', product_domain
+                ).in_(
+                    'status', ['pending', 'created']
+                ).order(
+                    'created_at', desc=True
+                ).limit(1).execute()
+                
+                if result.data:
+                    existing_sub = result.data[0]
+            except Exception as e:
+                logger.warning(f"[{request_id}] ⚠️ Error checking existing subs: {e}")
+        
+        # --- CASE 1: Same plan already pending → reuse (zero work) ---
+        if existing_sub and existing_sub.get('plan_name') == plan_name:
+            logger.info(
+                f"[{request_id}] ♻️ Reusing existing {plan_name} subscription: "
+                f"{existing_sub['razorpay_subscription_id']} "
+                f"(status={existing_sub['status']}, "
+                f"amount=₹{existing_sub.get('amount_paise', 0) / 100:,.0f})"
+            )
             return success_response({
-                'subscription_id': existing['razorpay_subscription_id'],
+                'subscription_id': existing_sub['razorpay_subscription_id'],
                 'key_id': RAZORPAY_KEY_ID,
-                'amount': plan['amount'],
-                'currency': plan['currency'],
-                'plan_name': plan['display_name'],
+                'amount': existing_sub.get('amount_paise', amount_paise),
+                'currency': existing_sub.get('currency', currency),
+                'plan_name': display_name,
                 'idempotency_hit': True
             })
+        
+        # --- CASE 2: Different plan pending → cancel old, UPDATE row ---
+        if existing_sub:
+            old_sub_id = existing_sub['razorpay_subscription_id']
+            old_plan = existing_sub.get('plan_name', 'unknown')
+            
+            logger.info(
+                f"[{request_id}] 🔄 Plan switch: {old_plan} → {plan_name} "
+                f"(cancelling {old_sub_id}, will update row {existing_sub['id']})"
+            )
+            
+            # Cancel old subscription on Razorpay
+            try:
+                razorpay_client.subscription.cancel(old_sub_id)
+                logger.info(f"[{request_id}] ✅ Cancelled old Razorpay sub: {old_sub_id}")
+            except Exception as cancel_err:
+                # Non-fatal — may already be cancelled/expired
+                logger.warning(f"[{request_id}] ⚠️ Cancel {old_sub_id}: {cancel_err}")
         
         # =================================================================
         # STEP 1: Get or Create Razorpay Customer (with immediate persist)
@@ -913,38 +1032,32 @@ def create_subscription():
                 
             except razorpay.errors.BadRequestError as e:
                 error_msg = str(e)
-                # Log the full error including response body
                 logger.error(
                     f"[{request_id}] Razorpay BadRequestError during customer creation",
                     extra={'error': error_msg, 'email': data.customer_email}
                 )
                 
                 if 'already exists' in error_msg.lower():
-                    # Customer exists in Razorpay but NOT in our DB
-                    # This is a data sync issue - return clear error
                     return error_response(
                         'A customer with this email already exists in payment system. '
                         'Please contact support or use a different email.',
                         'CUSTOMER_EXISTS',
-                        400  # Client error - not retryable
+                        400
                     )
                 else:
                     return error_response(
                         f'Invalid customer data: {error_msg}',
                         'CUSTOMER_VALIDATION_ERROR',
-                        400  # Client error
+                        400
                     )
                     
             except razorpay.errors.ServerError as e:
-                # Razorpay ServerError - could be duplicate customer or genuine error
                 error_msg = str(e)
                 logger.warning(
                     f"[{request_id}] Razorpay ServerError during customer creation: {error_msg}",
                     extra={'error': error_msg, 'email': data.customer_email}
                 )
                 
-                # CRITICAL FIX: Check if customer already exists in Razorpay
-                # ServerError often means duplicate customer (email already used)
                 try:
                     logger.info(f"[{request_id}] Checking Razorpay for existing customer with email: {data.customer_email}")
                     all_customers = razorpay_client.customer.all({'count': 100})
@@ -955,18 +1068,12 @@ def create_subscription():
                     
                     if existing_customer:
                         customer_id = existing_customer['id']
-                        logger.info(f"[{request_id}] ✅ Found existing customer in Razorpay: {customer_id} (was not in our DB)")
-                        
-                        # Store in our DB for future lookups
+                        logger.info(f"[{request_id}] ✅ Found existing customer in Razorpay: {customer_id}")
                         store_razorpay_customer_new(
                             user_id, customer_id, data.customer_email,
                             data.customer_name, data.customer_phone
                         )
-                        
-                        # Continue with subscription creation using this customer_id
-                        logger.info(f"[{request_id}] Proceeding with subscription using recovered customer_id")
                     else:
-                        # No existing customer found - genuine server error
                         logger.error(f"[{request_id}] No existing customer found, genuine Razorpay server error")
                         return error_response(
                             'Payment service temporarily unavailable. Please try again in a moment.',
@@ -982,16 +1089,14 @@ def create_subscription():
                     )
                 
             except requests.exceptions.Timeout:
-                # Request timeout - likely network/Razorpay issue
                 logger.error(f"[{request_id}] Razorpay request timeout during customer creation")
                 return error_response(
                     'Payment service request timed out. Please try again.',
                     'RAZORPAY_TIMEOUT',
-                    504  # Gateway timeout
+                    504
                 )
                 
             except Exception as e:
-                # Catch-all for unexpected errors
                 logger.exception(f"[{request_id}] Unexpected error creating customer: {e}")
                 return error_response(
                     'Failed to create customer. Please try again.',
@@ -1004,9 +1109,11 @@ def create_subscription():
             logger.error(f"[{request_id}] customer_id is None - cannot create subscription")
             return error_response('Customer creation failed', 'CUSTOMER_ERROR', 500)
         
-        # Create subscription
+        # =================================================================
+        # STEP 2: Create Razorpay subscription (using DB-resolved plan_id)
+        # =================================================================
         subscription_data = {
-            'plan_id': plan['plan_id'],
+            'plan_id': razorpay_plan_id,  # From pricing_plans table, NOT hardcoded
             'customer_id': customer_id,
             'total_count': 12,
             'quantity': 1,
@@ -1014,26 +1121,63 @@ def create_subscription():
             'notes': {
                 'user_id': user_id,
                 'plan_name': plan_name,
+                'product_domain': product_domain,
+                'pricing_version': str(pricing_version),
                 'request_id': request_id
             }
         }
         subscription = create_razorpay_subscription(subscription_data)
         
-        # Store in database with PENDING status
+        # =================================================================
+        # STEP 3: Store with billing immutability (UPDATE or INSERT)
+        # =================================================================
+        # - If existing_sub: UPDATE the same row in place (plan switch)
+        # - If new: INSERT one row
+        # pricing_version + amount_paise are LOCKED at creation time.
+        
+        subscription_fields = {
+            'razorpay_subscription_id': subscription['id'],
+            'razorpay_customer_id': customer_id,
+            'plan_name': plan_name,
+            'plan_id': razorpay_plan_id,
+            'status': 'pending',
+            'idempotency_key': idempotency_key,
+            'ai_responses_limit': ai_responses_limit,
+            'product_domain': product_domain,
+            'pricing_version': pricing_version,
+            'amount_paise': amount_paise,
+            'currency': currency,
+            'pricing_plan_id': pricing_plan_id,
+        }
+        
         if SUPABASE_AVAILABLE:
             supabase = get_supabase_client()
-            supabase.table('subscriptions').insert({
-                'user_id': user_id,
-                'razorpay_subscription_id': subscription['id'],
-                'razorpay_customer_id': customer_id,
-                'plan_name': plan_name,
-                'plan_id': plan['plan_id'],
-                'status': 'pending',
-                'idempotency_key': idempotency_key,
-                'ai_responses_limit': plan['ai_responses_limit']
-            }).execute()
             
-            # Record payment attempt
+            if existing_sub:
+                # UPDATE existing row in place (plan switch — same row, new plan)
+                supabase.table('subscriptions').update(
+                    subscription_fields
+                ).eq(
+                    'id', existing_sub['id']
+                ).execute()
+                
+                logger.info(
+                    f"[{request_id}] 🔄 Updated subscription row {existing_sub['id']}: "
+                    f"{existing_sub.get('plan_name')} → {plan_name} "
+                    f"(razorpay: {existing_sub['razorpay_subscription_id']} → {subscription['id']})"
+                )
+            else:
+                # INSERT fresh row (first subscription for this user+domain)
+                subscription_fields['user_id'] = user_id
+                supabase.table('subscriptions').insert(
+                    subscription_fields
+                ).execute()
+                
+                logger.info(
+                    f"[{request_id}] 🆕 Inserted new subscription row for {plan_name}"
+                )
+            
+            # Record payment attempt (always insert — audit trail)
             supabase.table('payment_attempts').insert({
                 'user_id': user_id,
                 'request_id': request_id,
@@ -1045,7 +1189,15 @@ def create_subscription():
                 'user_agent': request.headers.get('User-Agent', '')[:500]
             }).execute()
         
-        logger.info(f"[{request_id}] Created subscription {subscription['id']} for user {user_id}")
+        logger.info(
+            f"[{request_id}] ✅ Created subscription {subscription['id']} for user {user_id} "
+            f"(domain={product_domain}, plan={plan_name}, amount=₹{amount_paise / 100:,.0f}, v{pricing_version})"
+        )
+        
+        # Invalidate status cache so the payment status page shows fresh data
+        if cache_manager:
+            cache_manager.delete(f"subscription_status:{user_id}")
+            logger.debug(f"[{request_id}] 🗑️ Invalidated subscription status cache for {user_id}")
         
         # Send tracking request to Razorpay (non-critical)
         if RAZORPAY_KEY_ID:
@@ -1054,9 +1206,9 @@ def create_subscription():
         return success_response({
             'subscription_id': subscription['id'],
             'key_id': RAZORPAY_KEY_ID,
-            'amount': plan['amount'],
-            'currency': plan['currency'],
-            'plan_name': plan['display_name']
+            'amount': amount_paise,
+            'currency': currency,
+            'plan_name': display_name
         })
         
     except razorpay.errors.BadRequestError as e:
@@ -1065,10 +1217,13 @@ def create_subscription():
         return error_response(f'Razorpay error: {error_msg}', 'RAZORPAY_BAD_REQUEST', 400)
     except razorpay.errors.ServerError as e:
         error_msg = str(e)
-        # Log detailed context for debugging
-        env_mode = 'test' if 'test' in RAZORPAY_KEY_ID else 'live'
+        try:
+            from services.environment import get_razorpay_environment
+            env_mode = get_razorpay_environment()
+        except Exception:
+            env_mode = 'unknown'
         logger.error(f"[{request_id}] Razorpay ServerError: {error_msg}")
-        logger.error(f"[{request_id}] Context: plan_id={plan.get('plan_id')}, customer_id={customer_id}, env={env_mode}")
+        logger.error(f"[{request_id}] Context: domain={getattr(g, 'product_domain', '?')}, plan={plan_name}, env={env_mode}")
         return error_response(
             'Payment service temporarily unavailable. Please try again in a moment.',
             'RAZORPAY_SERVER_ERROR',
@@ -1318,6 +1473,205 @@ def cancel_subscription():
 
 
 # =============================================================================
+# Plan Change Endpoints
+# =============================================================================
+
+@payments_bp.route('/subscriptions/change-plan', methods=['POST'])
+@require_auth
+@require_razorpay
+def change_plan():
+    """
+    Change subscription plan (upgrade or downgrade).
+    
+    POST /api/subscriptions/change-plan
+    Body: { "new_plan_slug": "business" }
+    
+    Domain resolved from request.host via middleware (NEVER from body).
+    
+    Upgrade:
+      - Calculates seconds-based proration
+      - Creates Razorpay one-time order for difference
+      - Returns order details for frontend checkout
+      - subscription.update called ONLY after payment.captured webhook
+    
+    Downgrade:
+      - No charge, no refund
+      - Schedules change at cycle_end via Razorpay
+      - Current features preserved until period ends
+    
+    Safety:
+      - Rejects if pending change exists (409)
+      - Rejects if plan_change_locked (409)
+      - Rejects if proration payment pending (409)
+      - Rejects downgrade if usage exceeds new plan limits (400)
+    """
+    request_id = g.request_id
+    user_id = g.user_id
+    
+    # Validate plan change service
+    if not PLAN_CHANGE_AVAILABLE:
+        return error_response(
+            'Plan change service not available',
+            'PLAN_CHANGE_UNAVAILABLE',
+            503
+        )
+    
+    # Validate domain
+    product_domain = getattr(g, 'product_domain', None)
+    if not product_domain:
+        return error_response(
+            'Product domain could not be determined.',
+            'DOMAIN_REQUIRED',
+            400
+        )
+    
+    # Validate input
+    body = request.get_json()
+    if not body or not body.get('new_plan_slug'):
+        return error_response(
+            'new_plan_slug is required',
+            'VALIDATION_ERROR',
+            400
+        )
+    
+    new_plan_slug = body['new_plan_slug'].lower().strip()
+    
+    # Validate plan slug format
+    allowed_slugs = {'starter', 'business', 'pro', 'enterprise'}
+    if new_plan_slug not in allowed_slugs:
+        return error_response(
+            f'Invalid plan slug: {new_plan_slug}',
+            'INVALID_PLAN_SLUG',
+            400
+        )
+    
+    try:
+        plan_change_service = get_plan_change_service()
+        result = plan_change_service.request_plan_change(
+            user_id=user_id,
+            product_domain=product_domain,
+            new_plan_slug=new_plan_slug,
+            request_id=request_id,
+            client_ip=request.remote_addr or '',
+        )
+        
+        logger.info(
+            f"[{request_id}] Plan change result: "
+            f"direction={result.get('change_direction')}, "
+            f"requires_payment={result.get('requires_payment')}"
+        )
+        
+        return success_response(result)
+        
+    except PlanChangeError as e:
+        logger.warning(f"[{request_id}] Plan change rejected: {e.error_code} - {e.message}")
+        return error_response(e.message, e.error_code, e.status_code)
+    except Exception as e:
+        logger.exception(f"[{request_id}] Unexpected plan change error: {e}")
+        return error_response(
+            'An unexpected error occurred. Please try again.',
+            'INTERNAL_ERROR',
+            500
+        )
+
+
+@payments_bp.route('/subscriptions/cancel-change', methods=['POST'])
+@require_auth
+@require_razorpay
+def cancel_change():
+    """
+    Cancel a pending plan change.
+    
+    POST /api/subscriptions/cancel-change
+    
+    Allowed when:
+      - A pending change exists
+      - plan_change_locked is FALSE
+      - Proration payment not yet captured
+    
+    For downgrades, also reverts the Razorpay scheduled change.
+    """
+    request_id = g.request_id
+    user_id = g.user_id
+    
+    if not PLAN_CHANGE_AVAILABLE:
+        return error_response(
+            'Plan change service not available',
+            'PLAN_CHANGE_UNAVAILABLE',
+            503
+        )
+    
+    product_domain = getattr(g, 'product_domain', None)
+    if not product_domain:
+        return error_response(
+            'Product domain could not be determined.',
+            'DOMAIN_REQUIRED',
+            400
+        )
+    
+    try:
+        plan_change_service = get_plan_change_service()
+        result = plan_change_service.cancel_pending_change(
+            user_id=user_id,
+            product_domain=product_domain,
+            request_id=request_id,
+        )
+        
+        logger.info(f"[{request_id}] Pending change cancelled: {result}")
+        return success_response(result)
+        
+    except PlanChangeError as e:
+        return error_response(e.message, e.error_code, e.status_code)
+    except Exception as e:
+        logger.exception(f"[{request_id}] Cancel change error: {e}")
+        return error_response('Failed to cancel change', 'INTERNAL_ERROR', 500)
+
+
+@payments_bp.route('/subscriptions/pending-change', methods=['GET'])
+@require_auth
+def get_pending_change():
+    """
+    Get the current pending plan change status.
+    
+    GET /api/subscriptions/pending-change
+    
+    Returns the pending change details if any, or null.
+    """
+    request_id = g.request_id
+    user_id = g.user_id
+    
+    product_domain = getattr(g, 'product_domain', None)
+    if not product_domain:
+        return error_response('Domain required', 'DOMAIN_REQUIRED', 400)
+    
+    if not PLAN_CHANGE_AVAILABLE:
+        return error_response('Service unavailable', 'PLAN_CHANGE_UNAVAILABLE', 503)
+    
+    try:
+        plan_change_service = get_plan_change_service()
+        subscription = plan_change_service.get_active_subscription(user_id, product_domain)
+        
+        pending = subscription.get('pending_plan_slug')
+        if not pending:
+            return success_response({'pending_change': None})
+        
+        return success_response({
+            'pending_change': {
+                'to_plan': pending,
+                'direction': subscription.get('change_direction'),
+                'scheduled_at': subscription.get('change_scheduled_at'),
+                'proration_payment_status': subscription.get('proration_payment_status'),
+                'locked': subscription.get('plan_change_locked', False),
+            }
+        })
+    except PlanChangeError as e:
+        return error_response(e.message, e.error_code, e.status_code)
+    except Exception as e:
+        logger.error(f"[{request_id}] Get pending change error: {e}")
+        return error_response('Failed to get pending change', 'INTERNAL_ERROR', 500)
+
+
+# =============================================================================
 # Webhook Handler - Production Grade with Idempotency
 # =============================================================================
 
@@ -1436,12 +1790,16 @@ def process_subscription_charged(meta: Dict) -> WebhookResult:
     
     CRITICAL: This is where duplicate payment inserts were happening.
     Now uses upsert_payment_history() for idempotency.
+    
+    PLAN CHANGE: If pending_plan_slug is set, atomically applies the
+    pending plan change via the apply_plan_change() DB function.
     """
     request_id = getattr(g, 'request_id', 'unknown')
     sub_data = meta['subscription_data']
     payment_data = meta['payment_data']
     sub_id = meta['subscription_id']
     payment_id = meta['payment_id']
+    event_id = meta['event_id']
     
     if not sub_id:
         logger.warning(f"[{request_id}] subscription.charged missing subscription_id")
@@ -1463,15 +1821,54 @@ def process_subscription_charged(meta: Dict) -> WebhookResult:
     period_start = datetime.fromtimestamp(current_start, tz=timezone.utc) if current_start else None
     period_end = datetime.fromtimestamp(current_end, tz=timezone.utc) if current_end else None
     
-    # Update subscription status and reset usage
-    update_subscription_status(
-        razorpay_subscription_id=sub_id,
-        status='completed',
-        current_period_start=period_start,
-        current_period_end=period_end,
-        event_created_at=meta['created_at'],
-        reset_usage=True
-    )
+    # =====================================================================
+    # PLAN CHANGE: Apply pending plan change atomically
+    # =====================================================================
+    # If pending_plan_slug is set, this is a new cycle where the plan should switch.
+    # Uses the atomic DB function apply_plan_change() with SELECT FOR UPDATE.
+    
+    pending_slug = subscription.get('pending_plan_slug')
+    if pending_slug and PLAN_CHANGE_AVAILABLE:
+        try:
+            plan_change_service = get_plan_change_service()
+            change_result = plan_change_service.apply_pending_plan_change(
+                razorpay_subscription_id=sub_id,
+                event_id=event_id,
+                period_start=period_start,
+                period_end=period_end,
+                request_id=request_id,
+            )
+            
+            if isinstance(change_result, dict) and change_result.get('success'):
+                reason = change_result.get('reason', 'unknown')
+                if reason == 'applied':
+                    logger.info(
+                        f"[{request_id}] 🔄 Plan change applied: "
+                        f"{change_result.get('from_plan')}→{change_result.get('to_plan')} "
+                        f"for subscription {sub_id}"
+                    )
+                elif reason == 'already_processed':
+                    logger.info(f"[{request_id}] Plan change already processed (idempotent)")
+                else:
+                    logger.info(f"[{request_id}] Plan change result: {reason}")
+            else:
+                logger.warning(
+                    f"[{request_id}] Plan change apply returned: {change_result}"
+                )
+        except Exception as e:
+            logger.error(f"[{request_id}] ❌ Plan change apply failed: {e}")
+            # Don't fail the webhook — subscription status update is still important
+    else:
+        # No pending change — normal subscription renewal
+        # Update subscription status and reset usage
+        update_subscription_status(
+            razorpay_subscription_id=sub_id,
+            status='completed',
+            current_period_start=period_start,
+            current_period_end=period_end,
+            event_created_at=meta['created_at'],
+            reset_usage=True
+        )
     
     # Record payment with UPSERT (idempotent)
     if payment_id and user_id:
@@ -1578,10 +1975,18 @@ def process_payment_captured(meta: Dict) -> WebhookResult:
     
     This event can arrive for the same payment_id as subscription.charged.
     Using upsert ensures idempotency.
+    
+    PLAN CHANGE: If the payment is for a proration order, delegate to
+    PlanChangeService.handle_proration_payment_captured() which will:
+    1. Verify order_id
+    2. Mark proration_payment_status = 'captured'
+    3. Call subscription.update(schedule_change_at='cycle_end')
+    4. Set plan_change_locked = TRUE
     """
     request_id = getattr(g, 'request_id', 'unknown')
     payment_data = meta['payment_data']
     payment_id = meta['payment_id']
+    event_id = meta['event_id']
     
     if not payment_id:
         logger.warning(f"[{request_id}] payment.captured missing payment_id")
@@ -1590,6 +1995,28 @@ def process_payment_captured(meta: Dict) -> WebhookResult:
     # Try to find user from notes or subscription
     notes = payment_data.get('notes', {})
     user_id = notes.get('user_id')
+    order_id = payment_data.get('order_id')
+    
+    # =====================================================================
+    # PRORATION CHECK: Is this a plan upgrade proration payment?
+    # =====================================================================
+    if order_id and notes.get('type') == 'plan_upgrade_proration' and PLAN_CHANGE_AVAILABLE:
+        try:
+            plan_change_service = get_plan_change_service()
+            proration_result = plan_change_service.handle_proration_payment_captured(
+                order_id=order_id,
+                payment_id=payment_id,
+                event_id=event_id,
+                request_id=request_id,
+            )
+            logger.info(
+                f"[{request_id}] Proration payment handled: {proration_result}"
+            )
+        except Exception as e:
+            logger.error(
+                f"[{request_id}] ❌ Proration payment handler error: {e}"
+            )
+        # Continue to record payment below
     
     # If no user_id in notes, try to find via subscription
     if not user_id:
@@ -1606,7 +2033,7 @@ def process_payment_captured(meta: Dict) -> WebhookResult:
         currency=payment_data.get('currency', 'INR'),
         status='captured',
         payment_method=payment_data.get('method'),
-        razorpay_order_id=payment_data.get('order_id')
+        razorpay_order_id=order_id
     )
     
     if payment_result.get('is_new'):
@@ -1618,20 +2045,43 @@ def process_payment_captured(meta: Dict) -> WebhookResult:
 
 
 def process_payment_failed(meta: Dict) -> WebhookResult:
-    """Handle payment.failed event."""
+    """
+    Handle payment.failed event.
+    
+    PLAN CHANGE: If the payment was for a proration order, clears all
+    pending state so the user can re-attempt the upgrade.
+    """
     request_id = getattr(g, 'request_id', 'unknown')
     payment_data = meta['payment_data']
     
     error_code = payment_data.get('error_code', 'unknown')
     error_desc = payment_data.get('error_description', 'No description')
     payment_id = meta['payment_id'] or 'unknown'
+    event_id = meta['event_id']
     
     logger.warning(f"[{request_id}] Payment {payment_id} failed: {error_code} - {error_desc}")
     
-    # Optionally record failed payment for audit
+    # Check if this is a proration payment failure
     notes = payment_data.get('notes', {})
+    order_id = payment_data.get('order_id')
     user_id = notes.get('user_id')
     
+    if order_id and notes.get('type') == 'plan_upgrade_proration' and PLAN_CHANGE_AVAILABLE:
+        try:
+            plan_change_service = get_plan_change_service()
+            fail_result = plan_change_service.handle_proration_payment_failed(
+                order_id=order_id,
+                payment_id=payment_id,
+                event_id=event_id,
+                request_id=request_id,
+            )
+            logger.info(
+                f"[{request_id}] Proration failure handled: {fail_result}"
+            )
+        except Exception as e:
+            logger.error(f"[{request_id}] Proration failure handler error: {e}")
+    
+    # Record failed payment for audit
     if user_id and meta['payment_id']:
         upsert_payment_history(
             user_id=user_id,
@@ -1647,6 +2097,47 @@ def process_payment_failed(meta: Dict) -> WebhookResult:
     return WEBHOOK_OK
 
 
+def process_subscription_updated(meta: Dict) -> WebhookResult:
+    """
+    Handle subscription.updated event.
+    
+    Razorpay fires this when a subscription's plan_id is updated
+    (via our subscription.update call). This confirms the scheduled change.
+    
+    We log this for audit but don't apply the plan change here —
+    the actual application happens in subscription.charged on the next cycle.
+    """
+    request_id = getattr(g, 'request_id', 'unknown')
+    sub_data = meta['subscription_data']
+    sub_id = meta['subscription_id']
+    event_id = meta['event_id']
+    
+    if not sub_id:
+        logger.warning(f"[{request_id}] subscription.updated missing subscription_id")
+        return WEBHOOK_OK
+    
+    new_plan_id = sub_data.get('plan_id', 'unknown')
+    status = sub_data.get('status', 'unknown')
+    
+    logger.info(
+        f"[{request_id}] subscription.updated: {sub_id} → "
+        f"plan={new_plan_id}, status={status}, event={event_id}"
+    )
+    
+    # Update last_processed_event_id for idempotency tracking
+    subscription = get_subscription_by_razorpay_id(sub_id)
+    if subscription:
+        try:
+            supabase = get_supabase_client()
+            supabase.table('subscriptions').update({
+                'last_processed_event_id': event_id,
+            }).eq('id', subscription['id']).execute()
+        except Exception as e:
+            logger.error(f"[{request_id}] Failed to update event_id: {e}")
+    
+    return WEBHOOK_OK
+
+
 # Event handler routing table
 WEBHOOK_HANDLERS = {
     'subscription.activated': process_subscription_activated,
@@ -1655,6 +2146,7 @@ WEBHOOK_HANDLERS = {
     'subscription.halted': process_subscription_halted,
     'subscription.paused': process_subscription_paused,
     'subscription.resumed': process_subscription_resumed,
+    'subscription.updated': process_subscription_updated,
     'payment.captured': process_payment_captured,
     'payment.failed': process_payment_failed,
 }
