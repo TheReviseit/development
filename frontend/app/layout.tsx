@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { headers } from "next/headers";
 import { Outfit, Plus_Jakarta_Sans } from "next/font/google";
 import "./globals.css";
 import { SpeedInsights } from "@vercel/speed-insights/next";
@@ -39,10 +40,8 @@ export const viewport: Viewport = {
   ],
 };
 
-// Comprehensive SEO Metadata Configuration
-export const metadata: Metadata = {
-  metadataBase: new URL("https://www.flowauxi.com"),
-
+// Base SEO Metadata Configuration (Static elements)
+const baseMetadata: Metadata = {
   // Primary Meta Tags - Enhanced for better CTR
   title: {
     default: "Flowauxi - AI WhatsApp Automation Platform | Free Trial",
@@ -120,23 +119,20 @@ export const metadata: Metadata = {
   openGraph: {
     type: "website",
     locale: "en_US",
-    url: "https://www.flowauxi.com",
     siteName: "Flowauxi - WhatsApp Automation Platform",
     title: "Flowauxi - AI WhatsApp Automation Platform | Free Trial",
     description:
       "Transform your WhatsApp into a powerful business tool with AI automation. Get instant customer responses, automated follow-ups, and CRM integration. Trusted by 500+ businesses. Start free!",
     images: [
       {
-        url: "https://www.flowauxi.com/og-image.png",
-        secureUrl: "https://www.flowauxi.com/og-image.png",
+        url: "/og-image.png",
         width: 1200,
         height: 630,
         alt: "Flowauxi - AI-Powered WhatsApp Automation Platform for Business",
         type: "image/png",
       },
       {
-        url: "https://www.flowauxi.com/logo.png",
-        secureUrl: "https://www.flowauxi.com/logo.png",
+        url: "/logo.png",
         width: 512,
         height: 512,
         alt: "Flowauxi Logo",
@@ -195,15 +191,6 @@ export const metadata: Metadata = {
     },
   },
 
-  // Alternate Languages and Canonical
-  alternates: {
-    canonical: "https://www.flowauxi.com",
-    languages: {
-      "en-US": "https://www.flowauxi.com",
-      "en-IN": "https://www.flowauxi.com",
-    },
-  },
-
   // Additional metadata for better discovery
   other: {
     "mobile-web-app-capable": "yes",
@@ -215,6 +202,31 @@ export const metadata: Metadata = {
     "msapplication-config": "/browserconfig.xml",
   },
 };
+
+// Next.js dynamic metadata generation to support multi-tenant subdomains
+export async function generateMetadata(): Promise<Metadata> {
+  const headersList = await headers();
+  const host = headersList.get("host") || "www.flowauxi.com";
+  const isLocalhost = host.includes("localhost") || host.includes("127.0.0.1");
+  const protocol = isLocalhost ? "http" : "https";
+  const baseUrl = `${protocol}://${host}`;
+
+  return {
+    ...baseMetadata,
+    metadataBase: new URL(baseUrl),
+    alternates: {
+      canonical: baseUrl,
+      languages: {
+        "en-US": baseUrl,
+        "en-IN": baseUrl,
+      },
+    },
+    openGraph: {
+      ...baseMetadata.openGraph,
+      url: baseUrl,
+    },
+  };
+}
 
 // Organization, Website, WebPage, SoftwareApp, Breadcrumb, FAQ, Brand schemas
 // are now in lib/seo/structured-data.ts (extracted for maintainability)
@@ -306,27 +318,6 @@ export default function RootLayout({
         <meta name="language" content="English" />
         <meta name="geo.region" content="IN" />
         <meta name="geo.placename" content="India" />
-
-        {/* Canonical Link */}
-        <link rel="canonical" href="https://www.flowauxi.com" />
-
-        {/* Alternate for hreflang */}
-        <link rel="alternate" hrefLang="en" href="https://www.flowauxi.com" />
-        <link
-          rel="alternate"
-          hrefLang="en-US"
-          href="https://www.flowauxi.com"
-        />
-        <link
-          rel="alternate"
-          hrefLang="en-IN"
-          href="https://www.flowauxi.com"
-        />
-        <link
-          rel="alternate"
-          hrefLang="x-default"
-          href="https://www.flowauxi.com"
-        />
       </head>
       <body className={`${jakarta.variable} ${outfit.variable} antialiased`}>
         <QueryProvider>

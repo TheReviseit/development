@@ -1,4 +1,5 @@
 import { MetadataRoute } from "next";
+import { headers } from "next/headers";
 
 /**
  * WORLD-CLASS SEO SITEMAP CONFIGURATION
@@ -17,8 +18,12 @@ import { MetadataRoute } from "next";
  * This tells search engines about their existence without indexing content.
  */
 
-export default function sitemap(): MetadataRoute.Sitemap {
-  const baseUrl = "https://www.flowauxi.com";
+export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
+  const headersList = await headers();
+  const host = headersList.get("host") || "www.flowauxi.com";
+  const isLocalhost = host.includes("localhost") || host.includes("127.0.0.1");
+  const protocol = isLocalhost ? "http" : "https";
+  const baseUrl = `${protocol}://${host}`;
 
   // Update this date when making significant site-wide changes
   // Using a stable date prevents unnecessary re-crawling
