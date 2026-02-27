@@ -148,7 +148,16 @@ export async function getBusinessByUserId(userId: string) {
 
 export async function createOrUpdateBusiness(
   userId: string,
-  businessData: Omit<Business, "id" | "user_id" | "created_at" | "updated_at">,
+  businessData: Omit<
+    Business,
+    | "id"
+    | "user_id"
+    | "created_at"
+    | "updated_at"
+    | "url_slug"
+    | "url_slug_lower"
+  > &
+    Partial<Pick<Business, "url_slug" | "url_slug_lower">>,
 ) {
   // Check if business exists
   const existing = await getBusinessByUserId(userId);
@@ -333,7 +342,13 @@ export async function getSubscriptionByUserId(userId: string) {
     .from("subscriptions")
     .select("*")
     .eq("user_id", userId)
-    .in("status", ["active", "completed", "processing", "pending_upgrade", "upgrade_failed"])
+    .in("status", [
+      "active",
+      "completed",
+      "processing",
+      "pending_upgrade",
+      "upgrade_failed",
+    ])
     .order("created_at", { ascending: false })
     .limit(1)
     .maybeSingle();

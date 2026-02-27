@@ -1,4 +1,4 @@
-'use client';
+"use client";
 
 /**
  * LoadingSkeleton — Beautiful Loading State
@@ -9,16 +9,14 @@
 
 export default function LoadingSkeleton() {
   return (
-    <div className="space-y-8 animate-pulse">
-      {/* Billing Toggle Skeleton */}
-      <div className="flex justify-center">
-        <div className="h-12 w-64 bg-gray-200 rounded-lg" />
-      </div>
-
-      {/* Plan Cards Skeleton */}
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3 xl:grid-cols-4">
-        {[1, 2, 3, 4].map((i) => (
-          <div key={i} className="border-2 border-gray-200 rounded-lg p-6 bg-white">
+    <div className="space-y-6 animate-pulse">
+      {/* Plan Cards Skeleton — 3 cards centered */}
+      <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3 max-w-5xl mx-auto">
+        {[1, 2, 3].map((i) => (
+          <div
+            key={i}
+            className="border-2 border-gray-200 rounded-lg p-6 bg-white"
+          >
             {/* Title */}
             <div className="h-6 bg-gray-200 rounded w-3/4" />
             {/* Tagline */}

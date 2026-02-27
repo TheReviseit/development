@@ -75,7 +75,7 @@ const WhatsAppFeatures = () => {
             start: "top 80%",
             toggleActions: "play none none none",
           },
-        }
+        },
       );
 
       gsap.fromTo(
@@ -92,7 +92,7 @@ const WhatsAppFeatures = () => {
             start: "top 80%",
             toggleActions: "play none none none",
           },
-        }
+        },
       );
     });
 
@@ -107,7 +107,7 @@ const WhatsAppFeatures = () => {
       {
         threshold: 0.1,
         rootMargin: "0px 0px -100px 0px",
-      }
+      },
     );
 
     if (sectionRef.current) {
@@ -233,7 +233,7 @@ const WhatsAppFeatures = () => {
       ref={sectionRef}
       className={`whatsapp-features-section ${isVisible ? "visible" : ""}`}
     >
-      <div className="container">
+      <div className="container mx-auto px-4 max-w-7xl">
         {/* Section Header */}
         <div className="features-header">
           <h2 className="features-title" ref={titleRef}>

@@ -1,4 +1,4 @@
-'use client';
+"use client";
 
 /**
  * PlanCard — Individual Plan Display with CTA
@@ -8,9 +8,9 @@
  * Features: Current plan badge, recommended badge, pricing display, upgrade button
  */
 
-import { useState, useEffect } from 'react';
-import { useMutation } from '@tanstack/react-query';
-import { auth } from '@/src/firebase/firebase';
+import { useState, useEffect } from "react";
+import { useMutation } from "@tanstack/react-query";
+import { auth } from "@/src/firebase/firebase";
 
 interface Plan {
   plan_slug: string;
@@ -31,7 +31,7 @@ interface PlanCardProps {
   plan: Plan;
   isCurrent: boolean;
   isRecommended: boolean;
-  billingCycle: 'monthly' | 'yearly';
+  billingCycle: "monthly" | "yearly";
   domain: string;
   onViewDifferences?: () => void;
 }
@@ -49,35 +49,37 @@ export default function PlanCard({
 
   // Load Razorpay SDK on mount
   useEffect(() => {
-    if (typeof window === 'undefined') return;
+    if (typeof window === "undefined") return;
     if ((window as any).Razorpay) {
       setRazorpayLoaded(true);
       return;
     }
-    if (document.getElementById('razorpay-sdk')) {
+    if (document.getElementById("razorpay-sdk")) {
       // Script tag exists but hasn't loaded yet — wait for it
-      const existing = document.getElementById('razorpay-sdk') as HTMLScriptElement;
-      existing.addEventListener('load', () => setRazorpayLoaded(true));
+      const existing = document.getElementById(
+        "razorpay-sdk",
+      ) as HTMLScriptElement;
+      existing.addEventListener("load", () => setRazorpayLoaded(true));
       return;
     }
-    const script = document.createElement('script');
-    script.id = 'razorpay-sdk';
-    script.src = 'https://checkout.razorpay.com/v1/checkout.js';
+    const script = document.createElement("script");
+    script.id = "razorpay-sdk";
+    script.src = "https://checkout.razorpay.com/v1/checkout.js";
     script.async = true;
     script.onload = () => setRazorpayLoaded(true);
-    script.onerror = () => console.error('Failed to load Razorpay SDK');
+    script.onerror = () => console.error("Failed to load Razorpay SDK");
     document.body.appendChild(script);
   }, []);
 
   // Calculate display price
   const amountPaise =
-    billingCycle === 'yearly' && plan.amount_yearly_paise
+    billingCycle === "yearly" && plan.amount_yearly_paise
       ? plan.amount_yearly_paise
       : plan.amount_paise;
 
   const displayPrice = Math.floor(amountPaise / 100);
   const perMonth =
-    billingCycle === 'yearly' ? Math.floor(displayPrice / 12) : displayPrice;
+    billingCycle === "yearly" ? Math.floor(displayPrice / 12) : displayPrice;
 
   // Upgrade mutation
   const upgradeMutation = useMutation({
@@ -85,15 +87,15 @@ export default function PlanCard({
       // Get Firebase auth user ID
       const user = auth.currentUser;
       if (!user) {
-        throw new Error('Not authenticated');
+        throw new Error("Not authenticated");
       }
 
-      const res = await fetch('/api/upgrade/checkout', {
-        method: 'POST',
-        credentials: 'include',
+      const res = await fetch("/api/upgrade/checkout", {
+        method: "POST",
+        credentials: "include",
         headers: {
-          'Content-Type': 'application/json',
-          'X-User-Id': user.uid, // Send Firebase UID, not JWT token
+          "Content-Type": "application/json",
+          "X-User-Id": user.uid, // Send Firebase UID, not JWT token
         },
         body: JSON.stringify({
           domain,
@@ -104,7 +106,7 @@ export default function PlanCard({
 
       if (!res.ok) {
         const error = await res.json();
-        throw new Error(error.message || 'Upgrade failed');
+        throw new Error(error.message || "Upgrade failed");
       }
 
       return res.json();
@@ -112,9 +114,11 @@ export default function PlanCard({
     onMutate: () => setIsProcessing(true),
     onSuccess: (data) => {
       // Open Razorpay checkout
-      if (typeof window === 'undefined' || !(window as any).Razorpay) {
+      if (typeof window === "undefined" || !(window as any).Razorpay) {
         setIsProcessing(false);
-        alert('Payment gateway failed to load. Please refresh the page and try again.');
+        alert(
+          "Payment gateway failed to load. Please refresh the page and try again.",
+        );
         return;
       }
 
@@ -122,34 +126,34 @@ export default function PlanCard({
 
       if (!razorpaySubId) {
         setIsProcessing(false);
-        alert('Missing subscription ID from server. Please try again.');
+        alert("Missing subscription ID from server. Please try again.");
         return;
       }
 
       // Set flag BEFORE opening Razorpay — dashboard reads this on load
-      sessionStorage.setItem('flowauxi_upgrade_pending', '1');
+      sessionStorage.setItem("flowauxi_upgrade_pending", "1");
 
       const options = {
         key: data.razorpay_key_id,
         subscription_id: razorpaySubId,
-        name: 'Flowauxi',
+        name: "Flowauxi",
         description: `${plan.display_name} - ${billingCycle}`,
         handler: function () {
           // Redirect to dashboard — backend finds pending upgrade by user_id
-          window.location.href = '/dashboard?upgrade=success';
+          window.location.href = "/dashboard?upgrade=success";
         },
         modal: {
           ondismiss: function () {
             setIsProcessing(false);
-            sessionStorage.removeItem('flowauxi_upgrade_pending');
+            sessionStorage.removeItem("flowauxi_upgrade_pending");
           },
         },
       };
 
       const rzp = new (window as any).Razorpay(options);
-      rzp.on('payment.failed', function () {
+      rzp.on("payment.failed", function () {
         setIsProcessing(false);
-        sessionStorage.removeItem('flowauxi_upgrade_pending');
+        sessionStorage.removeItem("flowauxi_upgrade_pending");
       });
       rzp.open();
     },
@@ -161,7 +165,7 @@ export default function PlanCard({
 
   const handleUpgrade = () => {
     if (plan.requires_sales_call) {
-      window.location.href = 'mailto:sales@flowauxi.com';
+      window.location.href = "mailto:sales@flowauxi.com";
       return;
     }
 
@@ -172,8 +176,8 @@ export default function PlanCard({
     <div
       className={`
         relative rounded-lg border-2 bg-white p-6 shadow-sm hover:shadow-md transition-shadow duration-200
-        ${isCurrent ? 'border-black' : 'border-gray-200'}
-        ${isRecommended ? 'ring-2 ring-black ring-offset-2' : ''}
+        ${isCurrent ? "border-black" : "border-gray-200"}
+        ${isRecommended ? "ring-2 ring-black ring-offset-2" : ""}
       `}
     >
       {/* Badges */}
@@ -201,10 +205,12 @@ export default function PlanCard({
       {/* Pricing */}
       <div className="mt-6">
         <div className="flex items-baseline">
-          <span className="text-4xl font-bold text-black">₹{perMonth.toLocaleString()}</span>
+          <span className="text-4xl font-bold text-black">
+            ₹{perMonth.toLocaleString()}
+          </span>
           <span className="ml-2 text-gray-600">/month</span>
         </div>
-        {billingCycle === 'yearly' && (
+        {billingCycle === "yearly" && (
           <p className="mt-1 text-sm text-gray-600">
             ₹{displayPrice.toLocaleString()} billed annually
           </p>
@@ -216,7 +222,7 @@ export default function PlanCard({
         {isCurrent ? (
           <button
             disabled
-            className="w-full px-4 py-2 border-2 border-gray-300 text-gray-400 font-medium bg-gray-50 cursor-not-allowed"
+            className="w-full px-4 py-3 border-2 border-gray-200 text-sm text-gray-400 font-medium bg-gray-50 rounded-lg cursor-not-allowed"
           >
             Current Plan
           </button>
@@ -225,11 +231,11 @@ export default function PlanCard({
             onClick={handleUpgrade}
             disabled={isProcessing}
             className={`
-              w-full px-4 py-2 font-medium transition-colors duration-200
+              w-full px-4 py-3 text-sm font-semibold rounded-lg transition-colors duration-200
               ${
                 plan.requires_sales_call
-                  ? 'border-2 border-black text-black bg-white hover:bg-gray-50'
-                  : 'bg-black text-white hover:bg-gray-800'
+                  ? "border-2 border-black text-black bg-white hover:bg-gray-50"
+                  : "bg-black text-white hover:bg-gray-800"
               }
               disabled:opacity-50 disabled:cursor-not-allowed
             `}
@@ -258,9 +264,9 @@ export default function PlanCard({
                 Processing...
               </span>
             ) : plan.requires_sales_call ? (
-              'Contact Sales'
+              "Contact Sales"
             ) : (
-              'Upgrade Now'
+              "Upgrade Now"
             )}
           </button>
         )}
@@ -299,9 +305,22 @@ export default function PlanCard({
       {onViewDifferences && !isCurrent && (
         <button
           onClick={onViewDifferences}
-          className="mt-4 text-sm text-black hover:underline font-medium"
+          className="mt-4 w-full flex items-center justify-center gap-1.5 px-4 py-3 text-sm font-medium text-gray-600 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 hover:border-gray-300 hover:text-gray-900 transition-all duration-200"
         >
-          View what changes →
+          <svg
+            className="w-4 h-4"
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+            strokeWidth={2}
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              d="M9 5l7 7-7 7"
+            />
+          </svg>
+          View what changes
         </button>
       )}
     </div>

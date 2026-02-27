@@ -1,4 +1,4 @@
-'use client';
+"use client";
 
 /**
  * SoftLimitBanner — Proactive Limit Warning System
@@ -8,11 +8,11 @@
  * Features: Dismissible, localStorage persistence, multiple feature warnings
  */
 
-import { useState, useEffect } from 'react';
-import Link from 'next/link';
-import { auth } from '@/src/firebase/firebase';
+import { useState, useEffect } from "react";
+import Link from "next/link";
+import { auth } from "@/src/firebase/firebase";
 
-const DISMISSAL_KEY = 'soft_limit_dismissals';
+const DISMISSAL_KEY = "soft_limit_dismissals";
 const DISMISSAL_EXPIRY_DAYS = 7;
 
 interface Dismissals {
@@ -20,7 +20,7 @@ interface Dismissals {
 }
 
 function getDismissals(): Dismissals {
-  if (typeof window === 'undefined') return {};
+  if (typeof window === "undefined") return {};
 
   try {
     const stored = localStorage.getItem(DISMISSAL_KEY);
@@ -33,22 +33,22 @@ function getDismissals(): Dismissals {
     return Object.fromEntries(
       Object.entries(dismissals).filter(([_, timestamp]) => {
         return now - (timestamp as number) < DISMISSAL_EXPIRY_DAYS * 86400000;
-      })
-    );
+      }),
+    ) as Dismissals;
   } catch {
     return {};
   }
 }
 
 function dismissFeature(featureKey: string) {
-  if (typeof window === 'undefined') return;
+  if (typeof window === "undefined") return;
 
   try {
     const dismissals = getDismissals();
     dismissals[featureKey] = Date.now();
     localStorage.setItem(DISMISSAL_KEY, JSON.stringify(dismissals));
   } catch (e) {
-    console.error('Failed to save dismissal:', e);
+    console.error("Failed to save dismissal:", e);
   }
 }
 
@@ -77,15 +77,15 @@ export default function SoftLimitBanner() {
       // Get Firebase auth user ID
       const user = auth.currentUser;
       if (!user) {
-        console.warn('User not authenticated, skipping usage warnings fetch');
+        console.warn("User not authenticated, skipping usage warnings fetch");
         return;
       }
 
-      const res = await fetch('/api/features/usage', {
-        credentials: 'include',
+      const res = await fetch("/api/features/usage", {
+        credentials: "include",
         headers: {
-          'Content-Type': 'application/json',
-          'X-User-Id': user.uid, // Send Firebase UID, not JWT token
+          "Content-Type": "application/json",
+          "X-User-Id": user.uid, // Send Firebase UID, not JWT token
         },
       });
 
@@ -101,10 +101,10 @@ export default function SoftLimitBanner() {
           if (feature.soft_limit_exceeded && !feature.hard_limit_exceeded) {
             newWarnings.push({
               feature: feature.feature_key,
-              message: `You've used ${feature.used}/${feature.hard_limit} ${feature.feature_key.replace(/_/g, ' ')}`,
+              message: `You've used ${feature.used}/${feature.hard_limit} ${feature.feature_key.replace(/_/g, " ")}`,
               used: feature.used,
               limit: feature.hard_limit,
-              upgradeMessage: 'Upgrade for higher limits',
+              upgradeMessage: "Upgrade for higher limits",
             });
           }
         });
@@ -112,7 +112,7 @@ export default function SoftLimitBanner() {
 
       setWarnings(newWarnings);
     } catch (e) {
-      console.error('Failed to fetch usage warnings:', e);
+      console.error("Failed to fetch usage warnings:", e);
     }
   };
 

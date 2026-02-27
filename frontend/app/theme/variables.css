@@ -14,7 +14,7 @@
   --text-gray-400: #9ca3af;
   --background-color: #f5f7fa;
   --auth-bg: #f5f5f5;
-  --header-bg: rgba(255, 255, 255, 0.98);
+  --header-bg: #ffffff;
 
   /* UI Element Colors */
   --input-bg: #ffffff;
@@ -58,8 +58,9 @@
   --white: #ffffff;
 
   /* Typography */
-  --font-primary: var(--font-jakarta), -apple-system, BlinkMacSystemFont,
-    "SF Pro", system-ui, sans-serif;
+  --font-primary:
+    var(--font-jakarta), -apple-system, BlinkMacSystemFont, "SF Pro", system-ui,
+    sans-serif;
   --font-secondary: var(--font-outfit), sans-serif;
 
   /* Spacing Scale (8px base) */

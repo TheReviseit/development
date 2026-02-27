@@ -22,9 +22,9 @@ const COMPANY_LINKS = [
   { href: "/privacy", label: "Privacy" },
 ];
 
-export default function ShopFooter() {
+export default function ShopFooter({ dark = false }: { dark?: boolean }) {
   return (
-    <footer className={styles.footer}>
+    <footer className={`${styles.footer} ${dark ? styles.darkFooter : ""}`}>
       <div className={styles.footerInner}>
         <div className={styles.footerGrid}>
           {/* Brand */}

@@ -25,7 +25,8 @@ type Section =
   | "showcase" // ✅ Added showcase
   | "bot-settings"
   | "preview-bot"
-  | "settings";
+  | "settings"
+  | "profile";
 
 const sectionLabels: Record<Section, string> = {
   analytics: "Analytics",
@@ -42,10 +43,14 @@ const sectionLabels: Record<Section, string> = {
   "bot-settings": "AI Settings",
   "preview-bot": "Preview Bot",
   settings: "Settings",
+  profile: "Store Settings",
 };
 
 // Map pathname to section
 const getActiveSection = (pathname: string): Section => {
+  // Check profile first to avoid defaulting to analytics on profile pages
+  if (pathname.includes("/profile")) return "profile";
+
   if (pathname.includes("/bulk-messages")) return "bulk-messages";
   if (pathname.includes("/messages")) return "messages";
   if (pathname.includes("/templates")) return "templates";
@@ -55,7 +60,7 @@ const getActiveSection = (pathname: string): Section => {
   if (pathname.includes("/appointments")) return "appointments";
   if (pathname.includes("/orders")) return "orders";
   if (pathname.includes("/products")) return "products";
-  if (pathname.includes("/showcase")) return "showcase"; // ✅ Added showcase
+  if (pathname.includes("/showcase")) return "showcase";
   if (pathname.includes("/bot-settings")) return "bot-settings";
   if (pathname.includes("/preview-bot")) return "preview-bot";
   if (pathname.includes("/settings")) return "settings";
@@ -89,8 +94,10 @@ export default function DashboardLayout({
   const LONG_PRESS_DURATION = 500; // ms
   // Items that cannot be hidden (essential navigation)
   const NON_HIDEABLE_ITEMS = ["analytics", "messages"];
-  const [upgradeStatus, setUpgradeStatus] = useState<'idle' | 'verifying' | 'success' | 'error'>('idle');
-  const [upgradeMessage, setUpgradeMessage] = useState('');
+  const [upgradeStatus, setUpgradeStatus] = useState<
+    "idle" | "verifying" | "success" | "error"
+  >("idle");
+  const [upgradeMessage, setUpgradeMessage] = useState("");
   const upgradeVerifiedRef = useRef(false);
   const router = useRouter();
   const pathname = usePathname();
@@ -106,64 +113,73 @@ export default function DashboardLayout({
 
     // Check both URL params and sessionStorage (Razorpay handler is unreliable)
     const params = new URLSearchParams(window.location.search);
-    const fromUrl = params.get('upgrade') === 'success';
-    const fromStorage = sessionStorage.getItem('flowauxi_upgrade_pending') === '1';
+    const fromUrl = params.get("upgrade") === "success";
+    const fromStorage =
+      sessionStorage.getItem("flowauxi_upgrade_pending") === "1";
 
     if (!fromUrl && !fromStorage) return;
 
     upgradeVerifiedRef.current = true;
-    sessionStorage.removeItem('flowauxi_upgrade_pending');
-    setUpgradeStatus('verifying');
+    sessionStorage.removeItem("flowauxi_upgrade_pending");
+    setUpgradeStatus("verifying");
 
     const verifyPayment = async () => {
       try {
-        const { auth } = await import('@/src/firebase/firebase');
+        const { auth } = await import("@/src/firebase/firebase");
         const firebaseUser = auth.currentUser;
 
         if (!firebaseUser) {
-          setUpgradeStatus('error');
-          setUpgradeMessage('Not authenticated. Please refresh and try again.');
+          setUpgradeStatus("error");
+          setUpgradeMessage("Not authenticated. Please refresh and try again.");
           return;
         }
 
-        console.log('[Upgrade] Calling verify-payment for user', firebaseUser.uid);
+        console.log(
+          "[Upgrade] Calling verify-payment for user",
+          firebaseUser.uid,
+        );
 
-        const res = await fetch('/api/upgrade/verify-payment', {
-          method: 'POST',
-          credentials: 'include',
+        const res = await fetch("/api/upgrade/verify-payment", {
+          method: "POST",
+          credentials: "include",
           headers: {
-            'Content-Type': 'application/json',
-            'X-User-Id': firebaseUser.uid,
+            "Content-Type": "application/json",
+            "X-User-Id": firebaseUser.uid,
           },
-          body: JSON.stringify({ domain: 'shop' }),
+          body: JSON.stringify({ domain: "shop" }),
         });
 
         const result = await res.json();
-        console.log('[Upgrade] verify-payment response:', result);
+        console.log("[Upgrade] verify-payment response:", result);
 
         if (res.ok && result.success) {
-          setUpgradeStatus('success');
-          setUpgradeMessage('Plan upgraded successfully!');
+          setUpgradeStatus("success");
+          setUpgradeMessage("Plan upgraded successfully!");
           // Clean up URL params
-          window.history.replaceState({}, '', window.location.pathname);
+          window.history.replaceState({}, "", window.location.pathname);
           // Force refetch of subscription/entitlement data
           setTimeout(() => {
-            window.dispatchEvent(new CustomEvent('subscription-updated'));
+            window.dispatchEvent(new CustomEvent("subscription-updated"));
             router.refresh();
           }, 1500);
         } else {
-          setUpgradeStatus('error');
-          setUpgradeMessage(result.message || 'Upgrade verification failed. Your payment was received — it will activate shortly via webhook.');
+          setUpgradeStatus("error");
+          setUpgradeMessage(
+            result.message ||
+              "Upgrade verification failed. Your payment was received — it will activate shortly via webhook.",
+          );
         }
       } catch (err) {
-        console.error('[Upgrade] verify error:', err);
-        setUpgradeStatus('error');
-        setUpgradeMessage('Could not verify upgrade. Your payment was received — it will activate shortly.');
+        console.error("[Upgrade] verify error:", err);
+        setUpgradeStatus("error");
+        setUpgradeMessage(
+          "Could not verify upgrade. Your payment was received — it will activate shortly.",
+        );
       }
     };
 
     verifyPayment();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user]);
 
   // Read product domain using resolveDomain() — same function as middleware
@@ -1253,68 +1269,7 @@ export default function DashboardLayout({
                           </button>
                         </div>
                       )}
-                      {/* Settings - hideable */}
-                      {(mobileHideMode ||
-                        !mobileHiddenItems.includes("settings")) && (
-                        <div className={styles.mobileNavItemWrapper}>
-                          {mobileHideMode && canHideItem("settings") && (
-                            <button
-                              className={`${styles.mobileHideCheckbox} ${mobileHiddenItems.includes("settings") ? styles.mobileHideCheckboxChecked : ""}`}
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                toggleMobileHideItem("settings");
-                              }}
-                            >
-                              {mobileHiddenItems.includes("settings") && (
-                                <svg
-                                  width="14"
-                                  height="14"
-                                  viewBox="0 0 24 24"
-                                  fill="none"
-                                  stroke="currentColor"
-                                  strokeWidth="3"
-                                >
-                                  <path
-                                    d="M5 13l4 4L19 7"
-                                    strokeLinecap="round"
-                                    strokeLinejoin="round"
-                                  />
-                                </svg>
-                              )}
-                            </button>
-                          )}
-                          <button
-                            className={`${styles.mobileNavLink} ${activeSection === "settings" ? styles.mobileNavLinkActive : ""} ${mobileHiddenItems.includes("settings") ? styles.mobileNavLinkHidden : ""}`}
-                            onClick={() =>
-                              !mobileHideMode && handleSectionChange("settings")
-                            }
-                          >
-                            <svg
-                              width="20"
-                              height="20"
-                              fill="none"
-                              stroke="currentColor"
-                              viewBox="0 0 24 24"
-                            >
-                              <circle
-                                cx="12"
-                                cy="12"
-                                r="3"
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                                strokeWidth={2}
-                              />
-                              <path
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                                strokeWidth={2}
-                                d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"
-                              />
-                            </svg>
-                            <span>Settings</span>
-                          </button>
-                        </div>
-                      )}
+
                       <button
                         className={styles.mobileNavLink}
                         onClick={() => {
@@ -1396,49 +1351,93 @@ export default function DashboardLayout({
             )}
 
             {/* Upgrade Verification Banner */}
-            {upgradeStatus !== 'idle' && (
+            {upgradeStatus !== "idle" && (
               <div
                 style={{
-                  padding: '12px 20px',
-                  margin: '0 0 8px 0',
-                  borderRadius: '8px',
-                  fontSize: '14px',
+                  padding: "12px 20px",
+                  margin: "0 0 8px 0",
+                  borderRadius: "8px",
+                  fontSize: "14px",
                   fontWeight: 500,
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '10px',
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "10px",
                   backgroundColor:
-                    upgradeStatus === 'verifying' ? '#FFF8E1' :
-                    upgradeStatus === 'success' ? '#E8F5E9' : '#FFF3E0',
+                    upgradeStatus === "verifying"
+                      ? "#FFF8E1"
+                      : upgradeStatus === "success"
+                        ? "#E8F5E9"
+                        : "#FFF3E0",
                   color:
-                    upgradeStatus === 'verifying' ? '#F57F17' :
-                    upgradeStatus === 'success' ? '#2E7D32' : '#E65100',
+                    upgradeStatus === "verifying"
+                      ? "#F57F17"
+                      : upgradeStatus === "success"
+                        ? "#2E7D32"
+                        : "#E65100",
                   border: `1px solid ${
-                    upgradeStatus === 'verifying' ? '#FFE082' :
-                    upgradeStatus === 'success' ? '#A5D6A7' : '#FFCC80'
+                    upgradeStatus === "verifying"
+                      ? "#FFE082"
+                      : upgradeStatus === "success"
+                        ? "#A5D6A7"
+                        : "#FFCC80"
                   }`,
                 }}
               >
-                {upgradeStatus === 'verifying' && (
+                {upgradeStatus === "verifying" && (
                   <>
-                    <svg className="animate-spin" width="18" height="18" viewBox="0 0 24 24" fill="none">
-                      <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" opacity="0.3" />
-                      <path d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" fill="currentColor" opacity="0.75" />
+                    <svg
+                      className="animate-spin"
+                      width="18"
+                      height="18"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                    >
+                      <circle
+                        cx="12"
+                        cy="12"
+                        r="10"
+                        stroke="currentColor"
+                        strokeWidth="3"
+                        opacity="0.3"
+                      />
+                      <path
+                        d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
+                        fill="currentColor"
+                        opacity="0.75"
+                      />
                     </svg>
                     Verifying your upgrade payment...
                   </>
                 )}
-                {upgradeStatus === 'success' && (
+                {upgradeStatus === "success" && (
                   <>
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                      <path d="M5 13l4 4L19 7" strokeLinecap="round" strokeLinejoin="round" />
+                    <svg
+                      width="18"
+                      height="18"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                    >
+                      <path
+                        d="M5 13l4 4L19 7"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      />
                     </svg>
                     {upgradeMessage}
                   </>
                 )}
-                {upgradeStatus === 'error' && (
+                {upgradeStatus === "error" && (
                   <>
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <svg
+                      width="18"
+                      height="18"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                    >
                       <circle cx="12" cy="12" r="10" />
                       <line x1="12" y1="8" x2="12" y2="12" />
                       <line x1="12" y1="16" x2="12.01" y2="16" />
@@ -1446,10 +1445,17 @@ export default function DashboardLayout({
                     {upgradeMessage}
                   </>
                 )}
-                {upgradeStatus !== 'verifying' && (
+                {upgradeStatus !== "verifying" && (
                   <button
-                    onClick={() => setUpgradeStatus('idle')}
-                    style={{ marginLeft: 'auto', background: 'none', border: 'none', cursor: 'pointer', fontSize: '16px', color: 'inherit' }}
+                    onClick={() => setUpgradeStatus("idle")}
+                    style={{
+                      marginLeft: "auto",
+                      background: "none",
+                      border: "none",
+                      cursor: "pointer",
+                      fontSize: "16px",
+                      color: "inherit",
+                    }}
                   >
                     x
                   </button>

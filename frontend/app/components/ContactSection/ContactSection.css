@@ -24,7 +24,7 @@
     var(--auth-gradient-end) 100%
   );
   -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
+  /* -webkit-text-fill-color: transparent; */
   background-clip: text;
   font-family: var(--font-secondary);
   letter-spacing: -0.02em;
@@ -59,6 +59,12 @@
   padding: 48px;
   position: relative;
   overflow: hidden;
+  background: #ffffff;
+  border: 1px solid #000000;
+  border-radius: 20px;
+  box-shadow:
+    0 4px 6px -1px rgba(0, 0, 0, 0.05),
+    0 2px 4px -1px rgba(0, 0, 0, 0.03);
 }
 
 .contact-form-card::before {
@@ -125,12 +131,12 @@
 .form-textarea {
   width: 100%;
   padding: 14px 18px;
-  border: 2px solid var(--border-color);
+  border: 1px solid #d1d5db; /* Explicitly visible border */
   border-radius: 12px;
   font-size: 15px;
   font-family: var(--font-primary);
-  color: var(--heading-color);
-  background: var(--input-bg);
+  color: var(--heading-color, #111827);
+  background: #f9fafb; /* Light gray background to distinguish from white card */
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   outline: none;
   line-height: 1.5;
@@ -185,6 +191,12 @@
   overflow: hidden;
   background: #000000 !important;
   color: white !important;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border: none;
 }
 
 .contact-submit-btn:hover {
@@ -227,6 +239,12 @@
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   position: relative;
   overflow: hidden;
+  background: #ffffff;
+  border: 1px solid #000000;
+  border-radius: 20px;
+  box-shadow:
+    0 4px 6px -1px rgba(0, 0, 0, 0.05),
+    0 2px 4px -1px rgba(0, 0, 0, 0.03);
 }
 
 .contact-info-card::before {
@@ -368,11 +386,7 @@
 }
 
 .contact-social-link:hover {
-  background: linear-gradient(
-    135deg,
-    var(--auth-gradient-start) 0%,
-    var(--auth-gradient-end) 100%
-  );
+  background: black;
   border-color: transparent;
   color: white;
   transform: translateY(-4px) scale(1.1);

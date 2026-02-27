@@ -2171,6 +2171,17 @@
     Arial, sans-serif;
   /* Required for drag-drop overlay positioning */
   position: relative;
+  /* Hide scrollbar */
+  scrollbar-width: none !important;
+  -ms-overflow-style: none !important;
+  border: none !important;
+  outline: none !important;
+}
+
+.chatMessages::-webkit-scrollbar {
+  display: none !important;
+  width: 0 !important;
+  height: 0 !important;
 }
 
 .chatMessages > *:first-child {
@@ -3756,7 +3767,8 @@
     z-index: 100; /* Above mobile header (z-index: 50) */
     display: none;
     flex-direction: column;
-    background: var(--dash-bg-primary);
+    background: #ece5dd; /* Match WhatsApp background to prevent black line gaps */
+    border: none !important;
   }
 
   .chatAreaVisible {
@@ -3778,6 +3790,16 @@
     overflow-y: auto;
     min-height: 0;
     padding: 1rem;
+    scrollbar-width: none !important;
+    -ms-overflow-style: none !important;
+    border: none !important;
+    outline: none !important;
+  }
+
+  .chatAreaVisible .chatMessages::-webkit-scrollbar {
+    display: none !important;
+    width: 0 !important;
+    height: 0 !important;
   }
 
   /* Increase message width on mobile */

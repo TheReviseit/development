@@ -12,6 +12,12 @@
   flex-direction: column;
   position: relative;
   overflow: hidden;
+  scrollbar-width: none !important;
+  -ms-overflow-style: none !important;
+}
+
+.chatMessagesWrapper::-webkit-scrollbar {
+  display: none !important;
 }
 
 /* ============================================
@@ -597,5 +603,137 @@
     bottom: 80px;
     font-size: 0.6875rem;
     padding: 6px 12px;
+  }
+}
+
+/* ============================================
+   Message History Lock — Plan-gated messages
+   ============================================ */
+
+/* Wrapper for messages older than plan limit */
+.lockedMessages {
+  filter: blur(6px);
+  opacity: 0.35;
+  pointer-events: none;
+  user-select: none;
+  transition:
+    filter 0.3s ease,
+    opacity 0.3s ease;
+}
+
+/* Lock banner between old (locked) and new (visible) messages */
+.historyLockBanner {
+  position: relative;
+  margin: 16px 24px;
+  padding: 2px;
+  border-radius: 12px;
+  background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+  box-shadow:
+    0 4px 24px rgba(0, 0, 0, 0.12),
+    0 1px 4px rgba(0, 0, 0, 0.08);
+}
+
+.historyLockContent {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 20px;
+  border-radius: 11px;
+  background: black;
+}
+
+.historyLockIcon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.08);
+  color: #ffffff;
+  flex-shrink: 0;
+}
+
+.historyLockText {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+  min-width: 0;
+}
+
+.historyLockTitle {
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: #ffffff;
+  letter-spacing: -0.01em;
+  font-family:
+    -apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto", sans-serif;
+}
+
+.historyLockSubtitle {
+  font-size: 0.6875rem;
+  color: rgba(255, 255, 255, 0.55);
+  line-height: 1.3;
+  font-family:
+    -apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto", sans-serif;
+}
+
+.historyLockCta {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 7px 16px;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #1a1a2e;
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-decoration: none;
+  white-space: nowrap;
+  flex-shrink: 0;
+  transition: all 0.15s ease;
+  font-family:
+    -apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto", sans-serif;
+}
+
+.historyLockCta:hover {
+  background: #f0f0f0;
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(255, 255, 255, 0.2);
+}
+
+/* Mobile adjustments */
+@media (max-width: 768px) {
+  .historyLockBanner {
+    margin: 12px 12px;
+  }
+
+  .historyLockContent {
+    padding: 12px 14px;
+    gap: 10px;
+  }
+
+  .historyLockIcon {
+    width: 34px;
+    height: 34px;
+  }
+
+  .historyLockIcon svg {
+    width: 18px;
+    height: 18px;
+  }
+
+  .historyLockTitle {
+    font-size: 0.75rem;
+  }
+
+  .historyLockSubtitle {
+    font-size: 0.625rem;
+  }
+
+  .historyLockCta {
+    padding: 6px 12px;
+    font-size: 0.6875rem;
   }
 }

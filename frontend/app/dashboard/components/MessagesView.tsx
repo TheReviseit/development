@@ -15,6 +15,7 @@ import { usePushNotification } from "@/app/hooks/usePushNotification";
 import NotificationBanner from "./NotificationBanner";
 import styles from "../dashboard.module.css";
 import msgStyles from "./MessagesView.module.css";
+import MessageHistoryLock from "./MessageHistoryLock";
 
 interface Conversation {
   id: string;
@@ -1173,6 +1174,13 @@ export default function MessagesView() {
   const [loadingOlder, setLoadingOlder] = useState(false);
   const oldestCursorRef = useRef<string | null>(null);
 
+  // Message history lock — plan-gated feature
+  const [messageHistoryDays, setMessageHistoryDays] = useState<number | null>(
+    null,
+  );
+  const [planName, setPlanName] = useState<string>("your plan");
+  const [isHistoryUnlimited, setIsHistoryUnlimited] = useState(false);
+
   // Notification hooks
   const { playSound, showNotification, permissionStatus, requestPermission } =
     useNotification();
@@ -1308,6 +1316,38 @@ export default function MessagesView() {
   useEffect(() => {
     fetchConversations();
   }, [filter, fetchConversations]);
+
+  // Fetch message_history_days limit from FeatureGateEngine
+  useEffect(() => {
+    async function fetchHistoryLimit() {
+      try {
+        const res = await fetch(
+          "/api/features/check?feature=message_history_days",
+          { cache: "no-store" },
+        );
+        if (res.ok) {
+          const data = await res.json();
+          if (data.is_unlimited) {
+            setIsHistoryUnlimited(true);
+            setMessageHistoryDays(null);
+          } else {
+            setMessageHistoryDays(data.hard_limit ?? 10);
+            setIsHistoryUnlimited(false);
+          }
+          // Derive plan name from limit
+          const limit = data.hard_limit;
+          if (data.is_unlimited) setPlanName("Pro");
+          else if (limit && limit >= 50) setPlanName("Business");
+          else setPlanName("Starter");
+        }
+      } catch (err) {
+        console.error("Failed to fetch message history limit:", err);
+        // Fail open for UX — default to 10 days (Starter)
+        setMessageHistoryDays(10);
+      }
+    }
+    fetchHistoryLimit();
+  }, []);
 
   // Fetch messages when conversation is selected
   const fetchMessages = useCallback(async (contactPhone: string) => {
@@ -1773,8 +1813,13 @@ export default function MessagesView() {
                 // - Tab A receives same message via realtime -> already exists -> skip
                 const exists = prev.some(
                   (m) =>
-                    m.messageId === formattedMsg.messageId ||
-                    m.id === formattedMsg.id,
+                    (formattedMsg.id && m.id === formattedMsg.id) ||
+                    (formattedMsg.messageId &&
+                      m.messageId === formattedMsg.messageId) ||
+                    // Fallback: content + sender dedup (for AI messages with no wamid)
+                    (m.content === formattedMsg.content &&
+                      m.timestamp === formattedMsg.timestamp &&
+                      m.sender === formattedMsg.sender),
                 );
 
                 if (exists) {
@@ -1784,6 +1829,30 @@ export default function MessagesView() {
                     formattedMsg.messageId?.slice(-8),
                   );
                   return prev;
+                }
+
+                // RACE CONDITION FIX: For outbound messages, check if there's a
+                // pending optimistic message (temp-*) with the same content.
+                // This happens when Supabase realtime INSERT fires BEFORE the API
+                // response updates the optimistic message's temp ID to the real wamid.
+                if (newMsg.direction === "outbound") {
+                  const optimisticIdx = prev.findIndex(
+                    (m) =>
+                      m.id?.startsWith("temp-") &&
+                      m.sender === "user" &&
+                      m.content === formattedMsg.content,
+                  );
+
+                  if (optimisticIdx !== -1) {
+                    // Replace the optimistic message with the real one
+                    console.log(
+                      "🔄 [Realtime] Replacing optimistic message with real data:",
+                      formattedMsg.messageId?.slice(-8),
+                    );
+                    const updated = [...prev];
+                    updated[optimisticIdx] = formattedMsg;
+                    return updated;
+                  }
                 }
 
                 // Message not in state - add it
@@ -2394,8 +2463,17 @@ export default function MessagesView() {
   );
 
   // Group messages by date - memoized to prevent recalculation on every render
+  // Compute cutoff date for message history lock
+  const historyCutoffDate = useMemo(() => {
+    if (isHistoryUnlimited || messageHistoryDays === null) return null;
+    const cutoff = new Date();
+    cutoff.setDate(cutoff.getDate() - messageHistoryDays);
+    cutoff.setHours(0, 0, 0, 0);
+    return cutoff;
+  }, [messageHistoryDays, isHistoryUnlimited]);
+
   const messageGroups = useMemo(() => {
-    const groups: { date: string; messages: Message[] }[] = [];
+    const groups: { date: string; messages: Message[]; locked: boolean }[] = [];
     let currentDate = "";
 
     for (const msg of messages) {
@@ -2404,16 +2482,25 @@ export default function MessagesView() {
         day: "numeric",
       });
 
+      // Determine if this message is beyond the history limit
+      const msgTime = new Date(msg.timestamp);
+      const isLocked =
+        historyCutoffDate !== null && msgTime < historyCutoffDate;
+
       if (msgDate !== currentDate) {
         currentDate = msgDate;
-        groups.push({ date: msgDate, messages: [msg] });
+        groups.push({ date: msgDate, messages: [msg], locked: isLocked });
       } else {
         groups[groups.length - 1].messages.push(msg);
+        // If any message in the group is unlocked, the group is unlocked
+        if (!isLocked) {
+          groups[groups.length - 1].locked = false;
+        }
       }
     }
 
     return groups;
-  }, [messages]);
+  }, [messages, historyCutoffDate]);
 
   if (loading) {
     return (
@@ -3105,23 +3192,56 @@ export default function MessagesView() {
                     No messages yet. Send a message to start the conversation.
                   </div>
                 ) : (
-                  messageGroups.map((group) => (
-                    <div key={group.date}>
-                      <DateSeparator date={group.date} styles={styles} />
-                      {group.messages.map((msg) => (
-                        <MessageBubble
-                          key={`${msg.id}-${msg.type === "image" ? !!msg.mediaUrl : ""}`}
-                          msg={msg}
-                          styles={styles}
-                          conversationId={selectedConversation.id}
-                          onImageLoad={handleImageLoad}
-                          onImageClick={(imageUrl) =>
-                            setZoomedImageUrl(imageUrl)
-                          }
+                  <>
+                    {messageGroups.map((group, groupIdx) => {
+                      // Check if this is the first unlocked group (to show lock banner)
+                      const prevGroup =
+                        groupIdx > 0 ? messageGroups[groupIdx - 1] : null;
+                      const showLockBanner = prevGroup?.locked && !group.locked;
+
+                      return (
+                        <div key={group.date}>
+                          {/* Lock banner between locked and unlocked groups */}
+                          {showLockBanner && messageHistoryDays !== null && (
+                            <MessageHistoryLock
+                              historyDays={messageHistoryDays}
+                              planName={planName}
+                            />
+                          )}
+                          <div
+                            className={
+                              group.locked
+                                ? msgStyles.lockedMessages
+                                : undefined
+                            }
+                          >
+                            <DateSeparator date={group.date} styles={styles} />
+                            {group.messages.map((msg) => (
+                              <MessageBubble
+                                key={`${msg.id}-${msg.type === "image" ? !!msg.mediaUrl : ""}`}
+                                msg={msg}
+                                styles={styles}
+                                conversationId={selectedConversation.id}
+                                onImageLoad={handleImageLoad}
+                                onImageClick={(imageUrl) =>
+                                  setZoomedImageUrl(imageUrl)
+                                }
+                              />
+                            ))}
+                          </div>
+                        </div>
+                      );
+                    })}
+                    {/* Edge case: all messages locked — show banner at the end */}
+                    {messageGroups.length > 0 &&
+                      messageGroups.every((g) => g.locked) &&
+                      messageHistoryDays !== null && (
+                        <MessageHistoryLock
+                          historyDays={messageHistoryDays}
+                          planName={planName}
                         />
-                      ))}
-                    </div>
-                  ))
+                      )}
+                  </>
                 )}
                 <div ref={messagesEndRef} />
               </div>

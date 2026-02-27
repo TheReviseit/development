@@ -258,8 +258,10 @@
 }
 
 .ctaButton:hover {
-  background: linear-gradient(135deg, #e5e7eb 0%, #d1d5db 100%);
+  background: white;
+  color: black;
   transform: translateY(-2px);
+  border-color: black;
   box-shadow: 0 6px 20px rgba(0, 0, 0, 0.1);
 }
 

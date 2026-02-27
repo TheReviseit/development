@@ -7,6 +7,7 @@ import ImageModal from "../ImageModal";
 import Dropdown, { DropdownOption } from "@/app/utils/ui/Dropdown";
 import SearchableDropdown from "../SearchableDropdown";
 import SlidePanel from "@/app/utils/ui/SlidePanel";
+import ConfirmationModal from "../ConfirmationModal";
 
 // Types
 interface ProductVariant {
@@ -1019,6 +1020,7 @@ export default function ProductCard({
     number | null
   >(null);
   const [isVariantPanelOpen, setIsVariantPanelOpen] = React.useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = React.useState(false);
 
   // Handle variant edit
   const handleEditVariant = (variant: ProductVariant, index: number) => {
@@ -1121,7 +1123,7 @@ export default function ProductCard({
           {!isEditing && (
             <button
               className={styles.removeButton}
-              onClick={() => onRemove(product.id)}
+              onClick={() => setShowDeleteConfirm(true)}
               title="Remove product"
             >
               ✕
@@ -1790,6 +1792,20 @@ export default function ProductCard({
           imageUrl={selectedImageUrl}
         />
       )}
+
+      {/* Confirmation Modal for product deletion */}
+      <ConfirmationModal
+        isOpen={showDeleteConfirm}
+        onClose={() => setShowDeleteConfirm(false)}
+        onConfirm={() => {
+          onRemove(product.id);
+          setShowDeleteConfirm(false);
+        }}
+        title="Delete Product"
+        message={`Are you sure you want to delete "${product.name}"? This action cannot be undone.`}
+        confirmText="Delete Product"
+        type="danger"
+      />
     </div>
   );
 }

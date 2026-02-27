@@ -8,6 +8,19 @@ export function ServiceWorkerRegistration() {
       return;
     }
 
+    // Only register service worker in production to avoid breaking HMR and hot-reload in development
+    if (process.env.NODE_ENV !== "production") {
+      navigator.serviceWorker.getRegistrations().then((registrations) => {
+        for (let registration of registrations) {
+          registration.unregister();
+          console.log(
+            "🛠️ Dev Mode: Unregistered existing service worker to fix caching issues.",
+          );
+        }
+      });
+      return;
+    }
+
     // Register service worker
     const registerSW = async () => {
       try {

@@ -8,8 +8,8 @@
   left: 0;
   right: 0;
   z-index: 9999;
-  background: var(--header-bg);
-  border-bottom: 1px solid var(--header-border);
+  background: var(--header-bg, #ffffff);
+  border-bottom: 1px solid var(--header-border, #e5e7eb);
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
@@ -133,7 +133,7 @@
   cursor: pointer;
   background: var(--card-bg);
   color: var(--text-gray-700);
-  border: 1px solid var(--gray-300);
+  border: 1px solid black;
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
@@ -154,9 +154,9 @@
   font-weight: 600;
   text-decoration: none;
   cursor: pointer;
-  background: var(--primary-color);
-  color: var(--card-bg);
-  border: 1px solid var(--primary-color);
+  background: black;
+  color: white;
+  border: 1px solid black;
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 

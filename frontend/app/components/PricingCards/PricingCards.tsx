@@ -240,7 +240,7 @@ export default function PricingCards({
           <div className={styles.price}>
             <span className={styles.currency}>₹</span>
             <span className={styles.amount}>
-              {plan.price.toLocaleString("en-IN")}
+              {(plan.price / 100).toLocaleString("en-IN")}
             </span>
             <span className={styles.period}>/mo</span>
           </div>

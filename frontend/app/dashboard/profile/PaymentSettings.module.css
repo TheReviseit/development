@@ -12,19 +12,19 @@
   display: flex;
   align-items: flex-start;
   gap: 16px;
-  padding: 24px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  padding: 32px 24px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
 }
 
 .headerIcon {
   width: 48px;
   height: 48px;
   border-radius: 12px;
-  background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%);
+  background: white;
   display: flex;
   align-items: center;
   justify-content: center;
-  color: white;
+  color: black;
   flex-shrink: 0;
 }
 
@@ -59,10 +59,16 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 16px 20px;
-  background: #1a1a1a;
+  padding: 20px 24px;
+  background: rgba(255, 255, 255, 0.02);
   border-radius: 12px;
-  border: 1px solid rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  transition: all 0.2s ease;
+}
+
+.toggleRow:hover {
+  background: rgba(255, 255, 255, 0.04);
+  border-color: rgba(255, 255, 255, 0.12);
 }
 
 .toggleInfo {
@@ -146,7 +152,7 @@
 
 .helpLink {
   font-size: 13px;
-  color: #3b82f6;
+  color: #ffffff;
   text-decoration: none;
   font-weight: 500;
   transition: color 0.2s;
@@ -171,14 +177,14 @@
 
 .input {
   width: 100%;
-  padding: 12px 16px;
+  padding: 14px 16px;
   font-size: 14px;
   border: 1px solid rgba(255, 255, 255, 0.12);
   border-radius: 10px;
-  background: #1a1a1a;
+  background: rgba(255, 255, 255, 0.02);
   color: #fff;
-  transition: all 0.2s;
-  font-family: "Monaco", "Menlo", "Ubuntu Mono", monospace;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  font-family: inherit;
 }
 
 .input:focus {
@@ -225,35 +231,62 @@
   color: #666;
 }
 
-/* Info Box */
-.infoBox {
+/* How It Works Collapsible */
+.howItWorksToggle {
   display: flex;
-  gap: 12px;
-  padding: 16px;
-  background: rgba(59, 130, 246, 0.1);
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: 16px 20px;
+  background: rgba(59, 130, 246, 0.06);
+  border: 1px solid rgba(59, 130, 246, 0.15);
   border-radius: 12px;
-  border: 1px solid rgba(59, 130, 246, 0.2);
-}
-
-.infoBox svg {
-  flex-shrink: 0;
   color: #60a5fa;
-  margin-top: 2px;
-}
-
-.infoBox strong {
-  display: block;
   font-size: 14px;
   font-weight: 600;
-  color: #60a5fa;
-  margin-bottom: 4px;
+  cursor: pointer;
+  transition: all 0.2s ease;
 }
 
-.infoBox p {
-  font-size: 13px;
-  color: #93c5fd;
+.howItWorksToggle:hover {
+  background: rgba(59, 130, 246, 0.1);
+  border-color: rgba(59, 130, 246, 0.3);
+}
+
+.howItWorksContent {
+  margin-top: -8px;
+  padding: 24px;
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-top: none;
+  border-radius: 0 0 12px 12px;
+  animation: slideDown 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+@keyframes slideDown {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.howItWorksText {
+  font-size: 14px;
+  color: #b0b0b0;
+  line-height: 1.6;
   margin: 0;
-  line-height: 1.5;
+}
+
+.chevron {
+  transition: transform 0.3s ease;
+}
+
+.chevronActive {
+  transform: rotate(180deg);
 }
 
 /* Card Footer */
@@ -288,21 +321,34 @@
 }
 
 /* Responsive */
-@media (max-width: 640px) {
+@media (max-width: 768px) {
   .cardHeader {
-    flex-direction: column;
-    text-align: center;
+    flex-direction: row;
+    align-items: flex-start;
+    text-align: left;
+    gap: 12px;
+  }
+
+  .headerIcon {
+    width: 40px;
+    height: 40px;
   }
 
   .toggleRow {
-    flex-direction: column;
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
     gap: 12px;
-    text-align: center;
+    text-align: left;
   }
 
   .sectionHeader {
-    flex-direction: column;
-    gap: 8px;
-    align-items: flex-start;
+    display: flex !important;
+    flex-direction: row !important;
+    flex-wrap: nowrap !important;
+    align-items: center !important;
+    justify-content: space-between !important;
+    width: 100% !important;
+    margin-bottom: 12px;
   }
 }

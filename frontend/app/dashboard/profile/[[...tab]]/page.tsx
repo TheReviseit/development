@@ -3,9 +3,10 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useAuth } from "@/app/components/auth/AuthProvider";
 import Toast from "@/app/components/Toast/Toast";
-import PaymentSettings from "./PaymentSettings";
-import InvoiceSettings from "./InvoiceSettings";
-import styles from "./profile.module.css";
+import PaymentSettings from "../PaymentSettings";
+import InvoiceSettings from "../InvoiceSettings";
+import styles from "../profile.module.css";
+import { useRouter, useParams } from "next/navigation";
 
 interface BusinessProfile {
   businessName: string;
@@ -26,9 +27,20 @@ export default function ProfilePage() {
     logoUrl: "",
     logoPublicId: "",
   });
-  const [activeTab, setActiveTab] = useState<"profile" | "payment" | "invoice">(
-    "profile",
-  );
+  const router = useRouter();
+  const params = useParams();
+  const tabParam = params?.tab?.[0] || "store-profile";
+
+  let activeTab: "profile" | "payment" | "invoice" = "profile";
+  if (tabParam === "payment-gateway") activeTab = "payment";
+  if (tabParam === "invoice") activeTab = "invoice";
+
+  const handleTabClick = (tabId: "profile" | "payment" | "invoice") => {
+    let slug = "store-profile";
+    if (tabId === "payment") slug = "payment-gateway";
+    if (tabId === "invoice") slug = "invoice";
+    router.push(`/dashboard/profile/${slug}`);
+  };
   const [paymentData, setPaymentData] = useState({
     razorpayKeyId: "",
     razorpayKeySecret: "",
@@ -50,6 +62,7 @@ export default function ProfilePage() {
   const [showSlugWarning, setShowSlugWarning] = useState(false);
   const [slugAvailable, setSlugAvailable] = useState<boolean | null>(null);
   const [suggestedSlug, setSuggestedSlug] = useState("");
+  const [copySuccess, setCopySuccess] = useState(false);
 
   // ✅ Feature gate: custom_domain (slug editing)
   const [canEditSlug, setCanEditSlug] = useState<boolean | null>(null); // null = loading
@@ -138,6 +151,18 @@ export default function ProfilePage() {
       .replace(/^-+|-+$/g, "")
       .substring(0, 50);
   }, []);
+
+  // ✅ Copy URL to clipboard
+  const handleCopyUrl = async () => {
+    const url = `${window.location.origin}/store/${urlSlug || generateSlug(profile.businessName) || "your-store-name"}`;
+    try {
+      await navigator.clipboard.writeText(url);
+      setCopySuccess(true);
+      setTimeout(() => setCopySuccess(false), 2000);
+    } catch (err) {
+      console.error("Failed to copy!", err);
+    }
+  };
 
   // ✅ Debounced slug availability check
   const checkSlugDebounceRef = useRef<NodeJS.Timeout | null>(null);
@@ -445,24 +470,7 @@ export default function ProfilePage() {
             Manage your store profile and payment settings
           </p>
         </div>
-        <a
-          href="/upgrade?domain=shop"
-          className={styles.upgradeButton}
-          style={{
-            display: "inline-flex",
-            alignItems: "center",
-            padding: "10px 20px",
-            backgroundColor: "#000",
-            color: "#fff",
-            fontWeight: "600",
-            borderRadius: "6px",
-            textDecoration: "none",
-            transition: "background-color 0.2s",
-            whiteSpace: "nowrap",
-          }}
-          onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = "#333")}
-          onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = "#000")}
-        >
+        <a href="/upgrade?domain=shop" className={styles.upgradeButton}>
           <svg
             style={{ width: "20px", height: "20px", marginRight: "8px" }}
             fill="none"
@@ -484,19 +492,19 @@ export default function ProfilePage() {
       <div className={styles.tabsContainer}>
         <button
           className={`${styles.tab} ${activeTab === "profile" ? styles.activeTab : ""}`}
-          onClick={() => setActiveTab("profile")}
+          onClick={() => handleTabClick("profile")}
         >
           Store Profile
         </button>
         <button
           className={`${styles.tab} ${activeTab === "payment" ? styles.activeTab : ""}`}
-          onClick={() => setActiveTab("payment")}
+          onClick={() => handleTabClick("payment")}
         >
           Payment Gateway
         </button>
         <button
           className={`${styles.tab} ${activeTab === "invoice" ? styles.activeTab : ""}`}
-          onClick={() => setActiveTab("invoice")}
+          onClick={() => handleTabClick("invoice")}
         >
           Invoice
         </button>
@@ -594,32 +602,61 @@ export default function ProfilePage() {
               {/* ✅ Live Slug Preview */}
               {profile.businessName && (
                 <div className={styles.slugPreview}>
-                  <span className={styles.slugIcon}>🔗</span>
+                  {/* <span className={styles.slugIcon}>🔗</span> */}
                   <span className={styles.slugLabel}>Your store URL: </span>
                   <code className={styles.slugUrl}>
                     {typeof window !== "undefined" &&
                       `${window.location.origin}/store/${urlSlug || generateSlug(profile.businessName) || "your-store-name"}`}
                   </code>
 
-                  {/* Feature gate: show upgrade badge for starter users */}
-                  {canEditSlug === false && (
-                    <span
-                      style={{
-                        display: "inline-flex",
-                        alignItems: "center",
-                        gap: "4px",
-                        marginLeft: "8px",
-                        padding: "2px 8px",
-                        fontSize: "11px",
-                        fontWeight: 600,
-                        background: "linear-gradient(135deg, #f59e0b, #d97706)",
-                        color: "#fff",
-                        borderRadius: "4px",
-                      }}
-                    >
-                      ⭐ PRO
-                    </span>
-                  )}
+                  {/* Copy Button */}
+                  <button
+                    onClick={handleCopyUrl}
+                    className={`${styles.copyButton} ${copySuccess ? styles.copyButtonSuccess : ""}`}
+                    type="button"
+                  >
+                    {copySuccess ? (
+                      <>
+                        <svg
+                          width="14"
+                          height="14"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="2"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                        >
+                          <polyline points="20 6 9 17 4 12" />
+                        </svg>
+                        <span>Copied!</span>
+                      </>
+                    ) : (
+                      <>
+                        <svg
+                          width="14"
+                          height="14"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="2"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                        >
+                          <rect
+                            x="9"
+                            y="9"
+                            width="13"
+                            height="13"
+                            rx="2"
+                            ry="2"
+                          />
+                          <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+                        </svg>
+                        <span>Copy URL</span>
+                      </>
+                    )}
+                  </button>
 
                   {/* Availability indicator — only for users who CAN edit slug */}
                   {canEditSlug &&

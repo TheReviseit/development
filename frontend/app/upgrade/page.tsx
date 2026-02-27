@@ -10,38 +10,45 @@
  * Quality: Production-ready, Vercel/Stripe quality
  */
 
-import { Metadata } from 'next';
-import { headers } from 'next/headers';
-import UpgradeContainer from './components/UpgradeContainer';
+import { Metadata } from "next";
+import { headers } from "next/headers";
+import Image from "next/image";
+import Link from "next/link";
+import UpgradeContainer from "./components/UpgradeContainer";
+import ShopFooter from "../shop/components/ShopFooter";
+import logo from "@/public/logo.png";
 
 // Domain-specific metadata
 const DOMAIN_TITLES: Record<string, string> = {
-  shop: 'Upgrade Your Shop Plan',
-  marketing: 'Upgrade Your Marketing Plan',
-  api: 'Upgrade Your API Plan',
-  dashboard: 'Upgrade Your Dashboard Plan',
-  showcase: 'Upgrade Your Showcase Plan',
+  shop: "Upgrade Your Shop Plan",
+  marketing: "Upgrade Your Marketing Plan",
+  api: "Upgrade Your API Plan",
+  dashboard: "Upgrade Your Dashboard Plan",
+  showcase: "Upgrade Your Showcase Plan",
 };
 
 const DOMAIN_DESCRIPTIONS: Record<string, string> = {
-  shop: 'Unlock more products, orders, and advanced e-commerce features for your online store',
-  marketing: 'Scale your campaigns with higher limits and advanced automation tools',
-  api: 'Increase API rate limits and access premium developer features',
-  dashboard: 'Unlock premium analytics and advanced dashboard capabilities',
-  showcase: 'Expand your portfolio with more projects and premium templates',
+  shop: "Unlock more products, orders, and advanced e-commerce features for your online store",
+  marketing:
+    "Scale your campaigns with higher limits and advanced automation tools",
+  api: "Increase API rate limits and access premium developer features",
+  dashboard: "Unlock premium analytics and advanced dashboard capabilities",
+  showcase: "Expand your portfolio with more projects and premium templates",
 };
 
 export async function generateMetadata(): Promise<Metadata> {
   const headersList = await headers();
-  const domain = headersList.get('x-product-domain') || 'dashboard';
+  const domain = headersList.get("x-product-domain") || "dashboard";
 
   return {
-    title: DOMAIN_TITLES[domain] || 'Upgrade Your Plan - Flowauxi',
-    description: DOMAIN_DESCRIPTIONS[domain] || 'Unlock more features and higher limits with a premium plan',
+    title: DOMAIN_TITLES[domain] || "Upgrade Your Plan - Flowauxi",
+    description:
+      DOMAIN_DESCRIPTIONS[domain] ||
+      "Unlock more features and higher limits with a premium plan",
     openGraph: {
-      title: DOMAIN_TITLES[domain] || 'Upgrade Your Plan',
+      title: DOMAIN_TITLES[domain] || "Upgrade Your Plan",
       description: DOMAIN_DESCRIPTIONS[domain],
-      type: 'website',
+      type: "website",
     },
   };
 }
@@ -52,7 +59,7 @@ export default async function UpgradePage({
   searchParams: Promise<{ domain?: string; recommended?: string }>;
 }) {
   const headersList = await headers();
-  const detectedDomain = headersList.get('x-product-domain') || 'dashboard';
+  const detectedDomain = headersList.get("x-product-domain") || "dashboard";
 
   // Await searchParams (Next.js 15 requirement)
   const params = await searchParams;
@@ -62,25 +69,59 @@ export default async function UpgradePage({
   const recommendedPlan = params.recommended;
 
   return (
-    <div className="min-h-screen bg-white">
-      {/* Main Container */}
-      <div className="mx-auto max-w-7xl px-4 py-12 sm:px-6 lg:px-8">
-        {/* Header Section */}
-        <div className="text-center mb-12">
-          <h1 className="text-4xl font-bold tracking-tight text-black sm:text-5xl md:text-6xl">
+    <div className="min-h-screen bg-white flex flex-col">
+      {/* Navbar */}
+      <nav className="sticky top-0 z-40 w-full bg-white border-b border-gray-200">
+        <div className="max-w-6xl mx-auto px-6 flex items-center justify-between h-16">
+          <Link href="/" className="flex items-center gap-2.5">
+            <Image src={logo} alt="Flowauxi" width={28} height={28} />
+            <span className="text-base font-bold text-gray-900">Flowauxi</span>
+          </Link>
+          <Link
+            href="/dashboard"
+            className="inline-flex items-center gap-1.5 px-4 py-2 text-sm font-medium text-white bg-gray-900 rounded-lg hover:bg-gray-800 transition-colors duration-150"
+          >
+            <svg
+              className="w-4 h-4"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+              strokeWidth={2}
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                d="M10 19l-7-7m0 0l7-7m-7 7h18"
+              />
+            </svg>
+            Back to Dashboard
+          </Link>
+        </div>
+      </nav>
+
+      {/* Header Section */}
+      <div className="w-full pt-10 pb-8">
+        <div className="max-w-4xl mx-auto px-6 text-center">
+          <h1 className="text-3xl font-bold tracking-tight text-gray-900 sm:text-4xl">
             Choose Your Plan
           </h1>
-          <p className="mt-4 text-lg text-gray-600 max-w-2xl mx-auto">
-            {DOMAIN_DESCRIPTIONS[domain] || 'Select the perfect plan for your needs'}
+          <p className="mt-3 text-base text-gray-500 max-w-lg mx-auto">
+            {DOMAIN_DESCRIPTIONS[domain] ||
+              "Select the perfect plan for your needs"}
           </p>
         </div>
+      </div>
 
-        {/* Upgrade Container (Client Component) */}
+      {/* Main Content */}
+      <div className="flex-1 w-full max-w-6xl mx-auto px-6 py-8">
         <UpgradeContainer
           initialDomain={domain}
           recommendedPlan={recommendedPlan}
         />
       </div>
+
+      {/* Footer — Dark variant */}
+      <ShopFooter dark />
     </div>
   );
 }

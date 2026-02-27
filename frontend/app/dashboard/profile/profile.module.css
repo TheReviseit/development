@@ -37,6 +37,25 @@
   margin: 0;
 }
 
+.upgradeButton {
+  display: inline-flex;
+  align-items: center;
+  padding: 10px 20px;
+  background-color: #ffffff;
+  color: #000000;
+  font-weight: 600;
+  border-radius: 8px;
+  text-decoration: none;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+.upgradeButton:hover {
+  background-color: #f0f0f0;
+  transform: translateY(-1px);
+}
+
 /* Tabs */
 .tabsContainer {
   display: flex;
@@ -355,6 +374,39 @@
   color: #fbbf24;
 }
 
+.copyButton {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
+  padding: 6px 12px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 6px;
+  color: #ccc;
+  font-size: 0.75rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  user-select: none;
+}
+
+.copyButton:hover {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.2);
+  color: #fff;
+}
+
+.copyButton:active {
+  transform: translateY(1px);
+}
+
+.copyButtonSuccess {
+  background: rgba(16, 185, 129, 0.1) !important;
+  border-color: rgba(16, 185, 129, 0.3) !important;
+  color: #10b981 !important;
+}
+
 /* ============================================
    Warning Modal Styles
    ============================================ */
@@ -553,7 +605,37 @@
   transform: translateY(-1px);
 }
 
-@media (max-width: 640px) {
+@media (max-width: 768px) {
+  .header {
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    margin-bottom: 2rem;
+    gap: 1.5rem;
+    display: flex !important; /* Ensure header container is visible */
+  }
+
+  .logoUpload {
+    width: 140px;
+    height: 140px;
+  }
+
+  /* Hide redundant titles on mobile as they are in the header */
+  .title,
+  .subtitle {
+    display: none !important;
+  }
+
+  .upgradeButton {
+    width: 100%;
+    justify-content: center;
+    background-color: #ffffff !important;
+    color: #000000 !important;
+    padding: 12px 24px;
+    font-size: 0.95rem;
+    order: -1; /* Move to top of content */
+  }
+
   .urlComparison {
     padding: 1rem;
   }

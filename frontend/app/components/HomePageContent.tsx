@@ -14,9 +14,6 @@ const WhatsAppFeatures = dynamic(
 const OTPAPISection = dynamic(() => import("./OTPAPISection"), { ssr: false });
 
 // Lazy load below-fold components for better performance
-const PricingCards = dynamic(() => import("./PricingCards/PricingCards"), {
-  ssr: false,
-});
 const Testimonials = dynamic(() => import("./Testimonials"), { ssr: false });
 const ContactSection = dynamic(
   () => import("./ContactSection/ContactSection"),
@@ -59,7 +56,7 @@ export default function HomePageContent() {
       <Header />
 
       {/* Hero Section */}
-      <div className="pt-16 md:pt-20">
+      <div>
         <HeroSection />
       </div>
 
@@ -69,8 +66,8 @@ export default function HomePageContent() {
       {/* WhatsApp Features Section */}
       <WhatsAppFeatures />
 
-      {/* OTP API Section - NEW */}
-      <OTPAPISection />
+      {/* OTP API Section - HIDDEN */}
+      {/* <OTPAPISection /> */}
 
       {/* Trigger point for below-fold content */}
       <div ref={triggerRef} />
@@ -78,7 +75,6 @@ export default function HomePageContent() {
       {/* Lazy-loaded below-fold sections - only render when needed */}
       {showBelowFold && (
         <>
-          <PricingCards />
           <Testimonials />
           <ContactSection />
           <Footer />

@@ -135,7 +135,7 @@ export default function ContactSection() {
 
   return (
     <section id="contact" className="contact-section">
-      <div className="container">
+      <div className="container mx-auto px-4 max-w-7xl">
         {/* Section Header */}
         <div className="contact-header">
           <h2 className="contact-main-title">Get in Touch</h2>

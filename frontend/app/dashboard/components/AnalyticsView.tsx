@@ -123,7 +123,7 @@ export default function AnalyticsView() {
     process.env.NEXT_PUBLIC_DEV_USER_ID ||
     "7944b72f-2bc1-4cc1-9714-215c2e177b51";
 
-  // Feature gate: advanced_analytics (revenue chart) — hidden for Basic plan
+  // Feature gate: advanced_analytics — hidden for Starter plan
   const { subscription, isLoading: subLoading } = useSubscription(userId);
   const canAccessAnalytics =
     !subLoading && !!subscription && subscription.plan_name !== "starter";
@@ -144,8 +144,10 @@ export default function AnalyticsView() {
   }, [userId, period]);
 
   useEffect(() => {
-    loadAnalytics();
-  }, [loadAnalytics]);
+    if (canAccessAnalytics) {
+      loadAnalytics();
+    }
+  }, [loadAnalytics, canAccessAnalytics]);
 
   // Format large numbers
   const formatNumber = (num: number): string => {
@@ -181,14 +183,6 @@ export default function AnalyticsView() {
           icon: <ReadIcon />,
           color: "#a78bfa",
         },
-        // {
-        //   id: "ai",
-        //   label: "AI Replies",
-        //   value: formatNumber(analytics.ai.replies_generated),
-        //   subtitle: `${formatNumber(analytics.ai.tokens_used)} tokens used`,
-        //   icon: <AIIcon />,
-        //   color: "#f472b6",
-        // },
         {
           id: "conversations",
           label: "Active Conversations",
@@ -209,6 +203,293 @@ export default function AnalyticsView() {
     }) || [];
   const maxValue = Math.max(...chartData, 1);
 
+  // ─── STARTER PLAN: Full-page upgrade gate ───────────────────────────
+  if (!subLoading && !canAccessAnalytics) {
+    return (
+      <div className={styles.analyticsView}>
+        {/* Header */}
+        <div className={styles.viewHeader}>
+          <div>
+            <h1 className={styles.viewTitle}>WhatsApp Analytics</h1>
+            <p className={styles.viewSubtitle}>
+              Monitor your messaging performance and engagement
+            </p>
+          </div>
+        </div>
+
+        {/* Professional Upgrade Card */}
+        <div
+          style={{
+            maxWidth: "480px",
+            margin: "48px auto",
+            background: "#0f0f0f",
+            borderRadius: "16px",
+            padding: "40px 36px",
+            textAlign: "center",
+            border: "1px solid rgba(255,255,255,0.08)",
+          }}
+        >
+          {/* Lock Icon */}
+          <div
+            style={{
+              width: "56px",
+              height: "56px",
+              borderRadius: "14px",
+              background: "rgba(255,255,255,0.04)",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              margin: "0 auto 20px",
+              border: "1px solid rgba(255,255,255,0.06)",
+            }}
+          >
+            <svg
+              width="24"
+              height="24"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="#b0b0b0"
+              strokeWidth="1.5"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+              <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+            </svg>
+          </div>
+
+          {/* Title */}
+          <h2
+            style={{
+              color: "#ffffff",
+              fontSize: "20px",
+              fontWeight: 600,
+              margin: "0 0 6px 0",
+              letterSpacing: "-0.01em",
+              fontFamily:
+                "-apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif",
+            }}
+          >
+            Analytics is a Business feature
+          </h2>
+          <p
+            style={{
+              color: "#808080",
+              fontSize: "13px",
+              margin: "0 0 28px 0",
+              lineHeight: 1.5,
+              fontFamily:
+                "-apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif",
+            }}
+          >
+            Upgrade to unlock detailed insights about your messaging
+            performance.
+          </p>
+
+          {/* Feature highlights with SVG icons */}
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "1fr 1fr",
+              gap: "10px",
+              marginBottom: "28px",
+              textAlign: "left",
+            }}
+          >
+            {/* Message Activity */}
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: "10px",
+                padding: "10px 14px",
+                background: "rgba(255,255,255,0.03)",
+                borderRadius: "10px",
+                border: "1px solid rgba(255,255,255,0.06)",
+              }}
+            >
+              <svg
+                width="16"
+                height="16"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="#4ade80"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <polyline points="22 12 18 12 15 21 9 3 6 12 2 12" />
+              </svg>
+              <span
+                style={{
+                  color: "#b0b0b0",
+                  fontSize: "12.5px",
+                  fontWeight: 500,
+                  fontFamily:
+                    "-apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif",
+                }}
+              >
+                Message Activity
+              </span>
+            </div>
+
+            {/* Revenue Analytics */}
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: "10px",
+                padding: "10px 14px",
+                background: "rgba(255,255,255,0.03)",
+                borderRadius: "10px",
+                border: "1px solid rgba(255,255,255,0.06)",
+              }}
+            >
+              <svg
+                width="16"
+                height="16"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="#60a5fa"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <line x1="12" y1="1" x2="12" y2="23" />
+                <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
+              </svg>
+              <span
+                style={{
+                  color: "#b0b0b0",
+                  fontSize: "12.5px",
+                  fontWeight: 500,
+                  fontFamily:
+                    "-apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif",
+                }}
+              >
+                Revenue Analytics
+              </span>
+            </div>
+
+            {/* Performance Reports */}
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: "10px",
+                padding: "10px 14px",
+                background: "rgba(255,255,255,0.03)",
+                borderRadius: "10px",
+                border: "1px solid rgba(255,255,255,0.06)",
+              }}
+            >
+              <svg
+                width="16"
+                height="16"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="#a78bfa"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <line x1="18" y1="20" x2="18" y2="10" />
+                <line x1="12" y1="20" x2="12" y2="4" />
+                <line x1="6" y1="20" x2="6" y2="14" />
+              </svg>
+              <span
+                style={{
+                  color: "#b0b0b0",
+                  fontSize: "12.5px",
+                  fontWeight: 500,
+                  fontFamily:
+                    "-apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif",
+                }}
+              >
+                Performance Reports
+              </span>
+            </div>
+
+            {/* Custom Date Ranges */}
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: "10px",
+                padding: "10px 14px",
+                background: "rgba(255,255,255,0.03)",
+                borderRadius: "10px",
+                border: "1px solid rgba(255,255,255,0.06)",
+              }}
+            >
+              <svg
+                width="16"
+                height="16"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="#fbbf24"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
+                <line x1="16" y1="2" x2="16" y2="6" />
+                <line x1="8" y1="2" x2="8" y2="6" />
+                <line x1="3" y1="10" x2="21" y2="10" />
+              </svg>
+              <span
+                style={{
+                  color: "#b0b0b0",
+                  fontSize: "12.5px",
+                  fontWeight: 500,
+                  fontFamily:
+                    "-apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif",
+                }}
+              >
+                Custom Date Ranges
+              </span>
+            </div>
+          </div>
+
+          {/* CTA */}
+          <a
+            href="/upgrade?domain=shop"
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: "8px",
+              padding: "10px 28px",
+              background: "#ffffff",
+              color: "#000000",
+              fontSize: "13px",
+              fontWeight: 600,
+              borderRadius: "8px",
+              textDecoration: "none",
+              transition: "all 0.2s ease",
+              fontFamily:
+                "-apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif",
+            }}
+          >
+            <svg
+              width="14"
+              height="14"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <path d="M12 19V5M5 12l7-7 7 7" />
+            </svg>
+            Upgrade to Business
+          </a>
+        </div>
+      </div>
+    );
+  }
+
+  // ─── BUSINESS/PRO PLAN: Full analytics view ─────────────────────────
   return (
     <div className={styles.analyticsView}>
       {/* Header */}
@@ -316,60 +597,8 @@ export default function AnalyticsView() {
             ))}
           </div>
 
-          {/* Revenue Analytics Chart (Shop domain) — gated for Business+ */}
-          {canAccessAnalytics ? (
-            <RevenueAnalyticsChart />
-          ) : !subLoading ? (
-            <div
-              style={{
-                background: "#0a0a0a",
-                borderRadius: "16px",
-                padding: "32px 24px",
-                marginBottom: "24px",
-                textAlign: "center",
-                border: "1px solid #1a1a1a",
-              }}
-            >
-              <div style={{ fontSize: "36px", marginBottom: "12px" }}>📊</div>
-              <h3
-                style={{
-                  color: "#ffffff",
-                  fontSize: "16px",
-                  fontWeight: 600,
-                  margin: "0 0 8px 0",
-                }}
-              >
-                Revenue Analytics
-              </h3>
-              <p
-                style={{
-                  color: "#6b7280",
-                  fontSize: "13px",
-                  margin: "0 0 16px 0",
-                }}
-              >
-                Track revenue trends, order volume, and growth insights.
-              </p>
-              <a
-                href="/upgrade?domain=shop"
-                style={{
-                  display: "inline-flex",
-                  alignItems: "center",
-                  gap: "6px",
-                  padding: "8px 20px",
-                  background: "linear-gradient(135deg, #f59e0b, #d97706)",
-                  color: "#fff",
-                  fontSize: "13px",
-                  fontWeight: 600,
-                  borderRadius: "8px",
-                  textDecoration: "none",
-                  transition: "opacity 0.2s",
-                }}
-              >
-                ⭐ Upgrade to Business Plan
-              </a>
-            </div>
-          ) : null}
+          {/* Revenue Analytics Chart (Shop domain) */}
+          <RevenueAnalyticsChart />
 
           {/* Trends Chart - Redesigned */}
           {chartData.length > 0 &&
@@ -628,29 +857,6 @@ export default function AnalyticsView() {
                 </div>
               );
             })()}
-
-          {/* Empty trends state - commented out
-          {chartData.length === 0 && (
-            <div
-              style={{
-                background: "#0a0a0a",
-                borderRadius: "16px",
-                padding: "48px",
-                textAlign: "center",
-                color: "#6b7280",
-              }}
-            >
-              <div style={{ fontSize: "32px", marginBottom: "12px" }}>📈</div>
-              <h3 style={{ marginBottom: "8px", color: "#fff" }}>
-                No trend data yet
-              </h3>
-              <p>
-                Message activity will appear here as you send and receive
-                messages.
-              </p>
-            </div>
-          )}
-          */}
         </>
       )}
 

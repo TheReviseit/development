@@ -2,26 +2,31 @@ import { headers } from "next/headers";
 import ShopNavbar from "../shop/components/ShopNavbar";
 import ShopPricingSection from "../shop/components/ShopPricingSection";
 import ShopFooter from "../shop/components/ShopFooter";
+import Header from "../components/Header/Header";
+import Footer from "../components/Footer/Footer";
+import PricingCards from "../components/PricingCards/PricingCards";
+import type { ProductDomain } from "../../lib/domain/config";
 
 /**
  * Root Pricing Page
  * Detects domain/port and renders the appropriate pricing content
  */
-async function getProductFromRequest() {
+async function getProductFromRequest(): Promise<ProductDomain> {
   const headersList = await headers();
   const host = headersList.get("host") || "";
 
   // Check port in development
   if (host.includes("localhost") || host.includes("127.0.0.1")) {
     if (host.includes(":3001")) return "shop";
-    if (host.includes(":3002")) return "showcase"; // FIXED: was "marketing"
-    if (host.includes(":3003")) return "marketing"; // FIXED: was "showcase"
+    if (host.includes(":3002")) return "showcase";
+    if (host.includes(":3003")) return "marketing";
   }
 
   // Check subdomain in production
   if (host.startsWith("shop.")) return "shop";
   if (host.startsWith("marketing.")) return "marketing";
   if (host.startsWith("showcase.")) return "showcase";
+  if (host.startsWith("api.")) return "api";
 
   // Default: dashboard
   return "dashboard";
@@ -30,7 +35,7 @@ async function getProductFromRequest() {
 export default async function PricingPage() {
   const product = await getProductFromRequest();
 
-  // Render product-specific pricing
+  // Render product-specific pricing for Shop
   if (product === "shop") {
     return (
       <>
@@ -43,17 +48,16 @@ export default async function PricingPage() {
     );
   }
 
-  // Fallback for other domains
+  // Common Layout for other domains (Dashboard, Marketing, Showcase, API)
   return (
-    <div
-      style={{
-        padding: "100px 24px",
-        textAlign: "center",
-        fontFamily: "sans-serif",
-      }}
-    >
-      <h1>Pricing</h1>
-      <p>Pricing information for {product} is coming soon.</p>
-    </div>
+    <>
+      <Header />
+      <main className="pt-20">
+        {" "}
+        {/* Add padding for the fixed header */}
+        <PricingCards domain={product} />
+      </main>
+      <Footer />
+    </>
   );
 }

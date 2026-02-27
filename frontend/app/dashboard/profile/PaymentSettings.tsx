@@ -31,6 +31,7 @@ export default function PaymentSettings({
   );
   const [saving, setSaving] = useState(false);
   const [showSecret, setShowSecret] = useState(false);
+  const [showHowItWorks, setShowHowItWorks] = useState(false);
 
   // Update local state if initialData changes
   useEffect(() => {
@@ -89,9 +90,11 @@ export default function PaymentSettings({
             fill="none"
             stroke="currentColor"
             strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
           >
-            <rect x="1" y="4" width="22" height="16" rx="2" ry="2" />
-            <line x1="1" y1="10" x2="23" y2="10" />
+            <rect x="2" y="5" width="20" height="14" rx="2" />
+            <line x1="2" y1="10" x2="22" y2="10" />
           </svg>
         </div>
         <div>
@@ -122,103 +125,137 @@ export default function PaymentSettings({
           </label>
         </div>
 
-        {/* API Keys Section */}
-        <div className={styles.keysSection}>
-          <div className={styles.sectionHeader}>
-            <h3 className={styles.sectionTitle}>Razorpay API Keys</h3>
-            <a
-              href="https://dashboard.razorpay.com/app/website-app-settings/api-keys"
-              target="_blank"
-              rel="noopener noreferrer"
-              className={styles.helpLink}
-            >
-              Get your keys →
-            </a>
-          </div>
-
-          <div className={styles.inputGroup}>
-            <label className={styles.label}>Key ID</label>
-            <input
-              type="text"
-              className={styles.input}
-              value={razorpayKeyId}
-              onChange={(e) => setRazorpayKeyId(e.target.value)}
-              placeholder="rzp_live_xxxxxxxxxxxxxxxx"
-            />
-            <span className={styles.inputHint}>
-              Starts with rzp_live_ for production or rzp_test_ for testing
-            </span>
-          </div>
-
-          <div className={styles.inputGroup}>
-            <label className={styles.label}>Key Secret</label>
-            <div className={styles.secretInputWrapper}>
-              <input
-                type={showSecret ? "text" : "password"}
-                className={styles.input}
-                value={razorpayKeySecret}
-                onChange={(e) => setRazorpayKeySecret(e.target.value)}
-                placeholder="Your secret key"
-              />
-              <button
-                type="button"
-                className={styles.toggleSecretBtn}
-                onClick={() => setShowSecret(!showSecret)}
+        {/* API Keys Section - Only show when enabled */}
+        {paymentsEnabled && (
+          <div className={styles.keysSection}>
+            <div className={styles.sectionHeader}>
+              <h3 className={styles.sectionTitle}>Razorpay API Keys</h3>
+              <a
+                href="https://dashboard.razorpay.com/app/website-app-settings/api-keys"
+                target="_blank"
+                rel="noopener noreferrer"
+                className={styles.helpLink}
               >
-                {showSecret ? (
-                  <svg
-                    width="20"
-                    height="20"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                  >
-                    <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24" />
-                    <line x1="1" y1="1" x2="23" y2="23" />
-                  </svg>
-                ) : (
-                  <svg
-                    width="20"
-                    height="20"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                  >
-                    <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
-                    <circle cx="12" cy="12" r="3" />
-                  </svg>
-                )}
-              </button>
+                Get your keys →
+              </a>
             </div>
-            <span className={styles.inputHint}>
-              Keep this secret safe. Never share it publicly.
-            </span>
-          </div>
-        </div>
 
-        {/* Info Box */}
-        <div className={styles.infoBox}>
-          <svg
-            width="20"
-            height="20"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-          >
-            <circle cx="12" cy="12" r="10" />
-            <line x1="12" y1="16" x2="12" y2="12" />
-            <line x1="12" y1="8" x2="12.01" y2="8" />
-          </svg>
-          <div>
-            <strong>How it works:</strong>
-            <p>
-              Payments from your customers go directly to your Razorpay account.
-              We never hold or process your funds.
-            </p>
+            <div className={styles.inputGroup}>
+              <label className={styles.label}>Key ID</label>
+              <input
+                type="text"
+                className={styles.input}
+                value={razorpayKeyId}
+                onChange={(e) => setRazorpayKeyId(e.target.value)}
+                placeholder="rzp_live_xxxxxxxxxxxxxxxx"
+              />
+              <span className={styles.inputHint}>
+                Starts with rzp_live_ for production or rzp_test_ for testing
+              </span>
+            </div>
+
+            <div className={styles.inputGroup}>
+              <label className={styles.label}>Key Secret</label>
+              <div className={styles.secretInputWrapper}>
+                <input
+                  type={showSecret ? "text" : "password"}
+                  className={styles.input}
+                  value={razorpayKeySecret}
+                  onChange={(e) => setRazorpayKeySecret(e.target.value)}
+                  placeholder="Your secret key"
+                />
+                <button
+                  type="button"
+                  className={styles.toggleSecretBtn}
+                  onClick={() => setShowSecret(!showSecret)}
+                >
+                  {showSecret ? (
+                    <svg
+                      width="20"
+                      height="20"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    >
+                      <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24" />
+                      <line x1="1" y1="1" x2="23" y2="23" />
+                    </svg>
+                  ) : (
+                    <svg
+                      width="20"
+                      height="20"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    >
+                      <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+                      <circle cx="12" cy="12" r="3" />
+                    </svg>
+                  )}
+                </button>
+              </div>
+              <span className={styles.inputHint}>
+                Keep this secret safe. Never share it publicly.
+              </span>
+            </div>
           </div>
+        )}
+
+        {/* How It Works Dropdown */}
+        <div style={{ display: "flex", flexDirection: "column" }}>
+          <button
+            type="button"
+            className={styles.howItWorksToggle}
+            onClick={() => setShowHowItWorks(!showHowItWorks)}
+          >
+            <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+              <svg
+                width="18"
+                height="18"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <circle cx="12" cy="12" r="10" />
+                <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3" />
+                <line x1="12" y1="17" x2="12.01" y2="17" />
+              </svg>
+              How it works
+            </div>
+            <svg
+              width="18"
+              height="18"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              className={`${styles.chevron} ${showHowItWorks ? styles.chevronActive : ""}`}
+            >
+              <polyline points="6 9 12 15 18 9" />
+            </svg>
+          </button>
+
+          {showHowItWorks && (
+            <div className={styles.howItWorksContent}>
+              <p className={styles.howItWorksText}>
+                Payments from your customers go directly to your Razorpay
+                account. We never hold or process your funds. Your API keys are
+                stored securely and used only to verify transactions and issue
+                refunds.
+              </p>
+            </div>
+          )}
         </div>
       </div>
 
