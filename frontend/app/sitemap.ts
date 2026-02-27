@@ -48,6 +48,25 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       changeFrequency: "daily",
       priority: 1.0,
     },
+    // Product Domain Landing Pages — each ranks independently
+    {
+      url: `${baseUrl}/shop`,
+      lastModified: staticLastModified,
+      changeFrequency: "weekly",
+      priority: 1.0,
+    },
+    {
+      url: `${baseUrl}/marketing`,
+      lastModified: staticLastModified,
+      changeFrequency: "weekly",
+      priority: 1.0,
+    },
+    {
+      url: `${baseUrl}/showcase`,
+      lastModified: staticLastModified,
+      changeFrequency: "weekly",
+      priority: 1.0,
+    },
     // Conversion Pages
     {
       url: `${baseUrl}/signup`,
@@ -105,13 +124,6 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       lastModified: staticLastModified,
       changeFrequency: "yearly",
       priority: 0.4,
-    },
-    // Shop Landing
-    {
-      url: `${baseUrl}/shop`,
-      lastModified: staticLastModified,
-      changeFrequency: "weekly",
-      priority: 0.9,
     },
   ];
 
