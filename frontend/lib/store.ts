@@ -486,6 +486,56 @@ export async function storeExists(storeSlug: string): Promise<boolean> {
 }
 
 // ============================================================
+// Sitemap Support — Active Store Listings
+// ============================================================
+
+/**
+ * Lightweight store listing for sitemap generation.
+ */
+export interface StoreSitemapEntry {
+  slug: string;
+  businessName: string;
+  updatedAt: string;
+}
+
+/**
+ * Fetch all active store slugs for sitemap generation.
+ * Uses a lightweight SELECT query (no products, no variants).
+ *
+ * @returns Array of { slug, businessName, updatedAt }
+ */
+export async function getAllActiveStoreSlugs(): Promise<StoreSitemapEntry[]> {
+  try {
+    const supabase = getSupabase();
+
+    const { data, error } = await supabase
+      .from("businesses")
+      .select("user_id, url_slug, business_name, updated_at")
+      .not("store_active", "is", false)
+      .not("business_name", "is", null)
+      .order("updated_at", { ascending: false })
+      .limit(5000); // Safety cap for sitemap
+
+    if (error) {
+      console.error(
+        "[store.ts] Error fetching active stores for sitemap:",
+        error,
+      );
+      return [];
+    }
+
+    return (data || []).map((row) => ({
+      slug: row.url_slug || row.user_id,
+      businessName: row.business_name || "Store",
+      updatedAt: row.updated_at || new Date().toISOString(),
+    }));
+  } catch (err) {
+    console.error("[store.ts] getAllActiveStoreSlugs failed:", err);
+    return [];
+  }
+}
+
+// ============================================================
 // Helper Functions
 // ============================================================
 

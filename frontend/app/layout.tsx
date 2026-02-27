@@ -290,6 +290,8 @@ export default function RootLayout({
         />
 
         {/* Structured Data — imported from lib/seo/structured-data.ts */}
+        {/* Structured Data — Platform-level schemas (Organization, Website, etc.) */}
+        {/* NOTE: Store pages inject their own per-tenant schemas in page.tsx */}
         {ALL_SCHEMAS.map((schema, i) => (
           <script
             key={`schema-${i}`}
@@ -297,27 +299,6 @@ export default function RootLayout({
             dangerouslySetInnerHTML={{ __html: JSON.stringify(schema) }}
           />
         ))}
-
-        {/* Theme Colors */}
-        <meta name="theme-color" content="#22C15A" />
-        <meta name="msapplication-TileColor" content="#22C15A" />
-        <meta name="msapplication-TileImage" content="/icon-512.png" />
-
-        {/* Apple-specific meta tags */}
-        <meta name="apple-mobile-web-app-capable" content="yes" />
-        <meta
-          name="apple-mobile-web-app-status-bar-style"
-          content="black-translucent"
-        />
-        <meta name="apple-mobile-web-app-title" content="Flowauxi" />
-
-        {/* Additional SEO Tags */}
-        <meta name="rating" content="general" />
-        <meta name="distribution" content="global" />
-        <meta name="revisit-after" content="7 days" />
-        <meta name="language" content="English" />
-        <meta name="geo.region" content="IN" />
-        <meta name="geo.placename" content="India" />
       </head>
       <body className={`${jakarta.variable} ${outfit.variable} antialiased`}>
         <QueryProvider>

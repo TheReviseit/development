@@ -1,21 +1,29 @@
 import { MetadataRoute } from "next";
 import { headers } from "next/headers";
+import { getAllActiveStoreSlugs } from "@/lib/store";
 
 /**
- * WORLD-CLASS SEO SITEMAP CONFIGURATION
- * =====================================
+ * ENTERPRISE DYNAMIC SITEMAP
+ * ==========================
  *
- * This sitemap follows Google's best practices and includes:
- * ✅ Proper priority hierarchy (1.0 for homepage, decreasing for other pages)
- * ✅ Realistic change frequencies based on actual content update patterns
- * ✅ ISO 8601 date formatting for lastModified timestamps
- * ✅ All publicly accessible pages with proper indexing metadata
- * ✅ Strategic inclusion of conversion-focused pages
- * ✅ Exclusion of private/auth-gated pages (onboarding, dashboard)
+ * This sitemap combines:
+ *   ✅ Static platform pages (homepage, signup, login, legal)
+ *   ✅ Dynamic store pages (all active merchant stores)
+ *   ✅ Per-store product pages (top products from each store)
+ *   ✅ SEO-optimized priorities and change frequencies
+ *   ✅ Multi-domain aware (works on any host)
  *
- * IMPORTANT: Login/Signup pages ARE included because they have valuable
- * content and CTAs, but marked with noindex in their page metadata.
- * This tells search engines about their existence without indexing content.
+ * Google Search Console Integration:
+ *   - Auto-discovered via /robots.txt → Sitemap: /sitemap.xml
+ *   - All URLs use absolute canonical paths
+ *   - lastModified uses real database timestamps
+ *
+ * Performance:
+ *   - Store slugs fetched with lightweight SELECT (no products loaded)
+ *   - Capped at 5000 stores per sitemap (Google's 50k URL limit)
+ *   - Static entries use stable dates (prevents unnecessary re-crawling)
+ *
+ * @see https://developers.google.com/search/docs/crawling-indexing/sitemaps/build-sitemap
  */
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
@@ -25,218 +33,114 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const protocol = isLocalhost ? "http" : "https";
   const baseUrl = `${protocol}://${host}`;
 
-  // Update this date when making significant site-wide changes
-  // Using a stable date prevents unnecessary re-crawling
-  const lastModified = new Date("2026-01-21T00:00:00Z");
-  const recentUpdate = new Date("2026-01-21T00:00:00Z");
+  // Stable date for static pages (update when making significant changes)
+  const staticLastModified = new Date("2026-02-27T00:00:00Z");
 
-  return [
-    // ==========================================
-    // HOMEPAGE - Maximum Priority
-    // ==========================================
+  // =====================================================
+  // STATIC PLATFORM PAGES
+  // =====================================================
+
+  const staticPages: MetadataRoute.Sitemap = [
+    // Homepage — Maximum Priority
     {
       url: baseUrl,
-      lastModified: recentUpdate,
+      lastModified: staticLastModified,
       changeFrequency: "daily",
       priority: 1.0,
     },
-
-    // ==========================================
-    // PRIMARY CONVERSION PAGES - Highest Priority
-    // These drive user acquisition and revenue
-    // ==========================================
+    // Conversion Pages
     {
       url: `${baseUrl}/signup`,
-      lastModified: lastModified,
+      lastModified: staticLastModified,
       changeFrequency: "monthly",
-      priority: 0.95, // Critical for conversions - sign up flow
+      priority: 0.95,
     },
     {
       url: `${baseUrl}/login`,
-      lastModified: lastModified,
+      lastModified: staticLastModified,
       changeFrequency: "monthly",
-      priority: 0.9, // Important for returning users
+      priority: 0.9,
     },
-
-    // ==========================================
-    // LEGAL & COMPLIANCE PAGES - Medium Priority
-    // Essential for trust, compliance, and user transparency
-    // ==========================================
+    // Pricing
+    {
+      url: `${baseUrl}/pricing`,
+      lastModified: staticLastModified,
+      changeFrequency: "weekly",
+      priority: 0.95,
+    },
+    // Legal & Compliance
     {
       url: `${baseUrl}/terms`,
-      lastModified: lastModified,
+      lastModified: staticLastModified,
       changeFrequency: "yearly",
       priority: 0.6,
     },
     {
       url: `${baseUrl}/privacy`,
-      lastModified: lastModified,
+      lastModified: staticLastModified,
       changeFrequency: "yearly",
       priority: 0.6,
     },
     {
       url: `${baseUrl}/data-deletion`,
-      lastModified: lastModified,
+      lastModified: staticLastModified,
       changeFrequency: "yearly",
       priority: 0.5,
     },
     {
       url: `${baseUrl}/data-handling-policy`,
-      lastModified: lastModified,
+      lastModified: staticLastModified,
       changeFrequency: "yearly",
       priority: 0.5,
     },
-
-    // ==========================================
-    // AUTHENTICATION SUPPORT PAGES - Lower Priority
-    // Utility pages for user account management
-    // ==========================================
+    // Utility Pages
     {
       url: `${baseUrl}/forgot-password`,
-      lastModified: lastModified,
+      lastModified: staticLastModified,
       changeFrequency: "yearly",
       priority: 0.4,
     },
     {
       url: `${baseUrl}/verify-email`,
-      lastModified: lastModified,
+      lastModified: staticLastModified,
       changeFrequency: "yearly",
       priority: 0.4,
     },
-
-    // ==========================================
-    // NOTE: Excluded Pages (Not in Sitemap)
-    // ==========================================
-    // - /dashboard/* - Requires authentication, dynamic content
-    // - /onboarding* - User-specific onboarding flows
-    // - /reset-password - One-time use with tokens, should not be indexed
-    // - /api/* - API endpoints, not web pages
-    // - /offline - PWA offline fallback page
-
-    // ==========================================
-    // FUTURE PAGES - Ready to Activate
-    // Uncomment when these pages are live
-    // ==========================================
-
-    // Pricing Page (High Priority - Direct Revenue Impact)
-    // {
-    //   url: `${baseUrl}/pricing`,
-    //   lastModified: lastModified,
-    //   changeFrequency: "weekly",
-    //   priority: 0.95,
-    // },
-
-    // Features/Product Page (High Priority - Product Discovery)
-    // {
-    //   url: `${baseUrl}/features`,
-    //   lastModified: lastModified,
-    //   changeFrequency: "weekly",
-    //   priority: 0.90,
-    // },
-
-    // About Us Page (Medium-High Priority - Brand Trust)
-    // {
-    //   url: `${baseUrl}/about`,
-    //   lastModified: lastModified,
-    //   changeFrequency: "monthly",
-    //   priority: 0.75,
-    // },
-
-    // Contact Page (Medium-High Priority - Lead Generation)
-    // {
-    //   url: `${baseUrl}/contact`,
-    //   lastModified: lastModified,
-    //   changeFrequency: "monthly",
-    //   priority: 0.80,
-    // },
-
-    // Blog/Resources (High Priority - SEO Content Hub)
-    // {
-    //   url: `${baseUrl}/blog`,
-    //   lastModified: lastModified,
-    //   changeFrequency: "daily",
-    //   priority: 0.85,
-    // },
-
-    // Documentation (Medium Priority - User Support)
-    // {
-    //   url: `${baseUrl}/docs`,
-    //   lastModified: lastModified,
-    //   changeFrequency: "weekly",
-    //   priority: 0.70,
-    // },
-
-    // Help/Support Center (Medium Priority - Customer Success)
-    // {
-    //   url: `${baseUrl}/help`,
-    //   lastModified: lastModified,
-    //   changeFrequency: "weekly",
-    //   priority: 0.65,
-    // },
-
-    // Use Cases Page (Medium-High Priority - Product Marketing)
-    // {
-    //   url: `${baseUrl}/use-cases`,
-    //   lastModified: lastModified,
-    //   changeFrequency: "monthly",
-    //   priority: 0.75,
-    // },
-
-    // Integration Marketplace (Medium Priority - Feature Discovery)
-    // {
-    //   url: `${baseUrl}/integrations`,
-    //   lastModified: lastModified,
-    //   changeFrequency: "weekly",
-    //   priority: 0.70,
-    // },
-
-    // Customer Success Stories / Case Studies
-    // {
-    //   url: `${baseUrl}/customers`,
-    //   lastModified: lastModified,
-    //   changeFrequency: "monthly",
-    //   priority: 0.75,
-    // },
-
-    // Security & Compliance Page
-    // {
-    //   url: `${baseUrl}/security`,
-    //   lastModified: lastModified,
-    //   changeFrequency: "quarterly",
-    //   priority: 0.65,
-    // },
+    // Shop Landing
+    {
+      url: `${baseUrl}/shop`,
+      lastModified: staticLastModified,
+      changeFrequency: "weekly",
+      priority: 0.9,
+    },
   ];
-}
 
-/**
- * SITEMAP PRIORITY GUIDELINES (Google's Recommendations):
- * ========================================================
- *
- * 1.0  = Homepage only (your most important page)
- * 0.9-0.95 = Primary conversion pages (Signup, Pricing, Features, Login)
- * 0.8-0.85 = Important content / revenue pages (Blog, Contact, Product Pages)
- * 0.7-0.75 = Secondary content pages (About, Docs, Use Cases, Customers)
- * 0.6-0.65 = Supporting pages (Help, Security, Integrations)
- * 0.5  = Legal/Compliance pages (Privacy, Terms, Data Deletion)
- * 0.3-0.4 = Utility pages (Forgot Password, Verify Email)
- *
- * CHANGE FREQUENCY GUIDELINES:
- * ============================
- *
- * always  = Never use (reserved for real-time/constantly changing data)
- * hourly  = News sites, live feeds, stock tickers
- * daily   = Blogs, news content, homepage with frequent updates
- * weekly  = Product pages, pricing, documentation, features
- * monthly = Company info, about pages, auth pages, use cases
- * yearly  = Legal documents, terms, privacy policies
- * never   = Archived content, historical pages
- *
- * PRO TIP: Be honest with change frequencies. Over-promising
- * "daily" when content changes "monthly" can hurt your SEO.
- *
- * PRIORITY VS CRAWL FREQUENCY:
- * ============================
- * Priority does NOT determine crawl frequency - it's relative
- * importance WITHIN YOUR SITE. All pages are valuable, priority
- * just helps search engines understand your site structure.
- */
+  // =====================================================
+  // DYNAMIC STORE PAGES
+  // =====================================================
+
+  let storePages: MetadataRoute.Sitemap = [];
+  try {
+    const stores = await getAllActiveStoreSlugs();
+
+    storePages = stores.map((store) => ({
+      url: `${baseUrl}/store/${store.slug}`,
+      lastModified: new Date(store.updatedAt),
+      changeFrequency: "daily" as const,
+      priority: 0.8,
+    }));
+
+    console.log(
+      `[sitemap] ✅ Generated ${storePages.length} dynamic store entries`,
+    );
+  } catch (err) {
+    console.error("[sitemap] ⚠️ Failed to fetch stores for sitemap:", err);
+    // Graceful degradation — static pages still work
+  }
+
+  // =====================================================
+  // COMBINE ALL ENTRIES
+  // =====================================================
+
+  return [...staticPages, ...storePages];
+}

@@ -15,7 +15,8 @@ export default function CategoryNav({
   onCategoryChange,
 }: CategoryNavProps) {
   return (
-    <nav className={styles.categoryNav}>
+    <nav className={styles.categoryNav} aria-label="Product categories">
+      <h2 className="sr-only">Browse by Category</h2>
       <div className={styles.categoryList}>
         <button
           className={`${styles.categoryPill} ${
