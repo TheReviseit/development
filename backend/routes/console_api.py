@@ -642,18 +642,19 @@ def create_api_key(project_id: str):
         # =====================================================================
         if environment == 'live':
             subscription = get_org_subscription(org_id)
-            is_valid, error_msg = validate_key_environment('live', subscription)
+            user_id = str(getattr(user, 'id', None)) if user else None
+            is_valid, error_msg = validate_key_environment('live', subscription, user_id)
             
             if not is_valid:
                 logger.warning(
                     f"Live key creation denied for org {org_id}: "
-                    f"level={subscription.get('entitlement_level') if subscription else 'none'}"
+                    f"billing_status={subscription.get('billing_status') if subscription else 'none'}"
                 )
                 return jsonify({
                     'success': False,
                     'error': 'LIVE_ENTITLEMENT_REQUIRED',
                     'message': error_msg,
-                    'current_level': subscription.get('entitlement_level', 'none') if subscription else 'none',
+                    'billing_status': subscription.get('billing_status', 'none') if subscription else 'none',
                     'redirect': '/console/billing/select-plan',
                     'cta': {
                         'text': 'Upgrade to create live keys',

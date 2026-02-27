@@ -173,7 +173,7 @@ export default function TrackOrderPage() {
 
     try {
       const response = await fetch(
-        `/api/orders/track?orderId=${encodeURIComponent(orderId)}&username=${username}`,
+        `/api/orders/track?orderId=${encodeURIComponent(orderId)}&storeSlug=${username}`,
       );
 
       const data = await response.json();

@@ -7,6 +7,7 @@ import { InvoiceData, BusinessInfo } from "@/lib/invoice-utils";
 
 interface InvoiceSettingsProps {
   showToast: (text: string, type: "success" | "error") => void;
+  canCustomize?: boolean;
 }
 
 /**
@@ -15,7 +16,10 @@ interface InvoiceSettingsProps {
  * This tab displays what invoices look like when sent to customers
  * Invoices are auto-sent at checkout when customer provides email
  */
-export default function InvoiceSettings({ showToast }: InvoiceSettingsProps) {
+export default function InvoiceSettings({
+  showToast,
+  canCustomize = false,
+}: InvoiceSettingsProps) {
   const [loading, setLoading] = useState(true);
   const [businessProfile, setBusinessProfile] = useState<BusinessInfo>({
     name: "My Store",
@@ -164,17 +168,20 @@ export default function InvoiceSettings({ showToast }: InvoiceSettingsProps) {
               overflow: "hidden",
               border: "2px solid #e5e7eb",
               flexShrink: 0,
+              opacity: canCustomize ? 1 : 0.5,
+              pointerEvents: canCustomize ? "auto" : "none",
             }}
           >
             <input
               type="color"
               value={businessProfile.brandColor || "#22c55e"}
               onChange={handleColorChange}
+              disabled={!canCustomize}
               style={{
                 width: "150%",
                 height: "150%",
                 transform: "translate(-25%, -25%)",
-                cursor: "pointer",
+                cursor: canCustomize ? "pointer" : "not-allowed",
                 border: "none",
                 padding: 0,
               }}
@@ -191,25 +198,43 @@ export default function InvoiceSettings({ showToast }: InvoiceSettingsProps) {
               }}
             >
               Brand Color
+              {!canCustomize && (
+                <span
+                  style={{
+                    marginLeft: "8px",
+                    padding: "2px 8px",
+                    fontSize: "10px",
+                    fontWeight: 600,
+                    background: "linear-gradient(135deg, #f59e0b, #d97706)",
+                    color: "#fff",
+                    borderRadius: "4px",
+                    verticalAlign: "middle",
+                  }}
+                >
+                  ⭐ BUSINESS
+                </span>
+              )}
             </label>
             <p style={{ fontSize: "12px", color: "#666", margin: 0 }}>
-              Pick a color for your invoice header and accents
+              {canCustomize
+                ? "Pick a color for your invoice header and accents"
+                : "Upgrade to Business plan to customize your invoice colors"}
             </p>
           </div>
           <div>
             <button
               onClick={handleSaveColor}
-              disabled={saving}
+              disabled={saving || !canCustomize}
               style={{
-                background: "#000000",
+                background: canCustomize ? "#000000" : "#9ca3af",
                 color: "#ffffff",
                 border: "none",
                 padding: "8px 16px",
                 borderRadius: "8px",
                 fontSize: "13px",
                 fontWeight: 600,
-                cursor: saving ? "not-allowed" : "pointer",
-                opacity: saving ? 0.7 : 1,
+                cursor: saving || !canCustomize ? "not-allowed" : "pointer",
+                opacity: saving || !canCustomize ? 0.7 : 1,
                 transition: "all 0.2s ease",
                 whiteSpace: "nowrap",
               }}
@@ -221,7 +246,11 @@ export default function InvoiceSettings({ showToast }: InvoiceSettingsProps) {
 
         <InvoiceTemplate
           invoice={sampleInvoiceData}
-          business={businessProfile}
+          business={{
+            ...businessProfile,
+            // Basic plan: strip logo from invoice preview
+            logoUrl: canCustomize ? businessProfile.logoUrl : "",
+          }}
           showActions={false}
         />
       </div>

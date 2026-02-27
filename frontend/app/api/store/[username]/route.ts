@@ -42,10 +42,14 @@ export async function GET(
     }
 
     // Fetch store data
+    console.log(`[API /store] Fetching slug: "${username}"`);
+    console.log(`[API /store] Env check - SUPABASE_URL: ${process.env.NEXT_PUBLIC_SUPABASE_URL ? "SET" : "MISSING"}, SERVICE_KEY: ${process.env.SUPABASE_SERVICE_ROLE_KEY ? "SET" : "MISSING"}`);
     const storeData = await getStoreBySlug(username);
+    console.log(`[API /store] Result for "${username}": ${storeData ? "FOUND" : "NULL"}`);
 
     // Store not found or inactive
     if (!storeData) {
+      console.log(`[API /store] Returning 404 for: "${username}"`);
       return NextResponse.json(
         { success: false, error: "Store not found" },
         { status: 404 },
@@ -67,11 +71,9 @@ export async function GET(
       },
     );
   } catch (error) {
-    // Log error but don't expose details to client
-    console.error("[API /store/[username]] Error:", error);
-
+    console.error("[API /store/[username]] FATAL Error:", error);
     return NextResponse.json(
-      { success: false, error: "Internal server error" },
+      { success: false, error: "Internal server error", detail: String(error) },
       { status: 500 },
     );
   }

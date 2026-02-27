@@ -6,6 +6,7 @@ import { ServiceWorkerRegistration } from "@/components/pwa/ServiceWorkerRegistr
 import { PWAInstallPrompt } from "@/components/pwa/PWAInstallPrompt";
 import CookieConsent from "./components/CookieConsent/CookieConsent";
 import { ALL_SCHEMAS } from "@/lib/seo/structured-data";
+import QueryProvider from "./components/providers/QueryProvider";
 
 const jakarta = Plus_Jakarta_Sans({
   variable: "--font-jakarta",
@@ -328,11 +329,13 @@ export default function RootLayout({
         />
       </head>
       <body className={`${jakarta.variable} ${outfit.variable} antialiased`}>
-        <ServiceWorkerRegistration />
-        <PWAInstallPrompt />
-        <CookieConsent />
-        {children}
-        <SpeedInsights />
+        <QueryProvider>
+          <ServiceWorkerRegistration />
+          <PWAInstallPrompt />
+          <CookieConsent />
+          {children}
+          <SpeedInsights />
+        </QueryProvider>
       </body>
     </html>
   );

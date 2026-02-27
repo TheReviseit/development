@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { resolveSlugToUserId } from "@/lib/resolve-slug";
 
 // Initialize Supabase client
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
@@ -63,6 +64,10 @@ export async function POST(
     const supabase = getSupabase();
     const insufficientItems: InsufficientItem[] = [];
 
+    // ── RESOLVE SLUG → USER_ID ────────────────────────────────────────
+    const resolvedUserId = await resolveSlugToUserId(username);
+    const storeOwnerId = resolvedUserId || username;
+
     // Check stock for each item
     for (const item of items) {
       let productId = item.product_id;
@@ -81,7 +86,7 @@ export async function POST(
         const { data } = await supabase
           .from("products")
           .select("id, stock_quantity, size_stocks, has_size_pricing")
-          .eq("user_id", username)
+          .eq("user_id", storeOwnerId)
           .ilike("name", item.name)
           .single();
         if (data) {
@@ -155,7 +160,7 @@ export async function POST(
           .from("product_variants")
           .select("id, color, size_stocks, stock_quantity, has_size_pricing")
           .eq("product_id", productId)
-          .eq("user_id", username)
+          .eq("user_id", storeOwnerId)
           .eq("is_deleted", false);
 
         if (variants && variants.length > 0) {

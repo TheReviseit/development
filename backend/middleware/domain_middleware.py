@@ -18,10 +18,15 @@ Usage:
     domain = g.product_domain  # Always set after middleware runs
 """
 
+import os
 import logging
 from flask import request, g, abort, jsonify
 
 logger = logging.getLogger('reviseit.domain')
+
+# In development, allow tunnel hosts (ngrok, cloudflare tunnels, etc.)
+_IS_DEVELOPMENT = os.getenv('FLASK_ENV', 'development') != 'production'
+_TUNNEL_PATTERNS = ('.ngrok-free.app', '.ngrok.io', '.trycloudflare.com', '.loca.lt')
 
 # =============================================================================
 # ALLOWED HOSTS — Strict Whitelist
@@ -56,6 +61,7 @@ ALLOWED_HOSTS: dict[str, str] = {
 DOMAIN_EXEMPT_PREFIXES = (
     '/api/health',
     '/api/whatsapp/webhook',
+    '/api/whatsapp/debug-phone',
     '/v1/otp/',
     '/console/',
 )
@@ -114,18 +120,28 @@ def resolve_product_domain():
         if domain:
             logger.debug(f"🌐 Domain resolved from Origin: {origin_host} → {domain}")
         elif host in BACKEND_HOSTS:
-            # Origin exists but is unknown, and we're on a backend host
-            logger.warning(f"🚫 Unknown Origin host: {origin_host} (Origin: {origin})")
-            abort(403, description=f'Unrecognized origin: {origin_host}')
+            # In development, allow tunnel origins
+            if _IS_DEVELOPMENT and any(origin_host.endswith(pat) for pat in _TUNNEL_PATTERNS):
+                domain = 'api'
+                logger.info(f"🔧 Dev tunnel origin allowed: {origin_host} → {domain}")
+            else:
+                # Origin exists but is unknown, and we're on a backend host
+                logger.warning(f"🚫 Unknown Origin host: {origin_host} (Origin: {origin})")
+                abort(403, description=f'Unrecognized origin: {origin_host}')
     
     # Step 2: If no domain yet, try Host header (direct frontend access)
     if domain is None:
         domain = ALLOWED_HOSTS.get(host)
-        
+
         if domain is None:
-            # No Origin, unknown Host — block
-            logger.warning(f"🚫 Rejected request from unknown host: {host}")
-            abort(403, description=f'Unknown host: {host}')
+            # In development, allow tunnel hosts (ngrok, cloudflare, etc.)
+            if _IS_DEVELOPMENT and any(host.endswith(pat) for pat in _TUNNEL_PATTERNS):
+                domain = 'api'
+                logger.info(f"🔧 Dev tunnel host allowed: {host} → {domain}")
+            else:
+                # No Origin, unknown Host — block
+                logger.warning(f"🚫 Rejected request from unknown host: {host}")
+                abort(403, description=f'Unknown host: {host}')
     
     g.product_domain = domain
     logger.debug(f"🌐 Domain resolved: {host} → {domain}")

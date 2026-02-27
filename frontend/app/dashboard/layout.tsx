@@ -8,6 +8,7 @@ import { AuthProvider } from "@/app/components/auth/AuthProvider";
 import { DashboardAuthGuard } from "./components/DashboardAuthGuard";
 import { getDomainVisibility, type ProductDomain } from "@/lib/domain/config";
 import { getProductDomainFromBrowser } from "@/lib/domain/client";
+import SoftLimitBanner from "./components/SoftLimitBanner";
 import styles from "./dashboard.module.css";
 
 type Section =
@@ -88,10 +89,82 @@ export default function DashboardLayout({
   const LONG_PRESS_DURATION = 500; // ms
   // Items that cannot be hidden (essential navigation)
   const NON_HIDEABLE_ITEMS = ["analytics", "messages"];
+  const [upgradeStatus, setUpgradeStatus] = useState<'idle' | 'verifying' | 'success' | 'error'>('idle');
+  const [upgradeMessage, setUpgradeMessage] = useState('');
+  const upgradeVerifiedRef = useRef(false);
   const router = useRouter();
   const pathname = usePathname();
 
   const activeSection = getActiveSection(pathname);
+
+  // ── Upgrade Payment Verification ─────────────────────────────────────
+  // Triggered when `user` state is set (auth complete + onboarding verified).
+  // Checks URL for ?upgrade=success OR sessionStorage flag, then calls
+  // verify-payment. The backend finds the pending upgrade by user_id alone.
+  useEffect(() => {
+    if (!user || upgradeVerifiedRef.current) return;
+
+    // Check both URL params and sessionStorage (Razorpay handler is unreliable)
+    const params = new URLSearchParams(window.location.search);
+    const fromUrl = params.get('upgrade') === 'success';
+    const fromStorage = sessionStorage.getItem('flowauxi_upgrade_pending') === '1';
+
+    if (!fromUrl && !fromStorage) return;
+
+    upgradeVerifiedRef.current = true;
+    sessionStorage.removeItem('flowauxi_upgrade_pending');
+    setUpgradeStatus('verifying');
+
+    const verifyPayment = async () => {
+      try {
+        const { auth } = await import('@/src/firebase/firebase');
+        const firebaseUser = auth.currentUser;
+
+        if (!firebaseUser) {
+          setUpgradeStatus('error');
+          setUpgradeMessage('Not authenticated. Please refresh and try again.');
+          return;
+        }
+
+        console.log('[Upgrade] Calling verify-payment for user', firebaseUser.uid);
+
+        const res = await fetch('/api/upgrade/verify-payment', {
+          method: 'POST',
+          credentials: 'include',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-User-Id': firebaseUser.uid,
+          },
+          body: JSON.stringify({ domain: 'shop' }),
+        });
+
+        const result = await res.json();
+        console.log('[Upgrade] verify-payment response:', result);
+
+        if (res.ok && result.success) {
+          setUpgradeStatus('success');
+          setUpgradeMessage('Plan upgraded successfully!');
+          // Clean up URL params
+          window.history.replaceState({}, '', window.location.pathname);
+          // Force refetch of subscription/entitlement data
+          setTimeout(() => {
+            window.dispatchEvent(new CustomEvent('subscription-updated'));
+            router.refresh();
+          }, 1500);
+        } else {
+          setUpgradeStatus('error');
+          setUpgradeMessage(result.message || 'Upgrade verification failed. Your payment was received — it will activate shortly via webhook.');
+        }
+      } catch (err) {
+        console.error('[Upgrade] verify error:', err);
+        setUpgradeStatus('error');
+        setUpgradeMessage('Could not verify upgrade. Your payment was received — it will activate shortly.');
+      }
+    };
+
+    verifyPayment();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user]);
 
   // Read product domain using resolveDomain() — same function as middleware
   useEffect(() => {
@@ -1321,6 +1394,71 @@ export default function DashboardLayout({
                 )}
               </div>
             )}
+
+            {/* Upgrade Verification Banner */}
+            {upgradeStatus !== 'idle' && (
+              <div
+                style={{
+                  padding: '12px 20px',
+                  margin: '0 0 8px 0',
+                  borderRadius: '8px',
+                  fontSize: '14px',
+                  fontWeight: 500,
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '10px',
+                  backgroundColor:
+                    upgradeStatus === 'verifying' ? '#FFF8E1' :
+                    upgradeStatus === 'success' ? '#E8F5E9' : '#FFF3E0',
+                  color:
+                    upgradeStatus === 'verifying' ? '#F57F17' :
+                    upgradeStatus === 'success' ? '#2E7D32' : '#E65100',
+                  border: `1px solid ${
+                    upgradeStatus === 'verifying' ? '#FFE082' :
+                    upgradeStatus === 'success' ? '#A5D6A7' : '#FFCC80'
+                  }`,
+                }}
+              >
+                {upgradeStatus === 'verifying' && (
+                  <>
+                    <svg className="animate-spin" width="18" height="18" viewBox="0 0 24 24" fill="none">
+                      <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" opacity="0.3" />
+                      <path d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" fill="currentColor" opacity="0.75" />
+                    </svg>
+                    Verifying your upgrade payment...
+                  </>
+                )}
+                {upgradeStatus === 'success' && (
+                  <>
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <path d="M5 13l4 4L19 7" strokeLinecap="round" strokeLinejoin="round" />
+                    </svg>
+                    {upgradeMessage}
+                  </>
+                )}
+                {upgradeStatus === 'error' && (
+                  <>
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <circle cx="12" cy="12" r="10" />
+                      <line x1="12" y1="8" x2="12" y2="12" />
+                      <line x1="12" y1="16" x2="12.01" y2="16" />
+                    </svg>
+                    {upgradeMessage}
+                  </>
+                )}
+                {upgradeStatus !== 'verifying' && (
+                  <button
+                    onClick={() => setUpgradeStatus('idle')}
+                    style={{ marginLeft: 'auto', background: 'none', border: 'none', cursor: 'pointer', fontSize: '16px', color: 'inherit' }}
+                  >
+                    x
+                  </button>
+                )}
+              </div>
+            )}
+
+            {/* Soft-Limit Warning Banner - appears on all dashboard pages */}
+            <SoftLimitBanner />
 
             {isMobile ? (
               <div className={styles.mobileContent}>{children}</div>

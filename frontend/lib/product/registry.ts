@@ -148,7 +148,7 @@ export const PRODUCT_REGISTRY: Record<ProductDomain, ProductConfig> = {
         "shop",
         199900, // ₹1,999
         [
-          "Domain: Random domain name (e.g. store/abc1234)",
+          "Domain: Random domain name (e.g. store-abc1234)",
           "10 products (incl. variants)",
           "Standard invoice",
           "10 email invoices",

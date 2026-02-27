@@ -124,10 +124,27 @@ def process_order_event(
             
             # 2b. Send invoice via WhatsApp (for AI/WhatsApp orders only)
             # NON-BLOCKING: This triggers a separate background task
+            # Gated by live_order_updates feature (Business+ only)
             order_source = data.get("source")
             logger.info(f"📄 Invoice check: source='{order_source}', expected='ai', match={order_source == 'ai'}")
             
-            if order_source == "ai":
+            can_send_invoice = True
+            try:
+                from services.feature_gate_engine import get_feature_gate_engine
+                gate = get_feature_gate_engine()
+                decision = gate.check_feature_access(
+                    user_id=user_id,
+                    domain="shop",
+                    feature_key="live_order_updates",
+                )
+                if not decision.allowed:
+                    can_send_invoice = False
+                    logger.info(f"⏭️ Invoice WhatsApp skipped: live_order_updates not available for user {user_id[:15]}...")
+                    results["tasks"]["invoice"] = {"triggered": False, "reason": "feature_not_in_plan"}
+            except Exception as gate_err:
+                logger.warning(f"⚠️ Invoice feature gate check failed, proceeding: {gate_err}")
+            
+            if can_send_invoice and order_source == "ai":
                 try:
                     # Get business data for invoice generation
                     business_data = _get_business_data_for_invoice(user_id)

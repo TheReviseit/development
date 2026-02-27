@@ -50,9 +50,9 @@ except ImportError:
     RAZORPAY_AVAILABLE = False
     logger.warning("Razorpay SDK not installed")
 
-# Plan tier ordering (lower index = lower tier)
-# Used for upgrade/downgrade validation
-PLAN_TIER_ORDER = ['starter', 'growth', 'enterprise']
+# MIGRATION NOTE: Removed PLAN_TIER_ORDER hardcoded list
+# Tier ordering now comes from plan_metadata.tier_level in database
+# See get_plan_tier() function below for database-driven tier resolution
 
 # =============================================================================
 # Pricing Service (replaces hardcoded CONSOLE_PLAN_CONFIG)
@@ -72,28 +72,115 @@ except ImportError as e:
     logger.warning(f"PricingService not available for console: {e}")
     PRICING_SERVICE_AVAILABLE = False
 
-# Tier/entitlement metadata (NOT pricing — that comes from DB)
-CONSOLE_TIER_META = {
-    'starter': {'entitlement_level': 'live', 'tier': 0},
-    'growth': {'entitlement_level': 'live', 'tier': 1},
-    'enterprise': {'entitlement_level': 'enterprise', 'tier': 2, 'action': 'contact_sales'},
-}
+# =============================================================================
+# Database-Driven Tier Resolution (replaces hardcoded CONSOLE_TIER_META)
+# =============================================================================
+# MIGRATION: Removed hardcoded CONSOLE_TIER_META in favor of plan_metadata table
+# All tier ordering now comes from database, eliminating maintenance burden.
 
+def get_plan_tier(plan_slug: str, domain: str = 'api') -> Optional[int]:
+    """
+    Get numeric tier for a plan from plan_metadata table.
 
-def get_plan_tier(plan_name: str) -> int:
-    """Get numeric tier for a plan. Higher = better plan."""
-    meta = CONSOLE_TIER_META.get(plan_name.lower())
-    if meta:
-        return meta.get('tier', -1)
+    Args:
+        plan_slug: Plan identifier (e.g., 'starter', 'business', 'pro')
+        domain: Product domain (default: 'api' for console)
+
+    Returns:
+        Tier level (0=starter, 1=business, 2=pro, etc.) or None if not found
+    """
     try:
-        return PLAN_TIER_ORDER.index(plan_name.lower())
-    except ValueError:
-        return -1
+        supabase = get_supabase()
+
+        # First, get the pricing_plan_id for this slug
+        plan_result = supabase.table('pricing_plans').select('id').match({
+            'plan_slug': plan_slug.lower(),
+            'product_domain': domain,
+            'is_active': True
+        }).limit(1).execute()
+
+        if not plan_result.data:
+            logger.warning(f"Plan not found: {plan_slug} (domain={domain})")
+            return None
+
+        plan_id = plan_result.data[0]['id']
+
+        # Get tier metadata
+        meta_result = supabase.table('plan_metadata').select('tier_level').eq(
+            'plan_id', plan_id
+        ).single().execute()
+
+        if meta_result.data:
+            return meta_result.data.get('tier_level')
+
+        return None
+
+    except Exception as e:
+        logger.error(f"Failed to get plan tier: {e}", exc_info=True)
+        return None
 
 
-def is_upgrade(current_plan: str, target_plan: str) -> bool:
-    """Check if target_plan is a higher tier than current_plan."""
-    return get_plan_tier(target_plan) > get_plan_tier(current_plan)
+def is_upgrade(current_plan: str, target_plan: str, domain: str = 'api') -> bool:
+    """
+    Check if target_plan is a higher tier than current_plan.
+
+    Uses database-driven tier levels from plan_metadata table.
+
+    Args:
+        current_plan: Current plan slug
+        target_plan: Target plan slug
+        domain: Product domain (default: 'api' for console)
+
+    Returns:
+        True if target is higher tier, False otherwise
+    """
+    current_tier = get_plan_tier(current_plan, domain)
+    target_tier = get_plan_tier(target_plan, domain)
+
+    if current_tier is None or target_tier is None:
+        return False
+
+    return target_tier > current_tier
+
+
+def get_plan_metadata(plan_slug: str, domain: str = 'api') -> Optional[Dict]:
+    """
+    Get full plan metadata from plan_metadata table.
+
+    Returns:
+        {
+            'tier_level': 1,
+            'tagline': 'Most Popular',
+            'requires_sales_call': False,
+            'trial_days': 0
+        }
+        or None if not found
+    """
+    try:
+        supabase = get_supabase()
+
+        # Get pricing_plan_id
+        plan_result = supabase.table('pricing_plans').select('id').match({
+            'plan_slug': plan_slug.lower(),
+            'product_domain': domain,
+            'is_active': True
+        }).limit(1).execute()
+
+        if not plan_result.data:
+            return None
+
+        plan_id = plan_result.data[0]['id']
+
+        # Get metadata
+        meta_result = supabase.table('plan_metadata').select('*').eq(
+            'plan_id', plan_id
+        ).single().execute()
+
+        return meta_result.data if meta_result.data else None
+
+    except Exception as e:
+        logger.error(f"Failed to get plan metadata: {e}", exc_info=True)
+        return None
 
 # Create blueprint
 console_billing_bp = Blueprint('console_billing', __name__, url_prefix='/console/billing')
@@ -159,7 +246,8 @@ def list_plans():
         db_plans = pricing_service.get_all_plans('api', 'monthly')
         for plan in db_plans:
             plan_slug = plan.get('plan_slug')
-            meta = CONSOLE_TIER_META.get(plan_slug, {})
+            # Get metadata from database (replaces hardcoded CONSOLE_TIER_META)
+            meta = get_plan_metadata(plan_slug, 'api') or {}
             plans.append({
                 'id': plan_slug,
                 'name': plan.get('display_name', plan_slug.title()),
@@ -168,6 +256,9 @@ def list_plans():
                 'currency': plan.get('currency', 'INR'),
                 'interval': plan.get('billing_cycle', 'monthly'),
                 'features': plan.get('features_json', []),
+                'tier_level': meta.get('tier_level', 0),
+                'tagline': meta.get('tagline', ''),
+                'requires_sales_call': meta.get('requires_sales_call', False)
             })
         # Add enterprise (contact sales — not in pricing_plans)
         plans.append({
@@ -200,22 +291,23 @@ def get_current_subscription():
     if not subscription:
         return success_response({
             'subscription': None,
-            'entitlement_level': 'none',
             'can_create_live_keys': False
         })
+    
+    # Access decisions based on billing_status, not entitlement_level
+    billing_status = subscription.get('billing_status', 'created')
+    can_go_live = billing_status in ('active', 'trialing', 'grace_period', 'pending_upgrade', 'upgrade_failed')
     
     return success_response({
         'subscription': {
             'id': subscription['id'],
             'plan_name': subscription['plan_name'],
-            'billing_status': subscription['billing_status'],
-            'entitlement_level': subscription['entitlement_level'],
+            'billing_status': billing_status,
             'current_period_start': subscription.get('current_period_start'),
             'current_period_end': subscription.get('current_period_end'),
             'grace_period_end': subscription.get('grace_period_end')
         },
-        'entitlement_level': subscription['entitlement_level'],
-        'can_create_live_keys': subscription['entitlement_level'] in ('live', 'enterprise')
+        'can_create_live_keys': can_go_live
     })
 
 
@@ -258,16 +350,18 @@ def create_order():
         return error_response('Invalid JSON', 'INVALID_JSON', 400)
     
     plan_name = data.get('plan_name', '').lower()
-    
-    if plan_name not in CONSOLE_TIER_META:
+
+    # Validate plan exists in database (replaces hardcoded CONSOLE_TIER_META check)
+    tier_meta = get_plan_metadata(plan_name, 'api')
+    if not tier_meta:
         return error_response(
             f'Invalid plan: {plan_name}',
             'INVALID_PLAN',
             400
         )
-    
-    tier_meta = CONSOLE_TIER_META[plan_name]
-    if tier_meta.get('action') == 'contact_sales':
+
+    # Check if plan requires sales call (from database metadata)
+    if tier_meta.get('requires_sales_call', False):
         return error_response(
             'Enterprise plan requires contacting sales',
             'CONTACT_SALES',
@@ -430,7 +524,6 @@ def create_order():
             'org_id': org_id,
             'plan_name': plan_name,
             'billing_status': 'payment_pending',
-            'entitlement_level': 'sandbox',  # Stays sandbox until payment
             'razorpay_subscription_id': subscription['id'],
             'razorpay_customer_id': customer_id,
             'idempotency_key': idempotency_key
@@ -535,7 +628,6 @@ def verify_payment():
         
         db.table('otp_console_subscriptions').update({
             'billing_status': 'active',
-            'entitlement_level': 'live',  # Grant live access
             'current_period_start': datetime.now(timezone.utc).isoformat(),
             'current_period_end': (datetime.now(timezone.utc) + timedelta(days=30)).isoformat()
         }).eq('org_id', org_id).eq(
@@ -561,7 +653,7 @@ def poll_status():
     Poll subscription status.
     
     Frontend uses this to poll while waiting for webhook.
-    Returns current billing_status and entitlement_level.
+    Returns current billing_status and readiness.
     """
     org_id = g.console_org_id
     
@@ -570,14 +662,13 @@ def poll_status():
     if not subscription:
         return success_response({
             'status': 'none',
-            'entitlement_level': 'none',
             'ready': False
         })
     
+    billing_status = subscription.get('billing_status', 'created')
     return success_response({
-        'status': subscription['billing_status'],
-        'entitlement_level': subscription['entitlement_level'],
-        'ready': subscription['entitlement_level'] in ('live', 'enterprise'),
+        'status': billing_status,
+        'ready': billing_status in ('active', 'trialing', 'grace_period', 'pending_upgrade', 'upgrade_failed'),
         'plan_name': subscription['plan_name']
     })
 
@@ -661,19 +752,16 @@ def handle_webhook():
             return jsonify({'status': 'ignored', 'reason': 'not_console_subscription'}), 200
         
         sub_record = result.data
-        tier_meta = CONSOLE_TIER_META.get(sub_record['plan_name'], {})
-        target_entitlement = tier_meta.get('entitlement_level', 'live')
         
         # Handle event types
         if event in ('subscription.authenticated', 'subscription.activated'):
             db.table('otp_console_subscriptions').update({
                 'billing_status': 'active',
-                'entitlement_level': target_entitlement,
                 'current_period_start': datetime.now(timezone.utc).isoformat(),
                 'current_period_end': (datetime.now(timezone.utc) + timedelta(days=30)).isoformat()
             }).eq('id', sub_record['id']).execute()
             
-            logger.info(f"Subscription {razorpay_sub_id} activated, entitlement={target_entitlement}")
+            logger.info(f"Subscription {razorpay_sub_id} activated")
             
         elif event == 'subscription.charged':
             # Renewal
@@ -688,7 +776,6 @@ def handle_webhook():
         elif event == 'subscription.halted':
             db.table('otp_console_subscriptions').update({
                 'billing_status': 'suspended',
-                'entitlement_level': 'sandbox'  # Downgrade to sandbox
             }).eq('id', sub_record['id']).execute()
             
             logger.info(f"Subscription {razorpay_sub_id} halted")
@@ -696,7 +783,6 @@ def handle_webhook():
         elif event == 'subscription.cancelled':
             db.table('otp_console_subscriptions').update({
                 'billing_status': 'cancelled',
-                'entitlement_level': 'sandbox'
             }).eq('id', sub_record['id']).execute()
             
             logger.info(f"Subscription {razorpay_sub_id} cancelled")
@@ -710,7 +796,6 @@ def handle_webhook():
             if current.data and current.data['billing_status'] != 'active':
                 db.table('otp_console_subscriptions').update({
                     'billing_status': 'active',
-                    'entitlement_level': target_entitlement
                 }).eq('id', sub_record['id']).execute()
             
             logger.info(f"Payment captured for {razorpay_sub_id}")

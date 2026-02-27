@@ -8,9 +8,7 @@
   left: 0;
   right: 0;
   z-index: 100;
-  background: rgba(255, 255, 255, 0.8);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
+  background: #ffffff;
   border-bottom: 1px solid rgba(0, 0, 0, 0.05);
   transition: all 0.3s ease;
 }
@@ -128,9 +126,7 @@
   top: 64px;
   left: 0;
   right: 0;
-  background: rgba(255, 255, 255, 0.95);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
+  background: #ffffff;
   border-bottom: 1px solid rgba(0, 0, 0, 0.1);
   padding: 20px var(--shop-px-mobile, 16px) 28px;
   box-shadow: 0 12px 40px rgba(0, 0, 0, 0.08);

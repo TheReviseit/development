@@ -18,6 +18,7 @@ from flask_cors import CORS
 from dotenv import load_dotenv
 from functools import wraps
 
+
 # Load environment variables first
 load_dotenv()
 
@@ -255,6 +256,7 @@ cors_resources = {
             "X-User-Id",           # Frontend user identification
             "X-Correlation-Id",    # Request tracing
             "X-Request-Id",        # Request identification
+            "X-Idempotency-Key",   # Feature gate idempotent increments
             "Accept",
             "Origin",
             "Cache-Control",
@@ -351,6 +353,38 @@ try:
     logger.info("🌐 Domain routes registered (/api/domain/*)")
 except ImportError as e:
     logger.warning(f"Domain routes not available: {e}")
+
+# Register Feature Gate routes
+try:
+    from routes.features import features_bp
+    app.register_blueprint(features_bp)
+    logger.info("🚦 Feature Gate routes registered (/api/features/*)")
+except ImportError as e:
+    logger.warning(f"Feature Gate routes not available: {e}")
+
+# Register Products API routes (unified write path — single product creation endpoint)
+try:
+    from routes.products_api import products_bp
+    app.register_blueprint(products_bp)
+    logger.info("📦 Products API routes registered (/api/products/*)")
+except ImportError as e:
+    logger.warning(f"Products API routes not available: {e}")
+
+# Register Admin API routes (cache management, usage counter sync)
+try:
+    from routes.admin import admin_bp
+    app.register_blueprint(admin_bp)
+    logger.info("🔧 Admin API routes registered (/api/admin/*)")
+except ImportError as e:
+    logger.warning(f"Admin API routes not available: {e}")
+
+# Register Upgrade API routes (enterprise upgrade flow)
+try:
+    from routes.upgrade_api import upgrade_bp
+    app.register_blueprint(upgrade_bp)
+    logger.info("⬆️  Upgrade API routes registered (/api/upgrade/*)")
+except ImportError as e:
+    logger.warning(f"Upgrade API routes not available: {e}")
 
 
 # Initialize webhook security
@@ -818,19 +852,22 @@ def webhook():
     
     try:
         data = request.get_json()
-        logger.info(f"📨 Webhook received")
-        
+
         # Extract message data
         entry = data.get('entry', [{}])[0]
         changes = entry.get('changes', [{}])[0]
         value = changes.get('value', {})
         messages = value.get('messages', [])
         statuses = value.get('statuses', [])
-        
+
         metadata = value.get('metadata', {})
         phone_number_id = metadata.get('phone_number_id')
         display_phone = metadata.get('display_phone_number', 'Unknown')
-        
+
+        # Enhanced logging: show what type of event we received
+        event_type = "message" if messages else ("status" if statuses else "other")
+        logger.info(f"📨 Webhook received: type={event_type}, phone_id={phone_number_id}, display={display_phone}, msgs={len(messages)}, statuses={len(statuses)}")
+
         # Handle status updates
         if statuses and SUPABASE_AVAILABLE and update_message_status:
             for status_update in statuses:
@@ -938,34 +975,41 @@ def webhook():
                     if get_firebase_uid_from_user_id:
                         firebase_uid = get_firebase_uid_from_user_id(user_id)
                         logger.info(f"🔍 Retrieved Firebase UID: {firebase_uid[:15] if firebase_uid else 'None'}... for user {user_id[:8]}...")
-                    
+
+                    if not firebase_uid:
+                        logger.warning(f"⚠️ Firebase UID resolution failed for Supabase UUID {user_id[:8]}... — trying user_id as Firebase UID directly")
+                        # The user_id from connected_phone_numbers might already BE a Firebase UID
+                        # in legacy setups, or the users table row might be missing.
+                        # Try using user_id directly as firebase_uid for business lookup.
+                        firebase_uid = user_id
+
                     # PRIORITY 1: Try new Supabase businesses table first (most cost-effective)
                     if firebase_uid and SUPABASE_AVAILABLE and get_business_from_supabase:
                         logger.info(f"🔍 Attempting to load business data from Supabase businesses table...")
                         business_data = get_business_from_supabase(firebase_uid)
                         if business_data:
                             logger.info(f"✅ Loaded business data from Supabase businesses table: {business_data.get('business_name', 'Unknown')}")
-                    
+
                     # PRIORITY 2: Fall back to Firestore (legacy)
                     if not business_data and firebase_uid and FIREBASE_AVAILABLE and get_business_data_from_firestore:
                         logger.info(f"🔍 Falling back to Firestore for UID: {firebase_uid[:15]}...")
                         business_data = get_business_data_from_firestore(firebase_uid)
-                        
+
                         if business_data:
                             logger.info(f"✅ Loaded business data from Firestore: {business_data.get('business_name', 'Unknown')}")
                         else:
                             logger.warning(f"⚠️ No business data found in Firestore for Firebase UID: {firebase_uid[:15]}...")
-                    
+
                     # PRIORITY 3: Use Supabase AI capabilities + credentials if both above failed
                     if not business_data:
                         logger.info(f"🔄 Attempting to load from Supabase ai_capabilities table...")
-                        
+
                         # Try to load from Supabase (ai_capabilities + business info)
                         if SUPABASE_AVAILABLE and get_business_data_from_supabase and firebase_uid:
                             business_data = get_business_data_from_supabase(firebase_uid, credentials)
                             if business_data:
                                 logger.info(f"✅ Loaded business data from Supabase ai_capabilities: {business_data.get('business_name', 'Unknown')}")
-                        
+
                         # Final fallback: minimal data from credentials
                         if not business_data:
                             business_data = {
@@ -1027,6 +1071,24 @@ def webhook():
             else:
                 logger.warning(f"⚠️ Could not get Firebase UID for user_id: {user_id} - order persistence may fail")
         
+        # Resolve url_slug for store link if not already present
+        # This ensures WhatsApp order messages use the clean slug URL (shop.flowauxi.com/store/{slug})
+        if SUPABASE_AVAILABLE and not business_data.get('url_slug'):
+            try:
+                from supabase_client import get_supabase_client
+                _slug_client = get_supabase_client()
+                if _slug_client:
+                    _biz_id = business_data.get('business_id', '')
+                    if _biz_id and _biz_id != 'default' and len(_biz_id) > 10:
+                        _slug_result = _slug_client.table('businesses').select('url_slug').eq(
+                            'user_id', _biz_id
+                        ).limit(1).execute()
+                        if _slug_result.data and _slug_result.data[0].get('url_slug'):
+                            business_data['url_slug'] = _slug_result.data[0]['url_slug']
+                            logger.info(f"🔗 Resolved url_slug: {business_data['url_slug']}")
+            except Exception as slug_err:
+                logger.warning(f"⚠️ Could not resolve url_slug: {slug_err}")
+
         # Store Supabase business manager ID separately for analytics/message tracking
         if SUPABASE_AVAILABLE and user_id:
             supabase_business_id = get_business_id_for_user(user_id)
@@ -1459,6 +1521,120 @@ def webhook():
         return jsonify({'status': 'error', 'message': str(e)}), 500
 
 
+@app.route('/api/whatsapp/debug-phone/<phone_id>', methods=['GET'])
+def debug_phone_credentials(phone_id):
+    """
+    Diagnostic endpoint: check full credential chain for a phone number ID.
+    Returns which links in the chain exist and are active.
+    """
+    try:
+        from supabase_client import get_supabase_client
+        client = get_supabase_client()
+        if not client:
+            return jsonify({'error': 'Supabase not available'}), 500
+
+        result = {'phone_number_id': phone_id, 'chain': {}}
+
+        # Step 1: connected_phone_numbers
+        phone_res = client.table('connected_phone_numbers').select(
+            'id, phone_number_id, display_phone_number, user_id, whatsapp_account_id, is_active'
+        ).eq('phone_number_id', phone_id).execute()
+
+        if not phone_res.data:
+            result['chain']['phone'] = {'found': False, 'error': 'Phone number not in connected_phone_numbers table'}
+            return jsonify(result), 200
+
+        phone_data = phone_res.data[0]
+        result['chain']['phone'] = {
+            'found': True,
+            'is_active': phone_data.get('is_active'),
+            'display': phone_data.get('display_phone_number'),
+            'user_id': phone_data.get('user_id'),
+            'whatsapp_account_id': phone_data.get('whatsapp_account_id'),
+        }
+
+        # Step 2: connected_whatsapp_accounts
+        wa_id = phone_data.get('whatsapp_account_id')
+        if wa_id:
+            wa_res = client.table('connected_whatsapp_accounts').select(
+                'id, waba_id, waba_name, business_manager_id, is_active'
+            ).eq('id', wa_id).execute()
+
+            if wa_res.data:
+                wa_data = wa_res.data[0]
+                result['chain']['whatsapp_account'] = {
+                    'found': True,
+                    'is_active': wa_data.get('is_active'),
+                    'waba_id': wa_data.get('waba_id'),
+                    'waba_name': wa_data.get('waba_name'),
+                    'business_manager_id': wa_data.get('business_manager_id'),
+                }
+
+                # Step 3: connected_business_managers
+                bm_id = wa_data.get('business_manager_id')
+                if bm_id:
+                    bm_res = client.table('connected_business_managers').select(
+                        'id, business_name, facebook_account_id, is_active'
+                    ).eq('id', bm_id).execute()
+
+                    if bm_res.data:
+                        bm_data = bm_res.data[0]
+                        result['chain']['business_manager'] = {
+                            'found': True,
+                            'is_active': bm_data.get('is_active'),
+                            'business_name': bm_data.get('business_name'),
+                            'facebook_account_id': bm_data.get('facebook_account_id'),
+                        }
+
+                        # Step 4: connected_facebook_accounts
+                        fb_id = bm_data.get('facebook_account_id')
+                        if fb_id:
+                            fb_res = client.table('connected_facebook_accounts').select(
+                                'id, facebook_user_name, status'
+                            ).eq('id', fb_id).execute()
+
+                            if fb_res.data:
+                                fb_data = fb_res.data[0]
+                                result['chain']['facebook_account'] = {
+                                    'found': True,
+                                    'status': fb_data.get('status'),
+                                    'facebook_user_name': fb_data.get('facebook_user_name'),
+                                    'has_token': True,  # Don't expose token
+                                }
+                            else:
+                                result['chain']['facebook_account'] = {'found': False, 'error': f'No facebook account with id={fb_id}'}
+                        else:
+                            result['chain']['facebook_account'] = {'found': False, 'error': 'No facebook_account_id on business manager'}
+                    else:
+                        result['chain']['business_manager'] = {'found': False, 'error': f'No business manager with id={bm_id}'}
+                else:
+                    result['chain']['business_manager'] = {'found': False, 'error': 'No business_manager_id on whatsapp account'}
+            else:
+                result['chain']['whatsapp_account'] = {'found': False, 'error': f'No whatsapp account with id={wa_id}'}
+        else:
+            result['chain']['whatsapp_account'] = {'found': False, 'error': 'No whatsapp_account_id on phone record'}
+
+        # Summary
+        all_found = all(
+            result['chain'].get(k, {}).get('found', False)
+            for k in ['phone', 'whatsapp_account', 'business_manager', 'facebook_account']
+        )
+        all_active = all(
+            result['chain'].get(k, {}).get('is_active', False) in [True, 'active']
+            for k in ['phone', 'whatsapp_account', 'business_manager']
+        )
+        result['credential_chain_complete'] = all_found
+        result['all_links_active'] = all_active
+        result['will_route_messages'] = all_found and all_active
+
+        logger.info(f"🔍 Debug phone {phone_id}: chain_complete={all_found}, all_active={all_active}")
+        return jsonify(result), 200
+
+    except Exception as e:
+        logger.error(f"Debug phone error: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
 @app.route('/api/whatsapp/set-business-data', methods=['POST'])
 def set_business_data():
     """Set business data for AI responses."""
@@ -1527,7 +1703,49 @@ def ai_status():
     return jsonify(status), 200
 
 
+def _require_limit_ai_responses(f):
+    """
+    Lazy-import wrapper for @require_limit("ai_responses").
+    Delays middleware import until first request to avoid circular import.
+    Fail-closed: returns 503 if middleware unavailable.
+    """
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        try:
+            from middleware.feature_gate import with_feature_gate
+            gate_fn = with_feature_gate("ai_responses", increment=True, fail_closed=True)
+            # gate_fn is a decorator — apply it to the inner function and call
+            gated = gate_fn(f)
+            return gated(*args, **kwargs)
+        except ImportError:
+            logger.error("Feature gate middleware unavailable — fail closed")
+            return jsonify({
+                'success': False,
+                'error': 'Entitlement check failed',
+                'code': 'ENTITLEMENT_CHECK_UNAVAILABLE',
+            }), 503
+    return decorated
+
+
+def _require_body_auth(f):
+    """
+    Auth decorator for endpoints that receive user_id in the JSON body.
+    Sets g.user_id so feature gate decorators can work.
+    """
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        data = request.get_json(silent=True) or {}
+        user_id = data.get('user_id') or data.get('business_id')
+        if not user_id:
+            return jsonify({'success': False, 'error': 'user_id or business_id is required'}), 401
+        g.user_id = str(user_id)
+        return f(*args, **kwargs)
+    return decorated
+
+
 @app.route('/api/ai/generate-reply', methods=['POST'])
+@_require_body_auth
+@_require_limit_ai_responses
 def generate_ai_reply():
     """Generate AI reply for customer message."""
     if not AI_BRAIN_AVAILABLE:
@@ -1538,9 +1756,6 @@ def generate_ai_reply():
     
     try:
         data = request.get_json()
-        
-        if not data:
-            return jsonify({'success': False, 'error': 'No data provided'}), 400
         
         business_data = data.get('business_data')
         user_message = data.get('user_message', '').strip()

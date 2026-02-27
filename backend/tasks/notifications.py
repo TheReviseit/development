@@ -235,6 +235,25 @@ def send_order_whatsapp_notification(
     )
     
     try:
+        # ── Feature gate: live_order_updates (Business+ only) ──────────
+        try:
+            from services.feature_gate_engine import get_feature_gate_engine
+            gate = get_feature_gate_engine()
+            decision = gate.check_feature_access(
+                user_id=business_user_id,
+                domain="shop",
+                feature_key="live_order_updates",
+            )
+            if not decision.allowed:
+                logger.info(
+                    f"⏭️ [{correlation_id}] Skipping WhatsApp notification: "
+                    f"live_order_updates not available for user {business_user_id[:15]}..."
+                )
+                return {"success": True, "skipped": True, "reason": "feature_not_in_plan"}
+        except Exception as gate_err:
+            # Fail open: if gate check fails, still send notification
+            logger.warning(f"⚠️ [{correlation_id}] Feature gate check failed, proceeding: {gate_err}")
+
         # Skip notification for pending status (initial state)
         if status == "pending":
             logger.info(f"⏭️ [{correlation_id}] Skipping notification for pending status")

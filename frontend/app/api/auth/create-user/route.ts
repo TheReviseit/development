@@ -4,6 +4,7 @@ import {
   getUserByFirebaseUID,
   getUserByEmail,
   updateUserFirebaseUID,
+  ensureBusinessExists,
 } from "@/lib/supabase/queries";
 import { sendWelcomeEmail } from "@/lib/email/automated-emails";
 import { createUserSchema } from "@/lib/validation/schemas";
@@ -35,6 +36,10 @@ export async function POST(request: NextRequest) {
       const cache = getUserCache();
       cache.set(existingUser);
 
+      // REMOVED: Auto-creation of business records during login
+      // Business records should only be created when user explicitly updates business data
+      // await ensureBusinessExists(existingUser.id);
+
       return NextResponse.json({ user: existingUser, created: false });
     }
 
@@ -50,6 +55,9 @@ export async function POST(request: NextRequest) {
       // Update cache with new firebase_uid
       const cache = getUserCache();
       cache.set(updatedUser);
+
+      // REMOVED: Auto-creation of business records during migration
+      // await ensureBusinessExists(updatedUser.id);
 
       console.log(
         `[create-user] Successfully migrated user ${email} to new Firebase project`,
@@ -69,10 +77,17 @@ export async function POST(request: NextRequest) {
       phone,
     });
 
+    // REMOVED: Auto-creation of business records during signup
+    // Business records should only be created when user explicitly updates business data
+    // This prevents duplicate business records with inconsistent user_id formats
+    // await ensureBusinessExists(user.id);
+
     // Add newly created user to cache for fast future lookups
     const cache = getUserCache();
     cache.set(user);
-    console.log("[create-user] User cached successfully");
+    console.log(
+      "[create-user] User created successfully (business record will be created on first update)",
+    );
 
     // Note: Welcome email is now sent AFTER email verification
     // (see /api/auth/verify-email route)

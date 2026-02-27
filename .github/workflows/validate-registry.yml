@@ -1,0 +1,65 @@
+name: Validate Feature Registry
+
+on:
+  pull_request:
+    paths:
+      - 'shared/features/registry.ts'
+      - 'backend/migrations/seed_plan_features.sql'
+  push:
+    branches:
+      - main
+      - develop
+    paths:
+      - 'shared/features/registry.ts'
+      - 'backend/migrations/seed_plan_features.sql'
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build feature registry
+        run: npm run build:registry
+
+      - name: Validate registry consistency
+        run: node scripts/validate-registry.js
+
+      - name: Check for duplicate feature keys
+        run: |
+          if [ -f backend/features_registry.json ]; then
+            echo "✅ Feature registry JSON generated successfully"
+            cat backend/features_registry.json | jq 'keys | length' | xargs -I {} echo "Total features: {}"
+          else
+            echo "❌ Feature registry JSON not found"
+            exit 1
+          fi
+
+      - name: Lint TypeScript registry
+        run: npx tsc --noEmit shared/features/registry.ts
+
+  summary:
+    runs-on: ubuntu-latest
+    needs: validate
+    if: always()
+
+    steps:
+      - name: Job Summary
+        run: |
+          if [ "${{ needs.validate.result }}" == "success" ]; then
+            echo "✅ Feature registry validation passed"
+          else
+            echo "❌ Feature registry validation failed"
+            exit 1
+          fi

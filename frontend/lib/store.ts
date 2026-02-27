@@ -102,8 +102,10 @@ export interface StoreBanner {
  */
 export interface PublicStore {
   id: string;
+  userId?: string; // ✅ Firebase UID for real-time subscriptions
   businessName: string;
   canonicalSlug?: string; // ✅ Canonical URL slug for SEO and redirects
+  planTier?: "starter" | "business" | "pro"; // ✅ Plan tier for UI differentiation
   logoUrl?: string;
   bannerUrl?: string;
   storeActive: boolean;
@@ -210,18 +212,24 @@ export async function getStoreBySlug(
     let canonicalSlug: string = storeSlug;
 
     // STEP 1: Try businesses.url_slug_lower (PRIMARY - canonical URL)
-    const { data: businessBySlug } = await supabase
+    const { data: businessBySlug, error: slugError } = await supabase
       .from("businesses")
       .select("user_id, url_slug")
       .eq("url_slug_lower", normalized)
       .limit(1)
       .maybeSingle();
 
+    console.log(`[store.ts] STEP1 slug lookup "${normalized}":`, {
+      found: !!businessBySlug,
+      error: slugError?.message,
+    });
+
     if (businessBySlug && businessBySlug.url_slug) {
+      // Resolve via business slug — no entitlement check on public READ path.
       userId = businessBySlug.user_id;
-      canonicalSlug = businessBySlug.url_slug; // Use actual slug (not normalized)
+      canonicalSlug = businessBySlug.url_slug;
       console.log(
-        `[store.ts] ✅ Resolved via business slug: ${normalized} → ${canonicalSlug}`,
+        `[store.ts] ✅ Resolved via business slug: ${normalized} → userId=${userId}`,
       );
     } else {
       // STEP 2: Try users.username_lower (LEGACY fallback)
@@ -264,11 +272,18 @@ export async function getStoreBySlug(
     }
 
     // Query Supabase businesses table by user_id
+    console.log(`[store.ts] Querying businesses by user_id="${userId}"`);
     const { data: businessData, error: businessError } = await supabase
       .from("businesses")
       .select("*")
       .eq("user_id", userId)
       .maybeSingle();
+
+    console.log(`[store.ts] Business query result:`, {
+      found: !!businessData,
+      error: businessError?.message,
+      store_active: businessData?.store_active,
+    });
 
     if (businessError) {
       console.error("[store.ts] Supabase business query error:", businessError);
@@ -276,15 +291,42 @@ export async function getStoreBySlug(
     }
 
     if (!businessData) {
-      console.log(`[store.ts] No store found for slug: ${storeSlug}`);
+      console.log(`[store.ts] No store found for userId: ${userId}`);
       return null;
     }
 
-    // Check if store is active (default to true if field doesn't exist)
+    // Check if store is active (default to true if field doesn't exist in schema)
+    // Note: store_active column may not exist in all DB versions - default to active
     const storeActive = businessData.store_active !== false;
-    if (!storeActive) {
+    if (storeActive === false) {
       console.log(`[store.ts] Store is inactive: ${storeSlug}`);
       return null;
+    }
+
+    // ── Resolve plan tier for this user (shop domain) ───────────────
+    let planTier: "starter" | "business" | "pro" = "starter";
+    try {
+      const { data: subData } = await supabase
+        .from("subscriptions")
+        .select("pricing_plan:pricing_plans(plan_slug)")
+        .eq("user_id", userId)
+        .eq("product_domain", "shop")
+        .in("status", ["active", "trialing", "completed"])
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (subData?.pricing_plan) {
+        const pp = subData.pricing_plan as unknown;
+        // Supabase may return joined data as array or object
+        const planObj = Array.isArray(pp) ? pp[0] : pp;
+        const slug = (planObj as { plan_slug: string })?.plan_slug;
+        if (slug === "business" || slug === "pro") {
+          planTier = slug;
+        }
+      }
+    } catch (planErr) {
+      console.warn(`[store.ts] ⚠️ Could not resolve plan tier:`, planErr);
     }
 
     // Fetch products from NORMALIZED products table
@@ -310,8 +352,10 @@ export async function getStoreBySlug(
       const products = filterAndSortProducts(rawProducts);
       return {
         id: storeSlug,
+        userId, // ✅ Firebase UID for real-time subscriptions
         businessName: businessData.business_name || "Store",
         canonicalSlug, // ✅ Include canonical slug in fallback too
+        planTier, // ✅ Plan tier for UI differentiation
         logoUrl: businessData.logo_url,
         bannerUrl: businessData.banner_url,
         storeActive: true,
@@ -378,7 +422,7 @@ export async function getStoreBySlug(
     const { data: categoriesData } = await supabase
       .from("product_categories")
       .select("name")
-      .eq("user_id", storeSlug)
+      .eq("user_id", userId)
       .eq("is_active", true);
 
     const categories = (categoriesData || []).map((c) => c.name);
@@ -390,8 +434,10 @@ export async function getStoreBySlug(
     // Return only public-safe fields
     return {
       id: storeSlug,
+      userId, // ✅ Firebase UID for real-time subscriptions
       businessName: businessData.business_name || "Store",
       canonicalSlug, // ✅ Include canonical slug for redirect detection
+      planTier, // ✅ Plan tier for UI differentiation
       logoUrl: businessData.logo_url,
       bannerUrl: businessData.banner_url,
       storeActive: true,
@@ -403,7 +449,8 @@ export async function getStoreBySlug(
       socialMedia: businessData.social_media || {},
     };
   } catch (error) {
-    console.error("[store.ts] Error fetching store:", error);
+    console.error("[store.ts] CRITICAL Error fetching store:", error);
+    console.error("[store.ts] Error details:", JSON.stringify(error, null, 2));
     // In production, we don't throw - return null to show "store not found"
     // This prevents 500 errors from breaking the user experience
     return null;
@@ -423,7 +470,7 @@ export async function storeExists(storeSlug: string): Promise<boolean> {
 
     const { data, error } = await supabase
       .from("businesses")
-      .select("user_id, store_active")
+      .select("user_id")
       .eq("user_id", storeSlug)
       .maybeSingle();
 
@@ -431,8 +478,7 @@ export async function storeExists(storeSlug: string): Promise<boolean> {
       return false;
     }
 
-    // Check if store is active
-    return data.store_active !== false;
+    return true;
   } catch (error) {
     console.error("[store.ts] Error checking store existence:", error);
     return false;

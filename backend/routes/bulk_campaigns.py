@@ -3,10 +3,13 @@ Bulk Message Campaigns API Routes
 Handles bulk message campaign CRUD and sending operations
 """
 
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, request, jsonify, g
 from typing import Optional, List, Dict, Any
 from datetime import datetime
 from functools import wraps
+
+# Feature gate decorators (Phase 1: Revenue-Critical Enforcement)
+from middleware.feature_gate import require_limit, require_feature
 
 # Import Supabase client
 try:
@@ -20,13 +23,14 @@ bulk_campaigns_bp = Blueprint('bulk_campaigns', __name__, url_prefix='/api/bulk-
 
 
 def require_auth(f):
-    """Decorator to require authentication."""
+    """Decorator to require authentication. Sets both request.user_id and g.user_id."""
     @wraps(f)
     def decorated(*args, **kwargs):
         user_id = request.headers.get('X-User-ID') or request.headers.get('X-User-Id')
         if not user_id:
             return jsonify({'success': False, 'error': 'Authentication required'}), 401
         request.user_id = user_id
+        g.user_id = user_id  # Required by feature gate middleware
         return f(*args, **kwargs)
     return decorated
 
@@ -57,6 +61,7 @@ def list_bulk_campaigns():
 
 @bulk_campaigns_bp.route('', methods=['POST'])
 @require_auth
+@require_limit("bulk_messaging")  # Phase 1: Revenue-critical gate (atomic increment)
 def create_bulk_campaign():
     """Create a new bulk campaign."""
     if not SUPABASE_AVAILABLE:
@@ -135,6 +140,7 @@ def get_bulk_campaign(campaign_id: str):
 
 @bulk_campaigns_bp.route('/<campaign_id>/contacts', methods=['POST'])
 @require_auth
+@require_feature('bulk_messaging')
 def add_bulk_contacts(campaign_id: str):
     """Add contacts to a bulk campaign."""
     if not SUPABASE_AVAILABLE:
@@ -193,6 +199,7 @@ def add_bulk_contacts(campaign_id: str):
 
 @bulk_campaigns_bp.route('/<campaign_id>/send', methods=['POST'])
 @require_auth
+@require_limit("campaign_sends")  # Phase 1: Revenue-critical gate (atomic increment)
 def send_bulk_campaign(campaign_id: str):
     """Send the bulk campaign to all contacts."""
     if not SUPABASE_AVAILABLE:

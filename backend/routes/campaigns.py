@@ -5,9 +5,12 @@ Handles campaign creation, scheduling, sending, and tracking.
 
 import os
 from typing import Dict, Any, List, Optional
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, request, jsonify, g
 from functools import wraps
 from datetime import datetime, timedelta
+
+# Feature gate decorators (Phase 2: Limit Enforcement)
+from middleware.feature_gate import require_limit, require_feature
 
 # Create blueprint
 campaigns_bp = Blueprint('campaigns', __name__, url_prefix='/api/campaigns')
@@ -29,6 +32,7 @@ def require_auth(f):
         if not user_id:
             return jsonify({'success': False, 'error': 'Authentication required'}), 401
         request.user_id = user_id
+        g.user_id = user_id  # Required by feature gate middleware
         return f(*args, **kwargs)
     return decorated
 
@@ -79,6 +83,7 @@ def list_campaigns():
 
 @campaigns_bp.route('', methods=['POST'])
 @require_auth
+@require_limit("bulk_messaging")  # Phase 2: Broadcast campaign creation gate
 def create_campaign():
     """
     Create a new broadcast campaign.
@@ -207,6 +212,7 @@ def get_campaign(campaign_id: str):
 
 @campaigns_bp.route('/<campaign_id>', methods=['PUT'])
 @require_auth
+@require_feature('campaign_sends')
 def update_campaign(campaign_id: str):
     """
     Update a campaign (only if in draft/scheduled status).
@@ -261,6 +267,7 @@ def update_campaign(campaign_id: str):
 
 @campaigns_bp.route('/<campaign_id>', methods=['DELETE'])
 @require_auth
+@require_feature('campaign_sends')
 def delete_campaign(campaign_id: str):
     """Delete a campaign (only if in draft status)."""
     if not SUPABASE_AVAILABLE:
@@ -294,6 +301,7 @@ def delete_campaign(campaign_id: str):
 
 @campaigns_bp.route('/<campaign_id>/send', methods=['POST'])
 @require_auth
+@require_limit("campaign_sends")  # Phase 2: Campaign send quota enforcement
 def start_campaign(campaign_id: str):
     """
     Start sending a campaign.
@@ -430,6 +438,7 @@ def start_campaign(campaign_id: str):
 
 @campaigns_bp.route('/<campaign_id>/pause', methods=['POST'])
 @require_auth
+@require_feature('campaign_sends')
 def pause_campaign(campaign_id: str):
     """Pause a sending campaign."""
     if not SUPABASE_AVAILABLE:
@@ -457,6 +466,7 @@ def pause_campaign(campaign_id: str):
 
 @campaigns_bp.route('/<campaign_id>/resume', methods=['POST'])
 @require_auth
+@require_feature('campaign_sends')
 def resume_campaign(campaign_id: str):
     """Resume a paused campaign."""
     if not SUPABASE_AVAILABLE:
@@ -484,6 +494,7 @@ def resume_campaign(campaign_id: str):
 
 @campaigns_bp.route('/<campaign_id>/cancel', methods=['POST'])
 @require_auth
+@require_feature('campaign_sends')
 def cancel_campaign(campaign_id: str):
     """Cancel a campaign."""
     if not SUPABASE_AVAILABLE:

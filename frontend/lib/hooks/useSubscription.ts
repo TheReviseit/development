@@ -47,32 +47,7 @@ interface UseSubscriptionReturn {
     userInfo: { email: string; name?: string; phone?: string },
   ) => Promise<boolean>;
   cancel: () => Promise<boolean>;
-  canUseFeature: (feature: string) => boolean;
 }
-
-// Feature access by plan
-const FEATURE_ACCESS: Record<string, PlanName[]> = {
-  "ai-responses": ["starter", "business", "pro"],
-  "whatsapp-number": ["starter", "business", "pro"],
-  "faq-training": ["starter", "business", "pro"],
-  "live-chat": ["starter", "business", "pro"],
-  broadcasts: ["business", "pro"],
-  "template-builder": ["business", "pro"],
-  "contact-management": ["business", "pro"],
-  analytics: ["business", "pro"],
-  "multi-agent-inbox": ["pro"],
-  "workflow-automation": ["pro"],
-  "api-access": ["pro"],
-  "advanced-analytics": ["pro"],
-  "priority-support": ["pro"],
-};
-
-// Plan hierarchy for feature checkss
-const PLAN_HIERARCHY: Record<PlanName, number> = {
-  starter: 1,
-  business: 2,
-  pro: 3,
-};
 
 export function useSubscription(userId?: string): UseSubscriptionReturn {
   const [subscription, setSubscription] = useState<Subscription | null>(null);
@@ -192,22 +167,6 @@ export function useSubscription(userId?: string): UseSubscriptionReturn {
     }
   }, [userId, fetchSubscription]);
 
-  const canUseFeature = useCallback(
-    (feature: string): boolean => {
-      if (!subscription || subscription.status !== "active") {
-        return false;
-      }
-
-      const allowedPlans = FEATURE_ACCESS[feature];
-      if (!allowedPlans) {
-        return true; // Unknown feature, allow by default
-      }
-
-      return allowedPlans.includes(subscription.plan_name);
-    },
-    [subscription],
-  );
-
   const hasActiveSubscription = subscription?.status === "active";
 
   const remainingResponses = subscription
@@ -231,6 +190,5 @@ export function useSubscription(userId?: string): UseSubscriptionReturn {
     refetch: fetchSubscription,
     subscribe,
     cancel,
-    canUseFeature,
   };
 }

@@ -41,17 +41,34 @@ export default function Dropdown({
   const selectedOption = options.find((opt) => opt.value === value);
   const displayLabel = selectedOption?.label || placeholder;
 
-  // Calculate menu position based on trigger button
+  // Calculate menu position based on trigger button, with viewport flip
   const updateMenuPosition = useCallback(() => {
     if (triggerRef.current) {
       const rect = triggerRef.current.getBoundingClientRect();
+      const menuWidth = Math.max(rect.width, 160);
+      const gap = 6;
+
+      // Estimate menu height: ~44px per option, max 5 visible before scroll
+      const estimatedMenuHeight = Math.min(options.length, 5) * 44 + 16; // 16px padding
+      const spaceBelow = window.innerHeight - rect.bottom - gap;
+      const spaceAbove = rect.top - gap;
+
+      // Flip upward if not enough space below but enough above
+      const showAbove =
+        spaceBelow < estimatedMenuHeight && spaceAbove > spaceBelow;
+
+      // Clamp left to stay within viewport
+      const left = Math.min(rect.left, window.innerWidth - menuWidth - 8);
+
       setMenuPosition({
-        top: rect.bottom + 6, // 6px gap below trigger
-        left: rect.left,
-        width: Math.max(rect.width, 160), // Min width 160px
+        top: showAbove
+          ? rect.top - gap - Math.min(estimatedMenuHeight, spaceAbove)
+          : rect.bottom + gap,
+        left: Math.max(8, left),
+        width: menuWidth,
       });
     }
-  }, []);
+  }, [options.length]);
 
   // Update position when opening
   useEffect(() => {

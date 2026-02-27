@@ -1,114 +1,181 @@
 import Link from "next/link";
 import {
-  Eye,
-  Sparkles,
-  Image as ImageIcon,
-  ArrowRight,
-  Check,
-  Palette,
   Star,
+  ArrowRight,
+  Users,
+  Trophy,
   TrendingUp,
+  Zap,
   Layout,
-  Share2,
+  Palette,
+  Globe,
+  Shield,
+  Sparkles,
+  Activity,
+  Target,
+  Lock,
 } from "lucide-react";
+import styles from "./showcase.module.css";
 
 /**
- * Showcase Product Landing Page - Enterprise Grade
- * Domain: showcase.flowauxi.com
- * Port: localhost:3003
+ * Showcase Landing Page - Exact Bento Box Layout
+ * Top: Centered title, subtitle, buttons, rating
+ * Bottom: Hero image (left) | Bento cards (right)
  */
 
 export default function ShowcaseLandingPage() {
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-amber-50">
+    <div className={styles.container}>
       {/* Navigation */}
-      <nav className="fixed top-0 w-full z-50 bg-white/80 backdrop-blur-xl border-b border-gray-100 shadow-sm">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center h-16">
-            <div className="flex items-center gap-2 group">
-              <div className="relative">
-                <Eye className="h-8 w-8 text-amber-600 transition-transform group-hover:scale-110 duration-300" />
-                <div className="absolute -inset-2 bg-amber-600/20 rounded-full blur-lg opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
-              </div>
-              <span className="ml-2 text-xl font-bold bg-gradient-to-r from-amber-600 to-orange-600 bg-clip-text text-transparent">
-                Flowauxi Showcase
-              </span>
-            </div>
-            <div className="flex items-center gap-4">
-              <Link
-                href="/login"
-                className="text-gray-600 hover:text-gray-900 font-medium transition-colors duration-200"
-              >
-                Sign In
-              </Link>
-              <Link
-                href="/signup"
-                className="relative group overflow-hidden bg-gradient-to-r from-amber-600 to-orange-600 text-white px-6 py-2 rounded-xl font-medium transition-all duration-300 shadow-lg hover:shadow-xl hover:shadow-amber-500/50 hover:-translate-y-0.5"
-              >
-                <span className="relative z-10">Start Free Trial</span>
-                <div className="absolute inset-0 bg-gradient-to-r from-orange-600 to-amber-600 opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
-              </Link>
-            </div>
+      <nav className={styles.navbar}>
+        <div className={styles.navbarInner}>
+          <div className={styles.logo}>
+            <div className={styles.logoIcon}>F</div>
+            <span>Flowauxi</span>
+          </div>
+          <div className={styles.navLinks}>
+            <Link href="/" className={styles.navLink}>
+              Home
+            </Link>
+            <Link href="#features" className={styles.navLink}>
+              Features
+            </Link>
+            <Link href="/pricing" className={styles.navLink}>
+              Pricing
+            </Link>
+            <Link href="#contact" className={styles.navLink}>
+              Contact
+            </Link>
+            <Link href="/signup" className={styles.navCta}>
+              Sign Up
+            </Link>
           </div>
         </div>
       </nav>
 
       {/* Hero Section */}
-      <section className="relative overflow-hidden pt-32 pb-24 md:pt-40 md:pb-32">
-        <div className="absolute inset-0 overflow-hidden pointer-events-none">
-          <div className="absolute top-0 left-1/4 w-96 h-96 bg-amber-500/10 rounded-full blur-3xl animate-pulse-slow" />
-          <div className="absolute bottom-0 right-1/4 w-96 h-96 bg-orange-500/10 rounded-full blur-3xl animate-pulse-slow animation-delay-2000" />
-        </div>
-
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
-          <div className="text-center max-w-4xl mx-auto">
-            <div className="inline-flex items-center gap-2 bg-amber-100/80 backdrop-blur-sm text-amber-700 px-4 py-2 rounded-full text-sm font-medium mb-6 border border-amber-200/50">
-              <Sparkles className="h-4 w-4" />
-              <span>Powering 15,000+ portfolio websites worldwide</span>
-            </div>
-            <h1 className="text-5xl md:text-6xl lg:text-7xl font-bold text-gray-900 leading-tight mb-6">
-              Showcase Your Work
-              <span className="block bg-gradient-to-r from-amber-600 via-orange-600 to-rose-600 bg-clip-text text-transparent animate-gradient">
-                Like a Pro
-              </span>
+      <section className={styles.hero}>
+        <div className={styles.heroContainer}>
+          {/* Top Section - Centered Title, Subtitle, Buttons, Rating */}
+          <div className={styles.heroTopSection}>
+            <h1 className={styles.heroTitle}>
+              The Future of Portfolio
+              <br />
+              with Latest Technology
             </h1>
-            <p className="text-xl md:text-2xl text-gray-600 mb-8 leading-relaxed">
-              Create stunning portfolio websites with{" "}
-              <span className="font-semibold text-amber-600">
-                drag-and-drop builder
-              </span>
-              , beautiful templates, and powerful customization.
+            <p className={styles.heroSubtitle}>
+              Expert tech to elevate your portfolio. Let&apos;s take your
+              business further with stunning showcase websites and powerful
+              customization tools.
             </p>
-            <div className="flex flex-col sm:flex-row gap-4 justify-center mb-10">
-              <Link
-                href="/signup"
-                className="group relative inline-flex items-center justify-center bg-gradient-to-r from-amber-600 to-orange-600 text-white px-8 py-4 rounded-xl hover:from-amber-700 hover:to-orange-700 font-semibold transition-all duration-300 shadow-xl hover:shadow-2xl hover:shadow-amber-500/50 hover:-translate-y-1 text-lg overflow-hidden"
-              >
-                <span className="relative z-10 flex items-center gap-2">
-                  Start Free Trial
-                  <ArrowRight className="h-5 w-5 group-hover:translate-x-1 transition-transform duration-300" />
-                </span>
-                <div className="absolute inset-0 bg-gradient-to-r from-orange-600 to-rose-600 opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+            <div className={styles.heroButtons}>
+              <Link href="/signup" className={styles.primaryButton}>
+                Get Started
               </Link>
-              <Link
-                href="/demo"
-                className="group inline-flex items-center justify-center bg-white/80 backdrop-blur-sm border-2 border-gray-200 text-gray-700 px-8 py-4 rounded-xl hover:border-amber-300 hover:bg-amber-50/50 font-semibold transition-all duration-300 text-lg hover:shadow-lg"
-              >
-                View Examples
+              <Link href="#demo" className={styles.secondaryButton}>
+                Try Demo
               </Link>
             </div>
-            <div className="flex items-center justify-center gap-6 text-sm text-gray-500">
-              <div className="flex items-center gap-2">
-                <Check className="h-5 w-5 text-green-600" />
-                <span>Free forever plan</span>
+            <div className={styles.heroRating}>
+              <div className={styles.stars}>
+                {[...Array(5)].map((_, i) => (
+                  <Star key={i} size={18} fill="currentColor" />
+                ))}
               </div>
-              <div className="flex items-center gap-2">
-                <Check className="h-5 w-5 text-green-600" />
-                <span>No credit card</span>
+              <div className={styles.ratingText}>
+                <span className={styles.ratingScore}>5.0</span> from 80+ reviews
               </div>
-              <div className="flex items-center gap-2">
-                <Check className="h-5 w-5 text-green-600" />
-                <span>Custom domain</span>
+            </div>
+          </div>
+
+          {/* Bottom Section - Hero Image (left) + Bento Cards (right) */}
+          <div className={styles.heroBottomSection}>
+            {/* Left: Hero Image with Decorative Icons */}
+            <div className={styles.heroImageColumn}>
+              {/* Decorative floating icons */}
+              <div className={styles.decorativeIcons}>
+                <div className={styles.decorIcon}>
+                  <Target size={18} />
+                </div>
+                <div className={styles.decorIcon}>
+                  <Activity size={18} />
+                </div>
+                <div className={styles.decorIcon}>
+                  <Lock size={18} />
+                </div>
+              </div>
+
+              {/* Hero Image */}
+              <div className={styles.heroImage}>
+                <img
+                  src="https://images.unsplash.com/photo-1511818966892-d7d671e672a2?w=500&h=500&fit=crop&sat=20"
+                  alt="Modern architectural design showcase"
+                />
+              </div>
+            </div>
+
+            {/* Right: Bento Box Cards */}
+            <div className={`${styles.bentoGrid} ${styles.bentoGridAlt}`}>
+              {/* Card 1: Left Tall - Clients */}
+              <div
+                className={`${styles.bentoCard} ${styles.cardTeal} ${styles.bentoCard1Alt}`}
+              >
+                <div className={styles.cardIcon}>
+                  <Users size={20} />
+                </div>
+                <div>
+                  <div className={styles.cardNumber}>100+</div>
+                  <div className={styles.cardLabel}>
+                    Our Extended Clients and Partners
+                  </div>
+                </div>
+              </div>
+
+              {/* Card 2: Top Center - Total Projects */}
+              <div
+                className={`${styles.bentoCard} ${styles.cardMint} ${styles.bentoCard2Alt}`}
+              >
+                <div className={styles.cardIcon}>
+                  <Trophy size={20} />
+                </div>
+                <div>
+                  <div className={styles.cardLabel}>Total Projects</div>
+                  <div className={styles.cardNumber}>1951+</div>
+                  <div
+                    className={`${styles.cardLabel} ${styles.cardSmallText}`}
+                  >
+                    Increase of 2% this month
+                  </div>
+                </div>
+              </div>
+
+              {/* Card 3: Bottom Center - Years */}
+              <div
+                className={`${styles.bentoCard} ${styles.cardMint} ${styles.bentoCard3Alt}`}
+              >
+                <div className={styles.cardIcon}>
+                  <TrendingUp size={20} />
+                </div>
+                <div>
+                  <div className={styles.cardNumber}>6+</div>
+                  <div className={styles.cardLabel}>
+                    Years of Dedicated Service
+                  </div>
+                </div>
+              </div>
+
+              {/* Card 4: Right Tall - Efficiency */}
+              <div
+                className={`${styles.bentoCard} ${styles.cardTeal} ${styles.bentoCard4Alt}`}
+              >
+                <div className={styles.cardIcon}>
+                  <Zap size={20} />
+                </div>
+                <div>
+                  <div className={styles.cardLabel}>
+                    Achieved Optimal Efficiency and Boost Productivity
+                  </div>
+                </div>
               </div>
             </div>
           </div>
@@ -116,131 +183,101 @@ export default function ShowcaseLandingPage() {
       </section>
 
       {/* Features Section */}
-      <section className="py-24 bg-white">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="text-center mb-16">
-            <h2 className="text-4xl md:text-5xl font-bold text-gray-900 mb-4">
+      <section className={styles.features} id="features">
+        <div className={styles.featuresContent}>
+          <div className={styles.sectionHeader}>
+            <h2 className={styles.sectionTitle}>
               Built for Creators and Professionals
             </h2>
-            <p className="text-xl text-gray-600">
-              Everything you need to showcase your work beautifully
+            <p className={styles.sectionSubtitle}>
+              Everything you need to showcase your work beautifully with
+              cutting-edge technology
             </p>
           </div>
 
-          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+          <div className={styles.featuresGrid}>
             <FeatureCard
-              icon={<Layout className="h-8 w-8" />}
-              title="Drag & Drop Builder"
-              description="Intuitive visual builder with real-time preview. No coding required. Create professional sites in minutes."
-              gradient="from-amber-500 to-orange-600"
+              icon={<Layout size={28} />}
+              title="Visual Builder"
+              description="Intuitive drag-and-drop interface with real-time preview. Create professional portfolios in minutes."
             />
             <FeatureCard
-              icon={<Palette className="h-8 w-8" />}
-              title="Beautiful Templates"
+              icon={<Palette size={28} />}
+              title="Premium Templates"
               description="50+ professionally designed templates for every industry. Fully customizable to match your brand."
-              gradient="from-blue-500 to-cyan-600"
             />
             <FeatureCard
-              icon={<ImageIcon className="h-8 w-8" />}
-              title="Media Showcase"
-              description="Display images, videos, and documents beautifully. Optimized galleries with lightbox support."
-              gradient="from-purple-500 to-pink-600"
+              icon={<Globe size={28} />}
+              title="Global Reach"
+              description="Multi-language support, CDN delivery, and SEO optimization to reach audiences worldwide."
             />
             <FeatureCard
-              icon={<Star className="h-8 w-8" />}
-              title="Client Testimonials"
-              description="Showcase reviews and testimonials. Build trust with social proof and ratings."
-              gradient="from-green-500 to-emerald-600"
+              icon={<Shield size={28} />}
+              title="Enterprise Security"
+              description="Bank-level encryption, SSL certificates, and automatic backups to keep your data safe."
             />
             <FeatureCard
-              icon={<Share2 className="h-8 w-8" />}
-              title="Social Integration"
-              description="Connect Instagram, Behance, Dribbble, and more. Auto-sync your latest work."
-              gradient="from-violet-500 to-purple-600"
+              icon={<Sparkles size={28} />}
+              title="AI-Powered"
+              description="Smart content suggestions, auto-optimization, and intelligent analytics to maximize impact."
             />
             <FeatureCard
-              icon={<TrendingUp className="h-8 w-8" />}
-              title="Analytics & SEO"
-              description="Track visitors, optimize for search engines, and grow your audience with built-in tools."
-              gradient="from-pink-500 to-rose-600"
+              icon={<TrendingUp size={28} />}
+              title="Analytics & Insights"
+              description="Advanced visitor tracking, conversion metrics, and actionable insights to grow your audience."
             />
           </div>
         </div>
       </section>
 
       {/* CTA Section */}
-      <section className="relative py-24 overflow-hidden">
-        <div className="absolute inset-0 bg-gradient-to-br from-amber-600 via-orange-600 to-rose-600" />
-        <div className="absolute inset-0 bg-grid-pattern-white opacity-10" />
-        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 text-center relative z-10">
-          <h2 className="text-4xl md:text-5xl lg:text-6xl font-bold text-white mb-6">
-            Build Your Portfolio Today
+      <section className={styles.cta}>
+        <div className={styles.ctaContent}>
+          <h2 className={styles.ctaTitle}>
+            Build Your Professional Portfolio Today
           </h2>
-          <p className="text-xl md:text-2xl text-amber-100 mb-10">
-            Join thousands of creators showcasing their work with Flowauxi
+          <p className={styles.ctaSubtitle}>
+            Join thousands of creators and professionals showcasing their work
+            with Flowauxi&apos;s cutting-edge platform
           </p>
-          <Link
-            href="/signup"
-            className="group inline-flex items-center justify-center bg-white text-amber-600 px-10 py-5 rounded-xl hover:bg-gray-50 font-bold transition-all duration-300 shadow-2xl hover:shadow-3xl hover:-translate-y-1 text-lg"
-          >
-            <span className="flex items-center gap-2">
-              Start Free Trial
-              <ArrowRight className="h-6 w-6 group-hover:translate-x-1 transition-transform duration-300" />
-            </span>
+          <Link href="/signup" className={styles.ctaButton}>
+            Start Free Trial
+            <ArrowRight size={22} />
           </Link>
-          <p className="mt-6 text-amber-200 text-sm">
-            Free forever plan • No credit card required • Upgrade anytime
-          </p>
         </div>
       </section>
 
       {/* Footer */}
-      <footer className="bg-gray-900 text-gray-400 py-12">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
-          <div className="flex items-center justify-center mb-4">
-            <Eye className="h-6 w-6 text-amber-400" />
-            <span className="ml-2 text-white font-semibold text-lg">
-              Flowauxi Showcase
-            </span>
-          </div>
-          <p className="text-sm">
-            Portfolio platform built for creators and professionals
+      <footer className={styles.footer}>
+        <div className={styles.footerContent}>
+          <div className={styles.footerLogo}>Flowauxi Showcase</div>
+          <p className={styles.footerText}>
+            Professional portfolio platform built for creators
           </p>
-          <div className="mt-8 text-sm">
-            <p>&copy; 2026 Flowauxi. All rights reserved.</p>
-          </div>
+          <p className={styles.footerText}>
+            &copy; 2026 Flowauxi. All rights reserved.
+          </p>
         </div>
       </footer>
     </div>
   );
 }
 
-// Reusable Component
+// Feature Card Component
 function FeatureCard({
   icon,
   title,
   description,
-  gradient,
 }: {
   icon: React.ReactNode;
   title: string;
   description: string;
-  gradient: string;
 }) {
   return (
-    <div className="group relative bg-white/80 backdrop-blur-sm border border-gray-200 rounded-2xl p-8 hover:shadow-2xl hover:shadow-amber-500/10 transition-all duration-500 hover:-translate-y-2 overflow-hidden">
-      <div
-        className={`absolute inset-0 bg-gradient-to-br ${gradient} opacity-0 group-hover:opacity-5 transition-opacity duration-500`}
-      />
-      <div className="relative z-10">
-        <div
-          className={`inline-flex p-3 rounded-xl bg-gradient-to-br ${gradient} text-white mb-4 shadow-lg group-hover:scale-110 transition-transform duration-300`}
-        >
-          {icon}
-        </div>
-        <h3 className="text-xl font-bold text-gray-900 mb-3">{title}</h3>
-        <p className="text-gray-600 leading-relaxed">{description}</p>
-      </div>
+    <div className={styles.featureCard}>
+      <div className={styles.featureIcon}>{icon}</div>
+      <h3 className={styles.featureTitle}>{title}</h3>
+      <p className={styles.featureDescription}>{description}</p>
     </div>
   );
 }

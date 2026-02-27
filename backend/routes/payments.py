@@ -607,6 +607,18 @@ def update_subscription_status(
         
         if result.data:
             logger.info(f"[{request_id}] Subscription {razorpay_subscription_id} → {status}")
+            
+            # Active cache invalidation — don't wait for TTL
+            try:
+                sub_data = result.data[0] if result.data else {}
+                user_id = sub_data.get('user_id')
+                domain = sub_data.get('product_domain', 'shop')
+                if user_id:
+                    from services.feature_gate_engine import get_feature_gate_engine
+                    get_feature_gate_engine().invalidate_subscription_cache(str(user_id), domain)
+            except Exception as cache_err:
+                logger.warning(f"[{request_id}] Cache invalidation failed (non-fatal): {cache_err}")
+            
             return {'success': True, 'updated': True}
         else:
             logger.warning(f"[{request_id}] Subscription {razorpay_subscription_id} not found")
@@ -1038,12 +1050,39 @@ def create_subscription():
                 )
                 
                 if 'already exists' in error_msg.lower():
-                    return error_response(
-                        'A customer with this email already exists in payment system. '
-                        'Please contact support or use a different email.',
-                        'CUSTOMER_EXISTS',
-                        400
-                    )
+                    # Customer exists in Razorpay but not in our DB (user was re-created
+                    # after account deletion, or DB was wiped). Look up by email and reuse.
+                    try:
+                        logger.info(f"[{request_id}] Looking up existing Razorpay customer by email: {data.customer_email}")
+                        all_customers = razorpay_client.customer.all({'count': 100})
+                        existing_customer = next(
+                            (c for c in all_customers.get('items', []) if c.get('email') == data.customer_email),
+                            None
+                        )
+                        
+                        if existing_customer:
+                            customer_id = existing_customer['id']
+                            logger.info(f"[{request_id}] ✅ Found existing Razorpay customer: {customer_id}")
+                            # Store in our DB so future requests don't hit this path
+                            store_razorpay_customer_new(
+                                user_id, customer_id, data.customer_email,
+                                data.customer_name, data.customer_phone
+                            )
+                        else:
+                            logger.error(f"[{request_id}] Customer 'already exists' but not found via API lookup")
+                            return error_response(
+                                'A customer with this email already exists in payment system but could not be recovered. '
+                                'Please contact support.',
+                                'CUSTOMER_EXISTS',
+                                400
+                            )
+                    except Exception as lookup_error:
+                        logger.error(f"[{request_id}] Error during customer lookup fallback: {lookup_error}")
+                        return error_response(
+                            'Failed to recover existing payment customer. Please contact support.',
+                            'CUSTOMER_LOOKUP_FAILED',
+                            500
+                        )
                 else:
                     return error_response(
                         f'Invalid customer data: {error_msg}',
@@ -1302,14 +1341,14 @@ def verify_subscription():
             tz=timezone.utc
         ).isoformat()
         
-        # Update subscription to COMPLETED immediately (don't wait for webhook)
+        # Update subscription to ACTIVE immediately (don't wait for webhook)
         # Signature verification already confirms payment is valid
         if SUPABASE_AVAILABLE:
             supabase = get_supabase_client()
             
-            # Set to COMPLETED immediately - payment signature is verified
+            # Set to ACTIVE immediately - payment signature is verified
             supabase.table('subscriptions').update({
-                'status': 'completed',  # Mark as active immediately
+                'status': 'active',  # Must match subscriptions_status_check constraint
                 'current_period_start': current_start,
                 'current_period_end': current_end,
                 'ai_responses_used': 0  # Reset usage on activation
@@ -1741,33 +1780,95 @@ def extract_event_metadata(event: Dict) -> Dict:
 
 
 def process_subscription_activated(meta: Dict) -> WebhookResult:
-    """Handle subscription.activated event."""
+    """Handle subscription.activated event — supports both new subscriptions and upgrades."""
     request_id = getattr(g, 'request_id', 'unknown')
     sub_data = meta['subscription_data']
     sub_id = meta['subscription_id']
-    
+
     if not sub_id:
         logger.warning(f"[{request_id}] subscription.activated missing subscription_id")
         return WEBHOOK_OK  # Return 200 anyway, don't make Razorpay retry
-    
-    # Get current subscription state for ordering check
+
+    # Check if this is a pending upgrade (new Razorpay sub ID stored in pending field)
+    supabase = get_supabase_client()
+    pending_upgrade_sub = supabase.table('subscriptions').select('*').eq(
+        'pending_upgrade_razorpay_subscription_id', sub_id
+    ).eq('status', 'pending_upgrade').limit(1).execute()
+
+    if pending_upgrade_sub.data:
+        # This is an UPGRADE activation — swap to the new plan
+        subscription = pending_upgrade_sub.data[0]
+        new_plan_id = subscription.get('pending_upgrade_to_plan_id')
+
+        logger.info(
+            f"[{request_id}] Upgrade activation: sub={subscription['id']} "
+            f"razorpay_sub={sub_id} new_plan={new_plan_id}"
+        )
+
+        # Calculate period timestamps safely
+        current_start = sub_data.get('current_start', 0)
+        current_end = sub_data.get('current_end', 0)
+        period_start = datetime.fromtimestamp(current_start, tz=timezone.utc) if current_start else None
+        period_end = datetime.fromtimestamp(current_end, tz=timezone.utc) if current_end else None
+
+        # Atomically activate the new plan
+        update_data = {
+            'status': 'active',
+            'pricing_plan_id': new_plan_id,
+            'razorpay_subscription_id': sub_id,  # Swap to new Razorpay sub
+            'pending_upgrade_to_plan_id': None,
+            'pending_upgrade_razorpay_subscription_id': None,
+            'upgrade_failure_reason': None,
+            'upgrade_initiated_at': None,
+            'updated_at': datetime.now(timezone.utc).isoformat(),
+        }
+        if period_start:
+            update_data['current_period_start'] = period_start.isoformat()
+        if period_end:
+            update_data['current_period_end'] = period_end.isoformat()
+        if meta.get('created_at'):
+            update_data['last_webhook_event_at'] = meta['created_at'].isoformat()
+
+        supabase.table('subscriptions').update(update_data).eq(
+            'id', subscription['id']
+        ).execute()
+
+        # Invalidate caches
+        user_id = subscription.get('user_id')
+        domain = subscription.get('product_domain', 'shop')
+        if user_id:
+            try:
+                from services.feature_gate_engine import get_feature_gate_engine
+                engine = get_feature_gate_engine()
+                engine.invalidate_subscription_cache(str(user_id), domain)
+                engine.invalidate_usage_counter_cache(str(user_id), domain, None)
+            except Exception as cache_err:
+                logger.warning(f"[{request_id}] Cache invalidation failed (non-fatal): {cache_err}")
+
+        logger.info(
+            f"[{request_id}] Upgrade activated: sub={subscription['id']} "
+            f"plan={new_plan_id} domain={domain}"
+        )
+        return WEBHOOK_OK
+
+    # Standard flow — not an upgrade
     current = get_subscription_by_razorpay_id(sub_id)
-    
+
     if current:
         current_status = current.get('status', 'unknown')
-        
+
         # Event ordering safety - don't downgrade completed to activated
         if should_ignore_webhook_event(current_status, 'subscription.activated'):
             logger.info(f"[{request_id}] Ignoring subscription.activated - already {current_status}")
             return WEBHOOK_IGNORED_ORDERING
-    
+
     # Calculate period timestamps safely
     current_start = sub_data.get('current_start', 0)
     current_end = sub_data.get('current_end', 0)
-    
+
     period_start = datetime.fromtimestamp(current_start, tz=timezone.utc) if current_start else None
     period_end = datetime.fromtimestamp(current_end, tz=timezone.utc) if current_end else None
-    
+
     # Update subscription to COMPLETED (active)
     result = update_subscription_status(
         razorpay_subscription_id=sub_id,
@@ -1777,10 +1878,10 @@ def process_subscription_activated(meta: Dict) -> WebhookResult:
         event_created_at=meta['created_at'],
         reset_usage=True
     )
-    
+
     if result.get('success'):
         logger.info(f"[{request_id}] Subscription {sub_id} → COMPLETED (activated)")
-    
+
     return WEBHOOK_OK
 
 

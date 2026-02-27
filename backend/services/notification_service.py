@@ -658,6 +658,29 @@ class NotificationService:
         Returns:
             NotificationResult with success/failure details
         """
+        # ✅ Feature gate: live_order_updates — only Business+ plans get notifications
+        try:
+            from services.feature_gate_engine import get_feature_gate_engine
+            gate = get_feature_gate_engine()
+            decision = gate.check_feature_access(
+                user_id=business_user_id,
+                domain="shop",
+                feature_key="live_order_updates",
+            )
+            if not decision.allowed:
+                logger.info(
+                    f"⏭️ Skipping notification for order {order_id}: "
+                    f"live_order_updates not available for user {business_user_id[:15]}..."
+                )
+                return NotificationResult(
+                    success=True,
+                    channel=NotificationChannel.WHATSAPP,
+                    error="Skipped - feature not in plan"
+                )
+        except Exception as gate_err:
+            # Fail open: if gate check fails, still send notification
+            logger.warning(f"⚠️ Feature gate check failed, proceeding with notification: {gate_err}")
+
         # Skip notification for pending status (initial state)
         if status == "pending":
             logger.info(f"⏭️ Skipping notification for pending status (order: {order_id})")

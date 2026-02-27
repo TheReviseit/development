@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { cookies } from "next/headers";
-import { adminAuth } from "@/lib/firebase-admin";
+import { verifySessionCookieSafe } from "@/lib/firebase-admin";
 import { randomUUID } from "crypto";
 import { generateOrderId } from "@/lib/order-id";
 // Backend Flask API base URL (used for Google Sheets sync)
@@ -18,23 +18,27 @@ function getSupabase() {
   return createClient(supabaseUrl, supabaseServiceKey);
 }
 
-// Helper to get user ID from Firebase token
-async function getUserId(request: NextRequest): Promise<string | null> {
+// Helper to get user ID from Firebase session cookie
+async function getUserId(): Promise<string | null> {
   try {
     const cookieStore = await cookies();
     const sessionCookie = cookieStore.get("session")?.value;
 
     if (!sessionCookie) {
+      console.log("[orders] No session cookie found");
       return null;
     }
 
-    const decodedToken = await adminAuth.verifySessionCookie(
-      sessionCookie,
-      true,
-    );
-    return decodedToken.uid;
+    const result = await verifySessionCookieSafe(sessionCookie, false);
+
+    if (!result.success || !result.data) {
+      console.error("[orders] Session verification failed:", result.error, result.errorCode);
+      return null;
+    }
+
+    return result.data.uid;
   } catch (error) {
-    console.error("Error verifying session:", error);
+    console.error("[orders] Unexpected error in getUserId:", error);
     return null;
   }
 }
@@ -50,7 +54,7 @@ interface OrderItem {
 // GET - List all orders for current user
 export async function GET(request: NextRequest) {
   try {
-    const userId = await getUserId(request);
+    const userId = await getUserId();
 
     if (!userId) {
       console.log("📦 Orders API: No userId from session");
@@ -128,7 +132,7 @@ export async function GET(request: NextRequest) {
 // POST - Create a new order
 export async function POST(request: NextRequest) {
   try {
-    const userId = await getUserId(request);
+    const userId = await getUserId();
 
     if (!userId) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });

@@ -173,7 +173,7 @@ class TestRequirePaidOtpAccess:
         mock_ctx = EntitlementContext(
             user_id='user_123',
             org_id='org_456',
-            plan_tier=None,  # No paid plan!
+            plan_slug=None,  # No paid plan!
             billing_status=BillingStatus.EXPIRED
         )
         
@@ -200,7 +200,7 @@ class TestRequirePaidOtpAccess:
         """Active plan but inactive billing should return 402."""
         from middleware.security_enforcer import require_paid_otp_access
         from services.entitlement_service import (
-            EntitlementContext, PlanTier, BillingStatus
+            EntitlementContext, BillingStatus
         )
         
         @require_paid_otp_access()
@@ -211,7 +211,7 @@ class TestRequirePaidOtpAccess:
         mock_ctx = EntitlementContext(
             user_id='user_123',
             org_id='org_456',
-            plan_tier=PlanTier.STARTER,  # Has paid plan
+            plan_slug='starter',  # Has paid plan
             billing_status=BillingStatus.CANCELLED  # But cancelled!
         )
         
@@ -238,7 +238,7 @@ class TestRequirePaidOtpAccess:
         """Active paid subscription should allow OTP send."""
         from middleware.security_enforcer import require_paid_otp_access
         from services.entitlement_service import (
-            EntitlementContext, PlanTier, BillingStatus, PLAN_FEATURES
+            EntitlementContext, BillingStatus
         )
         
         @require_paid_otp_access()
@@ -249,9 +249,8 @@ class TestRequirePaidOtpAccess:
         mock_ctx = EntitlementContext(
             user_id='user_123',
             org_id='org_456',
-            plan_tier=PlanTier.GROWTH,
-            billing_status=BillingStatus.ACTIVE,
-            features=PLAN_FEATURES[PlanTier.GROWTH]
+            plan_slug='business',
+            billing_status=BillingStatus.ACTIVE
         )
         
         with patch('middleware.security_enforcer.get_entitlement_service') as mock_service:
@@ -331,7 +330,7 @@ class TestTenantAccess:
         """Should deny access when org_id doesn't match."""
         from middleware.security_enforcer import require_tenant_access
         from services.entitlement_service import (
-            EntitlementContext, PlanTier, BillingStatus
+            EntitlementContext, BillingStatus
         )
         
         @require_tenant_access('project')
@@ -342,7 +341,7 @@ class TestTenantAccess:
         ctx = EntitlementContext(
             user_id='user_123',
             org_id='org_A',  # User belongs to org_A
-            plan_tier=PlanTier.GROWTH,
+            plan_slug='business',
             billing_status=BillingStatus.ACTIVE
         )
         
@@ -359,7 +358,7 @@ class TestTenantAccess:
         """Should allow access when org_id matches."""
         from middleware.security_enforcer import require_tenant_access
         from services.entitlement_service import (
-            EntitlementContext, PlanTier, BillingStatus
+            EntitlementContext, BillingStatus
         )
         
         @require_tenant_access('project')
@@ -369,7 +368,7 @@ class TestTenantAccess:
         ctx = EntitlementContext(
             user_id='user_123',
             org_id='org_A',
-            plan_tier=PlanTier.GROWTH,
+            plan_slug='business',
             billing_status=BillingStatus.ACTIVE
         )
         

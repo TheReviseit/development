@@ -4,6 +4,8 @@ import { useState, useEffect, useCallback } from "react";
 import styles from "../dashboard.module.css";
 import { useAuth } from "@/app/components/auth/AuthProvider";
 import { fetchAnalyticsOverview, AnalyticsOverview } from "@/lib/api/whatsapp";
+import { RevenueAnalyticsChart } from "../orders/components/RevenueAnalyticsChart";
+import { useSubscription } from "@/lib/hooks/useSubscription";
 
 // Icon components
 const SendIcon = () => (
@@ -120,6 +122,11 @@ export default function AnalyticsView() {
     user?.id ||
     process.env.NEXT_PUBLIC_DEV_USER_ID ||
     "7944b72f-2bc1-4cc1-9714-215c2e177b51";
+
+  // Feature gate: advanced_analytics (revenue chart) — hidden for Basic plan
+  const { subscription, isLoading: subLoading } = useSubscription(userId);
+  const canAccessAnalytics =
+    !subLoading && !!subscription && subscription.plan_name !== "starter";
 
   // Fetch analytics data
   const loadAnalytics = useCallback(async () => {
@@ -309,205 +316,60 @@ export default function AnalyticsView() {
             ))}
           </div>
 
-          {/* AI Usage Card */}
-          <div
-            style={{
-              background: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
-              borderRadius: "16px",
-              padding: "24px",
-              color: "white",
-              marginBottom: "24px",
-              display: "grid",
-              gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))",
-              gap: "24px",
-            }}
-          >
-            <div>
-              <h3
-                style={{ fontSize: "14px", opacity: 0.8, marginBottom: "8px" }}
-              >
-                AI Token Usage
-              </h3>
-              <div style={{ fontSize: "28px", fontWeight: 700 }}>
-                {formatNumber(analytics.ai.tokens_used)} /{" "}
-                {formatNumber(analytics.ai.tokens_limit)}
-              </div>
-              <div
-                style={{
-                  background: "rgba(255,255,255,0.3)",
-                  height: "8px",
-                  borderRadius: "4px",
-                  marginTop: "12px",
-                  overflow: "hidden",
-                }}
-              >
-                <div
-                  style={{
-                    background: "white",
-                    height: "100%",
-                    width: `${analytics.ai.tokens_percent}%`,
-                    borderRadius: "4px",
-                  }}
-                />
-              </div>
-              <div style={{ fontSize: "12px", opacity: 0.8, marginTop: "8px" }}>
-                {analytics.ai.tokens_percent.toFixed(1)}% used
-              </div>
-            </div>
-            <div>
-              <h3
-                style={{ fontSize: "14px", opacity: 0.8, marginBottom: "8px" }}
-              >
-                AI Replies Generated
-              </h3>
-              <div style={{ fontSize: "28px", fontWeight: 700 }}>
-                {analytics.ai.replies_generated}
-              </div>
-              <div style={{ fontSize: "12px", opacity: 0.8, marginTop: "8px" }}>
-                Automated responses
-              </div>
-            </div>
-            <div>
-              <h3
-                style={{ fontSize: "14px", opacity: 0.8, marginBottom: "8px" }}
-              >
-                Estimated Cost
-              </h3>
-              <div style={{ fontSize: "28px", fontWeight: 700 }}>
-                ₹{analytics.ai.cost_inr.toFixed(2)}
-              </div>
-              <div style={{ fontSize: "12px", opacity: 0.8, marginTop: "8px" }}>
-                ${analytics.ai.cost_usd.toFixed(4)} USD
-              </div>
-            </div>
-          </div>
-
-          {/* Message Delivery Stats */}
-          <div
-            style={{
-              background: "#f8fafc",
-              borderRadius: "16px",
-              padding: "24px",
-              marginBottom: "24px",
-            }}
-          >
-            <h3
-              style={{
-                fontSize: "16px",
-                fontWeight: 600,
-                marginBottom: "16px",
-              }}
-            >
-              Message Delivery
-            </h3>
+          {/* Revenue Analytics Chart (Shop domain) — gated for Business+ */}
+          {canAccessAnalytics ? (
+            <RevenueAnalyticsChart />
+          ) : !subLoading ? (
             <div
               style={{
-                display: "grid",
-                gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))",
-                gap: "16px",
+                background: "#0a0a0a",
+                borderRadius: "16px",
+                padding: "32px 24px",
+                marginBottom: "24px",
+                textAlign: "center",
+                border: "1px solid #1a1a1a",
               }}
             >
-              <div
+              <div style={{ fontSize: "36px", marginBottom: "12px" }}>📊</div>
+              <h3
                 style={{
-                  textAlign: "center",
-                  padding: "16px",
-                  background: "white",
-                  borderRadius: "12px",
+                  color: "#ffffff",
+                  fontSize: "16px",
+                  fontWeight: 600,
+                  margin: "0 0 8px 0",
                 }}
               >
-                <div
-                  style={{
-                    fontSize: "24px",
-                    fontWeight: 700,
-                    color: "#4ade80",
-                  }}
-                >
-                  {analytics.messages.sent}
-                </div>
-                <div style={{ fontSize: "12px", color: "#6b7280" }}>Sent</div>
-              </div>
-              <div
+                Revenue Analytics
+              </h3>
+              <p
                 style={{
-                  textAlign: "center",
-                  padding: "16px",
-                  background: "white",
-                  borderRadius: "12px",
+                  color: "#6b7280",
+                  fontSize: "13px",
+                  margin: "0 0 16px 0",
                 }}
               >
-                <div
-                  style={{
-                    fontSize: "24px",
-                    fontWeight: 700,
-                    color: "#60a5fa",
-                  }}
-                >
-                  {analytics.messages.delivered}
-                </div>
-                <div style={{ fontSize: "12px", color: "#6b7280" }}>
-                  Delivered
-                </div>
-              </div>
-              <div
+                Track revenue trends, order volume, and growth insights.
+              </p>
+              <a
+                href="/upgrade?domain=shop"
                 style={{
-                  textAlign: "center",
-                  padding: "16px",
-                  background: "white",
-                  borderRadius: "12px",
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: "6px",
+                  padding: "8px 20px",
+                  background: "linear-gradient(135deg, #f59e0b, #d97706)",
+                  color: "#fff",
+                  fontSize: "13px",
+                  fontWeight: 600,
+                  borderRadius: "8px",
+                  textDecoration: "none",
+                  transition: "opacity 0.2s",
                 }}
               >
-                <div
-                  style={{
-                    fontSize: "24px",
-                    fontWeight: 700,
-                    color: "#a78bfa",
-                  }}
-                >
-                  {analytics.messages.read}
-                </div>
-                <div style={{ fontSize: "12px", color: "#6b7280" }}>Read</div>
-              </div>
-              <div
-                style={{
-                  textAlign: "center",
-                  padding: "16px",
-                  background: "white",
-                  borderRadius: "12px",
-                }}
-              >
-                <div
-                  style={{
-                    fontSize: "24px",
-                    fontWeight: 700,
-                    color: "#f87171",
-                  }}
-                >
-                  {analytics.messages.failed}
-                </div>
-                <div style={{ fontSize: "12px", color: "#6b7280" }}>Failed</div>
-              </div>
-              <div
-                style={{
-                  textAlign: "center",
-                  padding: "16px",
-                  background: "white",
-                  borderRadius: "12px",
-                }}
-              >
-                <div
-                  style={{
-                    fontSize: "24px",
-                    fontWeight: 700,
-                    color: "#22c55e",
-                  }}
-                >
-                  {analytics.messages.delivery_rate}%
-                </div>
-                <div style={{ fontSize: "12px", color: "#6b7280" }}>
-                  Delivery Rate
-                </div>
-              </div>
+                ⭐ Upgrade to Business Plan
+              </a>
             </div>
-          </div>
+          ) : null}
 
           {/* Trends Chart - Redesigned */}
           {chartData.length > 0 &&
@@ -767,7 +629,7 @@ export default function AnalyticsView() {
               );
             })()}
 
-          {/* Empty trends state */}
+          {/* Empty trends state - commented out
           {chartData.length === 0 && (
             <div
               style={{
@@ -788,6 +650,7 @@ export default function AnalyticsView() {
               </p>
             </div>
           )}
+          */}
         </>
       )}
 

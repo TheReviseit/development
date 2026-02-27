@@ -5,6 +5,7 @@ WhatsApp messaging routes with proper credential handling.
 from flask import Blueprint, request, jsonify
 import logging
 import os
+from middleware.feature_gate import require_feature
 
 logger = logging.getLogger(__name__)
 
@@ -27,6 +28,7 @@ whatsapp_service = WhatsAppService() if SERVICES_AVAILABLE else None
 
 
 @messaging_bp.route('/api/whatsapp/send-message', methods=['POST'])
+@require_feature('bulk_messaging')
 def send_message_with_user_credentials():
     """
     Send a WhatsApp message using the authenticated user's credentials.

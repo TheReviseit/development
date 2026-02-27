@@ -285,7 +285,7 @@ export function RevenueAnalyticsChart({ className }: Props) {
                 dataKey="label"
                 axisLine={false}
                 tickLine={false}
-                tick={{ fill: "rgb(0, 0, 0)", fontSize: 12 }}
+                tick={{ fill: "rgba(255, 255, 255, 0.5)", fontSize: 12 }}
                 dy={10}
                 interval="preserveStartEnd"
               />
@@ -293,7 +293,7 @@ export function RevenueAnalyticsChart({ className }: Props) {
               <YAxis
                 axisLine={false}
                 tickLine={false}
-                tick={{ fill: "rgb(0, 0, 0)", fontSize: 12 }}
+                tick={{ fill: "rgba(255, 255, 255, 0.5)", fontSize: 12 }}
                 tickFormatter={yAxisFormatter}
                 domain={yAxisDomain}
                 dx={-5}
@@ -301,13 +301,13 @@ export function RevenueAnalyticsChart({ className }: Props) {
 
               <Tooltip
                 content={<CustomTooltip currency={currency} />}
-                cursor={{ stroke: "rgb(0, 0, 0)", strokeWidth: 1 }}
+                cursor={{ stroke: "rgba(255, 255, 255, 0.2)", strokeWidth: 1 }}
               />
 
               <Area
                 type="monotone"
                 dataKey="revenue"
-                stroke="rgb(0, 0, 0)"
+                stroke="rgba(255, 255, 255, 0.6)"
                 strokeWidth={2}
                 fill="url(#revenueGradient)"
                 activeDot={{

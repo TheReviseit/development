@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { resolveSlugToUserId } from "@/lib/resolve-slug";
 
 // Initialize Supabase client
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
@@ -32,12 +33,21 @@ export async function GET(request: NextRequest) {
 
     const supabase = getSupabase();
 
-    // Fetch order by order ID and store slug (user_id)
+    // Resolve slug → Firebase UID (orders.user_id stores the Firebase UID)
+    const userId = await resolveSlugToUserId(storeSlug);
+    if (!userId) {
+      return NextResponse.json(
+        { error: "Store not found" },
+        { status: 404 },
+      );
+    }
+
+    // Fetch order by order ID and resolved user_id
     // Using ilike for case-insensitive search
     const { data: orders, error } = await supabase
       .from("orders")
       .select("*")
-      .eq("user_id", storeSlug)
+      .eq("user_id", userId)
       .ilike("order_id", orderId.trim())
       .order("created_at", { ascending: false })
       .limit(10); // Limit to prevent abuse

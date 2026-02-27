@@ -1,13 +1,17 @@
 "use client";
 
 import { useState, useEffect, useRef, useCallback } from "react";
+import Link from "next/link";
 import styles from "./products.module.css";
 import SlidePanel from "@/app/utils/ui/SlidePanel";
 import ProductForm from "@/app/dashboard/components/ProductCard/ProductForm";
 import { ProductCard } from "@/app/dashboard/components/ProductCard";
 import Toast from "@/app/components/Toast/Toast";
 import { useAuth } from "@/app/components/auth/AuthProvider";
-import { broadcastStoreUpdate } from "@/app/utils/storeSync";
+import {
+  broadcastStoreUpdate,
+  subscribeToStoreUpdates,
+} from "@/app/utils/storeSync";
 
 // Product type definition
 interface Product {
@@ -61,12 +65,29 @@ export default function ProductsPage() {
     text: string;
   } | null>(null);
 
-  // Store URL
-  const storeSlug = firebaseUser?.uid || "";
+  // ── Product Limit State ──────────────────────────────────────────────────
+  const [productLimit, setProductLimit] = useState<number | null>(null); // null = no limit / not loaded
+  const [productRemaining, setProductRemaining] = useState<number | null>(null);
+  const [productUsed, setProductUsed] = useState<number | null>(null);
+  const [productSoftLimit, setProductSoftLimit] = useState<number | null>(null);
+  // FIX: Use server-reported remaining count, NOT client-side row count.
+  // usage_counters is the single source of truth for limit enforcement.
+  const isAtProductLimit = productRemaining !== null && productRemaining <= 0;
+  // Show warning when approaching limit (server-reported used >= soft_limit)
+  const isApproachingLimit =
+    !isAtProductLimit &&
+    productUsed !== null &&
+    productSoftLimit !== null &&
+    productUsed >= productSoftLimit;
+
+  // Store URL — prefer custom slug from business profile, fall back to UID
+  const [storeSlug, setStoreSlug] = useState("");
   const storeUrl =
-    typeof window !== "undefined"
+    typeof window !== "undefined" && storeSlug
       ? `${window.location.origin}/store/${storeSlug}`
-      : `/store/${storeSlug}`;
+      : storeSlug
+        ? `/store/${storeSlug}`
+        : "";
 
   const handleCopyStoreLink = async () => {
     try {
@@ -89,110 +110,156 @@ export default function ProductsPage() {
     productsRef.current = products;
   }, [products]);
 
+  // Refetch products from server to get fresh data with all server-computed fields
+  const refetchProducts = useCallback(async () => {
+    try {
+      const response = await fetch("/api/products");
+      if (response.ok) {
+        const result = await response.json();
+        const mappedProducts = (result.products || []).map(
+          (p: Record<string, unknown>) => ({
+            id: p.id,
+            name: p.name || "",
+            category:
+              ((p.category as Record<string, unknown>)?.name as string) || "",
+            price: parseFloat(String(p.price)) || 0,
+            compareAtPrice: p.compare_at_price
+              ? parseFloat(String(p.compare_at_price))
+              : undefined,
+            priceUnit: p.price_unit || "INR",
+            duration: p.duration || "",
+            available: p.is_available !== false,
+            description: p.description || "",
+            sku: p.sku || "",
+            stockStatus: p.stock_status || "in_stock",
+            imageUrl: p.image_url || "",
+            imagePublicId: p.image_public_id || "",
+            originalSize: 0,
+            optimizedSize: 0,
+            variants: (
+              (p.variants as Array<Record<string, unknown>>) || []
+            ).map((v) => {
+              let sizeValue: string | string[] = v.size as string | string[];
+              if (Array.isArray(sizeValue)) {
+                // Already an array, keep it
+              } else if (
+                typeof sizeValue === "string" &&
+                sizeValue.trim().startsWith("[")
+              ) {
+                try {
+                  const parsed = JSON.parse(sizeValue);
+                  if (Array.isArray(parsed)) {
+                    sizeValue = parsed;
+                  }
+                } catch {
+                  // Keep original if parsing fails
+                }
+              } else if (
+                typeof sizeValue === "string" &&
+                sizeValue.includes(",")
+              ) {
+                sizeValue = sizeValue
+                  .split(",")
+                  .map((s) => s.trim())
+                  .filter(Boolean);
+              }
+
+              return {
+                id: (v.id as string) || "",
+                color: (v.color as string) || "",
+                size: sizeValue || "",
+                price: parseFloat(String(v.price)) || 0,
+                compareAtPrice: v.compare_at_price
+                  ? parseFloat(String(v.compare_at_price))
+                  : undefined,
+                stock: (v.stock_quantity as number) || (v.stock as number) || 0,
+                imageUrl: (v.image_url as string) || "",
+                imagePublicId: (v.image_public_id as string) || "",
+                hasSizePricing: (v.has_size_pricing as boolean) || false,
+                sizePrices:
+                  (typeof v.size_prices === "string"
+                    ? JSON.parse(v.size_prices)
+                    : v.size_prices) || {},
+                sizeStocks:
+                  (typeof v.size_stocks === "string"
+                    ? JSON.parse(v.size_stocks)
+                    : v.size_stocks) || {},
+              };
+            }),
+            sizes: p.sizes || [],
+            colors: p.colors || [],
+            brand: p.brand || "",
+            materials: p.materials || [],
+            hasSizePricing: (p.has_size_pricing as boolean) || false,
+            sizePrices:
+              (typeof p.size_prices === "string"
+                ? JSON.parse(p.size_prices)
+                : p.size_prices) || {},
+            sizeStocks:
+              (typeof p.size_stocks === "string"
+                ? JSON.parse(p.size_stocks)
+                : p.size_stocks) || {},
+          }),
+        );
+        setProducts(mappedProducts);
+        const categoryNames = (result.categories || []).map(
+          (c: Record<string, unknown>) => c.name as string,
+        );
+        setProductCategories(categoryNames);
+      }
+    } catch (error) {
+      console.error("Error refetching products:", error);
+    }
+  }, []);
+
   // Load products and categories on mount
   useEffect(() => {
     const loadData = async () => {
       try {
-        // Fetch from new normalized products API
-        const response = await fetch("/api/products");
-        if (response.ok) {
-          const result = await response.json();
-          // Map from normalized format to frontend format
-          const mappedProducts = (result.products || []).map(
-            (p: Record<string, unknown>) => ({
-              id: p.id,
-              name: p.name || "",
-              category:
-                ((p.category as Record<string, unknown>)?.name as string) || "",
-              price: parseFloat(String(p.price)) || 0,
-              compareAtPrice: p.compare_at_price
-                ? parseFloat(String(p.compare_at_price))
-                : undefined,
-              priceUnit: p.price_unit || "INR",
-              duration: p.duration || "",
-              available: p.is_available !== false,
-              description: p.description || "",
-              sku: p.sku || "",
-              stockStatus: p.stock_status || "in_stock",
-              imageUrl: p.image_url || "",
-              imagePublicId: p.image_public_id || "",
-              originalSize: 0,
-              optimizedSize: 0,
-              // Map variants from API (snake_case to camelCase)
-              variants: (
-                (p.variants as Array<Record<string, unknown>>) || []
-              ).map((v) => {
-                // Handle size that might be stored as array, stringified array, or comma-separated string
-                let sizeValue: string | string[] = v.size as string | string[];
-                if (Array.isArray(sizeValue)) {
-                  // Already an array, keep it
-                } else if (
-                  typeof sizeValue === "string" &&
-                  sizeValue.trim().startsWith("[")
-                ) {
-                  try {
-                    const parsed = JSON.parse(sizeValue);
-                    if (Array.isArray(parsed)) {
-                      sizeValue = parsed;
-                    }
-                  } catch {
-                    // Keep original if parsing fails
-                  }
-                } else if (
-                  typeof sizeValue === "string" &&
-                  sizeValue.includes(",")
-                ) {
-                  // Parse comma-separated string to array
-                  sizeValue = sizeValue
-                    .split(",")
-                    .map((s) => s.trim())
-                    .filter(Boolean);
-                }
+        // Fetch products via refetchProducts (shared logic)
+        await refetchProducts();
 
-                return {
-                  id: (v.id as string) || "",
-                  color: (v.color as string) || "",
-                  size: sizeValue || "",
-                  price: parseFloat(String(v.price)) || 0,
-                  compareAtPrice: v.compare_at_price
-                    ? parseFloat(String(v.compare_at_price))
-                    : undefined,
-                  stock:
-                    (v.stock_quantity as number) || (v.stock as number) || 0,
-                  imageUrl: (v.image_url as string) || "",
-                  imagePublicId: (v.image_public_id as string) || "",
-                  hasSizePricing: (v.has_size_pricing as boolean) || false,
-                  sizePrices:
-                    (typeof v.size_prices === "string"
-                      ? JSON.parse(v.size_prices)
-                      : v.size_prices) || {},
-                  sizeStocks:
-                    (typeof v.size_stocks === "string"
-                      ? JSON.parse(v.size_stocks)
-                      : v.size_stocks) || {},
-                };
-              }),
-              sizes: p.sizes || [],
-              colors: p.colors || [],
-              brand: p.brand || "",
-              materials: p.materials || [],
-              hasSizePricing: (p.has_size_pricing as boolean) || false,
-              sizePrices:
-                (typeof p.size_prices === "string"
-                  ? JSON.parse(p.size_prices)
-                  : p.size_prices) || {},
-              sizeStocks:
-                (typeof p.size_stocks === "string"
-                  ? JSON.parse(p.size_stocks)
-                  : p.size_stocks) || {},
-            }),
+        // Fetch store slug from business profile
+        try {
+          const bizRes = await fetch("/api/business/get");
+          if (bizRes.ok) {
+            const bizData = await bizRes.json();
+            if (bizData.data?.urlSlug) {
+              setStoreSlug(bizData.data.urlSlug);
+            } else if (firebaseUser?.uid) {
+              setStoreSlug(firebaseUser.uid);
+            }
+          } else if (firebaseUser?.uid) {
+            setStoreSlug(firebaseUser.uid);
+          }
+        } catch {
+          // Fall back to UID
+          if (firebaseUser?.uid) setStoreSlug(firebaseUser.uid);
+        }
+
+        // Fetch product limit from features API (advisory for UI gating)
+        try {
+          const limitRes = await fetch(
+            "/api/features/check?feature=create_product",
           );
-          setProducts(mappedProducts);
-          // Categories from the response
-          const categoryNames = (result.categories || []).map(
-            (c: Record<string, unknown>) => c.name as string,
-          );
-          setProductCategories(categoryNames);
+          if (limitRes.ok) {
+            const limitData = await limitRes.json();
+            // Skip limit processing when denial_reason is present —
+            // hard_limit=0 is a sentinel for "access denied", not a real plan limit.
+            if (
+              !limitData.denial_reason &&
+              limitData.hard_limit !== null &&
+              limitData.hard_limit !== undefined &&
+              !limitData.is_unlimited
+            ) {
+              setProductLimit(limitData.hard_limit);
+              setProductRemaining(limitData.remaining ?? null);
+              setProductUsed(limitData.used ?? null);
+              setProductSoftLimit(limitData.soft_limit ?? null);
+            }
+          }
+        } catch {
+          // Non-critical — limit will still be enforced server-side
         }
       } catch (error) {
         console.error("Error loading products:", error);
@@ -201,7 +268,21 @@ export default function ProductsPage() {
       }
     };
     loadData();
-  }, []);
+  }, [refetchProducts]);
+
+  // Subscribe to store updates (from add page broadcasts + Supabase Realtime)
+  // so product list auto-refreshes when products are added/edited elsewhere
+  useEffect(() => {
+    if (!storeSlug) return;
+
+    const unsubscribe = subscribeToStoreUpdates(storeSlug, () => {
+      refetchProducts();
+    });
+
+    return () => {
+      unsubscribe();
+    };
+  }, [storeSlug, refetchProducts]);
 
   // Save products to the backend (with debouncing for auto-save)
   const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -263,7 +344,23 @@ export default function ProductsPage() {
           return await response.json();
         } else {
           const error = await response.json();
-          setMessage({ type: "error", text: error.error || "Failed to save" });
+          // Handle structured 403 from product limit enforcement
+          if (
+            response.status === 403 &&
+            error.code === "PRODUCT_LIMIT_REACHED"
+          ) {
+            setMessage({
+              type: "error",
+              text:
+                error.message ||
+                `Product limit of ${error.limit} reached. Upgrade to add more.`,
+            });
+          } else {
+            setMessage({
+              type: "error",
+              text: error.error || "Failed to save",
+            });
+          }
           return null;
         }
       } catch (error) {
@@ -316,8 +413,15 @@ export default function ProductsPage() {
     [],
   );
 
-  // Add new product
+  // Add new product (gated by plan limit)
   const addProduct = () => {
+    if (isAtProductLimit) {
+      setMessage({
+        type: "error",
+        text: `You've reached your plan limit of ${productLimit} products. Upgrade your plan to add more.`,
+      });
+      return;
+    }
     setEditingProduct(null);
     setIsProductPanelOpen(true);
   };
@@ -334,14 +438,8 @@ export default function ProductsPage() {
     const result = await saveProduct(product, isNew);
 
     if (result) {
-      if (isNew && result.product) {
-        // Add the new product with the server-generated ID
-        const newProduct = { ...product, id: result.product.id };
-        setProducts([...products, newProduct]);
-      } else {
-        // Update existing product in state
-        setProducts(products.map((p) => (p.id === product.id ? product : p)));
-      }
+      // Refetch from server to get all server-computed fields and fresh data
+      await refetchProducts();
     }
 
     setIsProductPanelOpen(false);
@@ -521,6 +619,61 @@ export default function ProductsPage() {
         />
       )}
 
+      {/* Product Limit Banner */}
+      {isAtProductLimit && productLimit !== null && (
+        <div className={`${styles.limitBanner} ${styles.limitBannerReached}`}>
+          <svg
+            className={styles.limitBannerIcon}
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+          >
+            <circle cx="12" cy="12" r="10" />
+            <line x1="15" y1="9" x2="9" y2="15" />
+            <line x1="9" y1="9" x2="15" y2="15" />
+          </svg>
+          <span className={styles.limitBannerText}>
+            You&apos;ve reached your limit of{" "}
+            <strong>{productLimit} products</strong>. Upgrade to add more.
+          </span>
+          <Link
+            href="/upgrade?domain=shop&recommended=business"
+            className={styles.limitBannerUpgrade}
+          >
+            Upgrade Plan
+          </Link>
+        </div>
+      )}
+      {isApproachingLimit && productLimit !== null && (
+        <div className={`${styles.limitBanner} ${styles.limitBannerWarning}`}>
+          <svg
+            className={styles.limitBannerIcon}
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+          >
+            <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
+            <line x1="12" y1="9" x2="12" y2="13" />
+            <line x1="12" y1="17" x2="12.01" y2="17" />
+          </svg>
+          <span className={styles.limitBannerText}>
+            <strong>
+              {productLimit - products.length} product
+              {productLimit - products.length !== 1 ? "s" : ""} remaining
+            </strong>{" "}
+            on your current plan (limit: {productLimit}).
+          </span>
+          <Link
+            href="/upgrade?domain=shop&recommended=business"
+            className={styles.limitBannerUpgrade}
+          >
+            Upgrade
+          </Link>
+        </div>
+      )}
+
       {/* Auto-Save Indicator */}
       {isSavingInBackground && (
         <div className={styles.savingIndicator}>
@@ -529,8 +682,8 @@ export default function ProductsPage() {
         </div>
       )}
 
-      {/* Store Link Banner */}
-      {storeSlug && (
+      {/* Store Link Banner — only show when user has products (store exists) */}
+      {storeSlug && products.length > 0 && (
         <div className={styles.storeLinkBanner}>
           <div className={styles.storeLinkInfo}>
             <svg

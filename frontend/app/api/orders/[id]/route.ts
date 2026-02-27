@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { cookies } from "next/headers";
-import { adminAuth } from "@/lib/firebase-admin";
+import { adminAuth, verifySessionCookieSafe } from "@/lib/firebase-admin";
 import {
   triggerOrderStatusNotification,
   OrderStatus,
@@ -23,23 +23,31 @@ function getSupabase() {
   return createClient(supabaseUrl, supabaseServiceKey);
 }
 
-// Helper to get user ID from Firebase token
+// Helper to get user ID from Firebase session cookie
 async function getUserId(): Promise<string | null> {
   try {
     const cookieStore = await cookies();
     const sessionCookie = cookieStore.get("session")?.value;
 
     if (!sessionCookie) {
+      console.log("[orders/id] No session cookie found");
       return null;
     }
 
-    const decodedToken = await adminAuth.verifySessionCookie(
-      sessionCookie,
-      true,
-    );
-    return decodedToken.uid;
+    const result = await verifySessionCookieSafe(sessionCookie, false);
+
+    if (!result.success || !result.data) {
+      console.error(
+        "[orders/id] Session verification failed:",
+        result.error,
+        result.errorCode,
+      );
+      return null;
+    }
+
+    return result.data.uid;
   } catch (error) {
-    console.error("Error verifying session:", error);
+    console.error("[orders/id] Unexpected error in getUserId:", error);
     return null;
   }
 }
@@ -197,48 +205,193 @@ export async function PUT(
     // Backend handles WhatsApp credential lookup using user_id (multi-tenant)
     // =======================================================================
     if (newStatus && newStatus !== previousStatus) {
+      // ── Feature gate: live_order_updates (metered per plan) ───────────────
+      // Check usage against hard_limit and atomically increment if allowed.
+      // Fail-open: if gate check fails, still send notifications.
+      let canSendNotifications = true;
       try {
-        // Fetch business details for branded notifications
-        const { data: businessData } = await supabase
-          .from("businesses")
-          .select("business_name, logo_url")
-          .eq("user_id", userId)
-          .single();
+        // Resolve Firebase UID → Supabase UUID
+        const { data: userRow } = await supabase
+          .from("users")
+          .select("id")
+          .eq("firebase_uid", userId)
+          .limit(1)
+          .maybeSingle();
 
-        const orderDetails: OrderDetails = {
-          id: data.id,
-          order_id: data.order_id,
-          customer_name: data.customer_name,
-          customer_phone: data.customer_phone,
-          customer_email: data.customer_email,
-          items: data.items,
-          total_quantity: data.total_quantity,
-        };
+        if (userRow?.id) {
+          // Get active subscription for shop domain
+          const { data: sub } = await supabase
+            .from("subscriptions")
+            .select("pricing_plan_id")
+            .eq("user_id", userRow.id)
+            .eq("product_domain", "shop")
+            .in("status", [
+              "active",
+              "completed",
+              "past_due",
+              "trialing",
+              "trial",
+            ])
+            .order("created_at", { ascending: false })
+            .limit(1)
+            .maybeSingle();
 
-        // BusinessDetails - WhatsApp credentials are looked up by the backend
-        // using user_id (Firebase UID), so we don't need to fetch them here
-        const businessDetails: BusinessDetails = {
-          user_id: userId, // Firebase UID - backend uses this to fetch WhatsApp creds
-          business_name: businessData?.business_name || "Store",
-          logo_url: businessData?.logo_url,
-          // whatsapp_phone_number_id and whatsapp_access_token are NOT needed
-          // Backend's /api/whatsapp/send-notification handles credential lookup
-        };
+          if (sub?.pricing_plan_id) {
+            // Check if plan has live_order_updates feature
+            let featureData: {
+              hard_limit: number | null;
+              soft_limit: number | null;
+              is_unlimited: boolean;
+            } | null = null;
 
-        // Fire-and-forget: Don't await - notification runs in background
-        triggerOrderStatusNotification(
-          orderDetails,
-          newStatus,
-          previousStatus,
-          businessDetails,
+            const { data: planFeature } = await supabase
+              .from("plan_features")
+              .select("hard_limit, soft_limit, is_unlimited")
+              .eq("plan_id", sub.pricing_plan_id)
+              .eq("feature_key", "live_order_updates")
+              .limit(1)
+              .maybeSingle();
+
+            if (planFeature) {
+              featureData = planFeature;
+            } else {
+              // Feature not in plan — check sibling plans (same slug, different billing period)
+              const { data: plan } = await supabase
+                .from("pricing_plans")
+                .select("plan_slug")
+                .eq("id", sub.pricing_plan_id)
+                .limit(1)
+                .maybeSingle();
+
+              if (plan?.plan_slug) {
+                const { data: siblingPlan } = await supabase
+                  .from("pricing_plans")
+                  .select("id")
+                  .eq("plan_slug", plan.plan_slug)
+                  .eq("product_domain", "shop")
+                  .eq("is_active", true)
+                  .neq("id", sub.pricing_plan_id)
+                  .limit(1)
+                  .maybeSingle();
+
+                if (siblingPlan) {
+                  const { data: sibFeature } = await supabase
+                    .from("plan_features")
+                    .select("hard_limit, soft_limit, is_unlimited")
+                    .eq("plan_id", siblingPlan.id)
+                    .eq("feature_key", "live_order_updates")
+                    .limit(1)
+                    .maybeSingle();
+                  if (sibFeature) {
+                    featureData = sibFeature;
+                  }
+                }
+              }
+            }
+
+            if (!featureData) {
+              // Feature not found in plan or siblings → deny
+              canSendNotifications = false;
+              console.log(
+                `⏭️ [Notification] Skipping - live_order_updates not in plan for user ${userId.slice(0, 15)}...`,
+              );
+            } else if (featureData.is_unlimited) {
+              // Unlimited — always allowed
+              canSendNotifications = true;
+            } else if (
+              featureData.hard_limit !== null &&
+              featureData.hard_limit <= 0
+            ) {
+              // Explicitly denied (hard_limit = 0)
+              canSendNotifications = false;
+              console.log(
+                `⏭️ [Notification] Skipping - live_order_updates denied (hard_limit=0) for user ${userId.slice(0, 15)}...`,
+              );
+            } else if (featureData.hard_limit !== null) {
+              // Metered — check usage and atomically increment
+              const { data: rpcResult } = await supabase.rpc(
+                "check_and_increment_usage",
+                {
+                  p_user_id: userRow.id,
+                  p_domain: "shop",
+                  p_feature_key: "live_order_updates",
+                  p_hard_limit: featureData.hard_limit,
+                  p_soft_limit:
+                    featureData.soft_limit ??
+                    Math.floor(featureData.hard_limit * 0.8),
+                  p_is_unlimited: false,
+                  p_idempotency_key: `notif-${data.id}-${newStatus}`,
+                },
+              );
+
+              if (rpcResult && !rpcResult.allowed) {
+                canSendNotifications = false;
+                console.log(
+                  `⏭️ [Notification] Skipping - live_order_updates limit reached (${rpcResult.new_value}/${featureData.hard_limit}) for user ${userId.slice(0, 15)}...`,
+                );
+              }
+            }
+            // hard_limit === null and not unlimited → boolean granted, allow
+          } else {
+            // No subscription → skip notifications
+            canSendNotifications = false;
+            console.log(
+              `⏭️ [Notification] Skipping - no active subscription for user ${userId.slice(0, 15)}...`,
+            );
+          }
+        }
+      } catch (gateErr) {
+        // Fail-open: if gate check fails, still send notifications
+        console.warn(
+          `⚠️ [Notification] Feature gate check failed, proceeding:`,
+          gateErr,
         );
+      }
 
-        console.log(
-          `🔔 Order status notification triggered for #${data.order_id || data.id.slice(0, 8)}: ${previousStatus} → ${newStatus}`,
-        );
-      } catch (notifError) {
-        // Never fail the request due to notification errors
-        console.error("Error preparing order notification:", notifError);
+      if (canSendNotifications) {
+        try {
+          // Fetch business details for branded notifications
+          const { data: businessData } = await supabase
+            .from("businesses")
+            .select("business_name, logo_url")
+            .eq("user_id", userId)
+            .single();
+
+          const orderDetails: OrderDetails = {
+            id: data.id,
+            order_id: data.order_id,
+            customer_name: data.customer_name,
+            customer_phone: data.customer_phone,
+            customer_email: data.customer_email,
+            items: data.items,
+            total_quantity: data.total_quantity,
+          };
+
+          // BusinessDetails - WhatsApp credentials are looked up by the backend
+          // using user_id (Firebase UID), so we don't need to fetch them here
+          const businessDetails: BusinessDetails = {
+            user_id: userId, // Firebase UID - backend uses this to fetch WhatsApp creds
+            business_name: businessData?.business_name || "Store",
+            logo_url: businessData?.logo_url,
+            // whatsapp_phone_number_id and whatsapp_access_token are NOT needed
+            // Backend's /api/whatsapp/send-notification handles credential lookup
+          };
+
+          // Fire-and-forget: Don't await - notification runs in background
+          triggerOrderStatusNotification(
+            orderDetails,
+            newStatus,
+            previousStatus,
+            businessDetails,
+          );
+
+          console.log(
+            `🔔 Order status notification triggered for #${data.order_id || data.id.slice(0, 8)}: ${previousStatus} → ${newStatus}`,
+          );
+        } catch (notifError) {
+          // Never fail the request due to notification errors
+          console.error("Error preparing order notification:", notifError);
+        }
       }
     }
 
@@ -270,32 +423,38 @@ export async function DELETE(
     const { id } = await params;
     const supabase = getSupabase();
 
-    // Soft delete by setting status to cancelled
-    const { data, error } = await supabase
+    // First, delete related inventory_audit_log rows (foreign key constraint)
+    const { error: auditError } = await supabase
+      .from("inventory_audit_log")
+      .delete()
+      .eq("order_id", id);
+
+    if (auditError) {
+      console.warn("Warning deleting audit log entries:", auditError);
+      // Continue anyway — the audit log FK may not exist for all orders
+    }
+
+    // Hard delete - completely remove the order from the database
+    const { error } = await supabase
       .from("orders")
-      .update({
-        status: "cancelled",
-        updated_at: new Date().toISOString(),
-      })
+      .delete()
       .eq("id", id)
-      .eq("user_id", userId)
-      .select()
-      .single();
+      .eq("user_id", userId);
 
     if (error) {
       if (error.code === "PGRST116") {
         return NextResponse.json({ error: "Order not found" }, { status: 404 });
       }
-      console.error("Error cancelling order:", error);
+      console.error("Error deleting order:", error);
       return NextResponse.json(
-        { error: "Failed to cancel order" },
+        { error: "Failed to delete order" },
         { status: 500 },
       );
     }
 
-    // Best-effort: reflect cancellations in Google Sheets as well.
+    // Best-effort: reflect deletions in Google Sheets as well.
     try {
-      if (data?.id && userId) {
+      if (userId) {
         fetch(`${BACKEND_URL}/api/orders/sheets/sync`, {
           method: "POST",
           headers: {
@@ -303,20 +462,21 @@ export async function DELETE(
             "X-User-Id": userId,
           },
           body: JSON.stringify({
-            order_id: data.id,
+            order_id: id,
             user_id: userId,
+            deleted: true,
           }),
         }).catch((err) => {
-          console.error("Error triggering Google Sheets sync on cancel:", err);
+          console.error("Error triggering Google Sheets sync on delete:", err);
         });
       }
     } catch (err) {
-      console.error("Error preparing Google Sheets sync on cancel:", err);
+      console.error("Error preparing Google Sheets sync on delete:", err);
     }
 
     return NextResponse.json({
       success: true,
-      data,
+      message: "Order deleted successfully",
     });
   } catch (error) {
     console.error("Error in DELETE /api/orders/[id]:", error);

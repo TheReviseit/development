@@ -1,8 +1,8 @@
-/* Revenue Analytics Chart - Stripe-style dark theme */
+/* Revenue Analytics Chart - Dark theme matching dashboard */
 
 .container {
   position: relative;
-  background: white;
+  background: #0a0a0a;
   border-radius: 16px;
   padding: 24px;
   margin-bottom: 24px;
@@ -27,7 +27,7 @@
 .title {
   font-size: 16px;
   font-weight: 600;
-  color: #000000;
+  color: #ffffff;
   margin: 0;
 }
 
@@ -69,8 +69,8 @@
   align-items: center;
   gap: 6px;
   padding: 8px 12px;
-  background: #000000;
-  border: 1px solid #000000;
+  background: #1a1a1a;
+  border: 1px solid rgba(255, 255, 255, 0.12);
   border-radius: 8px;
   color: #ffffff;
   font-size: 13px;
@@ -80,8 +80,8 @@
 }
 
 .dropdownButton:hover {
-  background: #1a1a1a;
-  border-color: #1a1a1a;
+  background: #252525;
+  border-color: rgba(255, 255, 255, 0.25);
 }
 
 .dropdownIcon {
@@ -97,12 +97,12 @@
   top: calc(100% + 4px);
   right: 0;
   min-width: 120px;
-  background: #ffffff;
-  border: 1px solid rgba(0, 0, 0, 0.15);
+  background: #1a1a1a;
+  border: 1px solid rgba(255, 255, 255, 0.15);
   border-radius: 8px;
   padding: 4px;
   z-index: 100;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
 }
 
 .dropdownItem {
@@ -111,7 +111,7 @@
   background: transparent;
   border: none;
   border-radius: 6px;
-  color: rgba(0, 0, 0, 0.7);
+  color: rgba(255, 255, 255, 0.7);
   font-size: 13px;
   text-align: left;
   cursor: pointer;
@@ -119,13 +119,13 @@
 }
 
 .dropdownItem:hover {
-  background: rgba(0, 0, 0, 0.06);
-  color: rgba(0, 0, 0, 1);
+  background: rgba(255, 255, 255, 0.08);
+  color: #ffffff;
 }
 
 .dropdownItemActive {
-  background: rgba(0, 0, 0, 0.06);
-  color: #000000;
+  background: rgba(255, 255, 255, 0.1);
+  color: #ffffff;
   font-weight: 600;
 }
 
@@ -134,15 +134,15 @@
   position: relative;
 }
 
-/* Tooltip - Enhanced with date */
+/* Tooltip */
 .tooltip {
-  background: rgba(255, 255, 255, 0.98);
+  background: rgba(15, 15, 15, 0.95);
   backdrop-filter: blur(8px);
-  color: #1a1a2e;
+  color: #ffffff;
   padding: 10px 14px;
   border-radius: 10px;
   box-shadow:
-    0 8px 24px rgba(0, 0, 0, 0.3),
+    0 8px 24px rgba(0, 0, 0, 0.5),
     0 0 0 1px rgba(255, 255, 255, 0.1);
   white-space: nowrap;
 }
@@ -150,14 +150,14 @@
 .tooltipRevenue {
   font-size: 16px;
   font-weight: 700;
-  color: #1a1a2e;
+  color: #ffffff;
   margin-bottom: 2px;
 }
 
 .tooltipDate {
   font-size: 12px;
   font-weight: 500;
-  color: rgba(26, 26, 46, 0.6);
+  color: rgba(255, 255, 255, 0.6);
 }
 
 .tooltipValue {
@@ -178,7 +178,7 @@
   width: 64px;
   height: 64px;
   margin-bottom: 16px;
-  color: rgba(0, 0, 0, 0.3);
+  color: rgba(255, 255, 255, 0.3);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -187,13 +187,13 @@
 .emptyTitle {
   font-size: 16px;
   font-weight: 600;
-  color: rgba(0, 0, 0, 0.8);
+  color: rgba(255, 255, 255, 0.8);
   margin-bottom: 8px;
 }
 
 .emptyMessage {
   font-size: 14px;
-  color: rgba(0, 0, 0, 0.5);
+  color: rgba(255, 255, 255, 0.5);
   max-width: 400px;
   line-height: 1.5;
 }
@@ -256,7 +256,7 @@
   }
 }
 
-/* Error - Enhanced with retry */
+/* Error */
 .error {
   padding: 60px 20px;
   text-align: center;
@@ -270,22 +270,22 @@
 .errorTitle {
   font-size: 16px;
   font-weight: 600;
-  color: rgba(0, 0, 0, 0.8);
+  color: rgba(255, 255, 255, 0.8);
 }
 
 .errorMessage {
   font-size: 14px;
-  color: rgba(0, 0, 0, 0.5);
+  color: rgba(255, 255, 255, 0.5);
   max-width: 400px;
 }
 
 .retryButton {
   margin-top: 8px;
   padding: 10px 20px;
-  background: rgba(0, 0, 0, 0.05);
-  border: 1px solid rgba(0, 0, 0, 0.15);
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.15);
   border-radius: 8px;
-  color: #000000;
+  color: #ffffff;
   font-size: 14px;
   font-weight: 500;
   cursor: pointer;
@@ -293,8 +293,8 @@
 }
 
 .retryButton:hover {
-  background: rgba(0, 0, 0, 0.1);
-  border-color: rgba(0, 0, 0, 0.25);
+  background: rgba(255, 255, 255, 0.12);
+  border-color: rgba(255, 255, 255, 0.25);
 }
 
 /* Loading Overlay */
@@ -304,7 +304,7 @@
   left: 0;
   right: 0;
   bottom: 0;
-  background: rgba(26, 26, 46, 0.7);
+  background: rgba(10, 10, 10, 0.7);
   display: flex;
   align-items: center;
   justify-content: center;

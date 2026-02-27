@@ -220,31 +220,60 @@ def require_entitlement(feature: str):
     """
     Decorator factory: Require specific feature entitlement.
     
+    Delegates to FeatureGateEngine (DB-backed, domain-aware).
+    FAIL-CLOSED: if engine unavailable, access is denied.
+    
     Usage:
         @require_entitlement('otp_send')
         @require_entitlement('priority_routing')
     
     Args:
-        feature: Feature key from PLAN_FEATURES
+        feature: Feature key to check against plan_features table
     """
     def decorator(f: Callable) -> Callable:
         @wraps(f)
         def decorated_function(*args, **kwargs):
-            from services.entitlement_service import get_entitlement_service
-            
             ctx = getattr(g, 'entitlement_ctx', None)
             
             if not ctx:
                 logger.error(f"require_entitlement({feature}) called without context")
                 return _access_denied()
             
-            service = get_entitlement_service()
-            
-            if not service.check_feature_access(ctx, feature):
-                logger.info(f"Feature not entitled: user={ctx.user_id}, feature={feature}")
+            try:
+                from services.feature_gate_engine import get_feature_gate_engine
+                
+                engine = get_feature_gate_engine()
+                domain = getattr(g, 'product_domain', None)
+                
+                if not domain:
+                    logger.error(
+                        f"require_entitlement({feature}): product_domain not set, "
+                        f"denying user={ctx.user_id}"
+                    )
+                    return _access_denied()
+                
+                decision = engine.check_feature_access(
+                    user_id=ctx.user_id,
+                    domain=domain,
+                    feature_key=feature
+                )
+                
+                if not decision.allowed:
+                    logger.info(
+                        f"Feature not entitled: user={ctx.user_id}, "
+                        f"feature={feature}, domain={domain}"
+                    )
+                    return _access_denied()
+                
+                return f(*args, **kwargs)
+                
+            except Exception as e:
+                # FAIL CLOSED — security enforcement must never silently pass
+                logger.error(
+                    f"❌ FeatureGateEngine unavailable in require_entitlement: {e}. "
+                    f"DENYING feature={feature} for user={ctx.user_id}"
+                )
                 return _access_denied()
-            
-            return f(*args, **kwargs)
         
         return decorated_function
     
@@ -290,13 +319,16 @@ def require_tenant_access(resource_type: str):
 
 def require_usage_available(resource: str, amount: int = 1):
     """
-    Decorator factory: Check usage limits before allowing action.
+    DEPRECATED — Use @require_limit() from middleware.feature_gate instead.
     
-    Currently implements SOFT CAP behavior:
-    - Logs warning when approaching limit (80%)
-    - Does NOT hard-block (allows overage for billing)
+    @require_limit() provides:
+    - Atomic usage increment (no race conditions)
+    - Hard + soft limit enforcement
+    - Fail-closed behavior
+    - upgrade_pressure_signal analytics
     
-    Future: Could implement hard caps for specific resources.
+    This decorator only implements soft-cap warning logging.
+    Retained for backward compatibility — will be removed.
     
     Args:
         resource: Resource type ('otp_send', etc.)
@@ -305,26 +337,10 @@ def require_usage_available(resource: str, amount: int = 1):
     def decorator(f: Callable) -> Callable:
         @wraps(f)
         def decorated_function(*args, **kwargs):
-            from services.entitlement_service import get_entitlement_service
-            
-            ctx = getattr(g, 'entitlement_ctx', None)
-            
-            if not ctx:
-                return _access_denied()
-            
-            service = get_entitlement_service()
-            
-            # Check if approaching soft cap
-            is_approaching, percentage = service.is_approaching_soft_cap(ctx, resource)
-            
-            if is_approaching:
-                logger.info(
-                    f"Usage approaching soft cap: user={ctx.user_id}, "
-                    f"resource={resource}, usage={percentage}%"
-                )
-                # TODO: Trigger alert/notification to user
-            
-            # Allow the request (soft cap = no hard block)
+            logger.warning(
+                f"DEPRECATED: require_usage_available('{resource}') called. "
+                f"Migrate to @require_limit('{resource}') from middleware.feature_gate."
+            )
             return f(*args, **kwargs)
         
         return decorated_function

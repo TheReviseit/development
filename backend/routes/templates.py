@@ -6,8 +6,11 @@ Handles CRUD operations and syncing with Meta Graph API.
 import os
 import requests
 from typing import Dict, Any, List, Optional
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, request, jsonify, g
 from functools import wraps
+
+# Feature gate decorators (Phase 2: Limit Enforcement)
+from middleware.feature_gate import require_limit, require_feature
 
 # Create blueprint
 templates_bp = Blueprint('templates', __name__, url_prefix='/api/templates')
@@ -64,11 +67,11 @@ def require_auth(f):
     """Decorator to require authentication (simplified - integrate with your auth)."""
     @wraps(f)
     def decorated(*args, **kwargs):
-        # TODO: Replace with actual auth check
         user_id = request.headers.get('X-User-ID')
         if not user_id:
             return jsonify({'success': False, 'error': 'Authentication required'}), 401
         request.user_id = user_id
+        g.user_id = user_id  # Required by feature gate middleware
         return f(*args, **kwargs)
     return decorated
 
@@ -123,6 +126,7 @@ def list_templates():
 
 @templates_bp.route('/sync', methods=['POST'])
 @require_auth
+@require_feature('template_builder')
 def sync_templates():
     """
     Sync templates from Meta Graph API to local database.
@@ -223,6 +227,7 @@ def sync_templates():
 
 @templates_bp.route('', methods=['POST'])
 @require_auth
+@require_limit("template_builder")  # Phase 2: Template creation quota enforcement
 def create_template():
     """
     Create a new message template.
@@ -403,6 +408,7 @@ def create_template():
 
 @templates_bp.route('/<template_id>', methods=['DELETE'])
 @require_auth
+@require_feature('template_builder')
 def delete_template(template_id: str):
     """
     Delete a message template.
@@ -527,6 +533,7 @@ def get_user_phone_credentials(user_id: str) -> Optional[Dict[str, Any]]:
 
 @templates_bp.route('/send', methods=['POST'])
 @require_auth
+@require_limit("campaign_sends")  # Phase 2: Template send quota enforcement
 def send_template_message():
     """
     Send a message using an approved template.

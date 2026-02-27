@@ -323,7 +323,8 @@ class AIBrain:
             # =====================================================
             if booking_type == "order":
                 # Check if order booking is enabled and start order flow
-                if self._is_order_booking_enabled(biz_id):
+                # Pass business data for multi-domain product detection
+                if self._is_order_booking_enabled(biz_id, business):
                     flow_response = self._start_order_flow(user_id, biz_id, user_message, business)
                     if flow_response:
                         return flow_response
@@ -1446,15 +1447,40 @@ class AIBrain:
             "metadata": {"generation_method": "order_cancellation_handler", "cancellable": True}
         }
     
-    def _is_order_booking_enabled(self, user_id: str) -> bool:
-        """Check if order booking is enabled for this business."""
+    def _is_order_booking_enabled(self, user_id: str, business_data: Dict[str, Any] = None) -> bool:
+        """Check if order booking is enabled for this business.
+        
+        Multi-domain safe priority:
+        1. If business_data has products loaded (from any source) → enabled
+        2. If business_data has ai_capabilities.order_booking_enabled → use that
+        3. Fall back to querying ai_capabilities table (legacy, safe .limit(1))
+        """
+        # PRIORITY 1: If business has products loaded from ANY domain/source,
+        # order booking is implicitly enabled (businesses table, Firestore, etc.)
+        if business_data:
+            products = business_data.get("products_services", [])
+            if products and len(products) > 0:
+                logger.info(f"📦 Order booking auto-enabled: {len(products)} products found in business_data")
+                return True
+            
+            # PRIORITY 2: Check ai_capabilities already in business_data (loaded by get_business_data_from_supabase)
+            ai_caps = business_data.get("ai_capabilities", {})
+            if ai_caps and "order_booking_enabled" in ai_caps:
+                enabled = ai_caps.get("order_booking_enabled", False)
+                logger.info(f"📦 Order booking from business_data ai_capabilities: {enabled}")
+                return enabled
+        
+        # PRIORITY 3: Legacy DB query (safe fallback with .limit(1) instead of .single())
         if not self.supabase_client:
             return False
         try:
             result = self.supabase_client.table("ai_capabilities").select(
                 "order_booking_enabled"
-            ).eq("user_id", user_id).single().execute()
-            enabled = result.data.get("order_booking_enabled", False) if result.data else False
+            ).eq("user_id", user_id).limit(1).execute()
+            if result.data and len(result.data) > 0:
+                enabled = result.data[0].get("order_booking_enabled", False)
+            else:
+                enabled = False
             logger.info(f"📦 Order booking enabled for {user_id}: {enabled}")
             return enabled
         except Exception as e:
@@ -1651,12 +1677,17 @@ class AIBrain:
         categories = [c for c in product_categories if c]  # Remove empty
         logger.info(f"📂 Categories found: {len(categories)} - {categories[:5]}... (from products + AI Settings)")
         
-        # Get store link using business_id (Firebase UID) as the slug
+        # Build store link: prefer url_slug (clean URL) over business_id (Firebase UID)
+        # Multi-domain: shop lives at shop.flowauxi.com
         business_id = business_data.get("business_id")
+        url_slug = business_data.get("url_slug", "")
         store_link = None
-        if business_id and business_id != "default" and len(business_id) > 10:
-            store_link = f"https://flowauxi.com/store/{business_id}"
-            logger.info(f"🔗 Store link: {store_link}")
+        if url_slug:
+            store_link = f"https://shop.flowauxi.com/store/{url_slug}"
+            logger.info(f"🔗 Store link (slug): {store_link}")
+        elif business_id and business_id != "default" and len(business_id) > 10:
+            store_link = f"https://shop.flowauxi.com/store/{business_id}"
+            logger.info(f"🔗 Store link (UID fallback): {store_link}")
         
         # Try to extract category mention from initial message
         # Handles: "i want to order saree", "order saree", etc.
@@ -3129,10 +3160,13 @@ class AIBrain:
             if msg_lower in ["visit website", "visit_website"]:
                 store_link = state.collected_fields.get("store_link")
                 if not store_link:
-                    # Fallback: generate from business_id
+                    # Build store link: prefer url_slug over business_id
+                    url_slug = business_data.get("url_slug", "")
                     business_id = business_data.get("business_id")
-                    if business_id and business_id != "default" and len(business_id) > 10:
-                        store_link = f"https://flowauxi.com/store/{business_id}"
+                    if url_slug:
+                        store_link = f"https://shop.flowauxi.com/store/{url_slug}"
+                    elif business_id and business_id != "default" and len(business_id) > 10:
+                        store_link = f"https://shop.flowauxi.com/store/{business_id}"
                 
                 if store_link:
                     self.conversation_manager.add_message(user_id, "user", message)

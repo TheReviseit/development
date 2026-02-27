@@ -90,13 +90,13 @@ export function ServiceWorkerRegistration() {
 
     navigator.serviceWorker.addEventListener(
       "controllerchange",
-      handleControllerChange
+      handleControllerChange,
     );
 
     return () => {
       navigator.serviceWorker.removeEventListener(
         "controllerchange",
-        handleControllerChange
+        handleControllerChange,
       );
     };
   }, []);

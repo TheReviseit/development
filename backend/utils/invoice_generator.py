@@ -527,7 +527,7 @@ def _draw_totals_section(c, y, width, subtotal, shipping, total, store_slug):
     if store_slug:
         try:
             # Generate QR code for store URL
-            store_url = f"https://flowauxi.com/store/{store_slug}"
+            store_url = f"https://shop.flowauxi.com/store/{store_slug}"
             qr = qrcode.QRCode(
                 version=1,
                 error_correction=qrcode.constants.ERROR_CORRECT_L,

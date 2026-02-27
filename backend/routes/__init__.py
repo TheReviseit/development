@@ -16,6 +16,7 @@ from .payments import payments_bp
 from .inventory import inventory_bp
 from .showcase_api import showcase_bp
 from .slug_cache import slug_cache_bp  # ✅ Slug cache invalidation
+from .shop_business import shop_business_bp  # ✅ Shop business update (replaces service-role writes)
 
 __all__ = [
     'templates_bp',
@@ -31,6 +32,7 @@ __all__ = [
     'inventory_bp',
     'showcase_bp',
     'slug_cache_bp',  # ✅ Export slug cache
+    'shop_business_bp',  # ✅ Shop business update
 ]
 
 
@@ -47,6 +49,7 @@ def register_routes(app):
     app.register_blueprint(inventory_bp)
     app.register_blueprint(showcase_bp)  # Enterprise showcase system
     app.register_blueprint(slug_cache_bp)  # ✅ Slug cache invalidation
+    app.register_blueprint(shop_business_bp)  # ✅ Shop business update (entitlement-gated)
     register_test_routes(app)  # Register test push endpoint
     register_messaging_routes(app)  # Register messaging endpoint
     print("✅ Registered API routes: templates, contacts, analytics, campaigns, bulk-campaigns, appointments, orders, payments, inventory, showcase, slug-cache, test-push, messaging")

@@ -555,7 +555,10 @@ export default function BotSettingsView() {
               industry: apiData.industry || "",
               customIndustry: apiData.customIndustry || "",
               description: apiData.description || "",
-              contact: apiData.contact || INITIAL_DATA.contact,
+              contact: {
+                ...INITIAL_DATA.contact,
+                ...(apiData.contact || {}),
+              },
               socialMedia:
                 apiData.social_media ||
                 apiData.socialMedia ||
@@ -1616,7 +1619,7 @@ export default function BotSettingsView() {
         return !!(
           data.businessName.trim() &&
           data.industry &&
-          data.contact.phone.trim()
+          (data.contact?.phone || "").trim()
         );
       case "brand":
         return !!(data.brandVoice.tone && data.brandVoice.languagePreference);

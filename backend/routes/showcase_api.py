@@ -4,6 +4,9 @@ import logging
 import firebase_admin
 from firebase_admin import auth as firebase_auth
 
+# Feature gate decorators (Phase 1: Revenue-Critical Enforcement)
+from middleware.feature_gate import require_limit, require_feature
+
 # Import domain entities
 from domain.showcase_entities import (
     ShowcaseSettings,
@@ -24,50 +27,74 @@ logger = logging.getLogger('showcase.api')
 def get_user_from_token() -> Optional[str]:
     """
     Extract and verify Firebase token from Authorization header.
-    Sets g.user_id for downstream use.
-    Returns user_id (Firebase UID) if valid, None otherwise.
+    Sets g.user_id (Supabase UUID) and g.firebase_uid for downstream use.
+    Returns Supabase UUID if valid, None otherwise.
     
-    ✅ ENTERPRISE PRODUCTION FIX: Trusted Next.js API Route
+    ✅ ENTERPRISE PRODUCTION FIX: Trusted Next.js API Route + UID Resolution
     Next.js API route already verifies session cookies, so we trust X-User-ID header.
     Falls back to token verification if header not present.
+    
+    CRITICAL: Resolves Firebase UID → Supabase UUID so that @require_limit
+    decorator can correctly look up subscriptions and usage_counters (both
+    keyed by Supabase UUID).
     """
     from flask import g
     
-    # Trust X-User-ID from Next.js API route
+    firebase_uid = None
+    
+    # Trust X-User-ID from Next.js API route (this is Firebase UID)
     user_id_header = request.headers.get('X-User-ID')
     if user_id_header:
-        g.user_id = user_id_header
-        return user_id_header
+        firebase_uid = user_id_header
+    else:
+        # Fallback: verify token directly
+        auth_header = request.headers.get('Authorization', '')
+        if not auth_header.startswith('Bearer '):
+            return None
+        
+        token = auth_header[7:]
+        
+        # Try session cookie first
+        try:
+            decoded_token = firebase_auth.verify_session_cookie(token, check_revoked=True)
+            firebase_uid = decoded_token.get('uid')
+        except firebase_auth.InvalidSessionCookieError:
+            pass  # Try ID token next
+        except (firebase_auth.RevokedSessionCookieError, firebase_auth.ExpiredIdTokenError):
+            return None
+        except Exception:
+            pass  # Try ID token next
+        
+        # Try ID token
+        if not firebase_uid:
+            try:
+                decoded_token = firebase_auth.verify_id_token(token, check_revoked=True)
+                firebase_uid = decoded_token.get('uid')
+            except Exception as e:
+                logger.error(f'Token verification failed: {type(e).__name__}')
+                return None
     
-    # Fallback: verify token directly
-    auth_header = request.headers.get('Authorization', '')
-    if not auth_header.startswith('Bearer '):
+    if not firebase_uid:
         return None
     
-    token = auth_header[7:]
+    # Store Firebase UID for any table inserts that use it
+    g.firebase_uid = firebase_uid
     
-    # Try session cookie first
+    # Map Firebase UID → Supabase UUID for feature gate lookups
+    # (subscriptions, usage_counters, plan_features all use Supabase UUID)
     try:
-        decoded_token = firebase_auth.verify_session_cookie(token, check_revoked=True)
-        user_id = decoded_token.get('uid')
-        g.user_id = user_id
-        return user_id
-    except firebase_auth.InvalidSessionCookieError:
-        pass  # Try ID token next
-    except (firebase_auth.RevokedSessionCookieError, firebase_auth.ExpiredIdTokenError):
-        return None
-    except Exception:
-        pass  # Try ID token next
-    
-    # Try ID token
-    try:
-        decoded_token = firebase_auth.verify_id_token(token, check_revoked=True)
-        user_id = decoded_token.get('uid')
-        g.user_id = user_id
-        return user_id
+        from supabase_client import get_supabase_client
+        db = get_supabase_client()
+        result = db.table('users').select('id').eq('firebase_uid', firebase_uid).limit(1).execute()
+        if result.data:
+            g.user_id = str(result.data[0]['id'])
+        else:
+            g.user_id = firebase_uid  # Fallback: use Firebase UID directly
     except Exception as e:
-        logger.error(f'Token verification failed: {type(e).__name__}')
-        return None
+        logger.error(f"UID resolution failed: {e}")
+        g.user_id = firebase_uid
+    
+    return g.user_id
 
 
 # ============================================
@@ -404,7 +431,7 @@ def get_showcase(slug_or_username: str):
         }), 200
         
     except Exception as e:
-        logger.error(f"Error fetching showcase for slug '{slug_id}': {e}", exc_info=True)
+        logger.error(f"Error fetching showcase for slug '{slug_or_username}': {e}", exc_info=True)
         import traceback
         logger.error(f"Traceback: {traceback.format_exc()}")
         return jsonify({
@@ -456,6 +483,7 @@ def get_settings():
 
 
 @showcase_bp.route('/settings', methods=['POST'])
+@require_feature('create_product')
 def save_settings():
     """
     Save showcase settings with version handling
@@ -609,6 +637,7 @@ def get_items():
 
 
 @showcase_bp.route('/items', methods=['POST'])
+@require_limit("create_product")  # Phase 1: Revenue-critical gate (atomic increment)
 def create_item():
     """
     Create a new showcase item
@@ -706,6 +735,7 @@ def create_item():
 
 
 @showcase_bp.route('/items/<item_id>', methods=['PATCH'])
+@require_feature('create_product')
 def update_item(item_id: str):
     """
     Update an existing showcase item
@@ -794,6 +824,7 @@ def update_item(item_id: str):
 
 
 @showcase_bp.route('/items/<item_id>', methods=['DELETE'])
+@require_feature('create_product')
 def delete_item(item_id: str):
     """
     Soft-delete a showcase item

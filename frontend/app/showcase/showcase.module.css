@@ -1,0 +1,636 @@
+/**
+ * Showcase Landing Page - Exact Bento Box Layout
+ * Top: Centered title/buttons/rating
+ * Bottom: Hero image (left) | Bento cards (right)
+ */
+
+/* ============================================================================
+   Core Layout
+   ============================================================================ */
+
+.container {
+  min-height: 100vh;
+  background: #f5f7fa;
+  position: relative;
+  overflow-x: hidden;
+}
+
+/* ============================================================================
+   Navigation
+   ============================================================================ */
+
+.navbar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 1000;
+  background: rgba(255, 255, 255, 0.98);
+  backdrop-filter: blur(10px);
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.navbarInner {
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: 0 2rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  height: 70px;
+}
+
+.logo {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  font-size: 1.125rem;
+  font-weight: 700;
+  color: #0f3d3e;
+}
+
+.logoIcon {
+  width: 36px;
+  height: 36px;
+  background: #0f3d3e;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  font-weight: 700;
+  font-size: 1.125rem;
+}
+
+.navLinks {
+  display: flex;
+  align-items: center;
+  gap: 2.5rem;
+}
+
+.navLink {
+  color: #4a5568;
+  font-weight: 500;
+  font-size: 0.95rem;
+  transition: color 0.2s ease;
+  text-decoration: none;
+}
+
+.navLink:hover {
+  color: #0f3d3e;
+}
+
+.navCta {
+  background: #0f3d3e;
+  color: white;
+  padding: 0.625rem 1.5rem;
+  border-radius: 10px;
+  font-weight: 600;
+  font-size: 0.9rem;
+  transition: all 0.3s ease;
+  text-decoration: none;
+}
+
+.navCta:hover {
+  background: #1a5f63;
+  transform: translateY(-1px);
+}
+
+/* ============================================================================
+   Hero Section - Top: Centered Content | Bottom: Image + Bento Cards
+   ============================================================================ */
+
+.hero {
+  padding: 120px 2rem 100px;
+  position: relative;
+}
+
+.heroContainer {
+  max-width: 1400px;
+  margin: 0 auto;
+}
+
+/* Top Section - Centered Title/Subtitle/Buttons */
+.heroTopSection {
+  text-align: center;
+  margin-bottom: 4rem;
+}
+
+.heroTitle {
+  font-size: 3.5rem;
+  font-weight: 800;
+  line-height: 1.15;
+  color: #1a202c;
+  margin-bottom: 1.25rem;
+  letter-spacing: -0.02em;
+}
+
+.heroSubtitle {
+  font-size: 1.05rem;
+  color: #64748b;
+  line-height: 1.6;
+  margin-bottom: 2rem;
+  max-width: 650px;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.heroButtons {
+  display: flex;
+  gap: 1rem;
+  justify-content: center;
+  margin-bottom: 2rem;
+}
+
+.primaryButton {
+  background: #0f3d3e;
+  color: white;
+  padding: 0.875rem 1.75rem;
+  border-radius: 12px;
+  font-weight: 600;
+  font-size: 0.95rem;
+  transition: all 0.3s ease;
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  border: none;
+  cursor: pointer;
+}
+
+.primaryButton:hover {
+  background: #1a5f63;
+  transform: translateY(-2px);
+  box-shadow: 0 8px 20px rgba(15, 61, 62, 0.3);
+}
+
+.secondaryButton {
+  background: transparent;
+  color: #0f3d3e;
+  padding: 0.875rem 1.75rem;
+  border-radius: 12px;
+  font-weight: 600;
+  font-size: 0.95rem;
+  transition: all 0.3s ease;
+  text-decoration: none;
+  border: 2px solid #e2e8f0;
+}
+
+.secondaryButton:hover {
+  border-color: #0f3d3e;
+  background: rgba(15, 61, 62, 0.05);
+}
+
+.heroRating {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  justify-content: center;
+}
+
+.stars {
+  display: flex;
+  gap: 0.125rem;
+  color: #fbbf24;
+}
+
+.ratingText {
+  color: #64748b;
+  font-size: 0.9rem;
+}
+
+.ratingScore {
+  font-weight: 700;
+  color: #1a202c;
+}
+
+/* Bottom Section - Hero Image (left) + Bento Cards (right) */
+.heroBottomSection {
+  display: grid;
+  grid-template-columns: 420px 1fr;
+  gap: 3rem;
+  align-items: start;
+}
+
+/* Left: Hero Image */
+.heroImageColumn {
+  position: relative;
+}
+
+.decorativeIcons {
+  position: absolute;
+  left: -40px;
+  top: 45%;
+  transform: translateY(-50%);
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+  z-index: 10;
+}
+
+.decorIcon {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.12);
+  color: #0f3d3e;
+  transition: all 0.3s ease;
+}
+
+.decorIcon:hover {
+  transform: scale(1.1);
+  box-shadow: 0 5px 18px rgba(0, 0, 0, 0.18);
+}
+
+.heroImage {
+  width: 100%;
+  height: 380px;
+  border-radius: 20px;
+  overflow: hidden;
+  box-shadow: 0 15px 50px rgba(0, 0, 0, 0.15);
+}
+
+.heroImage img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+/* Right: Bento Cards Grid */
+.bentoGrid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  grid-template-rows: 170px 170px;
+  gap: 1.25rem;
+  height: 380px;
+}
+
+/* Card Positioning */
+.bentoCard1 {
+  grid-column: 1;
+  grid-row: 1 / 3;
+}
+
+.bentoCard2 {
+  grid-column: 2;
+  grid-row: 1;
+}
+
+.bentoCard3 {
+  grid-column: 2;
+  grid-row: 2;
+}
+
+.bentoCard4 {
+  grid-column: 1 / 3;
+  grid-row: 3;
+  height: 140px;
+}
+
+/* Alternative: 3-column grid with tall cards on left and right */
+.bentoGridAlt {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  grid-template-rows: repeat(2, 170px);
+  gap: 1.25rem;
+  height: 380px;
+}
+
+.bentoCard1Alt {
+  grid-column: 1;
+  grid-row: 1 / 3;
+}
+
+.bentoCard2Alt {
+  grid-column: 2;
+  grid-row: 1;
+}
+
+.bentoCard3Alt {
+  grid-column: 2;
+  grid-row: 2;
+}
+
+.bentoCard4Alt {
+  grid-column: 3;
+  grid-row: 1 / 3;
+}
+
+/* Base Card Styles */
+.bentoCard {
+  border-radius: 18px;
+  padding: 1.75rem 1.5rem;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  position: relative;
+  overflow: hidden;
+}
+
+.bentoCard:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.15);
+}
+
+/* Card Color Variants */
+.cardTeal {
+  background: linear-gradient(135deg, #0f3d3e 0%, #1a5f63 100%);
+  color: white;
+}
+
+.cardMint {
+  background: linear-gradient(135deg, #e8f5e9 0%, #d4f1d8 100%);
+  color: #065f46;
+  border: 2px solid #10b981;
+}
+
+.cardPeach {
+  background: linear-gradient(135deg, #fff5f0 0%, #ffe8db 100%);
+  color: #7c2d12;
+  border: 2px solid #ff6b35;
+}
+
+/* Card Content */
+.cardIcon {
+  width: 40px;
+  height: 40px;
+  border-radius: 9px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 0.875rem;
+}
+
+.cardTeal .cardIcon {
+  background: rgba(255, 255, 255, 0.15);
+  color: white;
+}
+
+.cardMint .cardIcon {
+  background: #10b981;
+  color: white;
+}
+
+.cardPeach .cardIcon {
+  background: #ff6b35;
+  color: white;
+}
+
+.cardNumber {
+  font-size: 2.5rem;
+  font-weight: 800;
+  line-height: 1;
+  margin-bottom: 0.375rem;
+  letter-spacing: -0.02em;
+}
+
+.cardLabel {
+  font-size: 0.875rem;
+  font-weight: 500;
+  line-height: 1.35;
+  opacity: 0.95;
+}
+
+.cardTeal .cardLabel {
+  color: rgba(255, 255, 255, 0.9);
+}
+
+.cardMint .cardLabel {
+  color: #065f46;
+}
+
+.cardPeach .cardLabel {
+  color: #7c2d12;
+}
+
+.cardSmallText {
+  font-size: 0.85rem;
+  opacity: 0.8;
+  margin-top: 0.25rem;
+}
+
+/* ============================================================================
+   Features Section
+   ============================================================================ */
+
+.features {
+  padding: 100px 2rem;
+  background: white;
+}
+
+.featuresContent {
+  max-width: 1280px;
+  margin: 0 auto;
+}
+
+.sectionHeader {
+  text-align: center;
+  margin-bottom: 4rem;
+}
+
+.sectionTitle {
+  font-size: 2.75rem;
+  font-weight: 800;
+  color: #1a202c;
+  margin-bottom: 1rem;
+}
+
+.sectionSubtitle {
+  font-size: 1.125rem;
+  color: #64748b;
+  max-width: 600px;
+  margin: 0 auto;
+}
+
+.featuresGrid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 2rem;
+}
+
+.featureCard {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 16px;
+  padding: 2.25rem;
+  transition: all 0.3s ease;
+}
+
+.featureCard:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 12px 30px rgba(15, 61, 62, 0.1);
+  border-color: #0f3d3e;
+}
+
+.featureIcon {
+  width: 56px;
+  height: 56px;
+  background: linear-gradient(135deg, #0f3d3e 0%, #1a5f63 100%);
+  border-radius: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  margin-bottom: 1.25rem;
+}
+
+.featureTitle {
+  font-size: 1.375rem;
+  font-weight: 700;
+  color: #1a202c;
+  margin-bottom: 0.625rem;
+}
+
+.featureDescription {
+  font-size: 0.975rem;
+  color: #64748b;
+  line-height: 1.6;
+}
+
+/* ============================================================================
+   CTA Section
+   ============================================================================ */
+
+.cta {
+  padding: 80px 2rem;
+  background: linear-gradient(135deg, #0f3d3e 0%, #1a5f63 50%, #2d8a90 100%);
+}
+
+.ctaContent {
+  max-width: 700px;
+  margin: 0 auto;
+  text-align: center;
+}
+
+.ctaTitle {
+  font-size: 2.75rem;
+  font-weight: 800;
+  color: white;
+  margin-bottom: 1rem;
+}
+
+.ctaSubtitle {
+  font-size: 1.125rem;
+  color: rgba(255, 255, 255, 0.9);
+  margin-bottom: 2rem;
+  line-height: 1.6;
+}
+
+.ctaButton {
+  background: white;
+  color: #0f3d3e;
+  padding: 1.125rem 2.25rem;
+  border-radius: 12px;
+  font-weight: 700;
+  font-size: 1.05rem;
+  transition: all 0.3s ease;
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.625rem;
+  box-shadow: 0 8px 25px rgba(0, 0, 0, 0.2);
+}
+
+.ctaButton:hover {
+  background: #e8f5e9;
+  transform: translateY(-3px);
+  box-shadow: 0 12px 35px rgba(0, 0, 0, 0.3);
+}
+
+/* ============================================================================
+   Footer
+   ============================================================================ */
+
+.footer {
+  background: #0f3d3e;
+  color: rgba(255, 255, 255, 0.7);
+  padding: 2.5rem 2rem;
+}
+
+.footerContent {
+  max-width: 1280px;
+  margin: 0 auto;
+  text-align: center;
+}
+
+.footerLogo {
+  font-size: 1.375rem;
+  font-weight: 700;
+  color: white;
+  margin-bottom: 0.75rem;
+}
+
+.footerText {
+  font-size: 0.9rem;
+  margin-bottom: 0.375rem;
+}
+
+/* ============================================================================
+   Responsive Design
+   ============================================================================ */
+
+@media (max-width: 1200px) {
+  .heroBottomSection {
+    grid-template-columns: 1fr;
+    gap: 2.5rem;
+  }
+
+  .decorativeIcons {
+    display: none;
+  }
+
+  .bentoGrid,
+  .bentoGridAlt {
+    grid-template-columns: 1fr 1fr;
+    grid-template-rows: auto;
+    height: auto;
+  }
+
+  .bentoCard1,
+  .bentoCard1Alt {
+    grid-column: 1;
+    grid-row: 1;
+  }
+
+  .bentoCard2,
+  .bentoCard2Alt {
+    grid-column: 2;
+    grid-row: 1;
+  }
+
+  .bentoCard3,
+  .bentoCard3Alt {
+    grid-column: 1;
+    grid-row: 2;
+  }
+
+  .bentoCard4,
+  .bentoCard4Alt {
+    grid-column: 2;
+    grid-row: 2;
+  }
+}
+
+@media (max-width: 768px) {
+  .heroTitle {
+    font-size: 2.25rem;
+  }
+
+  .bentoGrid,
+  .bentoGridAlt {
+    grid-template-columns: 1fr;
+  }
+
+  .featuresGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .navLinks {
+    display: none;
+  }
+}

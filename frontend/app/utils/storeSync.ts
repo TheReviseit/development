@@ -180,13 +180,25 @@ export function broadcastStoreUpdate(
  * - BroadcastChannel (same-browser tabs)
  * - localStorage (fallback)
  *
+ * @param storeIds - Array of acceptable store IDs (e.g., [firebaseUID, urlSlug]).
+ *                   The first element is used as the primary ID for Supabase Realtime filters.
+ *                   All IDs are checked when matching BroadcastChannel/localStorage events.
+ * @param onUpdate - Callback fired when a matching update event is received.
  * Returns cleanup function
  */
 export function subscribeToStoreUpdates(
-  storeId: string,
+  storeIds: string | string[],
   onUpdate: (event: StoreUpdateEvent) => void,
 ): () => void {
   if (typeof window === "undefined") return () => {};
+
+  // Normalize to array and deduplicate
+  const idList = Array.from(
+    new Set(Array.isArray(storeIds) ? storeIds : [storeIds]),
+  ).filter(Boolean);
+  const primaryId = idList[0]; // Used for Supabase Realtime filter
+
+  if (!primaryId) return () => {};
 
   const cleanupFunctions: (() => void)[] = [];
 
@@ -195,8 +207,8 @@ export function subscribeToStoreUpdates(
   const DEBOUNCE_MS = 500;
 
   const handleEvent = (event: StoreUpdateEvent) => {
-    // Only process events for our store
-    if (event.storeId !== storeId && event.storeId !== "*") return;
+    // Accept events matching ANY of our store IDs (UID, slug, or wildcard)
+    if (event.storeId !== "*" && !idList.includes(event.storeId)) return;
 
     // Debounce: ignore if we just processed an update
     const now = Date.now();
@@ -228,7 +240,7 @@ export function subscribeToStoreUpdates(
 
       // Create a single channel for both products and variants
       productsChannel = supabase
-        .channel(`store-products:${storeId}`)
+        .channel(`store-products:${primaryId}`)
         // Subscribe to products table changes
         .on(
           "postgres_changes",
@@ -236,7 +248,7 @@ export function subscribeToStoreUpdates(
             event: "*", // INSERT, UPDATE, DELETE
             schema: "public",
             table: "products",
-            filter: `user_id=eq.${storeId}`,
+            filter: `user_id=eq.${primaryId}`,
           },
           (
             payload: RealtimePostgresChangesPayload<Record<string, unknown>>,
@@ -255,7 +267,7 @@ export function subscribeToStoreUpdates(
 
             handleEvent({
               type: eventType,
-              storeId,
+              storeId: primaryId,
               productId:
                 ((payload.new as Record<string, unknown>)?.id as string) ||
                 ((payload.old as Record<string, unknown>)?.id as string),
@@ -274,7 +286,7 @@ export function subscribeToStoreUpdates(
             event: "*",
             schema: "public",
             table: "product_variants",
-            filter: `user_id=eq.${storeId}`,
+            filter: `user_id=eq.${primaryId}`,
           },
           (
             payload: RealtimePostgresChangesPayload<Record<string, unknown>>,
@@ -286,7 +298,7 @@ export function subscribeToStoreUpdates(
 
             handleEvent({
               type: "VARIANT_UPDATED",
-              storeId,
+              storeId: primaryId,
               productId:
                 ((payload.new as Record<string, unknown>)
                   ?.product_id as string) ||
@@ -310,7 +322,7 @@ export function subscribeToStoreUpdates(
             event: "*",
             schema: "public",
             table: "showcase_items",
-            filter: `user_id=eq.${storeId}`,
+            filter: `user_id=eq.${primaryId}`,
           },
           (
             payload: RealtimePostgresChangesPayload<Record<string, unknown>>,
@@ -329,7 +341,7 @@ export function subscribeToStoreUpdates(
 
             handleEvent({
               type: eventType,
-              storeId,
+              storeId: primaryId,
               productId:
                 ((payload.new as Record<string, unknown>)?.id as string) ||
                 ((payload.old as Record<string, unknown>)?.id as string),
@@ -346,7 +358,7 @@ export function subscribeToStoreUpdates(
             setConnectionStatus("connected");
             console.log(
               "[StoreSync] 🟢 Supabase Realtime connected for store:",
-              storeId,
+              primaryId,
             );
           } else if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") {
             setConnectionStatus("error");

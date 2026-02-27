@@ -51,7 +51,14 @@ export default function ProfilePage() {
   const [slugAvailable, setSlugAvailable] = useState<boolean | null>(null);
   const [suggestedSlug, setSuggestedSlug] = useState("");
 
-  // Load profile data
+  // ✅ Feature gate: custom_domain (slug editing)
+  const [canEditSlug, setCanEditSlug] = useState<boolean | null>(null); // null = loading
+  // ✅ Feature gate: invoice_customization
+  const [canAccessInvoice, setCanAccessInvoice] = useState<boolean | null>(
+    null,
+  );
+
+  // Load profile data + feature check
   useEffect(() => {
     const loadProfile = async () => {
       try {
@@ -81,8 +88,44 @@ export default function ProfilePage() {
       }
     };
 
+    // ✅ Check custom_domain feature (slug editing entitlement)
+    const checkSlugFeature = async () => {
+      try {
+        const res = await fetch(
+          "/api/console/features/check?feature=custom_domain",
+        );
+        if (res.ok) {
+          const data = await res.json();
+          setCanEditSlug(data.allowed === true);
+        } else {
+          setCanEditSlug(false);
+        }
+      } catch {
+        setCanEditSlug(false);
+      }
+    };
+
+    // ✅ Check invoice_customization feature
+    const checkInvoiceFeature = async () => {
+      try {
+        const res = await fetch(
+          "/api/console/features/check?feature=invoice_customization",
+        );
+        if (res.ok) {
+          const data = await res.json();
+          setCanAccessInvoice(data.allowed === true);
+        } else {
+          setCanAccessInvoice(false);
+        }
+      } catch {
+        setCanAccessInvoice(false);
+      }
+    };
+
     if (!authLoading) {
       loadProfile();
+      checkSlugFeature();
+      checkInvoiceFeature();
     }
   }, [authLoading]);
 
@@ -140,25 +183,37 @@ export default function ProfilePage() {
     }
   }, [profile.businessName, originalBusinessName, checkSlugAvailability]);
 
-  // ✅ Save profile with optional slug update consent
-  const saveProfile = async (allowSlugUpdate: boolean) => {
+  // ✅ Save profile — no client flags, backend detects slug changes
+  const saveProfile = async () => {
     setSaving(true);
     try {
       const response = await fetch("/api/business/save", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          ...profile,
-          allow_slug_update: allowSlugUpdate, // ✅ Explicit consent flag
-        }),
+        body: JSON.stringify(profile), // No allow_slug_update — backend handles it
       });
 
       if (response.ok) {
         setMessage({ type: "success", text: "Profile saved successfully!" });
-        // Update original name after successful save
         setOriginalBusinessName(profile.businessName);
+        setShowSlugWarning(false);
       } else {
-        setMessage({ type: "error", text: "Failed to save profile" });
+        const data = await response.json().catch(() => ({}));
+
+        // Handle structured backend errors
+        if (response.status === 403 && data.error === "FEATURE_GATED") {
+          setMessage({
+            type: "error",
+            text: "Custom store URL requires Business or Pro plan. Upgrade to change your URL.",
+          });
+        } else if (response.status === 409 && data.error === "SLUG_TAKEN") {
+          setMessage({
+            type: "error",
+            text: data.message || "This store URL is already taken.",
+          });
+        } else {
+          setMessage({ type: "error", text: "Failed to save profile" });
+        }
       }
     } catch (error) {
       setMessage({ type: "error", text: "Failed to save profile" });
@@ -167,20 +222,23 @@ export default function ProfilePage() {
     }
   };
 
-  // ✅ Handle save - check if slug will change
+  // ✅ Handle save — show warning if slug will change (for allowed users)
   const handleSave = async () => {
-    // Check if business name changed
-    if (profile.businessName !== originalBusinessName) {
+    if (
+      canEditSlug &&
+      profile.businessName !== originalBusinessName &&
+      originalBusinessName !== ""
+    ) {
       setShowSlugWarning(true);
       return; // Wait for user confirmation
     }
-    await saveProfile(false); // No slug update
+    await saveProfile();
   };
 
   // ✅ Confirm slug change
   const confirmSlugChange = async () => {
     setShowSlugWarning(false);
-    await saveProfile(true); // ✅ EXPLICIT: User confirmed slug update
+    await saveProfile();
   };
 
   // Compress image client-side
@@ -381,10 +439,45 @@ export default function ProfilePage() {
   return (
     <div className={styles.container}>
       <div className={styles.header}>
-        <h1 className={styles.title}>Store Settings</h1>
-        <p className={styles.subtitle}>
-          Manage your store profile and payment settings
-        </p>
+        <div>
+          <h1 className={styles.title}>Store Settings</h1>
+          <p className={styles.subtitle}>
+            Manage your store profile and payment settings
+          </p>
+        </div>
+        <a
+          href="/upgrade?domain=shop"
+          className={styles.upgradeButton}
+          style={{
+            display: "inline-flex",
+            alignItems: "center",
+            padding: "10px 20px",
+            backgroundColor: "#000",
+            color: "#fff",
+            fontWeight: "600",
+            borderRadius: "6px",
+            textDecoration: "none",
+            transition: "background-color 0.2s",
+            whiteSpace: "nowrap",
+          }}
+          onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = "#333")}
+          onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = "#000")}
+        >
+          <svg
+            style={{ width: "20px", height: "20px", marginRight: "8px" }}
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2}
+              d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"
+            />
+          </svg>
+          Upgrade Plan
+        </a>
       </div>
 
       {/* Tabs */}
@@ -505,25 +598,46 @@ export default function ProfilePage() {
                   <span className={styles.slugLabel}>Your store URL: </span>
                   <code className={styles.slugUrl}>
                     {typeof window !== "undefined" &&
-                      `${window.location.origin}/store/${generateSlug(profile.businessName) || "your-store-name"}`}
+                      `${window.location.origin}/store/${urlSlug || generateSlug(profile.businessName) || "your-store-name"}`}
                   </code>
 
-                  {/* Availability indicator */}
-                  {profile.businessName !== originalBusinessName && (
-                    <span className={styles.slugStatus}>
-                      {slugAvailable === null && (
-                        <span className={styles.checking}>Checking...</span>
-                      )}
-                      {slugAvailable === true && (
-                        <span className={styles.available}>✅ Available</span>
-                      )}
-                      {slugAvailable === false && (
-                        <span className={styles.taken}>
-                          ⚠️ Taken - will use {suggestedSlug}
-                        </span>
-                      )}
+                  {/* Feature gate: show upgrade badge for starter users */}
+                  {canEditSlug === false && (
+                    <span
+                      style={{
+                        display: "inline-flex",
+                        alignItems: "center",
+                        gap: "4px",
+                        marginLeft: "8px",
+                        padding: "2px 8px",
+                        fontSize: "11px",
+                        fontWeight: 600,
+                        background: "linear-gradient(135deg, #f59e0b, #d97706)",
+                        color: "#fff",
+                        borderRadius: "4px",
+                      }}
+                    >
+                      ⭐ PRO
                     </span>
                   )}
+
+                  {/* Availability indicator — only for users who CAN edit slug */}
+                  {canEditSlug &&
+                    profile.businessName !== originalBusinessName && (
+                      <span className={styles.slugStatus}>
+                        {slugAvailable === null && (
+                          <span className={styles.checking}>Checking...</span>
+                        )}
+                        {slugAvailable === true && (
+                          <span className={styles.available}>✅ Available</span>
+                        )}
+                        {slugAvailable === false && (
+                          <span className={styles.taken}>
+                            ⚠️ Taken - will use {suggestedSlug}
+                          </span>
+                        )}
+                      </span>
+                    )}
                 </div>
               )}
             </div>
@@ -553,6 +667,7 @@ export default function ProfilePage() {
       {activeTab === "invoice" && (
         <InvoiceSettings
           showToast={(text, type) => setMessage({ text, type })}
+          canCustomize={canAccessInvoice === true}
         />
       )}
 

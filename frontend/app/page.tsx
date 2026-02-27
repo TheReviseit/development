@@ -17,8 +17,8 @@ async function getProductFromRequest() {
   // Check port in development
   if (host.includes("localhost") || host.includes("127.0.0.1")) {
     if (host.includes(":3001")) return "shop";
-    if (host.includes(":3002")) return "marketing";
-    if (host.includes(":3003")) return "showcase";
+    if (host.includes(":3002")) return "showcase"; // FIXED: was "marketing"
+    if (host.includes(":3003")) return "marketing"; // FIXED: was "showcase"
   }
 
   // Check subdomain in production

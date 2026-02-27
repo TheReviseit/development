@@ -23,11 +23,39 @@ from typing import Optional
 from flask import Blueprint, request, jsonify, g
 from functools import wraps
 from pydantic import ValidationError as PydanticValidationError
+from middleware.feature_gate import require_feature
 
 logger = logging.getLogger('reviseit.routes.orders')
 
 # Create blueprint
 orders_bp = Blueprint('orders', __name__)
+
+
+# =============================================================================
+# Before-request: Populate g.user_id from X-User-Id for public checkout
+# =============================================================================
+# The @require_feature decorator checks g.user_id (normally set by Firebase
+# auth middleware). Public storefront checkout doesn't have Firebase tokens —
+# it only sends X-User-Id header. This hook bridges that gap.
+
+@orders_bp.before_request
+def _populate_g_user_id_from_header():
+    """Set g.user_id and g.product_domain from X-User-Id header if not already
+    set by Firebase/console auth middleware."""
+    if not getattr(g, 'user_id', None):
+        user_id = (
+            request.headers.get('X-User-Id')
+            or request.headers.get('X-Firebase-Uid')
+        )
+        if not user_id:
+            # Also try from JSON body
+            data = request.get_json(silent=True) or {}
+            user_id = data.get('user_id') or data.get('business_id')
+        if user_id:
+            g.user_id = user_id
+    # Orders are always in the "shop" domain
+    if not getattr(g, 'product_domain', None):
+        g.product_domain = 'shop'
 
 
 # =============================================================================
@@ -164,6 +192,9 @@ def get_service():
 
 @orders_bp.route('/api/orders', methods=['POST'])
 @handle_domain_errors
+# NOTE: No @require_feature here — public storefront checkout must always
+# be able to create orders regardless of store owner's subscription tier.
+# Dashboard order management (list/update/delete) retains feature gates.
 def create_order():
     """
     Create a new order.
@@ -360,6 +391,7 @@ def get_order(user_id: str, order_id: str):
 
 @orders_bp.route('/api/orders/<order_id>/status', methods=['PATCH'])
 @handle_domain_errors
+@require_feature('order_management')
 def update_order_status(order_id: str):
     """
     Update the status of an order.
@@ -424,6 +456,7 @@ def update_order_status(order_id: str):
 
 @orders_bp.route('/api/orders/<order_id>', methods=['PUT'])
 @handle_domain_errors
+@require_feature('order_management')
 def update_order(order_id: str):
     """
     Update an order (customer details, items, notes).
@@ -499,6 +532,7 @@ def update_order(order_id: str):
 
 @orders_bp.route('/api/orders/<order_id>', methods=['DELETE'])
 @handle_domain_errors
+@require_feature('order_management')
 def cancel_order(order_id: str):
     """Cancel an order (soft delete - sets status to cancelled)."""
     correlation_id = get_correlation_id()
@@ -531,6 +565,7 @@ def cancel_order(order_id: str):
 
 @orders_bp.route('/api/orders/ai/create', methods=['POST'])
 @handle_domain_errors
+@require_feature('order_management')
 def create_order_from_ai():
     """
     Create an order from AI conversation.
@@ -655,6 +690,7 @@ def orders_health():
 
 @orders_bp.route('/api/orders/sheets/initialize', methods=['POST'])
 @handle_domain_errors
+@require_feature('order_management')
 def initialize_order_sheet():
     """
     Initialize Google Sheet with column headers when user connects their sheet.
@@ -827,6 +863,7 @@ def initialize_order_sheet():
 
 @orders_bp.route('/api/orders/sheets/sync', methods=['POST'])
 @handle_domain_errors
+@require_feature('order_management')
 def sync_order_to_sheet():
     """
     Trigger a Google Sheets sync for an existing order in Supabase.
@@ -945,6 +982,7 @@ def is_order_booking_enabled(user_id: str) -> bool:
     """
     Check if order booking is enabled for a user/business.
     BACKWARD COMPATIBLE: This function is used by the AI brain.
+    Uses .limit(1) instead of .single() to avoid PGRST116 crash when no row exists.
     """
     try:
         from supabase_client import get_supabase_client
@@ -955,10 +993,10 @@ def is_order_booking_enabled(user_id: str) -> bool:
         
         result = supabase.table('ai_capabilities').select(
             'order_booking_enabled'
-        ).eq('user_id', user_id).single().execute()
+        ).eq('user_id', user_id).limit(1).execute()
         
-        if result.data:
-            return result.data.get('order_booking_enabled', False)
+        if result.data and len(result.data) > 0:
+            return result.data[0].get('order_booking_enabled', False)
     except Exception as e:
         logger.warning(f"Error checking order booking enabled: {e}")
     

@@ -12,6 +12,7 @@ Endpoints:
 import logging
 from flask import Blueprint, request, jsonify, g
 from typing import Optional, List
+from middleware.feature_gate import require_feature
 
 from domain import (
     StockItem,
@@ -35,6 +36,7 @@ inventory_bp = Blueprint('inventory', __name__)
 
 @inventory_bp.route('/api/inventory/reserve', methods=['POST'])
 @handle_domain_errors
+@require_feature('order_management')
 def reserve_stock():
     """
     Reserve stock for checkout.
@@ -165,6 +167,7 @@ def reserve_stock():
 
 @inventory_bp.route('/api/inventory/confirm', methods=['POST'])
 @handle_domain_errors
+@require_feature('order_management')
 def confirm_reservation():
     """
     Confirm reservation and deduct actual stock.
@@ -229,6 +232,7 @@ def confirm_reservation():
 
 @inventory_bp.route('/api/inventory/release', methods=['POST'])
 @handle_domain_errors
+@require_feature('order_management')
 def release_reservation():
     """
     Release reservation without deducting stock.
@@ -343,6 +347,7 @@ def get_stock(product_id):
 
 @inventory_bp.route('/api/inventory/validate', methods=['POST'])
 @handle_domain_errors
+@require_feature('order_management')
 def validate_stock():
     """
     Validate stock availability without creating reservations.

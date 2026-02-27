@@ -28,7 +28,7 @@ async function verifyUser(): Promise<{ userId: string } | NextResponse> {
   return { userId: result.data!.uid };
 }
 
-// Helper to log audit events
+// Helper to log audit events (used by GET-adjacent ops that stay in Next.js)
 async function logAudit(
   supabase: ReturnType<typeof getSupabase>,
   userId: string,
@@ -126,6 +126,13 @@ export async function GET(request: NextRequest) {
 }
 
 // POST /api/products - Create a new product
+// ============================================================================
+// UNIFIED WRITE PATH: Proxied to Flask backend.
+// Flask handles: auth → @require_limit("create_product") → atomic increment
+//                → insert into products table → return 201 or 403.
+// No direct DB writes here. No inline limit checks.
+// Pattern: identical to showcase/items/route.ts
+// ============================================================================
 export async function POST(request: NextRequest) {
   try {
     const authResult = await verifyUser();
@@ -133,109 +140,67 @@ export async function POST(request: NextRequest) {
     const { userId } = authResult;
 
     const body = await request.json();
-    const supabase = getSupabase();
 
-    // Validate required fields
-    if (
-      !body.name ||
-      typeof body.name !== "string" ||
-      body.name.trim() === ""
-    ) {
+    const BACKEND_URL =
+      process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
+
+    // Get session cookie for auth forwarding
+    const cookieStore = await cookies();
+    const sessionCookie = cookieStore.get("session")?.value || "";
+
+    const response = await fetch(`${BACKEND_URL}/api/products`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${sessionCookie}`,
+        "X-User-ID": userId,
+        // CRITICAL: Set Origin header so Flask domain middleware knows this is from shop
+        // Without this, backend defaults to 'dashboard' and subscription lookup fails
+        Origin: process.env.NEXT_PUBLIC_SHOP_URL || "http://localhost:3001",
+      },
+      body: JSON.stringify(body),
+    });
+
+    // Handle non-JSON responses (e.g., Flask error pages)
+    const contentType = response.headers.get("content-type");
+    if (!contentType || !contentType.includes("application/json")) {
+      const text = await response.text();
+      console.error(
+        "Backend returned non-JSON response:",
+        text.substring(0, 500),
+      );
       return NextResponse.json(
-        { error: "Product name is required" },
-        { status: 400 },
+        { error: "Backend error - check server logs" },
+        { status: 500 },
       );
     }
 
-    // Lookup category_id if name provided
-    let categoryId = body.categoryId || null;
-    if (body.category && typeof body.category === "string") {
-      const { data: cat } = await supabase
-        .from("product_categories")
-        .select("id")
-        .eq("user_id", userId)
-        .eq("name", body.category.trim())
-        .single();
+    const data = await response.json();
 
-      if (cat) {
-        categoryId = cat.id;
-      }
+    // Map Flask response to match frontend expectations
+    if (response.status === 201 && data.product) {
+      return NextResponse.json({ product: data.product }, { status: 201 });
     }
 
-    // Build product data - ALWAYS set user_id from session
-    const productData = {
-      user_id: userId,
-      name: body.name.trim(),
-      description: body.description || "",
-      sku: body.sku || null,
-      brand: body.brand || "",
-      price: parseFloat(body.price) || 0,
-      compare_at_price: body.compareAtPrice
-        ? parseFloat(body.compareAtPrice)
-        : null,
-      price_unit: body.priceUnit || "INR",
-      stock_quantity: parseInt(body.stockQuantity) || 0,
-      stock_status: body.stockStatus || "in_stock",
-      image_url: body.imageUrl || "",
-      image_public_id: body.imagePublicId || "",
-      duration: body.duration || "",
-      materials: body.materials || [],
-      sizes: body.sizes || [],
-      colors: body.colors || [],
-      tags: body.tags || [],
-      is_available: body.available !== false,
-      category_id: categoryId,
-      has_size_pricing: body.hasSizePricing || false,
-      size_prices: body.sizePrices || {},
-      size_stocks: body.sizeStocks || {},
-    };
-
-    // Insert product
-    const { data: product, error } = await supabase
-      .from("products")
-      .insert(productData)
-      .select()
-      .single();
-
-    if (error) {
-      console.error("Error creating product:", error);
-      return NextResponse.json({ error: error.message }, { status: 500 });
+    // Pass through error responses (403 limit, 400 validation, 500 etc.)
+    // Map Flask's feature gate denial to frontend's expected format
+    if (response.status === 403) {
+      const errorData = data.decision || data;
+      return NextResponse.json(
+        {
+          error: errorData.error || "PRODUCT_LIMIT_REACHED",
+          message:
+            errorData.message ||
+            "You've reached your plan limit. Upgrade to add more products.",
+          code: "PRODUCT_LIMIT_REACHED",
+          current: errorData.used ?? errorData.current,
+          limit: errorData.hard_limit ?? errorData.limit,
+        },
+        { status: 403 },
+      );
     }
 
-    // Insert variants if provided
-    if (
-      body.variants &&
-      Array.isArray(body.variants) &&
-      body.variants.length > 0
-    ) {
-      const variantsData = body.variants.map((v: Record<string, unknown>) => ({
-        user_id: userId,
-        product_id: product.id,
-        color: v.color || "",
-        size: v.size || "",
-        price: v.price ? parseFloat(String(v.price)) : null,
-        compare_at_price: v.compareAtPrice
-          ? parseFloat(String(v.compareAtPrice))
-          : null,
-        stock_quantity: v.stockQuantity ? parseInt(String(v.stockQuantity)) : 0,
-        image_url: v.imageUrl || "",
-        image_public_id: v.imagePublicId || "",
-        has_size_pricing: v.hasSizePricing || false,
-        size_prices: v.sizePrices || {},
-        size_stocks: v.sizeStocks || {},
-      }));
-
-      await supabase.from("product_variants").insert(variantsData);
-    }
-
-    // Log audit
-    await logAudit(supabase, userId, product.id, "create", {
-      name: product.name,
-    });
-
-    console.log(`✅ Created product "${product.name}" for user ${userId}`);
-
-    return NextResponse.json({ product }, { status: 201 });
+    return NextResponse.json(data, { status: response.status });
   } catch (error) {
     console.error("Error in POST /api/products:", error);
     return NextResponse.json(

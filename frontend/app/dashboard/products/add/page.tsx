@@ -3,6 +3,8 @@
 import { useState, useEffect, useRef, useMemo } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { broadcastStoreUpdate } from "@/app/utils/storeSync";
+import { useAuth } from "@/app/components/auth/AuthProvider";
 import styles from "./add-product.module.css";
 import ProductImageUpload from "../../components/ProductImageUpload";
 import SearchableDropdown from "../../components/SearchableDropdown";
@@ -289,6 +291,7 @@ const DRAFT_PRODUCT_KEY = "draft_product_add";
 
 export default function AddProductPage() {
   const router = useRouter();
+  const { firebaseUser } = useAuth();
   const [formData, setFormData] = useState<Product>(createEmptyProduct());
   const [productCategories, setProductCategories] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
@@ -301,6 +304,10 @@ export default function AddProductPage() {
   const [productVariants, setProductVariants] = useState<ProductVariant[]>([]);
   const [customCategory, setCustomCategory] = useState("");
   const [isDataLoaded, setIsDataLoaded] = useState(false);
+  const [productLimitReached, setProductLimitReached] = useState(false);
+  const [productLimitMax, setProductLimitMax] = useState<number | null>(null);
+  const [productRemaining, setProductRemaining] = useState<number | null>(null);
+  const [noSubscription, setNoSubscription] = useState(false);
   // Dynamic color and size options from database
   const [colorOptions, setColorOptions] = useState<ColorOption[]>(
     DEFAULT_COLOR_OPTIONS,
@@ -328,7 +335,13 @@ export default function AddProductPage() {
   const updateVariant = (
     id: string,
     field: keyof ProductVariant,
-    value: string | string[] | number | boolean | undefined | Record<string, number>,
+    value:
+      | string
+      | string[]
+      | number
+      | boolean
+      | undefined
+      | Record<string, number>,
   ) => {
     setProductVariants((prevVariants) =>
       prevVariants.map((v) => {
@@ -407,6 +420,53 @@ export default function AddProductPage() {
             console.error("Error parsing saved draft:", e);
           }
         }
+        // Check product limit — gate the add page URL
+        try {
+          const [countRes, limitRes] = await Promise.all([
+            fetch("/api/products?limit=1"),
+            fetch("/api/features/check?feature=create_product"),
+          ]);
+          if (countRes.ok && limitRes.ok) {
+            const countData = await countRes.json();
+            const limitData = await limitRes.json();
+
+            // ── Handle denial reasons (no subscription, missing data) ──
+            // These return hard_limit=0 as a sentinel, NOT a real plan limit.
+            if (limitData.denial_reason) {
+              if (
+                limitData.denial_reason === "NO_SUBSCRIPTION" ||
+                limitData.denial_reason === "PLAN_FEATURES_MISSING"
+              ) {
+                setNoSubscription(true);
+              }
+              // Don't process limits for denied responses
+            } else {
+              const currentCount = countData.total ?? 0;
+              const hardLimit = limitData.hard_limit;
+              const isUnlimited = limitData.is_unlimited;
+              if (
+                !isUnlimited &&
+                hardLimit !== null &&
+                hardLimit !== undefined &&
+                currentCount >= hardLimit
+              ) {
+                setProductLimitReached(true);
+                setProductLimitMax(hardLimit);
+              }
+              // Track remaining for the warning badge
+              if (
+                !isUnlimited &&
+                hardLimit !== null &&
+                hardLimit !== undefined
+              ) {
+                setProductLimitMax(hardLimit);
+                setProductRemaining(Math.max(0, hardLimit - currentCount));
+              }
+            }
+          }
+        } catch {
+          // Non-critical — server-side will still enforce
+        }
       } catch (error) {
         console.error("Error loading data:", error);
       } finally {
@@ -479,9 +539,10 @@ export default function AddProductPage() {
         variants: productVariants.map((v) => ({
           id: v.id,
           color: v.color || "",
-          size: Array.isArray(v.size) ? v.size.join(", ") : (v.size || ""),
+          size: Array.isArray(v.size) ? v.size.join(", ") : v.size || "",
           price: v.price || 0,
-          compareAtPrice: v.compareAtPrice !== undefined ? v.compareAtPrice : undefined,
+          compareAtPrice:
+            v.compareAtPrice !== undefined ? v.compareAtPrice : undefined,
           stockQuantity: v.stock || 0,
           imageUrl: v.imageUrl || "",
           imagePublicId: v.imagePublicId || "",
@@ -502,15 +563,36 @@ export default function AddProductPage() {
         // Clear the draft from localStorage on successful save
         localStorage.removeItem(DRAFT_PRODUCT_KEY);
         setMessage({ type: "success", text: "Product added successfully!" });
+
+        // Broadcast store update so other tabs/pages refetch immediately
+        const storeSlug = firebaseUser?.uid || "";
+        if (storeSlug) {
+          broadcastStoreUpdate(storeSlug);
+        }
+
         setTimeout(() => {
-          router.push("/dashboard/products");
-        }, 1000);
+          // Use router.replace + router.refresh to ensure the products page
+          // refetches fresh data instead of serving stale cached version
+          router.replace("/dashboard/products");
+          router.refresh();
+        }, 800);
       } else {
         const error = await response.json();
-        setMessage({
-          type: "error",
-          text: error.error || "Failed to save product",
-        });
+        // Handle structured 403 from product limit enforcement
+        if (response.status === 403 && error.code === "PRODUCT_LIMIT_REACHED") {
+          setProductLimitReached(true);
+          setMessage({
+            type: "error",
+            text:
+              error.message ||
+              `Product limit of ${error.limit} reached. Upgrade to add more.`,
+          });
+        } else {
+          setMessage({
+            type: "error",
+            text: error.error || "Failed to save product",
+          });
+        }
       }
     } catch (error) {
       setMessage({ type: "error", text: "Failed to save product" });
@@ -542,6 +624,188 @@ export default function AddProductPage() {
     );
   }
 
+  // ── No active subscription – show subscribe CTA ──
+  if (noSubscription) {
+    return (
+      <div className={styles.container}>
+        <div className={styles.header}>
+          <div>
+            <Link href="/dashboard/products" className={styles.backLink}>
+              <svg
+                width="16"
+                height="16"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+              >
+                <path
+                  d="M19 12H5M12 19l-7-7 7-7"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+              </svg>
+              Back to product list
+            </Link>
+            <h1 className={styles.pageTitle}>Subscription Required</h1>
+          </div>
+        </div>
+        <div
+          style={{
+            padding: "48px 40px",
+            textAlign: "center",
+            background:
+              "linear-gradient(135deg, rgba(139, 92, 246, 0.08), rgba(99, 102, 241, 0.08))",
+            border: "1px solid rgba(139, 92, 246, 0.25)",
+            borderRadius: "16px",
+            marginTop: "24px",
+          }}
+        >
+          <svg
+            width="56"
+            height="56"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="#8b5cf6"
+            strokeWidth="1.5"
+            style={{ margin: "0 auto 20px" }}
+          >
+            <rect x="1" y="4" width="22" height="16" rx="2" ry="2" />
+            <line x1="1" y1="10" x2="23" y2="10" />
+          </svg>
+          <h3
+            style={{
+              color: "#fff",
+              marginBottom: "8px",
+              fontSize: "20px",
+              fontWeight: 700,
+            }}
+          >
+            No Active Subscription
+          </h3>
+          <p
+            style={{
+              color: "rgba(255,255,255,0.6)",
+              marginBottom: "24px",
+              maxWidth: "400px",
+              margin: "0 auto 24px",
+              lineHeight: 1.6,
+            }}
+          >
+            Subscribe to a plan to start adding products to your store. All
+            plans include product catalog management.
+          </p>
+          <Link
+            href="/dashboard/profile"
+            style={{
+              display: "inline-block",
+              padding: "12px 28px",
+              background: "linear-gradient(135deg, #8b5cf6, #6366f1)",
+              color: "#fff",
+              borderRadius: "10px",
+              textDecoration: "none",
+              fontWeight: 600,
+              fontSize: "15px",
+              transition: "all 0.2s ease",
+            }}
+          >
+            View Plans & Subscribe
+          </Link>
+        </div>
+      </div>
+    );
+  }
+
+  // ── Product limit reached – show upgrade CTA ──
+  if (productLimitReached) {
+    return (
+      <div className={styles.container}>
+        <div className={styles.header}>
+          <div>
+            <Link href="/dashboard/products" className={styles.backLink}>
+              <svg
+                width="16"
+                height="16"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+              >
+                <path
+                  d="M19 12H5M12 19l-7-7 7-7"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+              </svg>
+              Back to product list
+            </Link>
+            <h1 className={styles.pageTitle}>Product Limit Reached</h1>
+          </div>
+        </div>
+        <div
+          style={{
+            padding: "48px 40px",
+            textAlign: "center",
+            background: "rgba(239, 68, 68, 0.08)",
+            border: "1px solid rgba(239, 68, 68, 0.25)",
+            borderRadius: "16px",
+            marginTop: "24px",
+          }}
+        >
+          <svg
+            width="56"
+            height="56"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="#ef4444"
+            strokeWidth="1.5"
+            style={{ margin: "0 auto 20px" }}
+          >
+            <circle cx="12" cy="12" r="10" />
+            <line x1="15" y1="9" x2="9" y2="15" />
+            <line x1="9" y1="9" x2="15" y2="15" />
+          </svg>
+          <h3
+            style={{
+              color: "#ef4444",
+              marginBottom: "8px",
+              fontSize: "20px",
+              fontWeight: 700,
+            }}
+          >
+            You&apos;ve reached your plan limit of {productLimitMax} products
+          </h3>
+          <p
+            style={{
+              color: "rgba(255,255,255,0.6)",
+              marginBottom: "24px",
+              maxWidth: "400px",
+              margin: "0 auto 24px",
+              lineHeight: 1.6,
+            }}
+          >
+            Upgrade your plan to add more products to your store.
+          </p>
+          <Link
+            href="/upgrade?domain=shop&recommended=business"
+            style={{
+              display: "inline-block",
+              padding: "12px 28px",
+              background: "linear-gradient(135deg, #8b5cf6, #6366f1)",
+              color: "#fff",
+              borderRadius: "10px",
+              textDecoration: "none",
+              fontWeight: 600,
+              fontSize: "15px",
+            }}
+          >
+            Upgrade Plan
+          </Link>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className={styles.container}>
       {/* Header */}
@@ -565,6 +829,44 @@ export default function AddProductPage() {
             Back to product list
           </Link>
           <h1 className={styles.pageTitle}>Add New Product</h1>
+          {productRemaining !== null &&
+            productLimitMax !== null &&
+            !productLimitReached && (
+              <p
+                style={{
+                  fontSize: "13px",
+                  color:
+                    productRemaining <= 2
+                      ? "#ef4444"
+                      : productRemaining <= Math.ceil(productLimitMax * 0.2)
+                        ? "#eab308"
+                        : "rgba(255,255,255,0.5)",
+                  marginTop: "4px",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "6px",
+                  fontWeight:
+                    productRemaining <= Math.ceil(productLimitMax * 0.2)
+                      ? 600
+                      : 400,
+                }}
+              >
+                <svg
+                  width="14"
+                  height="14"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                >
+                  <path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z" />
+                  <line x1="3" y1="6" x2="21" y2="6" />
+                  <path d="M16 10a4 4 0 0 1-8 0" />
+                </svg>
+                {productRemaining} of {productLimitMax} product
+                {productRemaining !== 1 ? "s" : ""} remaining
+              </p>
+            )}
           {isDataLoaded && (
             <p
               style={{
@@ -1264,7 +1566,9 @@ The CBD USED
                               updateVariant(
                                 variant.id,
                                 "compareAtPrice",
-                                value === "" ? undefined : parseFloat(value) || undefined,
+                                value === ""
+                                  ? undefined
+                                  : parseFloat(value) || undefined,
                               );
                             }}
                             placeholder="Offer Price"

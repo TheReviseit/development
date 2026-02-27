@@ -138,6 +138,72 @@
   color: #ff4444;
 }
 
+/* Usage Limits Row */
+.usageLimitsRow {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.usageLimitCard {
+  background: #0f0f0f;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 12px;
+  padding: 14px 16px;
+}
+
+.usageLimitHeader {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+  color: #a0a0a0;
+}
+
+.usageLimitTitle {
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: #a0a0a0;
+}
+
+.usageLimitValues {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.usageLimitCount {
+  font-size: 1.125rem;
+  font-weight: 700;
+  color: #fff;
+}
+
+.usageLimitRemaining {
+  font-size: 0.75rem;
+  color: #808080;
+}
+
+.usageLimitBar {
+  height: 4px;
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.usageLimitBarFill {
+  height: 100%;
+  border-radius: 2px;
+  transition: width 0.3s ease;
+}
+
+@media (max-width: 600px) {
+  .usageLimitsRow {
+    grid-template-columns: 1fr;
+  }
+}
+
 /* Orders Section */
 .ordersSection {
   background: #0f0f0f;
@@ -1949,6 +2015,17 @@
 
 .confirmationYesBtn:active {
   transform: scale(0.98);
+}
+
+.confirmationDeleteBtn {
+  background: #ef4444 !important;
+  color: #ffffff !important;
+  box-shadow: 0 4px 12px rgba(239, 68, 68, 0.3) !important;
+}
+
+.confirmationDeleteBtn:hover {
+  background: #dc2626 !important;
+  box-shadow: 0 6px 20px rgba(239, 68, 68, 0.4) !important;
 }
 
 /* ============================================

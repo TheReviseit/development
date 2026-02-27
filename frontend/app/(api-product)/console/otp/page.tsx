@@ -186,7 +186,6 @@ interface Plan {
 interface Subscription {
   plan_name: string;
   billing_status: string;
-  entitlement_level: string;
 }
 
 declare global {
@@ -204,7 +203,6 @@ export default function UpgradePage() {
   const [plans, setPlans] = useState<Plan[]>([]);
   const [currentSubscription, setCurrentSubscription] =
     useState<Subscription | null>(null);
-  const [entitlementLevel, setEntitlementLevel] = useState<string>("none");
   const [canCreateLiveKeys, setCanCreateLiveKeys] = useState<boolean>(false);
   const [selectedPlan, setSelectedPlan] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -231,8 +229,7 @@ export default function UpgradePage() {
       const subData = await subRes.json();
 
       if (subData.success) {
-        // Use the direct values from the API response
-        setEntitlementLevel(subData.entitlement_level || "none");
+        // billing_status is the single source of truth
         setCanCreateLiveKeys(subData.can_create_live_keys || false);
 
         if (subData.subscription) {
@@ -335,7 +332,7 @@ export default function UpgradePage() {
       };
     }
 
-    if (entitlementLevel === "sandbox") {
+    if (!currentSubscription) {
       return {
         icon: <SandboxIcon />,
         title: "Sandbox Mode",

@@ -5,9 +5,12 @@ Provides aggregated metrics, trends, and reporting.
 
 import os
 from typing import Dict, Any, List, Optional
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, request, jsonify, g
 from functools import wraps
 from datetime import datetime, timedelta
+
+# Feature gate decorators (Phase 1: Revenue-Critical Enforcement)
+from middleware.feature_gate import require_feature, require_limit
 
 # Create blueprint
 analytics_bp = Blueprint('analytics', __name__, url_prefix='/api/analytics')
@@ -22,13 +25,14 @@ except ImportError:
 
 
 def require_auth(f):
-    """Decorator to require authentication."""
+    """Decorator to require authentication. Sets both request.user_id and g.user_id."""
     @wraps(f)
     def decorated(*args, **kwargs):
         user_id = request.headers.get('X-User-ID')
         if not user_id:
             return jsonify({'success': False, 'error': 'Authentication required'}), 401
         request.user_id = user_id
+        g.user_id = user_id  # Required by feature gate middleware
         return f(*args, **kwargs)
     return decorated
 

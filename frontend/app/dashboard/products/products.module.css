@@ -454,3 +454,81 @@
   height: 16px;
   color: #22c55e;
 }
+
+/* ============================================
+   Product Limit Banner Styles
+   ============================================ */
+.limitBanner {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  border-radius: 10px;
+  margin-bottom: 1.5rem;
+  font-size: 0.875rem;
+  font-weight: 500;
+  animation: fadeInUp 0.3s ease;
+}
+
+.limitBannerWarning {
+  background: rgba(234, 179, 8, 0.1);
+  border: 1px solid rgba(234, 179, 8, 0.3);
+  color: #eab308;
+}
+
+.limitBannerReached {
+  background: rgba(239, 68, 68, 0.1);
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  color: #ef4444;
+}
+
+.limitBannerIcon {
+  flex-shrink: 0;
+  width: 20px;
+  height: 20px;
+}
+
+.limitBannerText {
+  flex: 1;
+}
+
+.limitBannerText strong {
+  font-weight: 700;
+}
+
+.limitBannerUpgrade {
+  flex-shrink: 0;
+  padding: 6px 14px;
+  border-radius: 6px;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  text-decoration: none;
+  transition: all 0.2s ease;
+}
+
+.limitBannerWarning .limitBannerUpgrade {
+  background: rgba(234, 179, 8, 0.2);
+  color: #eab308;
+  border: 1px solid rgba(234, 179, 8, 0.4);
+}
+
+.limitBannerWarning .limitBannerUpgrade:hover {
+  background: rgba(234, 179, 8, 0.3);
+}
+
+.limitBannerReached .limitBannerUpgrade {
+  background: rgb(255, 0, 0);
+  color: white;
+  border: none;
+}
+
+.limitBannerReached .limitBannerUpgrade:hover {
+  opacity: 0.9;
+  transform: translateY(-1px);
+}
+
+.addButton.addButtonDisabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+  pointer-events: none;
+}

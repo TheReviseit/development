@@ -555,15 +555,17 @@ def get_firebase_uid_from_user_id(user_id: str) -> Optional[str]:
         return None
     
     try:
-        result = client.table('users').select('firebase_uid').eq('id', user_id).single().execute()
-        
-        if result.data:
-            firebase_uid = result.data.get('firebase_uid')
+        result = client.table('users').select('firebase_uid').eq('id', user_id).limit(1).execute()
+
+        if result.data and len(result.data) > 0:
+            firebase_uid = result.data[0].get('firebase_uid')
             print(f"🔗 Mapped Supabase user {user_id[:8]}... → Firebase UID {firebase_uid[:10] if firebase_uid else 'None'}...")
             return firebase_uid
+        else:
+            print(f"⚠️ No user record found in users table for Supabase UUID: {user_id[:8]}...")
     except Exception as e:
         print(f"⚠️ Could not get Firebase UID for user {user_id}: {e}")
-    
+
     return None
 
 
@@ -585,15 +587,17 @@ def get_user_id_from_firebase_uid(firebase_uid: str) -> Optional[str]:
         return None
     
     try:
-        result = client.table('users').select('id').eq('firebase_uid', firebase_uid).single().execute()
-        
-        if result.data:
-            user_id = result.data.get('id')
+        result = client.table('users').select('id').eq('firebase_uid', firebase_uid).limit(1).execute()
+
+        if result.data and len(result.data) > 0:
+            user_id = result.data[0].get('id')
             print(f"🔗 Mapped Firebase UID {firebase_uid[:10]}... → Supabase user {user_id[:8] if user_id else 'None'}...")
             return user_id
+        else:
+            print(f"⚠️ No user record found for Firebase UID: {firebase_uid[:10]}...")
     except Exception as e:
         print(f"⚠️ Could not get Supabase user ID for Firebase UID {firebase_uid}: {e}")
-    
+
     return None
 
 
@@ -616,14 +620,15 @@ def get_business_data_for_user(user_id: str) -> Optional[Dict[str, Any]]:
         # Get business manager info for the user
         result = client.table('connected_business_managers').select(
             'business_name, business_email, business_vertical'
-        ).eq('user_id', user_id).eq('is_active', True).single().execute()
-        
-        if result.data:
+        ).eq('user_id', user_id).eq('is_active', True).limit(1).execute()
+
+        if result.data and len(result.data) > 0:
+            row = result.data[0]
             return {
                 'business_id': user_id,
-                'business_name': result.data.get('business_name', 'Our Business'),
-                'industry': result.data.get('business_vertical') or 'other',
-                'contact': {'email': result.data.get('business_email', '')},
+                'business_name': row.get('business_name', 'Our Business'),
+                'industry': row.get('business_vertical') or 'other',
+                'contact': {'email': row.get('business_email', '')},
                 'products_services': [],  # Can be extended to fetch from another table
             }
     except Exception as e:
@@ -676,10 +681,10 @@ def get_business_id_for_user(user_id: str) -> Optional[str]:
     try:
         result = client.table('connected_business_managers').select('id').eq(
             'user_id', user_id
-        ).eq('is_active', True).single().execute()
-        
-        if result.data:
-            return result.data.get('id')
+        ).eq('is_active', True).limit(1).execute()
+
+        if result.data and len(result.data) > 0:
+            return result.data[0].get('id')
     except Exception as e:
         print(f"⚠️ Could not get business ID: {e}")
     
@@ -764,14 +769,14 @@ def get_business_data_from_supabase(firebase_uid: str, credentials: Dict[str, An
                 if result.data:
                     business_info = result.data[0]
             
-            # Fetch Razorpay keys from businesses table using firebase_uid
+            # Fetch Razorpay keys + url_slug from businesses table using firebase_uid
             # The businesses table uses firebase_uid directly as user_id column
             biz_result = client.table('businesses').select(
-                'razorpay_key_id, razorpay_key_secret, payments_enabled'
-            ).eq('user_id', firebase_uid).single().execute()
-            
-            if biz_result.data:
-                razorpay_settings = biz_result.data
+                'razorpay_key_id, razorpay_key_secret, payments_enabled, url_slug'
+            ).eq('user_id', firebase_uid).limit(1).execute()
+
+            if biz_result.data and len(biz_result.data) > 0:
+                razorpay_settings = biz_result.data[0]
                 print(f"💰 Loaded Razorpay settings for user: {firebase_uid[:10]}...")
                 
         except Exception as e:
@@ -793,6 +798,7 @@ def get_business_data_from_supabase(firebase_uid: str, credentials: Dict[str, An
         'business_name': business_name,
         'industry': 'other',
         'description': '',
+        'url_slug': razorpay_settings.get('url_slug', '') if razorpay_settings else '',
         'contact': {
             'phone': credentials.get('display_phone_number', '') if credentials else '',
             'email': business_info.get('business_email', '') if business_info else '',
@@ -1296,73 +1302,73 @@ def get_business_from_supabase(firebase_uid: str) -> Optional[Dict[str, Any]]:
     try:
         result = client.table('businesses').select('*').eq(
             'user_id', firebase_uid
-        ).single().execute()
-        
-        if result.data:
-            print(f"✅ Loaded business from Supabase businesses table: {result.data.get('business_name', 'Unknown')}")
-            
-            # Fetch categories from the separate product_categories table
-            try:
-                categories_result = client.table('product_categories').select('id, name').eq(
-                    'user_id', firebase_uid
-                ).eq('is_active', True).order('sort_order').execute()
-                
-                if categories_result.data:
-                    category_names = [cat.get('name') for cat in categories_result.data if cat.get('name')]
-                    print(f"📂 Loaded {len(category_names)} categories from product_categories table: {category_names}")
-                    # Add categories to product_categories field
-                    result.data['product_categories'] = category_names
-                else:
-                    print(f"⚠️ No categories found in product_categories table for user: {firebase_uid[:15]}...")
-                    result.data['product_categories'] = []
-            except Exception as cat_err:
-                print(f"⚠️ Error loading categories: {cat_err}")
-                result.data['product_categories'] = []
-            
-            # Fetch products from the normalized products table WITH variants
-            try:
-                products_result = client.table('products').select(
-                    'id, name, description, sku, brand, price, compare_at_price, price_unit, '
-                    'image_url, sizes, colors, materials, tags, duration, '
-                    'is_available, stock_quantity, stock_status, '
-                    'has_size_pricing, size_prices, size_stocks, '
-                    'category_id, product_categories(name), '
-                    'product_variants(id, color, size, price, compare_at_price, stock_quantity, '
-                    'image_url, image_public_id, has_size_pricing, size_prices, size_stocks, is_available)'
-                ).eq('user_id', firebase_uid).eq('is_deleted', False).order('name').execute()
-                
-                if products_result.data:
-                    print(f"📦 Loaded {len(products_result.data)} products from normalized products table")
-                    # Store the fetched products in the result data
-                    result.data['products'] = products_result.data
-                    
-                    # Log first few products for debugging
-                    for i, p in enumerate(products_result.data[:3]):
-                        cat_name = p.get('product_categories', {}).get('name', 'No category') if p.get('product_categories') else 'No category'
-                        img_status = "✅" if p.get('image_url') else "❌"
-                        current_price = p.get('price', 0)
-                        original_price = p.get('compare_at_price')
-                        
-                        if original_price and original_price > current_price:
-                            price_display = f"Original: ₹{original_price}, Offer: ₹{current_price}"
-                        else:
-                            price_display = f"₹{current_price}"
-                        
-                        print(f"   Product {i+1}: {p.get('name')} | Category: {cat_name} | Image: {img_status} | Price: {price_display}")
-                else:
-                    print(f"⚠️ No products found in products table for user: {firebase_uid[:15]}...")
-                    result.data['products'] = []
-            except Exception as prod_err:
-                print(f"⚠️ Error loading products: {prod_err}")
-                import traceback
-                traceback.print_exc()
-                result.data['products'] = []
-            
-            return convert_supabase_business_to_ai_format(result.data)
+        ).limit(1).execute()
+
+        if not result.data or len(result.data) == 0:
+            print(f"⚠️ No business record found in businesses table for Firebase UID: {firebase_uid[:15]}...")
+            return None
+
+        biz_data = result.data[0]
+        print(f"✅ Loaded business from Supabase businesses table: {biz_data.get('business_name', 'Unknown')}")
+
+        # Fetch categories from the separate product_categories table
+        try:
+            categories_result = client.table('product_categories').select('id, name').eq(
+                'user_id', firebase_uid
+            ).eq('is_active', True).order('sort_order').execute()
+
+            if categories_result.data:
+                category_names = [cat.get('name') for cat in categories_result.data if cat.get('name')]
+                print(f"📂 Loaded {len(category_names)} categories from product_categories table: {category_names}")
+                biz_data['product_categories'] = category_names
+            else:
+                print(f"⚠️ No categories found in product_categories table for user: {firebase_uid[:15]}...")
+                biz_data['product_categories'] = []
+        except Exception as cat_err:
+            print(f"⚠️ Error loading categories: {cat_err}")
+            biz_data['product_categories'] = []
+
+        # Fetch products from the normalized products table WITH variants
+        try:
+            products_result = client.table('products').select(
+                'id, name, description, sku, brand, price, compare_at_price, price_unit, '
+                'image_url, sizes, colors, materials, tags, duration, '
+                'is_available, stock_quantity, stock_status, '
+                'has_size_pricing, size_prices, size_stocks, '
+                'category_id, product_categories(name), '
+                'product_variants(id, color, size, price, compare_at_price, stock_quantity, '
+                'image_url, image_public_id, has_size_pricing, size_prices, size_stocks, is_available)'
+            ).eq('user_id', firebase_uid).eq('is_deleted', False).order('name').execute()
+
+            if products_result.data:
+                print(f"📦 Loaded {len(products_result.data)} products from normalized products table")
+                biz_data['products'] = products_result.data
+
+                # Log first few products for debugging
+                for i, p in enumerate(products_result.data[:3]):
+                    cat_name = p.get('product_categories', {}).get('name', 'No category') if p.get('product_categories') else 'No category'
+                    img_status = "✅" if p.get('image_url') else "❌"
+                    current_price = p.get('price', 0)
+                    original_price = p.get('compare_at_price')
+
+                    if original_price and original_price > current_price:
+                        price_display = f"Original: ₹{original_price}, Offer: ₹{current_price}"
+                    else:
+                        price_display = f"₹{current_price}"
+
+                    print(f"   Product {i+1}: {p.get('name')} | Category: {cat_name} | Image: {img_status} | Price: {price_display}")
+            else:
+                print(f"⚠️ No products found in products table for user: {firebase_uid[:15]}...")
+                biz_data['products'] = []
+        except Exception as prod_err:
+            print(f"⚠️ Error loading products: {prod_err}")
+            import traceback
+            traceback.print_exc()
+            biz_data['products'] = []
+
+        return convert_supabase_business_to_ai_format(biz_data)
     except Exception as e:
-        # PGRST116 = no rows returned (user doesn't have data yet)
-        if 'PGRST116' not in str(e):
-            print(f"⚠️ Error loading business from Supabase: {e}")
+        print(f"⚠️ Error loading business from Supabase: {e}")
     
     return None
 
@@ -1657,6 +1663,7 @@ def convert_supabase_business_to_ai_format(data: Dict[str, Any]) -> Dict[str, An
         'business_name': data.get('business_name', 'Our Business'),
         'industry': data.get('industry', 'other'),
         'description': data.get('description', ''),
+        'url_slug': data.get('url_slug', ''),
         'contact': data.get('contact', {}),
         'location': {
             'address': location.get('address', ''),

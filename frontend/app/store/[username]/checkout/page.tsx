@@ -42,6 +42,8 @@ interface PaymentSettings {
   paymentsEnabled: boolean;
   razorpayKeyId: string | null;
   storeName: string;
+  storeUserId?: string; // ✅ Resolved Firebase UID from backend
+  invoiceEnabled?: boolean; // ✅ Whether email_invoices quota is available
   shippingCharges?: string;
   codAvailable?: boolean;
 }
@@ -192,7 +194,7 @@ export default function CheckoutPage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          user_id: username,
+          user_id: paymentSettings?.storeUserId || username,
           items: validationItems,
         }),
       });
@@ -240,7 +242,7 @@ export default function CheckoutPage() {
       const fullPhoneNumber = `+91${formData.phone}`;
 
       const orderData = {
-        user_id: username, // username is the business/user ID
+        user_id: paymentSettings?.storeUserId || username, // Use resolved UID
         customer_name: formData.name,
         customer_phone: fullPhoneNumber,
         customer_address: fullAddress,
@@ -977,6 +979,7 @@ export default function CheckoutPage() {
                     />
                   </div>
                 </div>
+                {paymentSettings?.invoiceEnabled !== false && (
                 <div className={styles.formGroupFull}>
                   <div
                     onClick={() => {
@@ -1065,6 +1068,7 @@ export default function CheckoutPage() {
                     </div>
                   )}
                 </div>
+                )}
               </div>
             </div>
 

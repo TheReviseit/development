@@ -168,7 +168,7 @@ const SHOP_PRICING: DomainPricingConfig = {
       description: "Perfect for getting started with your online store",
       tagline: "Everything you need to launch...",
       features: [
-        "Domain: Random domain name (e.g. store/abc1234)",
+        "Auto-generated store URL (e.g. store/a1b2c3d4)",
         "10 products (incl. variants)",
         "Standard invoice",
         "10 email invoices",
@@ -196,7 +196,7 @@ const SHOP_PRICING: DomainPricingConfig = {
       tagline: "Everything in Basic plus...",
       popular: true,
       features: [
-        "Custom domain name (store/yourstorename)",
+        "Custom store URL from your business name (e.g. store/your-brand)",
         "50 products (incl. variants)",
         "50 live order updates (Email & WhatsApp)",
         "Get order updates in Google Sheets (up to 50 orders)",
@@ -223,7 +223,7 @@ const SHOP_PRICING: DomainPricingConfig = {
       description: "Advanced features + unlimited users",
       tagline: "Everything in Business plus...",
       features: [
-        "Custom domain name (store/yourstorename)",
+        "Custom store URL from your business name (e.g. store/your-brand)",
         "100 products",
         "100 live order updates (Email & WhatsApp)",
         "Get order updates in Google Sheets",

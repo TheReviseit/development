@@ -168,26 +168,34 @@ def resolve_slug_to_user_id(slug_or_username: str) -> Optional[Tuple[str, str, b
     except Exception as e:
         logger.error(f"Error querying users table: {e}")
     
-    # STEP 3: Try direct Firebase UID (LEGACY FALLBACK - optional)
-    # This is for very old links that used UID directly
-    # You can remove this if you don't want to support it
+    # STEP 3: Try direct Firebase UID (LEGACY FALLBACK)
+    # This is the basic plan URL — Starter users access their store via UID
+    # Also handles legacy links that used UID directly before slugs were introduced
     try:
         result = db.table('businesses').select('user_id, url_slug').eq(
             'user_id', slug_or_username
         ).limit(1).execute()
-        
+
         if result.data and len(result.data) > 0:
             user_id = result.data[0]['user_id']
-            canonical_slug = result.data[0]['url_slug']
-            
+            canonical_slug = result.data[0].get('url_slug')
+
             if canonical_slug:
-                needs_redirect = True  # Always redirect UID → slug
+                # User has a slug — redirect UID → slug (canonical)
+                needs_redirect = True
                 logger.info(f"🆔 Resolved via UID, redirecting: UID → {canonical_slug}")
                 return (user_id, canonical_slug, needs_redirect)
-    
+            else:
+                # No slug set — UID IS the canonical identifier (Starter plan)
+                # Do not redirect; serve directly using UID as canonical
+                canonical_slug = slug_or_username
+                needs_redirect = False
+                logger.info(f"🆔 Resolved via UID (no slug set, Starter plan): {user_id[:8]}...")
+                return (user_id, canonical_slug, needs_redirect)
+
     except Exception as e:
         logger.error(f"Error in UID fallback: {e}")
-    
+
     # STEP 4: Not found
     logger.warning(f"❌ Slug not found: {normalized}")
     return None

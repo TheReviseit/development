@@ -7,7 +7,13 @@ import styles from "./orders.module.css";
 import { useRealtimeOrders } from "@/lib/hooks/useRealtimeOrders";
 import ImageModal from "../components/ImageModal";
 import Dropdown from "@/app/utils/ui/Dropdown";
-import { RevenueAnalyticsChart } from "./components/RevenueAnalyticsChart";
+import { useSubscription } from "@/lib/hooks/useSubscription";
+
+interface FeatureUsage {
+  used: number;
+  limit: number | null;
+  allowed: boolean;
+}
 
 interface OrderItem {
   name: string;
@@ -88,6 +94,51 @@ export default function OrdersPage() {
   const [sheetSyncEnabled, setSheetSyncEnabled] = useState(false);
   const [savingSheet, setSavingSheet] = useState(false);
   const [sheetConnected, setSheetConnected] = useState(false);
+  const [orderToDelete, setOrderToDelete] = useState<Order | null>(null);
+  const { subscription, isLoading: subLoading } = useSubscription(
+    userId ?? undefined,
+  );
+  const canAccessSheets =
+    !subLoading && !!subscription && subscription.plan_name !== "starter";
+
+  // Feature usage for live_order_updates and email_invoices
+  const [notifUsage, setNotifUsage] = useState<FeatureUsage | null>(null);
+  const [invoiceUsage, setInvoiceUsage] = useState<FeatureUsage | null>(null);
+  const [usageLoading, setUsageLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchUsage = async () => {
+      try {
+        const [notifRes, invoiceRes] = await Promise.all([
+          fetch("/api/features/check?feature=live_order_updates"),
+          fetch("/api/features/check?feature=email_invoices"),
+        ]);
+
+        if (notifRes.ok) {
+          const data = await notifRes.json();
+          setNotifUsage({
+            used: data.used ?? 0,
+            limit: data.hard_limit ?? null,
+            allowed: data.allowed ?? false,
+          });
+        }
+
+        if (invoiceRes.ok) {
+          const data = await invoiceRes.json();
+          setInvoiceUsage({
+            used: data.used ?? 0,
+            limit: data.hard_limit ?? null,
+            allowed: data.allowed ?? false,
+          });
+        }
+      } catch (err) {
+        console.error("Error fetching feature usage:", err);
+      } finally {
+        setUsageLoading(false);
+      }
+    };
+    fetchUsage();
+  }, []);
 
   // Fetch user ID for realtime subscription
   useEffect(() => {
@@ -105,16 +156,14 @@ export default function OrdersPage() {
     fetchUserId();
   }, []);
 
-  // Check if order feature is enabled and load sheet settings
+  // Load Google Sheet settings (no redirect needed)
   useEffect(() => {
-    const checkCapabilities = async () => {
+    const loadSheetSettings = async () => {
       try {
         const response = await fetch("/api/ai-capabilities");
         const data = await response.json();
-        if (!data.success || !data.data?.order_booking_enabled) {
-          router.push("/dashboard/bot-settings");
-        } else {
-          // Load Google Sheet settings
+        if (data.success && data.data) {
+          // Load Google Sheet settings if available
           if (data.data.order_sheet_url) {
             setSheetUrl(data.data.order_sheet_url);
             setSheetConnected(true);
@@ -124,11 +173,11 @@ export default function OrdersPage() {
           }
         }
       } catch (error) {
-        console.error("Error checking capabilities:", error);
+        console.error("Error loading sheet settings:", error);
       }
     };
-    checkCapabilities();
-  }, [router]);
+    loadSheetSettings();
+  }, []);
 
   // Real-time order handlers with optimistic updates
   const handleRealtimeInsert = useCallback((newOrder: Order) => {
@@ -716,24 +765,25 @@ export default function OrdersPage() {
     }
   };
 
-  const handleCancelOrder = async (order: Order) => {
-    if (!confirm("Are you sure you want to cancel this order?")) return;
+  // Show delete confirmation popup
+  const handleCancelOrder = (order: Order) => {
+    setOrderToDelete(order);
+  };
 
-    // Optimistic update
-    const previousStatus = order.status;
-    setUpdatingStatus((prev) => new Set(prev).add(order.id));
+  const cancelDeleteOrder = () => {
+    setOrderToDelete(null);
+  };
 
-    setOrders((prev) =>
-      prev.map((o) =>
-        o.id === order.id
-          ? {
-              ...o,
-              status: "cancelled" as const,
-              updated_at: new Date().toISOString(),
-            }
-          : o,
-      ),
-    );
+  const confirmDeleteOrder = async () => {
+    const order = orderToDelete;
+    if (!order) return;
+    setOrderToDelete(null);
+
+    // Store original order for revert on error
+    const originalOrders = [...orders];
+
+    // Optimistic removal from UI
+    setOrders((prev) => prev.filter((o) => o.id !== order.id));
 
     // Create abort controller for timeout (10 seconds max)
     const controller = new AbortController();
@@ -748,45 +798,15 @@ export default function OrdersPage() {
       clearTimeout(timeoutId);
 
       if (!response.ok) {
-        // Revert on error
-        setOrders((prev) =>
-          prev.map((o) =>
-            o.id === order.id
-              ? { ...o, status: previousStatus, updated_at: order.updated_at }
-              : o,
-          ),
-        );
-        console.error(`Failed to cancel order: ${response.status}`);
-        alert("Failed to cancel order. Please try again.");
+        // Revert on error - add order back
+        setOrders(originalOrders);
+        console.error(`Failed to delete order: ${response.status}`);
       }
-      // Success! Optimistic update already applied.
     } catch (error) {
       clearTimeout(timeoutId);
-
-      // Check if this was a timeout abort
-      const isTimeout = error instanceof Error && error.name === "AbortError";
-      const errorMessage = isTimeout
-        ? "Request timed out. Please check your connection."
-        : "Failed to cancel order. Please try again.";
-
-      console.error("Error cancelling order:", error);
-
-      // Revert on error
-      setOrders((prev) =>
-        prev.map((o) =>
-          o.id === order.id
-            ? { ...o, status: previousStatus, updated_at: order.updated_at }
-            : o,
-        ),
-      );
-      alert(errorMessage);
-    } finally {
-      // CRITICAL: Always clear loading state regardless of success/failure
-      setUpdatingStatus((prev) => {
-        const next = new Set(prev);
-        next.delete(order.id);
-        return next;
-      });
+      console.error("Error deleting order:", error);
+      // Revert on error - add order back
+      setOrders(originalOrders);
     }
   };
 
@@ -815,41 +835,45 @@ export default function OrdersPage() {
       {/* Header */}
       <div className={styles.viewHeader}>
         <div className={styles.headerActions}>
-          {/* Google Sheets Button */}
-          <button
-            className={`${styles.secondaryBtn} ${
-              sheetConnected ? styles.sheetConnected : ""
-            }`}
-            onClick={() => setShowSheetModal(true)}
-            title={
-              sheetConnected ? "Google Sheet connected" : "Connect Google Sheet"
-            }
-          >
-            <svg
-              width="16"
-              height="16"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
+          {/* Google Sheets Button - hidden for Basic plan */}
+          {canAccessSheets && (
+            <button
+              className={`${styles.secondaryBtn} ${
+                sheetConnected ? styles.sheetConnected : ""
+              }`}
+              onClick={() => setShowSheetModal(true)}
+              title={
+                sheetConnected
+                  ? "Google Sheet connected"
+                  : "Connect Google Sheet"
+              }
             >
-              <rect
-                x="3"
-                y="3"
-                width="18"
-                height="18"
-                rx="2"
-                ry="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
-              <line x1="3" y1="9" x2="21" y2="9" strokeLinecap="round" />
-              <line x1="3" y1="15" x2="21" y2="15" strokeLinecap="round" />
-              <line x1="9" y1="3" x2="9" y2="21" strokeLinecap="round" />
-            </svg>
-            {sheetConnected ? "Sheet Connected" : "Connect Sheet"}
-            {sheetConnected && <span className={styles.connectedDot}></span>}
-          </button>
+              <svg
+                width="16"
+                height="16"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+              >
+                <rect
+                  x="3"
+                  y="3"
+                  width="18"
+                  height="18"
+                  rx="2"
+                  ry="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+                <line x1="3" y1="9" x2="21" y2="9" strokeLinecap="round" />
+                <line x1="3" y1="15" x2="21" y2="15" strokeLinecap="round" />
+                <line x1="9" y1="3" x2="9" y2="21" strokeLinecap="round" />
+              </svg>
+              {sheetConnected ? "Sheet Connected" : "Connect Sheet"}
+              {sheetConnected && <span className={styles.connectedDot}></span>}
+            </button>
+          )}
           {/* <button
             className={styles.secondaryBtn}
             onClick={() => fetchOrders()}
@@ -895,9 +919,6 @@ export default function OrdersPage() {
           </button>
         </div>
       </div>
-
-      {/* Revenue Analytics Chart */}
-      <RevenueAnalyticsChart />
 
       {/* Stats Row */}
       <div className={styles.statsRow}>
@@ -980,6 +1001,83 @@ export default function OrdersPage() {
           </div>
         </div>
       </div>
+
+      {/* Usage Limits Row */}
+      {!usageLoading && (notifUsage?.limit !== null || invoiceUsage?.limit !== null) && (
+        <div className={styles.usageLimitsRow}>
+          {notifUsage && notifUsage.limit !== null && (
+            <div className={styles.usageLimitCard}>
+              <div className={styles.usageLimitHeader}>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07 19.5 19.5 0 01-6-6 19.79 19.79 0 01-3.07-8.67A2 2 0 014.11 2h3a2 2 0 012 1.72c.127.96.361 1.903.7 2.81a2 2 0 01-.45 2.11L8.09 9.91a16 16 0 006 6l1.27-1.27a2 2 0 012.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0122 16.92z" strokeLinecap="round" strokeLinejoin="round"/>
+                </svg>
+                <span className={styles.usageLimitTitle}>Order Updates</span>
+              </div>
+              <div className={styles.usageLimitValues}>
+                <span className={styles.usageLimitCount}>
+                  {notifUsage.used} / {notifUsage.limit}
+                </span>
+                <span className={styles.usageLimitRemaining}>
+                  {notifUsage.allowed
+                    ? `${notifUsage.limit - notifUsage.used} remaining`
+                    : "Limit reached"}
+                </span>
+              </div>
+              <div className={styles.usageLimitBar}>
+                <div
+                  className={styles.usageLimitBarFill}
+                  style={{
+                    width: `${Math.min(100, (notifUsage.used / notifUsage.limit) * 100)}%`,
+                    backgroundColor:
+                      notifUsage.used >= notifUsage.limit
+                        ? "#ef4444"
+                        : notifUsage.used >= notifUsage.limit * 0.8
+                          ? "#f59e0b"
+                          : "#22c15a",
+                  }}
+                />
+              </div>
+            </div>
+          )}
+          {invoiceUsage && invoiceUsage.limit !== null && (
+            <div className={styles.usageLimitCard}>
+              <div className={styles.usageLimitHeader}>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" strokeLinecap="round" strokeLinejoin="round"/>
+                  <polyline points="14 2 14 8 20 8" strokeLinecap="round" strokeLinejoin="round"/>
+                  <line x1="16" y1="13" x2="8" y2="13" strokeLinecap="round"/>
+                  <line x1="16" y1="17" x2="8" y2="17" strokeLinecap="round"/>
+                </svg>
+                <span className={styles.usageLimitTitle}>Email Invoices</span>
+              </div>
+              <div className={styles.usageLimitValues}>
+                <span className={styles.usageLimitCount}>
+                  {invoiceUsage.used} / {invoiceUsage.limit}
+                </span>
+                <span className={styles.usageLimitRemaining}>
+                  {invoiceUsage.allowed
+                    ? `${invoiceUsage.limit - invoiceUsage.used} remaining`
+                    : "Limit reached"}
+                </span>
+              </div>
+              <div className={styles.usageLimitBar}>
+                <div
+                  className={styles.usageLimitBarFill}
+                  style={{
+                    width: `${Math.min(100, (invoiceUsage.used / invoiceUsage.limit) * 100)}%`,
+                    backgroundColor:
+                      invoiceUsage.used >= invoiceUsage.limit
+                        ? "#ef4444"
+                        : invoiceUsage.used >= invoiceUsage.limit * 0.8
+                          ? "#f59e0b"
+                          : "#22c15a",
+                  }}
+                />
+              </div>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Orders Section */}
       <div className={styles.ordersSection}>
@@ -1626,8 +1724,8 @@ export default function OrdersPage() {
         </div>
       )}
 
-      {/* Google Sheets Connection Modal */}
-      {showSheetModal && (
+      {/* Google Sheets Connection Modal - hidden for Basic plan */}
+      {canAccessSheets && showSheetModal && (
         <div
           className={styles.modalOverlay}
           onClick={() => setShowSheetModal(false)}
@@ -1850,6 +1948,48 @@ export default function OrdersPage() {
                 onClick={confirmStatusChange}
               >
                 Yes, Change
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Order Confirmation Modal */}
+      {orderToDelete && (
+        <div
+          className={styles.confirmationOverlay}
+          onClick={cancelDeleteOrder}
+          role="presentation"
+        >
+          <div
+            className={styles.confirmationModal}
+            onClick={(e) => e.stopPropagation()}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="confirm-delete-title"
+          >
+            <h3 id="confirm-delete-title" className={styles.confirmationTitle}>
+              Delete this order?
+            </h3>
+            <p className={styles.confirmationText}>
+              Are you sure you want to delete order from{" "}
+              <strong>{orderToDelete.customer_name}</strong>? This action cannot
+              be undone.
+            </p>
+            <div className={styles.confirmationActions}>
+              <button
+                type="button"
+                className={styles.confirmationNoBtn}
+                onClick={cancelDeleteOrder}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className={`${styles.confirmationYesBtn} ${styles.confirmationDeleteBtn}`}
+                onClick={confirmDeleteOrder}
+              >
+                Yes, Delete
               </button>
             </div>
           </div>

@@ -6,6 +6,7 @@ import { InvoiceDocument } from "@/lib/invoice-pdf";
 import { renderToBuffer } from "@react-pdf/renderer";
 import { randomUUID } from "crypto";
 import { generateOrderId } from "@/lib/order-id";
+import { resolveSlugToUserId } from "@/lib/resolve-slug";
 
 // Initialize Supabase client
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
@@ -278,6 +279,12 @@ export async function POST(
       );
     }
 
+    // ── RESOLVE SLUG → USER_ID ────────────────────────────────────────
+    // The URL slug (username) may be "a1b2c3d4" or "rajas-boutique".
+    // Resolve to the actual Firebase UID for backend calls.
+    const resolvedUserId = await resolveSlugToUserId(username);
+    const storeOwnerId = resolvedUserId || username;
+
     // Validate items structure
     for (const item of items) {
       if (
@@ -301,9 +308,8 @@ export async function POST(
         ? "http://localhost:5000"
         : process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
 
-    // Prepare order data for Flask backend
     const flaskOrderData = {
-      user_id: username,
+      user_id: storeOwnerId,
       customer_name,
       customer_phone,
       customer_address,
@@ -331,7 +337,7 @@ export async function POST(
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "X-User-Id": username,
+        "X-User-Id": storeOwnerId,
       },
       body: JSON.stringify(flaskOrderData),
     });
@@ -396,11 +402,105 @@ export async function POST(
       // Fire-and-forget: Don't await this - it runs in background
       (async () => {
         try {
+          // ── Feature gate: email_invoices (metered per plan) ──────────────
+          // Check usage against hard_limit before sending invoice.
+          // Fail-open: if gate check fails, proceed with sending.
+          let invoiceAllowed = true;
+          try {
+            const { data: userRow } = await supabase
+              .from("users")
+              .select("id")
+              .eq("firebase_uid", storeOwnerId)
+              .limit(1)
+              .maybeSingle();
+
+            if (userRow?.id) {
+              const { data: sub } = await supabase
+                .from("subscriptions")
+                .select("pricing_plan_id")
+                .eq("user_id", userRow.id)
+                .eq("product_domain", "shop")
+                .in("status", [
+                  "active",
+                  "completed",
+                  "past_due",
+                  "trialing",
+                  "trial",
+                ])
+                .order("created_at", { ascending: false })
+                .limit(1)
+                .maybeSingle();
+
+              if (sub?.pricing_plan_id) {
+                const { data: planFeature } = await supabase
+                  .from("plan_features")
+                  .select("hard_limit, soft_limit, is_unlimited")
+                  .eq("plan_id", sub.pricing_plan_id)
+                  .eq("feature_key", "email_invoices")
+                  .limit(1)
+                  .maybeSingle();
+
+                if (planFeature) {
+                  if (planFeature.is_unlimited) {
+                    // Unlimited — always allowed, no increment needed for counting
+                    invoiceAllowed = true;
+                  } else if (
+                    planFeature.hard_limit !== null &&
+                    planFeature.hard_limit <= 0
+                  ) {
+                    // Explicitly denied (hard_limit = 0)
+                    invoiceAllowed = false;
+                    console.log(
+                      `⏭️ [Invoice] Skipping - email_invoices denied (hard_limit=0) for store ${storeOwnerId.slice(0, 15)}...`,
+                    );
+                  } else if (planFeature.hard_limit !== null) {
+                    // Metered — check usage and atomically increment
+                    const { data: rpcResult } = await supabase.rpc(
+                      "check_and_increment_usage",
+                      {
+                        p_user_id: userRow.id,
+                        p_domain: "shop",
+                        p_feature_key: "email_invoices",
+                        p_hard_limit: planFeature.hard_limit,
+                        p_soft_limit: planFeature.soft_limit ?? Math.floor(planFeature.hard_limit * 0.8),
+                        p_is_unlimited: false,
+                        p_idempotency_key: `invoice-${orderData.id}`,
+                      },
+                    );
+
+                    if (rpcResult && !rpcResult.allowed) {
+                      invoiceAllowed = false;
+                      console.log(
+                        `⏭️ [Invoice] Skipping - email_invoices limit reached (${rpcResult.new_value}/${planFeature.hard_limit}) for store ${storeOwnerId.slice(0, 15)}...`,
+                      );
+                    }
+                  }
+                  // hard_limit === null and not unlimited → boolean granted, allow
+                }
+                // planFeature not found → fail-open, allow
+              }
+              // No subscription → fail-open, allow
+            }
+          } catch (gateErr) {
+            // Fail-open: if gate check fails, still send invoice
+            console.warn(
+              `⚠️ [Invoice] Feature gate check failed, proceeding:`,
+              gateErr,
+            );
+          }
+
+          if (!invoiceAllowed) {
+            console.log(
+              `⏭️ [Invoice] Invoice not sent for order ${orderData.id} - email_invoices limit exhausted`,
+            );
+            return;
+          }
+
           // Fetch business details for invoice branding
           const { data: businessData, error: businessError } = await supabase
             .from("businesses")
             .select("business_name, logo_url, contact, location, brand_color")
-            .eq("user_id", username)
+            .eq("user_id", storeOwnerId)
             .single();
 
           if (businessData && !businessError) {
@@ -622,17 +722,17 @@ export async function POST(
           : process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
 
       // Only attempt sync if we have an order id and user id.
-      if (orderData?.id && username) {
+      if (orderData?.id && storeOwnerId) {
         // Do not await this fetch; log errors but keep response fast.
         fetch(`${BACKEND_URL}/api/orders/sheets/sync`, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
-            "X-User-Id": username,
+            "X-User-Id": storeOwnerId,
           },
           body: JSON.stringify({
             order_id: orderData.id,
-            user_id: username,
+            user_id: storeOwnerId,
           }),
         }).catch((err) => {
           console.error("Error triggering Google Sheets sync:", err);

@@ -47,8 +47,8 @@ const PRODUCTION_HOSTNAME_MAP: Record<string, ProductDomain> = {
 const DEV_PORT_MAP: Record<string, ProductDomain> = {
   "3000": "dashboard",
   "3001": "shop",
-  "3002": "marketing",
-  "3003": "showcase",
+  "3002": "showcase", // FIXED: was "marketing"
+  "3003": "marketing", // FIXED: was "showcase"
   "3004": "api",
 };
 

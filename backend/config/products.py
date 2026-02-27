@@ -126,7 +126,7 @@ PRODUCT_REGISTRY: dict[ProductDomain, ProductConfig] = {
                 tagline=None,
                 popular=False,
                 features=[
-                    "Domain: Random domain name (e.g. store/abc1234)",
+                    "Domain: Random domain name (e.g. store-abc1234)",
                     "10 products (incl. variants)",
                     "Standard invoice",
                     "10 email invoices",

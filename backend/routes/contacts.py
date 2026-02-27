@@ -10,6 +10,7 @@ from typing import Dict, Any, List, Optional
 from flask import Blueprint, request, jsonify, Response
 from functools import wraps
 from datetime import datetime
+from middleware.feature_gate import require_feature, require_limit
 
 # Create blueprint
 contacts_bp = Blueprint('contacts', __name__, url_prefix='/api/contacts')
@@ -131,6 +132,7 @@ def list_contacts():
 
 @contacts_bp.route('', methods=['POST'])
 @require_auth
+@require_feature('contact_management')
 def create_contact():
     """
     Create a new contact.
@@ -228,6 +230,7 @@ def get_contact(contact_id: str):
 
 @contacts_bp.route('/<contact_id>', methods=['PUT'])
 @require_auth
+@require_feature('contact_management')
 def update_contact(contact_id: str):
     """
     Update a contact.
@@ -287,6 +290,7 @@ def update_contact(contact_id: str):
 
 @contacts_bp.route('/<contact_id>', methods=['DELETE'])
 @require_auth
+@require_feature('contact_management')
 def delete_contact(contact_id: str):
     """Delete a contact."""
     if not SUPABASE_AVAILABLE:
@@ -311,6 +315,7 @@ def delete_contact(contact_id: str):
 
 @contacts_bp.route('/<contact_id>/tags', methods=['POST'])
 @require_auth
+@require_feature('contact_management')
 def add_tags(contact_id: str):
     """
     Add tags to a contact.
@@ -359,6 +364,7 @@ def add_tags(contact_id: str):
 
 @contacts_bp.route('/<contact_id>/tags', methods=['DELETE'])
 @require_auth
+@require_feature('contact_management')
 def remove_tags(contact_id: str):
     """
     Remove tags from a contact.
@@ -407,6 +413,7 @@ def remove_tags(contact_id: str):
 
 @contacts_bp.route('/import', methods=['POST'])
 @require_auth
+@require_feature('contact_management')
 def import_contacts():
     """
     Bulk import contacts from CSV.
@@ -620,6 +627,7 @@ def list_contact_lists():
 
 @contacts_bp.route('/lists', methods=['POST'])
 @require_auth
+@require_feature('contact_management')
 def create_contact_list():
     """
     Create a new contact list.

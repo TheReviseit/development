@@ -118,6 +118,24 @@ const nextConfig: NextConfig = {
   // Compression
   compress: true,
 
+  // API Proxy - Forward unmatched /api/* requests to Flask backend
+  // Uses fallback form so Next.js App Router API routes always take priority.
+  // Only requests that have NO matching Next.js route file are sent to Flask.
+  async rewrites() {
+    const backendUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
+
+    return {
+      beforeFiles: [],
+      afterFiles: [],
+      fallback: [
+        {
+          source: "/api/:path*",
+          destination: `${backendUrl}/api/:path*`,
+        },
+      ],
+    };
+  },
+
   // Explicitly set Turbopack root to resolve workspace inference issues and fix HMR
   turbopack: {
     root: ".",
