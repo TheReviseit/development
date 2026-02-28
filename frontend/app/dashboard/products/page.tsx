@@ -660,8 +660,8 @@ export default function ProductsPage() {
           </svg>
           <span className={styles.limitBannerText}>
             <strong>
-              {productLimit - products.length} product
-              {productLimit - products.length !== 1 ? "s" : ""} remaining
+              {productRemaining} product
+              {productRemaining !== 1 ? "s" : ""} remaining
             </strong>{" "}
             on your current plan (limit: {productLimit}).
           </span>

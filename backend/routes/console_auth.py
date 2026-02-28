@@ -96,6 +96,7 @@ def signup():
     email = data.get('email', '').strip()
     password = data.get('password', '')
     name = data.get('name', '').strip()
+    domain = data.get('domain', '').strip() or None  # Product domain (shop, marketing, etc.)
     
     # Validation
     if not email:
@@ -127,7 +128,8 @@ def signup():
                 email=email,
                 password=password,
                 name=name,
-                ip_address=ip_address
+                ip_address=ip_address,
+                signup_domain=domain
             ))
         finally:
             loop.close()
@@ -366,7 +368,8 @@ def login():
             response_data = {
                 'success': True,
                 'user': result['user'],
-                'org': result['org']
+                'org': result['org'],
+                'subscribed_domains': result.get('subscribed_domains', ['dashboard'])
             }
             
             response = make_response(jsonify(response_data), 200)
@@ -526,6 +529,111 @@ def get_me():
             'role': user.current_org_role
         } if user.current_org_id else None
     }), 200
+
+
+# =============================================================================
+# DOMAIN ACCESS — Product Subscription Check
+# =============================================================================
+
+@console_auth_bp.route('/domain-access', methods=['GET'])
+@require_console_auth()
+def get_domain_access():
+    """
+    Get product domains the current user has subscribed to.
+    
+    Response:
+        {
+            "success": true,
+            "subscribed_domains": ["dashboard", "shop"],
+            "subscriptions": [...]
+        }
+    
+    Notes:
+        - 'dashboard' is ALWAYS included (implicitly granted to all users)
+        - Only 'active' and 'trial' status subscriptions are counted
+    """
+    user = g.console_user
+    
+    try:
+        import asyncio
+        service = get_console_auth_service()
+        
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        try:
+            result = loop.run_until_complete(service.get_user_domain_access(
+                user_id=user.id
+            ))
+        finally:
+            loop.close()
+        
+        return jsonify(result), 200
+        
+    except Exception as e:
+        logger.error(f"Domain access error: {e}")
+        return jsonify({
+            'success': True,
+            'subscribed_domains': ['dashboard'],  # Fail-safe
+            'subscriptions': []
+        }), 200
+
+
+@console_auth_bp.route('/domain-access', methods=['POST'])
+@require_console_auth()
+def add_domain_subscription():
+    """
+    Subscribe the current user to a new product domain.
+    
+    Request Body:
+        {
+            "product_domain": "shop"
+        }
+    """
+    try:
+        data = request.get_json() or {}
+    except Exception:
+        return jsonify({
+            'success': False,
+            'error': 'INVALID_JSON'
+        }), 400
+    
+    product_domain = data.get('product_domain', '').strip()
+    if not product_domain:
+        return jsonify({
+            'success': False,
+            'error': 'MISSING_DOMAIN',
+            'message': 'product_domain is required'
+        }), 400
+    
+    user = g.console_user
+    
+    try:
+        import asyncio
+        service = get_console_auth_service()
+        
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        try:
+            result = loop.run_until_complete(service.add_product_subscription(
+                user_id=user.id,
+                org_id=user.current_org_id,
+                product_domain=product_domain
+            ))
+        finally:
+            loop.close()
+        
+        if result.get('success'):
+            return jsonify(result), 200
+        else:
+            return jsonify(result), 400
+        
+    except Exception as e:
+        logger.error(f"Add subscription error: {e}")
+        return jsonify({
+            'success': False,
+            'error': 'INTERNAL_ERROR',
+            'message': 'Unable to add subscription'
+        }), 500
 
 
 # =============================================================================

@@ -122,7 +122,8 @@ const nextConfig: NextConfig = {
   // Uses fallback form so Next.js App Router API routes always take priority.
   // Only requests that have NO matching Next.js route file are sent to Flask.
   async rewrites() {
-    const backendUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
+    const backendUrl =
+      process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
 
     return {
       beforeFiles: [],
@@ -138,7 +139,10 @@ const nextConfig: NextConfig = {
 
   // Explicitly set Turbopack root to resolve workspace inference issues and fix HMR
   turbopack: {
-    root: ".",
+    root: __dirname,
+    resolveAlias: {
+      tailwindcss: require.resolve("tailwindcss"),
+    },
   },
 };
 

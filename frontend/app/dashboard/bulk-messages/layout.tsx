@@ -1,0 +1,11 @@
+import SubscriptionGate from "@/app/dashboard/components/SubscriptionGate";
+
+export default function BulkMessagesLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
+  return (
+    <SubscriptionGate requiredProduct="marketing">{children}</SubscriptionGate>
+  );
+}

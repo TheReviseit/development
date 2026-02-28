@@ -421,13 +421,13 @@ export default function AddProductPage() {
           }
         }
         // Check product limit — gate the add page URL
+        // Uses feature check response which is reconciled against actual
+        // product count (mirrors backend _reconcile_product_counter).
         try {
-          const [countRes, limitRes] = await Promise.all([
-            fetch("/api/products?limit=1"),
-            fetch("/api/features/check?feature=create_product"),
-          ]);
-          if (countRes.ok && limitRes.ok) {
-            const countData = await countRes.json();
+          const limitRes = await fetch(
+            "/api/features/check?feature=create_product",
+          );
+          if (limitRes.ok) {
             const limitData = await limitRes.json();
 
             // ── Handle denial reasons (no subscription, missing data) ──
@@ -441,7 +441,7 @@ export default function AddProductPage() {
               }
               // Don't process limits for denied responses
             } else {
-              const currentCount = countData.total ?? 0;
+              const currentCount = limitData.used ?? 0;
               const hardLimit = limitData.hard_limit;
               const isUnlimited = limitData.is_unlimited;
               if (
@@ -460,7 +460,9 @@ export default function AddProductPage() {
                 hardLimit !== undefined
               ) {
                 setProductLimitMax(hardLimit);
-                setProductRemaining(Math.max(0, hardLimit - currentCount));
+                setProductRemaining(
+                  limitData.remaining ?? Math.max(0, hardLimit - currentCount),
+                );
               }
             }
           }
@@ -1361,6 +1363,7 @@ The CBD USED
                 <div
                   key={variant.id}
                   style={{
+                    position: "relative",
                     display: "flex",
                     flexDirection: "column",
                     gap: "20px",
@@ -1372,6 +1375,41 @@ The CBD USED
                     alignItems: "center",
                   }}
                 >
+                  {/* Remove variant button - top right */}
+                  <button
+                    type="button"
+                    onClick={() => removeVariant(variant.id)}
+                    style={{
+                      position: "absolute",
+                      top: "10px",
+                      right: "10px",
+                      width: "28px",
+                      height: "28px",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      background: "rgba(239,68,68,0.1)",
+                      border: "1px solid rgba(239,68,68,0.25)",
+                      borderRadius: "50%",
+                      color: "#ef4444",
+                      cursor: "pointer",
+                      fontSize: "14px",
+                      transition: "all 0.2s ease",
+                      zIndex: 2,
+                    }}
+                    title="Remove variant"
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.background = "rgba(239,68,68,0.2)";
+                      e.currentTarget.style.borderColor = "rgba(239,68,68,0.5)";
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.background = "rgba(239,68,68,0.1)";
+                      e.currentTarget.style.borderColor =
+                        "rgba(239,68,68,0.25)";
+                    }}
+                  >
+                    ✕
+                  </button>
                   {/* Top Center: Variant Photo */}
                   <div
                     style={{
@@ -1465,7 +1503,7 @@ The CBD USED
                           fontSize: "14px",
                         }}
                       >
-                        $
+                        ₹
                       </span>
                       <input
                         type="number"
@@ -1758,7 +1796,7 @@ The CBD USED
                                       fontSize: "13px",
                                     }}
                                   >
-                                    $
+                                    ₹
                                   </span>
                                   <input
                                     type="number"
@@ -1855,29 +1893,6 @@ The CBD USED
                         </div>
                       )}
                     </div>
-
-                    <button
-                      type="button"
-                      onClick={() => removeVariant(variant.id)}
-                      style={{
-                        width: "36px",
-                        height: "36px",
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "center",
-                        background: "rgba(239,68,68,0.1)",
-                        border: "1px solid rgba(239,68,68,0.3)",
-                        borderRadius: "8px",
-                        color: "#ef4444",
-                        cursor: "pointer",
-                        fontSize: "18px",
-                        transition: "all 0.2s ease",
-                        flex: "0 0 36px",
-                      }}
-                      title="Remove variant"
-                    >
-                      ✕
-                    </button>
                   </div>
                 </div>
               ))}

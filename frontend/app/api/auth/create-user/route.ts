@@ -5,6 +5,7 @@ import {
   getUserByEmail,
   updateUserFirebaseUID,
   ensureBusinessExists,
+  recordProductSubscription,
 } from "@/lib/supabase/queries";
 import { sendWelcomeEmail } from "@/lib/email/automated-emails";
 import { createUserSchema } from "@/lib/validation/schemas";
@@ -27,7 +28,8 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const { firebase_uid, email, full_name, phone } = validationResult.data;
+    const { firebase_uid, email, full_name, phone, signup_domain } =
+      validationResult.data;
 
     // Check if user already exists by firebase_uid
     const existingUser = await getUserByFirebaseUID(firebase_uid);
@@ -91,6 +93,13 @@ export async function POST(request: NextRequest) {
 
     // Note: Welcome email is now sent AFTER email verification
     // (see /api/auth/verify-email route)
+
+    // Record product subscription for the domain user signed up from
+    if (signup_domain && signup_domain !== "dashboard") {
+      await recordProductSubscription(user.id, signup_domain).catch((err) =>
+        console.error("[create-user] Product subscription error:", err),
+      );
+    }
 
     return NextResponse.json({ user, created: true });
   } catch (error: any) {

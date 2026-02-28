@@ -1,55 +1,14 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
-import dynamic from "next/dynamic";
 import Header from "./Header/Header";
-import HeroSection from "./HeroSection";
-
-// Lazy load components that use GSAP to improve initial load
-const TrustedBy = dynamic(() => import("./TrustedBy"), { ssr: false });
-const WhatsAppFeatures = dynamic(
-  () => import("./WhatsAppFeatures/WhatsAppFeatures"),
-  { ssr: false },
-);
-const OTPAPISection = dynamic(() => import("./OTPAPISection"), { ssr: false });
-
-// Lazy load below-fold components for better performance
-const Testimonials = dynamic(() => import("./Testimonials"), { ssr: false });
-const ContactSection = dynamic(
-  () => import("./ContactSection/ContactSection"),
-  { ssr: false },
-);
-const Footer = dynamic(() => import("./Footer/Footer"), { ssr: false });
+import HeroSection from "./HeroSection/HeroSection";
+import TrustedBy from "./TrustedBy/TrustedBy";
+import WhatsAppFeatures from "./WhatsAppFeatures/WhatsAppFeatures";
+import Testimonials from "./Testimonials/Testimonials";
+import ContactSection from "./ContactSection/ContactSection";
+import Footer from "./Footer/Footer";
 
 export default function HomePageContent() {
-  const [showBelowFold, setShowBelowFold] = useState(false);
-  const triggerRef = useRef<HTMLDivElement>(null);
-
-  // Use Intersection Observer to load below-fold content when user scrolls near
-  useEffect(() => {
-    const observer = new IntersectionObserver(
-      (entries) => {
-        if (entries[0].isIntersecting) {
-          setShowBelowFold(true);
-          observer.disconnect(); // Only need to trigger once
-        }
-      },
-      { rootMargin: "200px" }, // Start loading 200px before visible
-    );
-
-    if (triggerRef.current) {
-      observer.observe(triggerRef.current);
-    }
-
-    // Also trigger after 3 seconds as fallback for slow scrollers
-    const timeout = setTimeout(() => setShowBelowFold(true), 3000);
-
-    return () => {
-      observer.disconnect();
-      clearTimeout(timeout);
-    };
-  }, []);
-
   return (
     <div className="min-h-screen">
       {/* Header / Navigation */}
@@ -66,20 +25,14 @@ export default function HomePageContent() {
       {/* WhatsApp Features Section */}
       <WhatsAppFeatures />
 
-      {/* OTP API Section - HIDDEN */}
-      {/* <OTPAPISection /> */}
+      {/* Testimonials */}
+      <Testimonials />
 
-      {/* Trigger point for below-fold content */}
-      <div ref={triggerRef} />
+      {/* Contact Section */}
+      <ContactSection />
 
-      {/* Lazy-loaded below-fold sections - only render when needed */}
-      {showBelowFold && (
-        <>
-          <Testimonials />
-          <ContactSection />
-          <Footer />
-        </>
-      )}
+      {/* Footer */}
+      <Footer />
     </div>
   );
 }

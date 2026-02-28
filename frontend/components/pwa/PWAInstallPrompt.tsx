@@ -57,7 +57,10 @@ const SmartphoneIcon = () => (
   </svg>
 );
 
+import { usePathname } from "next/navigation";
+
 export function PWAInstallPrompt() {
+  const pathname = usePathname();
   const [deferredPrompt, setDeferredPrompt] =
     useState<BeforeInstallPromptEvent | null>(null);
   const [showPrompt, setShowPrompt] = useState(false);
@@ -141,7 +144,7 @@ export function PWAInstallPrompt() {
     return () => {
       window.removeEventListener(
         "beforeinstallprompt",
-        handleBeforeInstallPrompt
+        handleBeforeInstallPrompt,
       );
       window.removeEventListener("appinstalled", handleAppInstalled);
     };
@@ -170,8 +173,14 @@ export function PWAInstallPrompt() {
     localStorage.setItem("pwa-prompt-dismissed", new Date().toISOString());
   };
 
-  // Don't render if installed or not showing
-  if (isInstalled || !showPrompt) {
+  // Don't render if installed, not showing, or if user is viewing a merchant store, login or signup
+  if (
+    isInstalled ||
+    !showPrompt ||
+    pathname?.startsWith("/store") ||
+    pathname?.startsWith("/login") ||
+    pathname?.startsWith("/signup")
+  ) {
     return null;
   }
 
@@ -265,7 +274,8 @@ export function PWAInstallPrompt() {
           background: #000000;
           border-radius: 20px;
           padding: 24px;
-          box-shadow: 0 -4px 30px rgba(34, 193, 90, 0.15),
+          box-shadow:
+            0 -4px 30px rgba(34, 193, 90, 0.15),
             0 10px 40px rgba(0, 0, 0, 0.1);
           border: 1px solid rgba(34, 193, 90, 0.2);
           max-width: 420px;

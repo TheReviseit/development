@@ -867,6 +867,18 @@ class FeatureGateEngine:
         # 5. Usage counter (always from DB, never cached)
         usage = self._get_current_usage(user_id, domain, feature_key)
 
+        # 5b. Counter reconciliation for create_product
+        # Product deletions don't decrement usage_counters, causing drift.
+        # Reconcile counter with actual product count before evaluating limits.
+        # CRITICAL: Must run even when usage == 0. If no usage_counters row
+        # exists (new user or row never created), usage defaults to 0 — but
+        # the user may already have products created before the feature gate
+        # was deployed, or the counter row was never initialized. Without
+        # this check, the gate sees usage=0 < hard_limit → ALLOW, bypassing
+        # the limit entirely. Domain-agnostic: works for all domains/plans.
+        if feature_key == 'create_product':
+            usage = self._reconcile_product_counter(user_id, domain, feature_key, usage)
+
         return PolicyContext(
             user_id=user_id,
             domain=domain,
@@ -941,13 +953,16 @@ class FeatureGateEngine:
         # DB fallback
         try:
             
-            # Step 1: Get subscription (plan_id is Razorpay plan ID string)
+            # Step 1: Get subscription filtered by product_domain
+            # CRITICAL: Must filter by product_domain to find the correct
+            # domain's subscription when user has multiple subscriptions.
             result = self.supabase.table('subscriptions').select(
-                'id, user_id, plan_id, status, created_at'
+                'id, user_id, plan_id, status, product_domain, created_at'
             ).match({
                 'user_id': user_id,
+                'product_domain': domain,
             }).in_(
-                'status', ['active', 'completed', 'past_due', 'grace_period', 'trialing', 'processing', 'pending_upgrade', 'upgrade_failed']
+                'status', ['active', 'completed', 'past_due', 'grace_period', 'trialing', 'trial', 'processing', 'pending_upgrade', 'upgrade_failed']
             ).order('created_at', desc=True).limit(1).execute()
 
             if not result.data:
@@ -973,10 +988,6 @@ class FeatureGateEngine:
                 return None
             
             plan = plan_result.data[0]
-            
-            # Verify domain matches
-            if plan.get('product_domain') != domain:
-                return None
             
             # Step 3: Combine subscription + plan data
             combined = {
@@ -1135,6 +1146,98 @@ class FeatureGateEngine:
         except Exception as e:
             logger.error(f"Usage counter fetch error: {e}", exc_info=True)
             return 0  # Default: 0 usage (fail open for reads)
+
+    def _reconcile_product_counter(
+        self, user_id: str, domain: str, feature_key: str, counter_value: int
+    ) -> int:
+        """
+        Reconcile usage counter with actual product count.
+        
+        Products table uses Firebase UID as user_id, but usage_counters
+        uses the Supabase UUID. We look up the Firebase UID from users
+        table, then count actual non-deleted products.
+        
+        Handles all edge cases:
+        - Counter row missing (new user, pre-feature-gate products)
+        - Counter drift (product deleted but counter not decremented)
+        - Zero counter with actual products (most critical bypass vector)
+        
+        Returns the reconciled usage value.
+        """
+        try:
+            # 1. Get Firebase UID from Supabase user_id
+            user_result = self.supabase.table('users').select(
+                'firebase_uid'
+            ).eq('id', user_id).limit(1).execute()
+
+            if not user_result.data:
+                logger.warning(f"[RECONCILE] No user found for id={user_id}")
+                return counter_value  # Can't reconcile, use existing value
+
+            firebase_uid = user_result.data[0].get('firebase_uid')
+            if not firebase_uid:
+                return counter_value
+
+            # 2. Count actual non-deleted products + their variants
+            # Each product counts as 1, each variant also counts as 1.
+            # Example: 1 product with 2 variants = 3 items toward limit.
+            product_result = self.supabase.table('products').select(
+                'id', count='exact'
+            ).eq('user_id', firebase_uid).neq(
+                'is_deleted', True
+            ).execute()
+
+            product_count = product_result.count if product_result.count is not None else 0
+
+            # Count variants belonging to non-deleted products
+            variant_count = 0
+            if product_count > 0:
+                # Get IDs of non-deleted products, then count their variants
+                product_ids_result = self.supabase.table('products').select(
+                    'id'
+                ).eq('user_id', firebase_uid).neq(
+                    'is_deleted', True
+                ).execute()
+
+                if product_ids_result.data:
+                    product_ids = [p['id'] for p in product_ids_result.data]
+                    variant_result = self.supabase.table('product_variants').select(
+                        'id', count='exact'
+                    ).in_('product_id', product_ids).execute()
+                    variant_count = variant_result.count if variant_result.count is not None else 0
+
+            actual_count = product_count + variant_count
+
+            # 3. If counter matches reality, no correction needed
+            if counter_value == actual_count:
+                return counter_value
+
+            # 4. Counter drifted — correct it
+            logger.warning(
+                f"[RECONCILE] Counter drift detected for user={user_id}: "
+                f"counter={counter_value}, actual={actual_count}. Correcting."
+            )
+            try:
+                # Use upsert to handle both cases:
+                # - Row exists but value is wrong → update
+                # - Row doesn't exist at all → insert
+                self.supabase.table('usage_counters').upsert({
+                    'user_id': user_id,
+                    'domain': domain,
+                    'feature_key': feature_key,
+                    'current_value': actual_count,
+                }, on_conflict='user_id,domain,feature_key').execute()
+            except Exception as update_err:
+                logger.error(
+                    f"[RECONCILE] Failed to upsert counter: {update_err}"
+                )
+                # Still return actual count for this request even if DB write failed
+            return actual_count
+
+        except Exception as e:
+            logger.error(f"[RECONCILE] Error reconciling counter: {e}", exc_info=True)
+            return counter_value  # Fail safe: use existing counter value
+
 
     def _atomic_increment(
         self,

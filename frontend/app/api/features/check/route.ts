@@ -96,6 +96,7 @@ export async function GET(request: NextRequest) {
         "grace_period",
         "trialing",
         "trial",
+        "processing",
         "pending_upgrade",
         "upgrade_failed",
       ])
@@ -138,6 +139,52 @@ export async function GET(request: NextRequest) {
       .eq("feature_key", featureKey)
       .maybeSingle();
     used = counter?.current_value ?? 0;
+
+    // 3b. Counter reconciliation for create_product
+    // CRITICAL: usage_counters may be 0 or stale (row missing, drift from
+    // deletions, or products created before feature gate was deployed).
+    // Count actual non-deleted products + their variants and use the HIGHER
+    // value to prevent limit bypass. Mirrors backend _reconcile_product_counter().
+    // Each product counts as 1, each variant also counts as 1.
+    // Example: 1 product with 2 variants = 3 items toward limit.
+    if (featureKey === "create_product") {
+      // Count non-deleted products
+      const { count: productCount } = await supabase
+        .from("products")
+        .select("id", { count: "exact", head: true })
+        .eq("user_id", firebaseUid)
+        .neq("is_deleted", true);
+
+      const pCount = productCount ?? 0;
+
+      // Count variants belonging to non-deleted products
+      let vCount = 0;
+      if (pCount > 0) {
+        const { data: productIds } = await supabase
+          .from("products")
+          .select("id")
+          .eq("user_id", firebaseUid)
+          .neq("is_deleted", true);
+
+        if (productIds && productIds.length > 0) {
+          const ids = productIds.map((p) => p.id);
+          const { count: variantCount } = await supabase
+            .from("product_variants")
+            .select("id", { count: "exact", head: true })
+            .in("product_id", ids);
+          vCount = variantCount ?? 0;
+        }
+      }
+
+      const actualCount = pCount + vCount;
+
+      if (actualCount > used) {
+        console.warn(
+          `🔄 [FeatureCheck] Counter drift: counter=${used}, actual=${actualCount} (${pCount} products + ${vCount} variants) for ${firebaseUid}. Using actual.`,
+        );
+        used = actualCount;
+      }
+    }
 
     let hardLimit: number | null = null;
     let softLimit: number | null = null;

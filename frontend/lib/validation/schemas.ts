@@ -17,6 +17,9 @@ export const createUserSchema = z.object({
     .transform((val) => val.toLowerCase().trim()),
   full_name: z.string().max(255, "Name too long").optional(),
   phone: z.string().max(20, "Phone number too long").optional(),
+  signup_domain: z
+    .enum(["shop", "marketing", "showcase", "api", "dashboard"])
+    .optional(),
 });
 
 // Email sending schema

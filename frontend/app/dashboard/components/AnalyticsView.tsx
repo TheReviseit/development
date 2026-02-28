@@ -110,18 +110,15 @@ const ConversationIcon = () => (
 );
 
 export default function AnalyticsView() {
-  const { user } = useAuth();
+  const { user, firebaseUser } = useAuth();
   const [analytics, setAnalytics] = useState<AnalyticsOverview | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [period, setPeriod] = useState<"7d" | "30d" | "90d">("7d");
 
-  // Use user.id or fallback to development user ID
-  // TODO: Remove fallback once auth sync is fixed
-  const userId =
-    user?.id ||
-    process.env.NEXT_PUBLIC_DEV_USER_ID ||
-    "7944b72f-2bc1-4cc1-9714-215c2e177b51";
+  // Use Firebase UID for backend API calls (X-User-Id header expects Firebase UID)
+  // user?.id is the Supabase UUID which the backend cannot map
+  const userId = firebaseUser?.uid || "";
 
   // Feature gate: advanced_analytics — hidden for Starter plan
   const { subscription, isLoading: subLoading } = useSubscription(userId);

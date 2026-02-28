@@ -9,6 +9,7 @@ import { DashboardAuthGuard } from "./components/DashboardAuthGuard";
 import { getDomainVisibility, type ProductDomain } from "@/lib/domain/config";
 import { getProductDomainFromBrowser } from "@/lib/domain/client";
 import SoftLimitBanner from "./components/SoftLimitBanner";
+import SubscriptionGateOverlay from "./components/SubscriptionGateOverlay";
 import styles from "./dashboard.module.css";
 
 type Section =
@@ -99,6 +100,11 @@ export default function DashboardLayout({
   >("idle");
   const [upgradeMessage, setUpgradeMessage] = useState("");
   const upgradeVerifiedRef = useRef(false);
+  // ── Domain Subscription Gate ──────────────────────────────────────
+  const [subscribedDomains, setSubscribedDomains] = useState<string[]>([
+    "dashboard",
+  ]);
+  const [domainAccessLoaded, setDomainAccessLoaded] = useState(false);
   const router = useRouter();
   const pathname = usePathname();
 
@@ -187,6 +193,47 @@ export default function DashboardLayout({
     const domain = getProductDomainFromBrowser();
     setCurrentDomain(domain);
   }, []);
+
+  useEffect(() => {
+    setDomainAccessLoaded(false);
+
+    if (currentDomain === "dashboard") {
+      setSubscribedDomains((prev) =>
+        prev.includes("dashboard") ? prev : [...prev, "dashboard"],
+      );
+      setDomainAccessLoaded(true);
+      return;
+    }
+
+    const checkDomainAccess = async () => {
+      try {
+        const res = await fetch(
+          `/api/subscription/check-domain?domain=${currentDomain}`,
+          { credentials: "include" },
+        );
+
+        if (res.ok) {
+          const data = await res.json();
+          if (data.hasAccess) {
+            // User has access to this domain
+            setSubscribedDomains((prev) =>
+              prev.includes(currentDomain) ? prev : [...prev, currentDomain],
+            );
+          }
+        }
+      } catch (err) {
+        // Fail-safe: don't block access on network errors
+        console.warn("[Dashboard] Failed to check domain access:", err);
+        setSubscribedDomains((prev) =>
+          prev.includes(currentDomain) ? prev : [...prev, currentDomain],
+        );
+      } finally {
+        setDomainAccessLoaded(true);
+      }
+    };
+
+    checkDomainAccess();
+  }, [currentDomain]);
 
   // Get visibility rules for current domain (re-computed when domain is resolved)
   const visibility = getDomainVisibility(currentDomain);
@@ -336,6 +383,34 @@ export default function DashboardLayout({
       router.push(`/dashboard/${section}`);
     }
   };
+
+  // ════════════════════════════════════════════════════════════════════
+  // DOMAIN ACCESS GATE — Production-grade: NO dashboard content renders
+  // ════════════════════════════════════════════════════════════════════
+  // If the user doesn't have access to this product domain, we EARLY
+  // RETURN with only the gate page. The entire dashboard (sidebar,
+  // mobile menu, children, API calls) is never mounted in the DOM.
+  // This cannot be bypassed via DevTools — there's nothing to delete.
+  const isDomainGated =
+    domainAccessLoaded &&
+    currentDomain !== "dashboard" &&
+    !subscribedDomains.includes(currentDomain);
+
+  if (isDomainGated) {
+    return (
+      <AuthProvider>
+        <DashboardAuthGuard
+          setUser={setUser}
+          setLoading={setLoading}
+          user={user}
+        />
+        <SubscriptionGateOverlay
+          currentDomain={currentDomain}
+          userEmail={user?.email}
+        />
+      </AuthProvider>
+    );
+  }
 
   return (
     <AuthProvider>

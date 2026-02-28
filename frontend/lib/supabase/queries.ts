@@ -359,3 +359,67 @@ export async function getSubscriptionByUserId(userId: string) {
   }
   return data;
 }
+
+// =============================================================================
+// PRODUCT SUBSCRIPTIONS — Per-Domain Access Control
+// =============================================================================
+
+const SUBSCRIBABLE_DOMAINS = new Set(["shop", "marketing", "showcase", "api"]);
+
+/**
+ * Record a product domain subscription for a user.
+ * Uses upsert to handle reactivation of expired subscriptions.
+ *
+ * @param userId - Supabase user ID (from `users` table)
+ * @param productDomain - One of: shop, marketing, showcase, api
+ */
+export async function recordProductSubscription(
+  userId: string,
+  productDomain: string,
+): Promise<void> {
+  if (!SUBSCRIBABLE_DOMAINS.has(productDomain)) return;
+
+  const { error } = await supabaseAdmin.from("product_subscriptions").upsert(
+    {
+      user_id: userId,
+      org_id: userId, // For Firebase users, user acts as their own org
+      product_domain: productDomain,
+      status: "active",
+      metadata: { source: "signup" },
+    },
+    { onConflict: "user_id,product_domain" },
+  );
+
+  if (error) {
+    console.error(
+      `[recordProductSubscription] Error for ${productDomain}:`,
+      error,
+    );
+    // Non-fatal: don't throw — subscription failure shouldn't block signup
+  }
+}
+
+/**
+ * Get all product domains a user has active subscriptions for.
+ * Returns at minimum ['dashboard'] (always implicitly granted).
+ */
+export async function getUserProductSubscriptions(
+  userId: string,
+): Promise<string[]> {
+  const { data, error } = await supabaseAdmin
+    .from("product_subscriptions")
+    .select("product_domain, status")
+    .eq("user_id", userId)
+    .in("status", ["active", "trial"]);
+
+  if (error) {
+    console.error("[getUserProductSubscriptions] Error:", error);
+    return ["dashboard"]; // Fail-safe
+  }
+
+  const domains = ["dashboard"]; // Always included
+  for (const row of data || []) {
+    domains.push(row.product_domain);
+  }
+  return domains;
+}

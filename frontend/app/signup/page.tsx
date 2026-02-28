@@ -15,6 +15,7 @@ import {
 import { auth } from "@/src/firebase/firebase";
 import styles from "./Signup.module.css";
 import { useDebounce } from "@/lib/hooks/useDebounce";
+import { getProductDomainFromBrowser } from "@/lib/domain/client";
 
 // Lazy load Toast component
 const Toast = dynamic(() => import("../components/Toast/Toast"), {
@@ -227,6 +228,7 @@ export default function SignupPage() {
                 full_name: name,
                 email: email,
                 phone: phone,
+                signup_domain: getProductDomainFromBrowser(),
               }),
             }),
             // Send verification email
@@ -330,6 +332,7 @@ export default function SignupPage() {
             full_name: result.user.displayName || "",
             email: result.user.email || "",
             phone: "", // Phone not available from Google signup
+            signup_domain: getProductDomainFromBrowser(),
           }),
         }).catch((err) => console.error("User creation error:", err)),
 

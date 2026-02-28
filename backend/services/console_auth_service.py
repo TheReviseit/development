@@ -176,12 +176,16 @@ class ConsoleAuthService:
     # SIGNUP
     # -------------------------------------------------------------------------
     
+    # Valid product domains that can be subscribed to
+    SUBSCRIBABLE_DOMAINS = frozenset({'shop', 'marketing', 'showcase', 'api'})
+
     async def signup(
         self,
         email: str,
         password: str,
         name: Optional[str] = None,
-        ip_address: Optional[str] = None
+        ip_address: Optional[str] = None,
+        signup_domain: Optional[str] = None
     ) -> Dict[str, Any]:
         """
         Create new console user account.
@@ -281,6 +285,23 @@ class ConsoleAuthService:
                 'role': 'owner',
                 'accepted_at': datetime.utcnow().isoformat()
             }).execute()
+            
+            # ── Product Domain Subscription ──────────────────────────────
+            # Record which product the user signed up from. The 'dashboard'
+            # domain is implicitly available to all users and never stored.
+            if signup_domain and signup_domain in self.SUBSCRIBABLE_DOMAINS:
+                try:
+                    self.db.table('product_subscriptions').insert({
+                        'user_id': user_id,
+                        'org_id': org_id,
+                        'product_domain': signup_domain,
+                        'status': 'active',
+                        'metadata': {'source': 'signup', 'ip': ip_address}
+                    }).execute()
+                    logger.info(f"Product subscription created: {signup_domain} for user {user_id}")
+                except Exception as sub_err:
+                    # Non-fatal: user is created, subscription record failed
+                    logger.error(f"Failed to create product subscription: {sub_err}")
             
             # Create default test project
             self.db.table('otp_projects').insert({
@@ -781,6 +802,20 @@ Flowauxi"""
             # Audit log
             await self._audit_log(user_id, org_id, 'login', ip_address=ip_address)
             
+            # ── Fetch subscribed product domains ────────────────────────
+            subscribed_domains = ['dashboard']  # Always implicitly granted
+            try:
+                subs_result = self.db.table('product_subscriptions').select(
+                    'product_domain, status'
+                ).eq('user_id', user_id).in_(
+                    'status', ['active', 'trial']
+                ).execute()
+                
+                for sub in (subs_result.data or []):
+                    subscribed_domains.append(sub['product_domain'])
+            except Exception as subs_err:
+                logger.warning(f"Failed to fetch subscriptions on login: {subs_err}")
+            
             return {
                 'success': True,
                 'user': {
@@ -795,6 +830,7 @@ Flowauxi"""
                     'slug': org.get('slug') if org else None,
                     'role': org_membership.get('role') if org_membership else None
                 } if org else None,
+                'subscribed_domains': subscribed_domains,
                 'access_token': access_token,
                 'refresh_token': refresh_token,
                 'expires_in': JWT_ACCESS_TOKEN_EXPIRE_MINUTES * 60
@@ -930,6 +966,101 @@ Flowauxi"""
                 'success': False,
                 'error': 'REFRESH_FAILED',
                 'message': 'Unable to refresh token'
+            }
+    
+    # -------------------------------------------------------------------------
+    # DOMAIN ACCESS — Product Subscription Queries
+    # -------------------------------------------------------------------------
+    
+    async def get_user_domain_access(
+        self,
+        user_id: str
+    ) -> Dict[str, Any]:
+        """
+        Get all product domains the user has active subscriptions for.
+        
+        Returns:
+            {
+                'success': True,
+                'subscribed_domains': ['dashboard', 'shop', ...],
+                'subscriptions': [{'product_domain': 'shop', 'status': 'active', ...}]
+            }
+        """
+        try:
+            subs_result = self.db.table('product_subscriptions').select(
+                'product_domain, status, subscribed_at, expires_at'
+            ).eq('user_id', user_id).execute()
+            
+            # Dashboard is always implicitly available
+            subscribed_domains = ['dashboard']
+            all_subscriptions = []
+            
+            for sub in (subs_result.data or []):
+                all_subscriptions.append(sub)
+                if sub['status'] in ('active', 'trial'):
+                    subscribed_domains.append(sub['product_domain'])
+            
+            return {
+                'success': True,
+                'subscribed_domains': subscribed_domains,
+                'subscriptions': all_subscriptions
+            }
+            
+        except Exception as e:
+            logger.error(f"Domain access check error: {e}")
+            return {
+                'success': False,
+                'error': 'DOMAIN_ACCESS_ERROR',
+                'message': 'Unable to check domain access',
+                'subscribed_domains': ['dashboard']  # Fail-safe: grant dashboard
+            }
+    
+    async def add_product_subscription(
+        self,
+        user_id: str,
+        org_id: str,
+        product_domain: str,
+        status: str = 'active'
+    ) -> Dict[str, Any]:
+        """
+        Add or reactivate a product domain subscription.
+        Uses upsert to handle reactivation of expired/inactive subscriptions.
+        """
+        if product_domain not in self.SUBSCRIBABLE_DOMAINS:
+            return {
+                'success': False,
+                'error': 'INVALID_DOMAIN',
+                'message': f'Invalid product domain: {product_domain}'
+            }
+        
+        try:
+            self.db.table('product_subscriptions').upsert(
+                {
+                    'user_id': user_id,
+                    'org_id': org_id,
+                    'product_domain': product_domain,
+                    'status': status,
+                    'subscribed_at': datetime.utcnow().isoformat()
+                },
+                on_conflict='user_id,product_domain'
+            ).execute()
+            
+            await self._audit_log(
+                user_id, org_id, 'product_subscribed',
+                resource_type='product_domain',
+                resource_id=product_domain
+            )
+            
+            logger.info(f"Product subscription added/updated: {product_domain} for user {user_id}")
+            
+            return {'success': True, 'product_domain': product_domain, 'status': status}
+            
+        except Exception as e:
+            logger.error(f"Add subscription error: {e}")
+            return {
+                'success': False,
+                'error': 'SUBSCRIPTION_ERROR',
+                'message': 'Unable to add subscription'
             }
     
     # -------------------------------------------------------------------------
