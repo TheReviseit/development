@@ -121,13 +121,13 @@ def process_order_event(
                 correlation_id=correlation_id,
             )
             results["tasks"]["notification"] = notif_result
-            
+
             # 2b. Send invoice via WhatsApp (for AI/WhatsApp orders only)
             # NON-BLOCKING: This triggers a separate background task
             # Gated by live_order_updates feature (Business+ only)
             order_source = data.get("source")
             logger.info(f"📄 Invoice check: source='{order_source}', expected='ai', match={order_source == 'ai'}")
-            
+
             can_send_invoice = True
             try:
                 from services.feature_gate_engine import get_feature_gate_engine
@@ -143,14 +143,11 @@ def process_order_event(
                     results["tasks"]["invoice"] = {"triggered": False, "reason": "feature_not_in_plan"}
             except Exception as gate_err:
                 logger.warning(f"⚠️ Invoice feature gate check failed, proceeding: {gate_err}")
-            
+
             if can_send_invoice and order_source == "ai":
                 try:
-                    # Get business data for invoice generation
                     business_data = _get_business_data_for_invoice(user_id)
-                    
                     if business_data:
-                        # Trigger invoice task (async, non-blocking)
                         invoice_result = send_invoice_whatsapp.delay(
                             order_id=order_id,
                             user_id=user_id,
@@ -165,9 +162,23 @@ def process_order_event(
                         logger.warning(f"No business data for invoice, skipping for order {order_id}")
                         results["tasks"]["invoice"] = {"triggered": False, "reason": "no_business_data"}
                 except Exception as inv_err:
-                    # Invoice failure should NEVER block order processing
                     logger.warning(f"Invoice trigger failed for order {order_id}: {inv_err}")
                     results["tasks"]["invoice"] = {"triggered": False, "error": str(inv_err)}
+
+        # 2a. Send WhatsApp status update notification to customer
+        STATUS_CHANGE_EVENTS = {
+            "order_confirmed", "order_processing",
+            "order_completed", "order_cancelled",
+        }
+        if event_type in STATUS_CHANGE_EVENTS:
+            status_notif_result = send_order_status_whatsapp(
+                order_id=order_id,
+                user_id=user_id,
+                data=data,
+                event_type=event_type,
+                correlation_id=correlation_id,
+            )
+            results["tasks"]["status_notification"] = status_notif_result
         
         # 3. Update analytics
         analytics_result = update_order_analytics(
@@ -800,6 +811,78 @@ def send_order_notification(
         logger.warning(f"Failed to send notification: {e}")
         result["error"] = str(e)
     
+    return result
+
+
+@background_task(name="orders.send_status_whatsapp")
+def send_order_status_whatsapp(
+    order_id: str,
+    user_id: str,
+    data: Dict[str, Any],
+    event_type: str,
+    correlation_id: Optional[str] = None,
+) -> Dict[str, Any]:
+    """
+    Send WhatsApp status update notification to the customer.
+    Called for order_confirmed, order_processing, order_completed, order_cancelled events.
+    Gated by live_order_updates feature (Business+ plans only).
+    """
+    result = {"sent": False, "event_type": event_type}
+
+    try:
+        from services.notification_service import get_notification_service
+
+        customer_phone = data.get("customer_phone")
+        if not customer_phone:
+            logger.info(f"⏭️ Status notification skipped for order {order_id}: no customer phone")
+            result["skip_reason"] = "no_customer_phone"
+            return result
+
+        # Map event type → status string
+        status = event_type.replace("order_", "")  # e.g. "order_confirmed" → "confirmed"
+        previous_status = data.get("previous_status")
+
+        # Resolve business name
+        business_name = data.get("business_name") or "our store"
+        try:
+            from supabase_client import get_supabase_client
+            db = get_supabase_client()
+            biz_row = db.table("businesses").select("business_name").eq("user_id", user_id).maybe_single().execute()
+            if biz_row.data and biz_row.data.get("business_name"):
+                business_name = biz_row.data["business_name"]
+        except Exception as biz_err:
+            logger.debug(f"Could not resolve business name: {biz_err}")
+
+        notification_svc = get_notification_service()
+        notif_result = notification_svc.send_order_status_notification(
+            order_id=order_id,
+            customer_name=data.get("customer_name", "Customer"),
+            customer_phone=customer_phone,
+            customer_email=data.get("customer_email"),
+            status=status,
+            previous_status=previous_status,
+            business_name=business_name,
+            business_user_id=user_id,
+            items=data.get("items"),
+            total_quantity=data.get("total_quantity"),
+        )
+
+        result["sent"] = notif_result.success
+        result["channel"] = notif_result.channel.value if notif_result.channel else None
+        if notif_result.error:
+            result["skip_reason"] = notif_result.error
+        if notif_result.message_id:
+            result["message_id"] = notif_result.message_id
+
+        logger.info(
+            f"{'✅' if notif_result.success else '⏭️'} Status notification ({status}) "
+            f"for order {order_id}: sent={notif_result.success}"
+        )
+
+    except Exception as e:
+        logger.error(f"Error sending status WhatsApp for order {order_id}: {e}", exc_info=True)
+        result["error"] = str(e)
+
     return result
 
 

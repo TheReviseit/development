@@ -19,6 +19,8 @@ interface Product {
   name: string;
   category: string;
   price: number;
+  compareAtPrice?: number;
+  quantity?: number;
   priceUnit: string;
   duration: string;
   available: boolean;
@@ -34,11 +36,13 @@ interface Product {
     color: string;
     size: string | string[];
     price: number;
+    compareAtPrice?: number;
     stock: number;
     imageUrl: string;
     imagePublicId: string;
     hasSizePricing?: boolean;
     sizePrices?: Record<string, number>;
+    sizeStocks?: Record<string, number>;
   }>;
   sizes: string[];
   colors: string[];
@@ -132,6 +136,7 @@ export default function ProductsPage() {
             description: p.description || "",
             sku: p.sku || "",
             stockStatus: p.stock_status || "in_stock",
+            quantity: parseInt(String(p.stock_quantity)) || 0,
             imageUrl: p.image_url || "",
             imagePublicId: p.image_public_id || "",
             originalSize: 0,
@@ -300,8 +305,8 @@ export default function ProductsPage() {
           sku: product.sku,
           brand: product.brand,
           price: product.price,
-          // imagePublicId: product.imagePublicId,
-          // duration: product.duration,
+          compareAtPrice: product.compareAtPrice,
+          stockQuantity: product.quantity || 0,
           imageUrl: product.imageUrl,
           imagePublicId: product.imagePublicId,
           duration: product.duration,
@@ -319,11 +324,13 @@ export default function ProductsPage() {
             color: v.color || "",
             size: Array.isArray(v.size) ? v.size.join(", ") : v.size || "",
             price: v.price || 0,
+            compareAtPrice: v.compareAtPrice,
             stockQuantity: v.stock || 0,
             imageUrl: v.imageUrl || "",
             imagePublicId: v.imagePublicId || "",
             hasSizePricing: v.hasSizePricing || false,
             sizePrices: v.sizePrices || {},
+            sizeStocks: v.sizeStocks || {},
           })),
         };
 
@@ -459,7 +466,21 @@ export default function ProductsPage() {
         method: "DELETE",
       });
       if (response.ok) {
+        const data = await response.json();
+        const itemsRemoved: number = data.itemsRemoved ?? 1;
+
         setProducts(products.filter((p) => p.id !== id));
+
+        // Update limit counters immediately — no need to wait for a page refresh
+        setProductUsed((prev) =>
+          prev !== null ? Math.max(0, prev - itemsRemoved) : prev,
+        );
+        setProductRemaining((prev) =>
+          prev !== null && productLimit !== null
+            ? Math.min(productLimit, prev + itemsRemoved)
+            : prev,
+        );
+
         setMessage({ type: "success", text: "Product deleted" });
         if (storeSlug) {
           broadcastStoreUpdate(storeSlug);

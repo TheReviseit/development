@@ -427,10 +427,12 @@ class FeatureGateEngine:
                 return decision
 
             # Feature is allowed — atomically increment in DB
+            # Resolve to Supabase UUID — usage_counters.user_id is Supabase UUID
+            supabase_uuid_for_increment = self._resolve_to_supabase_uuid(user_id)
             if ctx.hard_limit is not None or ctx.is_unlimited:
                 # Counted feature: use atomic RPC
                 increment_result = self._atomic_increment(
-                    user_id, domain, feature_key,
+                    supabase_uuid_for_increment, domain, feature_key,
                     ctx.hard_limit, ctx.soft_limit, ctx.is_unlimited,
                     idempotency_key
                 )
@@ -508,10 +510,11 @@ class FeatureGateEngine:
             If format='list': [{"feature_key": "...", "current_value": ..., ...}, ...]
         """
         try:
+            supabase_uuid = self._resolve_to_supabase_uuid(user_id)
             result = self.supabase.table('usage_counters').select(
                 'feature_key, current_value, reset_at, period_start'
             ).match({
-                'user_id': user_id,
+                'user_id': supabase_uuid,
                 'domain': domain,
             }).execute()
 
@@ -774,23 +777,24 @@ class FeatureGateEngine:
                 }).execute()
 
                 if addons_result.data:
-                    for addon_row in addons_result.data:
-                        # Get addon details
-                        addon_result = self.supabase.table('plan_addons').select('*').eq(
-                            'id', addon_row['addon_id']
-                        ).single().execute()
+                    # Batch-fetch ALL addon details in one query instead of N+1
+                    addon_ids = [row['addon_id'] for row in addons_result.data]
+                    all_addons_result = self.supabase.table('plan_addons').select(
+                        'id, addon_slug, feature_key, limit_increase'
+                    ).in_('id', addon_ids).execute()
 
-                        if addon_result.data:
-                            addon = addon_result.data
-                            # Check if addon applies to this feature
-                            if addon.get('feature_key') == feature_key:
-                                quantity = addon_row.get('quantity', 1)
-                                limit_increase = addon.get('limit_increase', 0) * quantity
-                                effective_limit += limit_increase
-                                logger.debug(
-                                    f"Add-on '{addon.get('addon_slug')}' increased {feature_key} "
-                                    f"by {limit_increase} for {user_id}:{domain}"
-                                )
+                    addon_map = {a['id']: a for a in (all_addons_result.data or [])}
+
+                    for addon_row in addons_result.data:
+                        addon = addon_map.get(addon_row['addon_id'])
+                        if addon and addon.get('feature_key') == feature_key:
+                            quantity = addon_row.get('quantity', 1)
+                            limit_increase = addon.get('limit_increase', 0) * quantity
+                            effective_limit += limit_increase
+                            logger.debug(
+                                f"Add-on '{addon.get('addon_slug')}' increased {feature_key} "
+                                f"by {limit_increase} for {user_id}:{domain}"
+                            )
 
             return (effective_limit if effective_limit > 0 else plan_hard_limit, False)
 
@@ -810,8 +814,14 @@ class FeatureGateEngine:
         flags = self._get_feature_flags()
         is_enabled = flags.get(feature_key, True)  # Default: enabled
 
+        # Resolve user_id to Supabase UUID once — all downstream DB calls
+        # (subscriptions, usage_counters, plan_overrides) use Supabase UUID.
+        # _get_subscription, _get_current_usage also do their own resolution,
+        # but resolving here avoids repeated DB lookups for each sub-call.
+        supabase_uuid = self._resolve_to_supabase_uuid(user_id)
+
         # 2. Subscription
-        sub = self._get_subscription(user_id, domain)
+        sub = self._get_subscription(supabase_uuid, domain)
 
         if not sub:
             return PolicyContext(
@@ -856,7 +866,7 @@ class FeatureGateEngine:
         # 4. Calculate effective limit (plan + add-ons + overrides)
         subscription_id = sub.get('id')
         effective_hard_limit, effective_is_unlimited = self._get_effective_limit(
-            user_id=user_id,
+            user_id=supabase_uuid,
             domain=domain,
             feature_key=feature_key,
             plan_hard_limit=feature_config.get('hard_limit'),
@@ -865,7 +875,7 @@ class FeatureGateEngine:
         )
 
         # 5. Usage counter (always from DB, never cached)
-        usage = self._get_current_usage(user_id, domain, feature_key)
+        usage = self._get_current_usage(supabase_uuid, domain, feature_key)
 
         # 5b. Counter reconciliation for create_product
         # Product deletions don't decrement usage_counters, causing drift.
@@ -877,10 +887,10 @@ class FeatureGateEngine:
         # this check, the gate sees usage=0 < hard_limit → ALLOW, bypassing
         # the limit entirely. Domain-agnostic: works for all domains/plans.
         if feature_key == 'create_product':
-            usage = self._reconcile_product_counter(user_id, domain, feature_key, usage)
+            usage = self._reconcile_product_counter(supabase_uuid, domain, feature_key, usage)
 
         return PolicyContext(
-            user_id=user_id,
+            user_id=user_id,  # Keep original for logging/audit trail
             domain=domain,
             feature_key=feature_key,
             plan_slug=plan_slug,
@@ -930,6 +940,39 @@ class FeatureGateEngine:
             logger.error(f"Feature flags fetch error: {e}", exc_info=True)
             return {}  # Default: all enabled
 
+    def _resolve_to_supabase_uuid(self, user_id: str) -> str:
+        """
+        Resolve Firebase UID → Supabase UUID if needed.
+
+        subscriptions.user_id is a FK to users.id (Supabase UUID).
+        Callers may pass either a Firebase UID (alphanumeric, no dashes)
+        or a Supabase UUID (36-char, with dashes). This method normalises
+        the input so all DB queries use the correct UUID.
+
+        Returns the Supabase UUID if resolution succeeds, otherwise the
+        original value (so the caller can still try the query).
+        """
+        # Already a UUID (36 chars with dashes)
+        if user_id and '-' in user_id and len(user_id) == 36:
+            return user_id
+
+        # Firebase UID: look up the Supabase UUID
+        try:
+            users_result = self.supabase.table('users').select('id').eq(
+                'firebase_uid', user_id
+            ).limit(1).execute()
+            if users_result.data and users_result.data[0].get('id'):
+                supabase_uuid = users_result.data[0]['id']
+                logger.debug(
+                    f"[FEATURE_GATE] Resolved Firebase UID → Supabase UUID: "
+                    f"{user_id[:8]}... → {supabase_uuid}"
+                )
+                return supabase_uuid
+        except Exception as e:
+            logger.warning(f"[FEATURE_GATE] UID resolution failed for {user_id}: {e}")
+
+        return user_id  # Fallback: return as-is
+
     def _get_subscription(self, user_id: str, domain: str) -> Optional[Dict]:
         """
         Get user's active subscription. Cached in Redis with versioned key.
@@ -938,7 +981,7 @@ class FeatureGateEngine:
         consistency after plan changes. When UpgradeOrchestrator increments
         the version, this cache automatically misses and refetches from DB.
         """
-        # Use versioned cache key
+        # Use versioned cache key (keyed on original user_id for cache consistency)
         cache_key = self._get_subscription_cache_key(user_id, domain)
 
         # Try cache
@@ -952,14 +995,19 @@ class FeatureGateEngine:
 
         # DB fallback
         try:
-            
-            # Step 1: Get subscription filtered by product_domain
-            # CRITICAL: Must filter by product_domain to find the correct
-            # domain's subscription when user has multiple subscriptions.
+            # Resolve Firebase UID → Supabase UUID.
+            # subscriptions.user_id is a FK to users.id (Supabase UUID).
+            supabase_uuid = self._resolve_to_supabase_uuid(user_id)
+
+            # Step 1: Get subscription filtered by product_domain.
+            # CRITICAL: Select both plan_id (Razorpay) AND pricing_plan_id (UUID FK).
+            # pricing_plan_id is the authoritative source of truth — it is always
+            # updated when the plan changes (upgrade, webhook, verify-payment).
+            # plan_id (Razorpay plan ID) may lag if an older code path didn't update it.
             result = self.supabase.table('subscriptions').select(
-                'id, user_id, plan_id, status, product_domain, created_at'
+                'id, user_id, plan_id, pricing_plan_id, plan_name, status, product_domain, created_at'
             ).match({
-                'user_id': user_id,
+                'user_id': supabase_uuid,
                 'product_domain': domain,
             }).in_(
                 'status', ['active', 'completed', 'past_due', 'grace_period', 'trialing', 'trial', 'processing', 'pending_upgrade', 'upgrade_failed']
@@ -967,28 +1015,53 @@ class FeatureGateEngine:
 
             if not result.data:
                 return None
-            
+
             sub = result.data[0]
-            razorpay_plan_id = sub.get('plan_id')
-            
-            if not razorpay_plan_id:
-                logger.warning(f"Subscription {sub.get('id')} has no plan_id")
-                return None
-            
-            # Step 2: Look up pricing_plans by razorpay_plan_id
-            
-            plan_result = self.supabase.table('pricing_plans').select(
-                'id, plan_slug, product_domain, pricing_version, is_active'
-            ).eq('razorpay_plan_id', razorpay_plan_id).eq(
-                'is_active', True
-            ).execute()
-            
-            if not plan_result.data:
-                logger.error(f"No pricing_plan found for razorpay_plan_id={razorpay_plan_id}")
-                return None
-            
-            plan = plan_result.data[0]
-            
+
+            # Step 2: Resolve to a pricing_plans row.
+            # Priority: pricing_plan_id (UUID FK) > plan_id (Razorpay ID) lookup.
+            # This makes the gate resilient against plan_id drift that occurs when
+            # old upgrade paths didn't update the Razorpay plan ID column.
+            plan = None
+
+            direct_pricing_plan_id = sub.get('pricing_plan_id')
+            if direct_pricing_plan_id:
+                # Fast path: pricing_plan_id is already the UUID FK — one lookup
+                direct_result = self.supabase.table('pricing_plans').select(
+                    'id, plan_slug, product_domain, pricing_version, is_active'
+                ).eq('id', direct_pricing_plan_id).limit(1).execute()
+                if direct_result.data:
+                    plan = direct_result.data[0]
+                    logger.debug(
+                        f"[FEATURE_GATE] Resolved via pricing_plan_id={direct_pricing_plan_id[:8]}..."
+                    )
+
+            if not plan:
+                # Fallback: derive from razorpay plan_id (legacy path)
+                razorpay_plan_id = sub.get('plan_id')
+                if not razorpay_plan_id:
+                    logger.warning(
+                        f"Subscription {sub.get('id')} has neither pricing_plan_id nor plan_id"
+                    )
+                    return None
+
+                plan_result = self.supabase.table('pricing_plans').select(
+                    'id, plan_slug, product_domain, pricing_version, is_active'
+                ).eq('razorpay_plan_id', razorpay_plan_id).eq(
+                    'is_active', True
+                ).execute()
+
+                if not plan_result.data:
+                    logger.error(
+                        f"No pricing_plan found for razorpay_plan_id={razorpay_plan_id}"
+                    )
+                    return None
+
+                plan = plan_result.data[0]
+                logger.debug(
+                    f"[FEATURE_GATE] Resolved via razorpay plan_id (fallback) → {plan.get('plan_slug')}"
+                )
+
             # Step 3: Combine subscription + plan data
             combined = {
                 'id': sub.get('id'),
@@ -998,7 +1071,7 @@ class FeatureGateEngine:
                 'pricing_plan_id': plan.get('id'),   # UUID for plan_features lookup
                 'plan_version': plan.get('pricing_version', 1),
                 'product_domain': plan.get('product_domain'),
-                'razorpay_plan_id': razorpay_plan_id,
+                'razorpay_plan_id': sub.get('plan_id'),
             }
 
             # Cache
@@ -1117,10 +1190,11 @@ class FeatureGateEngine:
     def _get_current_usage(self, user_id: str, domain: str, feature_key: str) -> int:
         """Get current usage count. NEVER cached — always real-time from DB."""
         try:
+            supabase_uuid = self._resolve_to_supabase_uuid(user_id)
             result = self.supabase.table('usage_counters').select(
                 'current_value, reset_at'
             ).match({
-                'user_id': user_id,
+                'user_id': supabase_uuid,
                 'domain': domain,
                 'feature_key': feature_key,
             }).limit(1).execute()
@@ -1165,16 +1239,24 @@ class FeatureGateEngine:
         Returns the reconciled usage value.
         """
         try:
-            # 1. Get Firebase UID from Supabase user_id
-            user_result = self.supabase.table('users').select(
-                'firebase_uid'
-            ).eq('id', user_id).limit(1).execute()
+            # 1. Get Firebase UID — user_id may be Firebase UID or Supabase UUID
+            # Detect format: Firebase UIDs are alphanumeric (no dashes),
+            # Supabase UUIDs are 36 chars with dashes.
+            if '-' in user_id and len(user_id) == 36:
+                # Already a Supabase UUID — look up Firebase UID
+                user_result = self.supabase.table('users').select(
+                    'firebase_uid'
+                ).eq('id', user_id).limit(1).execute()
 
-            if not user_result.data:
-                logger.warning(f"[RECONCILE] No user found for id={user_id}")
-                return counter_value  # Can't reconcile, use existing value
+                if not user_result.data:
+                    logger.warning(f"[RECONCILE] No user found for id={user_id}")
+                    return counter_value
 
-            firebase_uid = user_result.data[0].get('firebase_uid')
+                firebase_uid = user_result.data[0].get('firebase_uid')
+            else:
+                # Already a Firebase UID
+                firebase_uid = user_id
+
             if not firebase_uid:
                 return counter_value
 

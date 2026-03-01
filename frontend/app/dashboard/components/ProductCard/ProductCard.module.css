@@ -1171,6 +1171,37 @@
   transform: scale(0.95);
 }
 
+.variantDeleteButton {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border: 1px solid rgba(239, 68, 68, 0.2);
+  background: rgba(239, 68, 68, 0.06);
+  border-radius: 8px;
+  color: rgba(239, 68, 68, 0.5);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  opacity: 0;
+  flex-shrink: 0;
+}
+
+.variantItemWrapper:hover .variantDeleteButton {
+  opacity: 1;
+}
+
+.variantDeleteButton:hover {
+  background: rgba(239, 68, 68, 0.18);
+  border-color: rgba(239, 68, 68, 0.5);
+  color: #ef4444;
+  transform: scale(1.05);
+}
+
+.variantDeleteButton:active {
+  transform: scale(0.95);
+}
+
 /* ============================================
    Variant Edit Panel Content
    ============================================ */

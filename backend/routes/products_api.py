@@ -243,6 +243,36 @@ def create_product():
         from supabase_client import get_supabase_client
         db = get_supabase_client()
 
+        # ── Variant-aware limit pre-flight check ──
+        # @require_limit already incremented counter by 1 (for the product itself).
+        # But we also need to count variants toward the limit.
+        # Check if total items (1 product + N variants) would exceed the limit.
+        variants = data.get('variants', [])
+        variant_count = len(variants) if isinstance(variants, list) else 0
+        
+        if variant_count > 0:
+            feature_decision = getattr(g, 'feature_decision', None)
+            if feature_decision and not getattr(feature_decision, 'is_unlimited', False):
+                hard_limit = getattr(feature_decision, 'hard_limit', None)
+                current_usage = getattr(feature_decision, 'used', 0)
+                # current_usage already includes the +1 from @require_limit
+                # Check if adding variants would exceed the limit
+                if hard_limit is not None and (current_usage + variant_count) > hard_limit:
+                    # Roll back the product counter increment (was already done by @require_limit)
+                    _decrement_product_counter(g.user_id, db)
+                    remaining = max(0, hard_limit - (current_usage - 1))  # -1 because it was just incremented
+                    return jsonify({
+                        "success": False,
+                        "error": "PRODUCT_LIMIT_REACHED",
+                        "message": f"Adding this product with {variant_count} variant(s) would exceed your limit of {hard_limit}. "
+                                   f"You have {remaining} slot(s) remaining.",
+                        "code": "PRODUCT_LIMIT_REACHED",
+                        "current": current_usage - 1,
+                        "limit": hard_limit,
+                        "requested": 1 + variant_count,
+                        "remaining": remaining,
+                    }), 403
+
         # ── Resolve category_id if name provided ──
         category_id = data.get('categoryId') or None
         category_name = (data.get('category') or '').strip()
@@ -293,7 +323,6 @@ def create_product():
         product_id = product['id']
 
         # ── Insert variants if provided ──
-        variants = data.get('variants', [])
         if variants and isinstance(variants, list) and len(variants) > 0:
             variants_data = []
             for v in variants:
@@ -314,6 +343,26 @@ def create_product():
 
             try:
                 db.table('product_variants').insert(variants_data).execute()
+                
+                # Increment counter by variant count (product itself was already counted by @require_limit)
+                if variant_count > 0:
+                    try:
+                        counter_row = db.table('usage_counters').select('current_value').match({
+                            'user_id': g.user_id,
+                            'feature_key': 'create_product',
+                            'domain': 'shop',
+                        }).limit(1).execute()
+                        if counter_row.data:
+                            current = counter_row.data[0]['current_value'] or 0
+                            new_value = current + variant_count
+                            db.table('usage_counters').update({'current_value': new_value}).match({
+                                'user_id': g.user_id,
+                                'feature_key': 'create_product',
+                                'domain': 'shop',
+                            }).execute()
+                            logger.info(f"Incremented create_product counter by {variant_count} for variants ({current} → {new_value})")
+                    except Exception as counter_err:
+                        logger.warning(f"Variant counter increment failed (will reconcile): {counter_err}")
             except Exception as e:
                 logger.warning(f"Variant insert failed (product still created): {e}")
 
@@ -323,13 +372,13 @@ def create_product():
                 'user_id': g.firebase_uid,
                 'product_id': product_id,
                 'action': 'create',
-                'changes': {'name': product['name']},
-                'affected_count': 1,
+                'changes': {'name': product['name'], 'variant_count': variant_count},
+                'affected_count': 1 + variant_count,
             }).execute()
         except Exception as e:
             logger.warning(f"Audit log failed (non-critical): {e}")
 
-        logger.info(f"✅ Created product \"{product['name']}\" for user {g.firebase_uid}")
+        logger.info(f"✅ Created product \"{product['name']}\" with {variant_count} variant(s) for user {g.firebase_uid}")
 
         return jsonify({
             "success": True,

@@ -66,17 +66,31 @@ def get_overview():
         return jsonify({'success': False, 'error': 'Database not available'}), 503
     
     try:
-        user_id = request.user_id
+        firebase_uid = request.user_id
         period = request.args.get('period', '7d')
         start_date, end_date = get_date_range(period)
-        
+
         client = get_supabase_client()
-        
+
+        # analytics_daily stores Supabase UUIDs, not Firebase UIDs.
+        # Resolve Firebase UID → Supabase UUID before querying.
+        supabase_user_id = None
+        try:
+            uid_result = client.table('users').select('id').eq(
+                'firebase_uid', firebase_uid
+            ).limit(1).execute()
+            if uid_result.data:
+                supabase_user_id = uid_result.data[0].get('id')
+        except Exception:
+            pass
+        # Fall back to firebase_uid if resolution fails (legacy rows)
+        user_id = supabase_user_id or firebase_uid
+
         # Get aggregated analytics from analytics_daily table
         analytics_result = client.table('analytics_daily').select('*').eq(
             'user_id', user_id
         ).gte('date', start_date).lt('date', end_date).execute()
-        
+
         analytics_data = analytics_result.data or []
         
         # Calculate totals

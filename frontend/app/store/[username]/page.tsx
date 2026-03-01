@@ -21,6 +21,7 @@
  * @see https://developers.google.com/search/docs/appearance/structured-data/product
  */
 
+import { cache } from "react";
 import { notFound, redirect } from "next/navigation";
 import { headers } from "next/headers";
 import type { Metadata } from "next";
@@ -28,6 +29,10 @@ import { getStoreBySlug } from "@/lib/store";
 import { generateStoreMetadata } from "@/lib/seo/store-metadata";
 import { generateAllStoreSchemas } from "@/lib/seo/product-schema";
 import StoreClientPage from "./client-page";
+
+// Deduplicate SSR fetch — generateMetadata() and StorePage() share the same
+// request-scoped cache so getStoreBySlug is only called ONCE per render.
+const getStoreBySlugCached = cache(getStoreBySlug);
 
 // =============================================================================
 // ISR CONFIGURATION
@@ -61,7 +66,7 @@ export async function generateMetadata({
   const protocol = isLocalhost ? "http" : "https";
 
   // Fetch store data — same function used by the page
-  const storeData = await getStoreBySlug(username);
+  const storeData = await getStoreBySlugCached(username);
 
   // If store doesn't exist, return minimal metadata (notFound will render)
   if (!storeData) {
@@ -95,7 +100,7 @@ export default async function StorePage({ params }: StorePageProps) {
   }
 
   console.log(`[StorePage SSR] Fetching store for: "${username}"`);
-  const storeData = await getStoreBySlug(username);
+  const storeData = await getStoreBySlugCached(username);
   console.log(`[StorePage SSR] Result: ${storeData ? "FOUND" : "NULL"}`);
 
   if (!storeData) {

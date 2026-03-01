@@ -1719,7 +1719,7 @@ export default function BotSettingsView() {
     return (
       <div className={styles.container}>
         <div className={styles.header}>
-          <h1 className={styles.title}>🤖 AI Settings</h1>
+          <h1 className={styles.title}>AI Settings</h1>
           <p className={styles.subtitle}>Loading your configuration...</p>
         </div>
         <div className={styles.loadingContainer}>
@@ -1733,7 +1733,7 @@ export default function BotSettingsView() {
   return (
     <div className={styles.container}>
       <div className={styles.header}>
-        <h1 className={styles.title}>🤖 AI Settings</h1>
+        <h1 className={styles.title}>AI Settings</h1>
         <p className={styles.subtitle}>
           Configure your business profile for AI-powered responses
         </p>
@@ -2479,24 +2479,6 @@ export default function BotSettingsView() {
               </div>
             </div>
             <div className={styles.formGrid}>
-              <div className={styles.formGroup}>
-                <label className={styles.closedToggle}>
-                  <input
-                    type="checkbox"
-                    checked={data.ecommercePolicies.codAvailable}
-                    onChange={(e) =>
-                      setData({
-                        ...data,
-                        ecommercePolicies: {
-                          ...data.ecommercePolicies,
-                          codAvailable: e.target.checked,
-                        },
-                      })
-                    }
-                  />
-                  <span>Cash on Delivery (COD) Available</span>
-                </label>
-              </div>
               <div className={styles.formGroup}>
                 <label className={styles.closedToggle}>
                   <input

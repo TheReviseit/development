@@ -789,13 +789,38 @@ def send_notification_message():
         )
         
         if result.get('success'):
+            wamid = result.get('message_id')
             logger.info(
                 f"✅ [{correlation_id}] Notification sent to {to} "
-                f"(message_id: {result.get('message_id', 'N/A')})"
+                f"(message_id: {wamid or 'N/A'})"
             )
+
+            # ── Store in DB so the message shows in the chat view ────────────
+            try:
+                from supabase_client import store_message
+                contact_name = data.get('customer_name') or data.get('contact_name')
+                store_message(
+                    user_id=user_id,
+                    phone_number_id=phone_number_id,
+                    message_id=wamid or f"notif_{correlation_id}",
+                    direction='outbound',
+                    from_number=phone_number_id,
+                    to_number=to,
+                    message_type='text',
+                    message_body=message,
+                    status='sent',
+                    contact_name=contact_name,
+                    wamid=wamid,
+                    is_ai_generated=False,
+                )
+                logger.info(f"💾 [{correlation_id}] Notification stored in chat DB for {to}")
+            except Exception as store_err:
+                # Non-critical — message was already sent, only log the warning
+                logger.warning(f"⚠️ [{correlation_id}] Could not store notification in DB: {store_err}")
+
             return jsonify({
                 'success': True,
-                'message_id': result.get('message_id'),
+                'message_id': wamid,
                 'source': source,
                 'business_name': business_name
             }), 200

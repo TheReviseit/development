@@ -84,9 +84,9 @@ export async function GET(request: NextRequest) {
       });
     }
 
-    const { data: subscription } = await supabase
+    const { data: subscriptionRaw } = await supabase
       .from("subscriptions")
-      .select("pricing_plan_id")
+      .select("pricing_plan_id, plan_id")
       .eq("user_id", supabaseUserId)
       .eq("product_domain", "shop")
       .in("status", [
@@ -104,7 +104,53 @@ export async function GET(request: NextRequest) {
       .limit(1)
       .maybeSingle();
 
-    if (!subscription?.pricing_plan_id) {
+    if (!subscriptionRaw) {
+      // FAIL CLOSED: No subscription = deny access
+      return NextResponse.json({
+        allowed: false,
+        hard_limit: 0,
+        soft_limit: 0,
+        is_unlimited: false,
+        used: 0,
+        remaining: 0,
+        denial_reason: "NO_SUBSCRIPTION",
+        upgrade_required: true,
+        feature_key: featureKey,
+      });
+    }
+
+    // Resolve pricing_plan_id — may be null if only plan_id (Razorpay ID) is stored
+    let resolvedPricingPlanId: string | null =
+      subscriptionRaw.pricing_plan_id ?? null;
+
+    if (!resolvedPricingPlanId && subscriptionRaw.plan_id) {
+      // plan_id is the Razorpay plan ID — look up the pricing_plans row
+      const { data: pricingPlan } = await supabase
+        .from("pricing_plans")
+        .select("id")
+        .eq("razorpay_plan_id", subscriptionRaw.plan_id)
+        .eq("is_active", true)
+        .limit(1)
+        .maybeSingle();
+
+      resolvedPricingPlanId = pricingPlan?.id ?? null;
+
+      // Back-fill the FK so future lookups are fast
+      if (resolvedPricingPlanId) {
+        await supabase
+          .from("subscriptions")
+          .update({ pricing_plan_id: resolvedPricingPlanId })
+          .eq("user_id", supabaseUserId)
+          .eq("product_domain", "shop");
+        console.log(
+          `✅ [FeatureCheck] Back-filled pricing_plan_id=${resolvedPricingPlanId} for user ${firebaseUid}`,
+        );
+      }
+    }
+
+    const subscription = { pricing_plan_id: resolvedPricingPlanId };
+
+    if (!subscription.pricing_plan_id) {
       // FAIL CLOSED: No subscription = deny access
       return NextResponse.json({
         allowed: false,

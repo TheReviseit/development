@@ -242,7 +242,11 @@ class ProrationCalculator:
 
         if period_end <= period_start:
             raise ValueError(
-                f"period_end ({period_end}) must be after period_start ({period_start})"
+                f"period_end ({period_end}) must be after period_start ({period_start}). "
+                f"This usually means the subscription's billing period was never populated by "
+                f"the payment gateway (period_start == period_end). "
+                f"The UpgradeEngine should reconstruct the period via _resolve_billing_period() "
+                f"before calling calculate_proration()."
             )
 
     def _ensure_timezone(self, dt, name: str) -> datetime:

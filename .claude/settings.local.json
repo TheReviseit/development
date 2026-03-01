@@ -1,0 +1,7 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(find \"c:\\\\Users\\\\Sugan001\\\\Desktop\\\\Flowauxi\\\\backend\\\\routes\" -name \"*.py\" -exec wc -l {} ;)"
+    ]
+  }
+}

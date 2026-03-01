@@ -9,6 +9,7 @@ import styles from "./add-product.module.css";
 import ProductImageUpload from "../../components/ProductImageUpload";
 import SearchableDropdown from "../../components/SearchableDropdown";
 import type { SearchableOption } from "../../components/SearchableDropdown";
+import Toast from "@/app/components/Toast/Toast";
 
 // Variant type definition
 interface ProductVariant {
@@ -505,6 +506,26 @@ export default function AddProductPage() {
       return;
     }
 
+    if (!formData.colors || formData.colors.length === 0) {
+      setMessage({ type: "error", text: "Product color is required" });
+      return;
+    }
+
+    if (!formData.sizes || formData.sizes.length === 0) {
+      setMessage({ type: "error", text: "Product sizes are required" });
+      return;
+    }
+
+    const hasGlobalStock = !!formData.quantity;
+    const hasSizeStocks = formData.sizes.some(
+      (size) => !!formData.sizeStocks?.[size],
+    );
+    const hasVariantStocks = productVariants.length > 0;
+    if (!hasGlobalStock && !hasSizeStocks && !hasVariantStocks) {
+      setMessage({ type: "error", text: "Product stock quantity is required" });
+      return;
+    }
+
     setSaving(true);
     try {
       // If a new custom category was created, add it first
@@ -582,12 +603,14 @@ export default function AddProductPage() {
         const error = await response.json();
         // Handle structured 403 from product limit enforcement
         if (response.status === 403 && error.code === "PRODUCT_LIMIT_REACHED") {
-          setProductLimitReached(true);
           setMessage({
             type: "error",
-            text:
-              error.message ||
-              `Product limit of ${error.limit} reached. Upgrade to add more.`,
+            text: `Limit reached (${error.limit}). Remove a product to continue.`,
+          });
+        } else if (response.status === 403) {
+          setMessage({
+            type: "error",
+            text: "Limit reached. Remove a product to continue.",
           });
         } else {
           setMessage({
@@ -924,7 +947,9 @@ export default function AddProductPage() {
           </div>
 
           <div className={styles.field}>
-            <label className={styles.label}>Product Name</label>
+            <label className={styles.label}>
+              Product Name <span style={{ color: "#ef4444" }}>*</span>
+            </label>
             <input
               type="text"
               className={styles.input}
@@ -939,7 +964,7 @@ export default function AddProductPage() {
             <div className={styles.field}>
               <label className={styles.label}>Price</label>
               <div className={styles.inputWithPrefix}>
-                <span className={styles.inputPrefix}>$</span>
+                <span className={styles.inputPrefix}>₹</span>
                 <input
                   type="number"
                   className={`${styles.input} ${styles.inputWithPrefixField}`}
@@ -1032,7 +1057,7 @@ export default function AddProductPage() {
               {showOfferPrice && (
                 <div style={{ position: "relative" }}>
                   <div className={styles.inputWithPrefix}>
-                    <span className={styles.inputPrefix}>$</span>
+                    <span className={styles.inputPrefix}>₹</span>
                     <input
                       type="number"
                       className={`${styles.input} ${styles.inputWithPrefixField}`}
@@ -1100,7 +1125,9 @@ export default function AddProductPage() {
           {/* Color and Size Fields */}
           <div className={styles.fieldsRow}>
             <div className={styles.field}>
-              <label className={styles.label}>Color</label>
+              <label className={styles.label}>
+                Color <span style={{ color: "#ef4444" }}>*</span>
+              </label>
               <MultiSelectDropdown
                 options={colorOptions.map((c) => c.name)}
                 value={formData.colors || ""}
@@ -1110,7 +1137,9 @@ export default function AddProductPage() {
               />
             </div>
             <div className={styles.field}>
-              <label className={styles.label}>Sizes</label>
+              <label className={styles.label}>
+                Sizes <span style={{ color: "#ef4444" }}>*</span>
+              </label>
               <MultiSelectDropdown
                 options={sizeOptions}
                 value={formData.sizes || []}
@@ -1191,7 +1220,7 @@ export default function AddProductPage() {
                       <div key={size} className={styles.sizePriceItem}>
                         <label className={styles.sizePriceLabel}>{size}</label>
                         <div className={styles.sizePriceInputWrapper}>
-                          <span className={styles.currencySymbol}>$</span>
+                          <span className={styles.currencySymbol}>₹</span>
                           <input
                             type="number"
                             className={styles.sizePriceInput}
@@ -1312,7 +1341,9 @@ The CBD USED
 
         {/* Inventory Section */}
         <div className={styles.section}>
-          <h2 className={styles.sectionTitle}>Inventory</h2>
+          <h2 className={styles.sectionTitle}>
+            Inventory <span style={{ color: "#ef4444" }}>*</span>
+          </h2>
 
           {formData.sizes && formData.sizes.length > 0 ? (
             <div className={styles.sizeInventoryGrid}>
@@ -1322,9 +1353,14 @@ The CBD USED
                   <input
                     type="number"
                     className={styles.input}
-                    value={formData.sizeStocks?.[size] ?? ""}
+                    value={
+                      formData.sizeStocks?.[size] === 0
+                        ? ""
+                        : (formData.sizeStocks?.[size] ?? "")
+                    }
                     onChange={(e) => {
-                      const newQuantity = parseInt(e.target.value) || 0;
+                      const val = e.target.value;
+                      const newQuantity = val === "" ? 0 : parseInt(val, 10);
                       updateField("sizeStocks", {
                         ...(formData.sizeStocks || {}),
                         [size]: newQuantity,
@@ -1338,14 +1374,17 @@ The CBD USED
             </div>
           ) : (
             <div className={styles.field}>
-              <label className={styles.label}>Quantity</label>
+              <label className={styles.label}>
+                Quantity <span style={{ color: "#ef4444" }}>*</span>
+              </label>
               <input
                 type="number"
                 className={styles.input}
-                value={formData.quantity || ""}
-                onChange={(e) =>
-                  updateField("quantity", parseInt(e.target.value) || 0)
-                }
+                value={formData.quantity === 0 ? "" : formData.quantity}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  updateField("quantity", val === "" ? 0 : parseInt(val, 10));
+                }}
                 placeholder="1020"
                 min="0"
               />
@@ -1593,7 +1632,7 @@ The CBD USED
                               fontSize: "14px",
                             }}
                           >
-                            $
+                            ₹
                           </span>
                           <input
                             type="number"
@@ -1857,9 +1896,15 @@ The CBD USED
                               <input
                                 type="number"
                                 className={styles.input}
-                                value={variant.sizeStocks?.[sz] ?? ""}
+                                value={
+                                  variant.sizeStocks?.[sz] === 0
+                                    ? ""
+                                    : (variant.sizeStocks?.[sz] ?? "")
+                                }
                                 onChange={(e) => {
-                                  const newQty = parseInt(e.target.value) || 0;
+                                  const val = e.target.value;
+                                  const newQty =
+                                    val === "" ? 0 : parseInt(val, 10);
                                   updateVariant(variant.id, "sizeStocks", {
                                     ...(variant.sizeStocks || {}),
                                     [sz]: newQty,
@@ -1880,14 +1925,17 @@ The CBD USED
                           <input
                             type="number"
                             className={styles.input}
-                            value={variant.stock || ""}
-                            onChange={(e) =>
+                            value={
+                              variant.stock === 0 ? "" : (variant.stock ?? "")
+                            }
+                            onChange={(e) => {
+                              const val = e.target.value;
                               updateVariant(
                                 variant.id,
                                 "stock",
-                                parseInt(e.target.value) || 0,
-                              )
-                            }
+                                val === "" ? 0 : parseInt(val, 10),
+                              );
+                            }}
                             placeholder="Stock"
                           />
                         </div>
@@ -1936,9 +1984,6 @@ The CBD USED
             Discard
           </button>
           <div className={styles.footerRight}>
-            <button type="button" className={styles.scheduleBtn}>
-              Schedule
-            </button>
             <button
               type="button"
               className={styles.addProductBtn}
@@ -1953,13 +1998,11 @@ The CBD USED
 
       {/* Toast */}
       {message && (
-        <div
-          className={`${styles.toast} ${
-            message.type === "success" ? styles.toastSuccess : styles.toastError
-          }`}
-        >
-          {message.text}
-        </div>
+        <Toast
+          message={message.text}
+          type={message.type}
+          onClose={() => setMessage(null)}
+        />
       )}
     </div>
   );

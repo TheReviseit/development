@@ -7,6 +7,7 @@ interface PaymentData {
   razorpayKeyId: string;
   razorpayKeySecret: string;
   paymentsEnabled: boolean;
+  codAvailable: boolean;
 }
 
 interface PaymentSettingsProps {
@@ -29,6 +30,9 @@ export default function PaymentSettings({
   const [paymentsEnabled, setPaymentsEnabled] = useState(
     initialData?.paymentsEnabled || false,
   );
+  const [codAvailable, setCodAvailable] = useState(
+    initialData?.codAvailable || false,
+  );
   const [saving, setSaving] = useState(false);
   const [showSecret, setShowSecret] = useState(false);
   const [showHowItWorks, setShowHowItWorks] = useState(false);
@@ -39,6 +43,7 @@ export default function PaymentSettings({
       setRazorpayKeyId(initialData.razorpayKeyId || "");
       setRazorpayKeySecret(initialData.razorpayKeySecret || "");
       setPaymentsEnabled(initialData.paymentsEnabled || false);
+      setCodAvailable(initialData.codAvailable || false);
     }
   }, [initialData]);
 
@@ -62,6 +67,7 @@ export default function PaymentSettings({
           razorpayKeyId,
           razorpayKeySecret,
           paymentsEnabled,
+          codAvailable,
         }),
       });
 
@@ -120,6 +126,24 @@ export default function PaymentSettings({
               type="checkbox"
               checked={paymentsEnabled}
               onChange={(e) => setPaymentsEnabled(e.target.checked)}
+            />
+            <span className={styles.toggleSlider}></span>
+          </label>
+        </div>
+
+        {/* COD Toggle */}
+        <div className={styles.toggleRow}>
+          <div className={styles.toggleInfo}>
+            <span className={styles.toggleLabel}>Cash on Delivery (COD)</span>
+            <span className={styles.toggleHint}>
+              Allow customers to pay with cash on delivery
+            </span>
+          </div>
+          <label className={styles.toggle}>
+            <input
+              type="checkbox"
+              checked={codAvailable}
+              onChange={(e) => setCodAvailable(e.target.checked)}
             />
             <span className={styles.toggleSlider}></span>
           </label>

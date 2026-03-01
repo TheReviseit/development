@@ -22,6 +22,14 @@ from typing import Dict, Any, Optional
 import logging
 from datetime import datetime, timezone
 
+try:
+    from middleware import rate_limit
+except ImportError:
+    def rate_limit(**kwargs):
+        def decorator(f):
+            return f
+        return decorator
+
 # Initialize logger
 logger = logging.getLogger(__name__)
 
@@ -162,6 +170,7 @@ def error_response(message: str, error_code: str, status: int = 400) -> tuple:
 # =============================================================================
 
 @upgrade_bp.route('/options', methods=['GET'])
+@rate_limit(limit=30, window=60)
 @require_auth
 def get_upgrade_options():
     """
@@ -265,6 +274,7 @@ def get_upgrade_options():
 # =============================================================================
 
 @upgrade_bp.route('/checkout', methods=['POST'])
+@rate_limit(limit=10, window=60)
 @require_auth
 def create_upgrade_checkout():
     """
@@ -508,6 +518,88 @@ def create_upgrade_checkout():
 
 
 # =============================================================================
+# Slug Migration Helper
+# =============================================================================
+
+def _migrate_slug_on_upgrade(firebase_uid: str, supabase) -> None:
+    """
+    Atomically migrate a forced-fallback slug to the business name slug
+    after a plan upgrade to Business/Pro.
+
+    This runs immediately after payment verification so the store URL is
+    available via /store/<business-name> without requiring a manual profile save.
+
+    Safety:
+    - Only migrates if current slug == forced fallback (user_id[:8])
+    - Skips if business_name is blank (nothing to derive from)
+    - Skips if business already has a custom slug
+    - Idempotent: safe to call multiple times
+    """
+    import re
+    import threading
+
+    fallback_slug = firebase_uid[:8].lower()
+
+    # Read current business record
+    biz_result = supabase.table('businesses') \
+        .select('url_slug, business_name') \
+        .eq('user_id', firebase_uid) \
+        .maybe_single() \
+        .execute()
+
+    if not biz_result.data:
+        logger.info(f"slug_migration_skipped: no business record for {firebase_uid[:8]}...")
+        return
+
+    current_slug = biz_result.data.get('url_slug')
+    business_name = biz_result.data.get('business_name', '').strip()
+
+    # Only migrate if slug is still the forced fallback or missing
+    if current_slug and current_slug != fallback_slug:
+        logger.info(f"slug_migration_skipped: already has custom slug '{current_slug}' for {firebase_uid[:8]}...")
+        return
+
+    if not business_name:
+        logger.warning(f"slug_migration_skipped: blank business_name for {firebase_uid[:8]}...")
+        return
+
+    # Generate new slug from business name
+    new_slug = business_name.lower().strip()
+    new_slug = re.sub(r'[^a-z0-9]+', '-', new_slug)
+    new_slug = re.sub(r'-+', '-', new_slug).strip('-') or 'store'
+
+    # Check collision — don't steal another user's slug
+    collision_result = supabase.table('businesses').select('user_id').eq(
+        'url_slug_lower', new_slug.lower()
+    ).neq('user_id', firebase_uid).limit(1).execute()
+
+    if collision_result.data:
+        # Slug taken by another user — append suffix
+        import hashlib
+        suffix = hashlib.md5(firebase_uid.encode()).hexdigest()[:4]
+        new_slug = f"{new_slug}-{suffix}"
+        logger.info(f"slug_migration collision detected, using: {new_slug}")
+
+    # Write to DB (update by user_id)
+    supabase.table('businesses').update({
+        'url_slug': new_slug,
+        'url_slug_lower': new_slug.lower(),
+    }).eq('user_id', firebase_uid).execute()
+
+    logger.info(f"slug_migration_success: '{current_slug}' → '{new_slug}' for user {firebase_uid[:8]}...")
+
+    # Invalidate slug cache so the new slug resolves immediately
+    def _bust_cache():
+        try:
+            from utils.slug_resolver import invalidate_slug_cache
+            invalidate_slug_cache(firebase_uid, old_slug=current_slug)
+        except Exception as e:
+            logger.warning(f"slug_migration cache bust failed (non-critical): {e}")
+
+    threading.Thread(target=_bust_cache, daemon=True).start()
+
+
+# =============================================================================
 # POST /api/upgrade/verify-payment
 # =============================================================================
 
@@ -600,6 +692,24 @@ def verify_upgrade_payment():
         if not new_plan_id:
             return error_response('No target plan found', 'NO_TARGET_PLAN', 400)
 
+        # Resolve plan_slug AND razorpay_plan_id for the new plan.
+        #
+        # CRITICAL: The subscriptions.plan_id column stores the Razorpay plan ID.
+        # The feature gate engine uses plan_id to re-derive pricing_plan_id, so
+        # it MUST be updated here. Without this, the gate reads the old Starter
+        # Razorpay plan ID and returns Starter features even on Business plan.
+        new_plan_slug = None
+        new_razorpay_plan_id = None
+        try:
+            plan_row = supabase.table('pricing_plans').select('plan_slug, razorpay_plan_id').eq(
+                'id', new_plan_id
+            ).limit(1).execute()
+            if plan_row.data:
+                new_plan_slug = plan_row.data[0].get('plan_slug')
+                new_razorpay_plan_id = plan_row.data[0].get('razorpay_plan_id')
+        except Exception as slug_err:
+            logger.warning(f"verify_payment could not resolve plan details for {new_plan_id}: {slug_err}")
+
         update_data = {
             'status': 'active',
             'pricing_plan_id': new_plan_id,
@@ -610,6 +720,17 @@ def verify_upgrade_payment():
             'upgrade_initiated_at': None,
             'updated_at': datetime.now(timezone.utc).isoformat(),
         }
+
+        # Keep plan_name in sync with the new plan
+        if new_plan_slug:
+            update_data['plan_name'] = new_plan_slug
+
+        # CRITICAL: Update plan_id to new plan's Razorpay plan ID.
+        # The feature gate engine's _get_subscription reads plan_id to look up
+        # the pricing plan. Without this update it resolves to the old Starter
+        # plan and returns Starter features after upgrade.
+        if new_razorpay_plan_id:
+            update_data['plan_id'] = new_razorpay_plan_id
 
         # Set period from Razorpay if available
         current_start = rzp_sub.get('current_start')
@@ -627,15 +748,33 @@ def verify_upgrade_payment():
             'id', subscription['id']
         ).execute()
 
-        # 5. Invalidate caches
+        # 5. Invalidate caches.
+        # Use increment_subscription_version (not just invalidate_subscription_cache)
+        # so the versioned cache key is bumped — all in-flight requests that already
+        # hold a reference to the old versioned key will miss and re-fetch from DB.
         domain = subscription.get('product_domain', 'shop')
         try:
             from services.feature_gate_engine import get_feature_gate_engine
             engine = get_feature_gate_engine()
-            engine.invalidate_subscription_cache(str(user_id), domain)
+            engine.increment_subscription_version(str(user_id), domain)
             engine.invalidate_usage_counter_cache(str(user_id), domain, None)
         except Exception as cache_err:
             logger.warning(f"verify_payment cache invalidation failed: {cache_err}")
+
+        # 6. Trigger slug migration for shop domain upgrades.
+        #    When a Starter user upgrades to Business/Pro their slug is still
+        #    the forced fallback (user_id[:8]).  We migrate it immediately so
+        #    /store/<business-name> works without requiring a manual profile save.
+        #
+        #    IMPORTANT: businesses.user_id stores Firebase UID, not Supabase UUID.
+        #    g.firebase_uid is set by require_auth and is the correct key.
+        if domain == 'shop' and new_plan_slug in ('business', 'pro'):
+            try:
+                firebase_uid = getattr(g, 'firebase_uid', None) or user_id
+                _migrate_slug_on_upgrade(firebase_uid, supabase)
+            except Exception as slug_err:
+                # Non-critical — user can still trigger migration by re-saving profile
+                logger.warning(f"verify_payment slug migration failed (non-critical): {slug_err}")
 
         logger.info(
             f"verify_payment_activated user={user_id} sub={subscription['id']} "

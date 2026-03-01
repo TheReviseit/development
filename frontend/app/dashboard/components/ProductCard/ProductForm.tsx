@@ -517,7 +517,8 @@ export default function ProductForm({
       {/* Product/Service Name */}
       <div className={styles.field}>
         <label className={styles.label}>
-          {isEcommerce ? "Product Name" : "Service Name"}
+          {isEcommerce ? "Product Name" : "Service Name"}{" "}
+          <span style={{ color: "#ef4444" }}>*</span>
         </label>
         <input
           type="text"
@@ -890,9 +891,14 @@ export default function ProductForm({
                 <input
                   type="number"
                   className={styles.input}
-                  value={formData.sizeStocks?.[size] ?? ""}
+                  value={
+                    formData.sizeStocks?.[size] === 0
+                      ? ""
+                      : (formData.sizeStocks?.[size] ?? "")
+                  }
                   onChange={(e) => {
-                    const newQuantity = parseInt(e.target.value) || 0;
+                    const val = e.target.value;
+                    const newQuantity = val === "" ? 0 : parseInt(val, 10);
                     updateField("sizeStocks", {
                       ...(formData.sizeStocks || {}),
                       [size]: newQuantity,
@@ -910,10 +916,11 @@ export default function ProductForm({
             <input
               type="number"
               className={styles.input}
-              value={formData.quantity || ""}
-              onChange={(e) =>
-                updateField("quantity", parseInt(e.target.value) || 0)
-              }
+              value={formData.quantity === 0 ? "" : formData.quantity}
+              onChange={(e) => {
+                const val = e.target.value;
+                updateField("quantity", val === "" ? 0 : parseInt(val, 10));
+              }}
               placeholder="0"
               min="0"
             />

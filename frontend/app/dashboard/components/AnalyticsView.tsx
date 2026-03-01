@@ -115,6 +115,7 @@ export default function AnalyticsView() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [period, setPeriod] = useState<"7d" | "30d" | "90d">("7d");
+  const [chartGrouping, setChartGrouping] = useState<"Daily" | "Weekly" | "Monthly">("Daily");
 
   // Use Firebase UID for backend API calls (X-User-Id header expects Firebase UID)
   // user?.id is the Supabase UUID which the backend cannot map
@@ -122,8 +123,16 @@ export default function AnalyticsView() {
 
   // Feature gate: advanced_analytics — hidden for Starter plan
   const { subscription, isLoading: subLoading } = useSubscription(userId);
+  // Grant access when the plan is anything other than "starter".
+  // Also treat "active" subscriptions without a resolved plan_name as having
+  // access — the backend /subscriptions/status now patches stale plan_names
+  // automatically, so if it returned a name we trust it; if it returned
+  // "starter" but status is active we still rely on the name.
+  const STARTER_SLUGS = ["starter", "pending", ""];
   const canAccessAnalytics =
-    !subLoading && !!subscription && subscription.plan_name !== "starter";
+    !subLoading &&
+    !!subscription &&
+    !STARTER_SLUGS.includes(subscription.plan_name?.toLowerCase?.() ?? "");
 
   // Fetch analytics data
   const loadAnalytics = useCallback(async () => {
@@ -191,17 +200,88 @@ export default function AnalyticsView() {
       ]
     : [];
 
-  // Get chart data from trends
-  const chartData = analytics?.trends.sent || [];
-  const chartLabels =
-    analytics?.trends.dates.map((d) => {
+  // Build grouped chart data based on Daily/Weekly/Monthly toggle
+  const buildChartData = () => {
+    const rawDates = analytics?.trends.dates || [];
+    const rawSent = analytics?.trends.sent || [];
+
+    if (rawDates.length === 0) return { data: [], labels: [] };
+
+    if (chartGrouping === "Daily") {
+      return {
+        data: rawSent,
+        labels: rawDates.map((d) => {
+          const date = new Date(d);
+          return `${date.getMonth() + 1}/${date.getDate()}`;
+        }),
+      };
+    }
+
+    if (chartGrouping === "Weekly") {
+      const buckets: { label: string; total: number }[] = [];
+      rawDates.forEach((d, i) => {
+        const date = new Date(d);
+        // ISO week number
+        const dayOfWeek = date.getDay(); // 0=Sun
+        const monday = new Date(date);
+        monday.setDate(date.getDate() - ((dayOfWeek + 6) % 7));
+        const label = `${monday.getMonth() + 1}/${monday.getDate()}`;
+        const existing = buckets.find((b) => b.label === label);
+        if (existing) {
+          existing.total += rawSent[i] || 0;
+        } else {
+          buckets.push({ label, total: rawSent[i] || 0 });
+        }
+      });
+      return {
+        data: buckets.map((b) => b.total),
+        labels: buckets.map((b) => `W/${b.label}`),
+      };
+    }
+
+    // Monthly
+    const buckets: { label: string; total: number }[] = [];
+    rawDates.forEach((d, i) => {
       const date = new Date(d);
-      return `${date.getMonth() + 1}/${date.getDate()}`;
-    }) || [];
-  const maxValue = Math.max(...chartData, 1);
+      const label = date.toLocaleString("default", { month: "short" });
+      const existing = buckets.find((b) => b.label === label);
+      if (existing) {
+        existing.total += rawSent[i] || 0;
+      } else {
+        buckets.push({ label, total: rawSent[i] || 0 });
+      }
+    });
+    return {
+      data: buckets.map((b) => b.total),
+      labels: buckets.map((b) => b.label),
+    };
+  };
+
+  const { data: chartData, labels: chartLabels } = buildChartData();
+  const maxValue = Math.max(...(chartData.length ? chartData : [0]), 1);
+
+  // ─── Subscription still loading — show nothing yet ──────────────────
+  if (subLoading) {
+    return (
+      <div className={styles.analyticsView}>
+        <div className={styles.viewHeader}>
+          <div>
+            <h1 className={styles.viewTitle}>WhatsApp Analytics</h1>
+            <p className={styles.viewSubtitle}>
+              Monitor your messaging performance and engagement
+            </p>
+          </div>
+        </div>
+        <div style={{ textAlign: "center", padding: "60px", color: "#6b7280" }}>
+          <div style={{ fontSize: "32px", marginBottom: "16px" }}>📊</div>
+          Loading analytics...
+        </div>
+      </div>
+    );
+  }
 
   // ─── STARTER PLAN: Full-page upgrade gate ───────────────────────────
-  if (!subLoading && !canAccessAnalytics) {
+  if (!canAccessAnalytics) {
     return (
       <div className={styles.analyticsView}>
         {/* Header */}
@@ -663,9 +743,10 @@ export default function AnalyticsView() {
                         gap: "4px",
                       }}
                     >
-                      {["Daily", "Weekly", "Monthly"].map((label) => (
+                      {(["Daily", "Weekly", "Monthly"] as const).map((label) => (
                         <button
                           key={label}
+                          onClick={() => setChartGrouping(label)}
                           style={{
                             padding: "6px 12px",
                             fontSize: "12px",
@@ -674,8 +755,8 @@ export default function AnalyticsView() {
                             borderRadius: "6px",
                             cursor: "pointer",
                             background:
-                              label === "Daily" ? "#2a2a2a" : "transparent",
-                            color: label === "Daily" ? "#ffffff" : "#6b7280",
+                              chartGrouping === label ? "#2a2a2a" : "transparent",
+                            color: chartGrouping === label ? "#ffffff" : "#6b7280",
                             transition: "all 0.2s",
                           }}
                         >
@@ -753,41 +834,28 @@ export default function AnalyticsView() {
                         ))}
 
                         {/* Bars */}
-                        {chartData.map((value, index) => (
-                          <div
-                            key={index}
-                            style={{
-                              flex: 1,
-                              height: "100%",
-                              display: "flex",
-                              alignItems: "flex-end",
-                              position: "relative",
-                              zIndex: 1,
-                            }}
-                          >
+                        {chartData.map((value, index) => {
+                          const barHeight = maxValue > 0 ? (value / maxValue) * 100 : 0;
+                          return (
                             <div
-                              className="chart-bar"
-                              style={{
-                                width: "100%",
-                                height: `${
-                                  maxValue > 0 ? (value / maxValue) * 100 : 0
-                                }%`,
-                                background:
-                                  "linear-gradient(180deg, #e5e5e5 0%, #a3a3a3 100%)",
-                                borderRadius: "3px 3px 0 0",
-                                minHeight: value > 0 ? "4px" : "0",
-                                transition: "height 0.3s ease",
-                                cursor: "pointer",
-                                position: "relative",
-                              }}
+                              key={index}
                               title={`${chartLabels[index]}: ${value} messages`}
+                              className="chart-bar-wrapper"
+                              style={{
+                                flex: 1,
+                                position: "relative",
+                                zIndex: 1,
+                                display: "flex",
+                                alignItems: "flex-end",
+                                height: "100%",
+                              }}
                             >
                               {/* Tooltip */}
                               <div
                                 className="chart-tooltip"
                                 style={{
                                   position: "absolute",
-                                  bottom: "100%",
+                                  bottom: `calc(${barHeight}% + 8px)`,
                                   left: "50%",
                                   transform: "translateX(-50%)",
                                   background: "#1f1f1f",
@@ -800,7 +868,6 @@ export default function AnalyticsView() {
                                   transition: "all 0.2s",
                                   zIndex: 100,
                                   pointerEvents: "none",
-                                  marginBottom: "8px",
                                 }}
                               >
                                 <div
@@ -822,9 +889,23 @@ export default function AnalyticsView() {
                                   {value.toLocaleString()} messages
                                 </div>
                               </div>
+                              {/* The actual bar */}
+                              <div
+                                className="chart-bar"
+                                style={{
+                                  width: "100%",
+                                  height: `${barHeight}%`,
+                                  minHeight: value > 0 ? "4px" : "0",
+                                  background:
+                                    "linear-gradient(180deg, #6ee7b7 0%, #22c55e 100%)",
+                                  borderRadius: "3px 3px 0 0",
+                                  transition: "height 0.3s ease",
+                                  cursor: "pointer",
+                                }}
+                              />
                             </div>
-                          </div>
-                        ))}
+                          );
+                        })}
                       </div>
 
                       {/* X-Axis Labels */}
@@ -835,19 +916,26 @@ export default function AnalyticsView() {
                           marginTop: "8px",
                         }}
                       >
-                        {chartData.map((_, index) => (
-                          <div
-                            key={index}
-                            style={{
-                              flex: 1,
-                              textAlign: "center",
-                              fontSize: "10px",
-                              color: "#6b7280",
-                            }}
-                          >
-                            {index + 1}
-                          </div>
-                        ))}
+                        {chartData.map((_, index) => {
+                          // Show label only for every Nth bar to avoid crowding
+                          const total = chartData.length;
+                          const showEvery = total <= 10 ? 1 : total <= 20 ? 2 : total <= 31 ? 3 : 7;
+                          const showLabel = index % showEvery === 0;
+                          return (
+                            <div
+                              key={index}
+                              style={{
+                                flex: 1,
+                                textAlign: "center",
+                                fontSize: "10px",
+                                color: "#6b7280",
+                                overflow: "hidden",
+                              }}
+                            >
+                              {showLabel ? chartLabels[index] : ""}
+                            </div>
+                          );
+                        })}
                       </div>
                     </div>
                   </div>
@@ -866,14 +954,14 @@ export default function AnalyticsView() {
             transform: rotate(360deg);
           }
         }
-        .chart-bar:hover {
+        .chart-bar-wrapper:hover .chart-bar {
           background: linear-gradient(
             180deg,
-            #ffffff 0%,
-            #d4d4d4 100%
+            #a7f3d0 0%,
+            #4ade80 100%
           ) !important;
         }
-        .chart-bar:hover .chart-tooltip {
+        .chart-bar-wrapper:hover .chart-tooltip {
           opacity: 1 !important;
           visibility: visible !important;
         }

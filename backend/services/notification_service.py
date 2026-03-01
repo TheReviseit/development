@@ -514,16 +514,39 @@ Thank you for choosing {request.business_name}! ❤️""".strip()
             
             self.circuit_breaker.record_success()
             latency = (time.time() - start_time) * 1000
-            
+            wamid = result.get('message_id')
+
             logger.info(
                 f"✅ [{correlation_id}] WhatsApp sent successfully to {to} "
-                f"(latency: {latency:.0f}ms, message_id: {result.get('message_id', 'N/A')})"
+                f"(latency: {latency:.0f}ms, message_id: {wamid or 'N/A'})"
             )
-            
+
+            # ── Store in DB so the message appears in the chat view ──────────
+            try:
+                from supabase_client import store_message
+                store_message(
+                    user_id=request.business_user_id,
+                    phone_number_id=phone_number_id,
+                    message_id=wamid or f"notif_{request.order_id}_{request.status}",
+                    direction='outbound',
+                    from_number=phone_number_id,
+                    to_number=to,
+                    message_type='text',
+                    message_body=message,
+                    status='sent',
+                    contact_name=request.customer_name,
+                    wamid=wamid,
+                    is_ai_generated=False,
+                )
+                logger.info(f"💾 [{correlation_id}] Notification message stored in chat DB")
+            except Exception as store_err:
+                # Non-critical — message was sent, storage failure shouldn't surface as error
+                logger.warning(f"⚠️ [{correlation_id}] Could not store notification in DB: {store_err}")
+
             return NotificationResult(
                 success=True,
                 channel=NotificationChannel.WHATSAPP,
-                message_id=result.get('message_id'),
+                message_id=wamid,
                 latency_ms=latency,
                 correlation_id=correlation_id
             )

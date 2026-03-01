@@ -90,7 +90,7 @@ class UpgradeOptions:
     available_plans: List[Dict]
     recommended_plan: Optional[Dict]
     feature_differences: Dict[str, Any]
-    usage_summary: Dict[str, int]
+    usage_summary: Dict[str, Any]  # {feature_key: {used, limit, is_unlimited}}
     available_addons: List[Dict]
     domain: str
 
@@ -239,11 +239,28 @@ class UpgradeEngine:
             # 4. Sort by tier_level (ascending: starter → business → pro)
             enriched_plans.sort(key=lambda p: p.get('tier_level', 999))
 
-            # 5. Get usage summary from FeatureGateEngine
-            usage = self._feature_gate_engine.get_usage_summary(user_id, domain)
+            # 5. Get usage summary from FeatureGateEngine and enrich with plan limits
+            usage_raw = self._feature_gate_engine.get_usage_summary(user_id, domain)
+
+            # Attach hard_limit for each feature so the frontend can render proper
+            # percentage bars (used / limit) instead of using raw count as %.
+            plan_features_map = (
+                self._get_plan_features_map(current_plan['pricing_plan_id'])
+                if current_plan and current_plan.get('pricing_plan_id')
+                else {}
+            )
+            usage = {
+                feature_key: {
+                    'used': count,
+                    'limit': (plan_features_map.get(feature_key) or {}).get('hard_limit'),
+                    'is_unlimited': (plan_features_map.get(feature_key) or {}).get('is_unlimited', False),
+                }
+                for feature_key, count in usage_raw.items()
+            }
 
             # 6. Calculate recommended plan (smart multi-feature analysis)
-            recommended = self._calculate_recommended_plan(current_plan, enriched_plans, usage)
+            # Uses raw counts (Dict[str, int]) — not the enriched shape
+            recommended = self._calculate_recommended_plan(current_plan, enriched_plans, usage_raw)
 
             # 7. Calculate feature differences (gained/lost/changed limits)
             feature_diffs = self._calculate_feature_differences(current_plan, enriched_plans)
@@ -424,11 +441,12 @@ class UpgradeEngine:
             # 7. Calculate proration (if active subscription)
             proration = None
             if current_sub and current_sub.get('status') == 'active':
+                period_start, period_end = self._resolve_billing_period(current_sub)
                 proration = self._proration_calc.calculate_proration(
                     old_amount_paise=current_plan['amount_paise'],
                     new_amount_paise=target_plan['amount_paise'],
-                    period_start=current_sub['current_period_start'],
-                    period_end=current_sub['current_period_end']
+                    period_start=period_start,
+                    period_end=period_end
                 )
 
             # ALLOWED
@@ -471,6 +489,53 @@ class UpgradeEngine:
     # =========================================================================
     # Private Methods (Implementation Details)
     # =========================================================================
+
+    def _resolve_billing_period(self, subscription: Dict):
+        """
+        Return (period_start, period_end) for proration, handling corrupt/uninitialized rows.
+
+        Razorpay subscriptions sometimes have period_start == period_end (both set to the
+        subscription creation timestamp) when the webhook hasn't fired yet or the payment
+        gateway didn't populate the fields.  In that case we reconstruct a sensible 30-day
+        window from created_at so the proration calculation doesn't crash.
+
+        Returns:
+            Tuple[datetime, datetime]: (period_start, period_end) — both UTC-aware,
+            guaranteed period_end > period_start.
+        """
+        from datetime import timedelta
+
+        raw_start = subscription.get('current_period_start')
+        raw_end   = subscription.get('current_period_end')
+
+        # Parse both fields through the calculator's own parser so we get tz-aware datetimes
+        # without duplicating the parsing logic.
+        parse = self._proration_calc._ensure_timezone
+
+        period_start = parse(raw_start, 'current_period_start') if raw_start else None
+        period_end   = parse(raw_end,   'current_period_end')   if raw_end   else None
+
+        # ── Detect corrupt / uninitialized period ───────────────────────────────
+        # This happens when both timestamps are identical (Razorpay not yet settled)
+        # or when either field is missing entirely.
+        if period_start is None or period_end is None or period_end <= period_start:
+            self.logger.warning(
+                "billing_period_corrupt_reconstructed",
+                extra={
+                    "subscription_id": subscription.get('id'),
+                    "raw_start": str(raw_start),
+                    "raw_end":   str(raw_end),
+                    "action": "reconstructing_30d_window_from_created_at",
+                }
+            )
+            # Anchor the period on created_at (or now as last resort)
+            anchor_raw = subscription.get('created_at') or subscription.get('start_date')
+            anchor = parse(anchor_raw, 'created_at') if anchor_raw else datetime.now(timezone.utc)
+
+            period_start = anchor
+            period_end   = anchor + timedelta(days=30)
+
+        return period_start, period_end
 
     def _get_subscription(self, user_id: str, domain: str) -> Optional[Dict]:
         """Get active subscription for user+domain."""
@@ -579,21 +644,26 @@ class UpgradeEngine:
         }
         """
         if not current_plan:
-            # No current plan, all features are "gained"
+            # No current plan — batch-fetch all target plan features in one query
+            all_plan_ids = [plan['id'] for plan in target_plans]
+            features_batch = self._get_plan_features_batch(all_plan_ids)
             return {
                 plan['plan_slug']: {
-                    "gained": list(self._get_plan_features_map(plan['id']).keys()),
+                    "gained": list(features_batch.get(plan['id'], {}).keys()),
                     "lost": [],
                     "limit_changes": {}
                 }
                 for plan in target_plans
             }
 
-        current_features = self._get_plan_features_map(current_plan['pricing_plan_id'])
+        # Batch-fetch current + all target plan features in a SINGLE query
+        all_plan_ids = [current_plan['pricing_plan_id']] + [t['id'] for t in target_plans]
+        features_batch = self._get_plan_features_batch(all_plan_ids)
+        current_features = features_batch.get(current_plan['pricing_plan_id'], {})
 
         diffs = {}
         for target in target_plans:
-            target_features = self._get_plan_features_map(target['id'])
+            target_features = features_batch.get(target['id'], {})
 
             # Feature keys gained/lost
             current_keys = set(current_features.keys())
@@ -630,6 +700,27 @@ class UpgradeEngine:
             row['feature_key']: row
             for row in (result.data or [])
         }
+
+    def _get_plan_features_batch(self, plan_ids: List[str]) -> Dict[str, Dict[str, Dict]]:
+        """
+        Batch-fetch features for MULTIPLE plans in a single query.
+        Returns {plan_id: {feature_key: row}}.
+        Eliminates N+1 when comparing features across plans.
+        """
+        if not plan_ids:
+            return {}
+        result = self._supabase.table('plan_features').select('*').in_(
+            'plan_id', plan_ids
+        ).execute()
+
+        features_by_plan: Dict[str, Dict[str, Dict]] = {}
+        for row in (result.data or []):
+            pid = row['plan_id']
+            if pid not in features_by_plan:
+                features_by_plan[pid] = {}
+            features_by_plan[pid][row['feature_key']] = row
+
+        return features_by_plan
 
     def _calculate_recommended_plan(
         self,

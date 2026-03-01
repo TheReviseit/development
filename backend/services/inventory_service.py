@@ -543,19 +543,31 @@ class InventoryService:
         
         try:
             # Use atomic RPC - trusts reservations, never re-validates stock
-            result = self.db.rpc('confirm_reservations_atomic', {
-                'p_reservation_ids': reservation_ids,
-                'p_order_id': order_id,
-                'p_idempotency_key': idempotency_key
-            }).execute()
-            
-            if not result.data:
+            try:
+                result = self.db.rpc('confirm_reservations_atomic', {
+                    'p_reservation_ids': reservation_ids,
+                    'p_order_id': order_id,
+                    'p_idempotency_key': idempotency_key
+                }).execute()
+                data = result.data
+            except Exception as rpc_exc:
+                # The postgrest client raises APIError when the RPC returns a JSON
+                # object that doesn't match SingleAPIResponse shape — this includes
+                # valid idempotency responses like {'message': 'Already processed',
+                # 'success': True, 'idempotent': True}.  Unwrap and handle them here.
+                raw = getattr(rpc_exc, 'json', None) or getattr(rpc_exc, 'args', [None])[0]
+                if isinstance(raw, dict) and raw.get('success') and (
+                    raw.get('idempotent') or raw.get('already_confirmed')
+                ):
+                    logger.info(f"Idempotent (via APIError path): Order {order_id} already confirmed")
+                    return True
+                raise  # not an idempotency response — let the outer handler classify it
+
+            if not data:
                 raise ReservationError(
                     message="Failed to confirm reservations - no response from atomic RPC",
                     correlation_id=correlation_id
                 )
-            
-            data = result.data
             
             # Handle idempotent responses
             if data.get('idempotent') or data.get('already_confirmed'):

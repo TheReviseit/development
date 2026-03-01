@@ -667,27 +667,81 @@ def get_phone_number_uuid(phone_number_id: str) -> Optional[str]:
 def get_business_id_for_user(user_id: str) -> Optional[str]:
     """
     Get the business_id (connected_business_managers.id) for a user.
-    
+
     Args:
-        user_id: The user UUID
-        
+        user_id: Firebase UID or Supabase UUID for the user
+
     Returns:
         The business manager UUID or None
     """
     client = get_supabase_client()
     if not client:
         return None
-    
-    try:
-        result = client.table('connected_business_managers').select('id').eq(
-            'user_id', user_id
-        ).eq('is_active', True).limit(1).execute()
 
-        if result.data and len(result.data) > 0:
-            return result.data[0].get('id')
+    try:
+        # First try to resolve Firebase UID → Supabase UUID
+        supabase_uuid = None
+        try:
+            uid_result = client.table('users').select('id').eq('firebase_uid', user_id).limit(1).execute()
+            if uid_result.data and len(uid_result.data) > 0:
+                supabase_uuid = uid_result.data[0].get('id')
+        except Exception:
+            pass
+
+        # Try with supabase UUID first (if resolved), then fall back to raw user_id
+        for lookup_id in filter(None, [supabase_uuid, user_id]):
+            result = client.table('connected_business_managers').select('id').eq(
+                'user_id', lookup_id
+            ).eq('is_active', True).limit(1).execute()
+
+            if result.data and len(result.data) > 0:
+                return result.data[0].get('id')
     except Exception as e:
         print(f"⚠️ Could not get business ID: {e}")
-    
+
+    return None
+
+
+def get_business_id_for_phone(phone_number_id: str) -> Optional[str]:
+    """
+    Get the business_id (connected_business_managers.id) via phone_number_id.
+
+    Lookup chain:
+      connected_phone_numbers → connected_whatsapp_accounts → connected_business_managers
+
+    Args:
+        phone_number_id: The Meta phone number ID (e.g. '829493816924844')
+
+    Returns:
+        The business manager UUID or None
+    """
+    client = get_supabase_client()
+    if not client:
+        return None
+
+    try:
+        phone_result = client.table('connected_phone_numbers').select(
+            'whatsapp_account_id'
+        ).eq('phone_number_id', phone_number_id).eq('is_active', True).limit(1).execute()
+
+        if not (phone_result.data and len(phone_result.data) > 0):
+            return None
+
+        waba_id = phone_result.data[0].get('whatsapp_account_id')
+        if not waba_id:
+            return None
+
+        waba_result = client.table('connected_whatsapp_accounts').select(
+            'business_manager_id'
+        ).eq('id', waba_id).eq('is_active', True).limit(1).execute()
+
+        if not (waba_result.data and len(waba_result.data) > 0):
+            return None
+
+        return waba_result.data[0].get('business_manager_id')
+    except Exception as e:
+        print(f"⚠️ Could not get business ID via phone: {e}")
+
     return None
 
 
@@ -1005,10 +1059,12 @@ def store_message(
         return None
     
     try:
-        # Get business_id from user_id
-        business_id = get_business_id_for_user(user_id)
+        # Get business_id — try user lookup first, then fall back to phone_number_id
+        business_id = get_business_id_for_user(user_id) if user_id else None
+        if not business_id and phone_number_id:
+            business_id = get_business_id_for_phone(phone_number_id)
         if not business_id:
-            print(f"⚠️ No business found for user {user_id}")
+            print(f"⚠️ No business found for user {user_id} / phone_number_id {phone_number_id}")
             return None
         
         # Determine customer phone (the external party)

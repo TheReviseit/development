@@ -65,7 +65,7 @@ interface ProductCardProps {
   isEcommerce: boolean;
   productCategories: string[];
   onUpdate: (id: string, field: keyof ProductService, value: unknown) => void;
-  onRemove: (id: string) => void;
+  onRemove: (id: string) => void | Promise<void>;
   onImageDeleted?: () => void; // Optional callback to trigger save after image deletion
   onSave?: (product: ProductService) => void; // Callback to trigger save when editing is done
 }
@@ -862,9 +862,11 @@ function VariantEditPanel({
 function VariantsDisplay({
   variants,
   onEditVariant,
+  onDeleteVariant,
 }: {
   variants: ProductVariant[];
   onEditVariant: (variant: ProductVariant, index: number) => void;
+  onDeleteVariant: (variant: ProductVariant, index: number) => void;
 }) {
   const [isExpanded, setIsExpanded] = React.useState(false);
   const [selectedImageUrl, setSelectedImageUrl] = React.useState<string | null>(
@@ -955,7 +957,7 @@ function VariantsDisplay({
                 </div>
               </div>
 
-              {/* Edit Button */}
+              {/* Variant Actions */}
               <div className={styles.variantActions}>
                 <button
                   type="button"
@@ -977,6 +979,27 @@ function VariantsDisplay({
                     <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
                   </svg>
                 </button>
+                <button
+                  type="button"
+                  className={styles.variantDeleteButton}
+                  onClick={() => onDeleteVariant(variant, idx)}
+                  title="Delete variant"
+                  aria-label="Delete variant"
+                >
+                  <svg
+                    width="14"
+                    height="14"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2.5"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  >
+                    <line x1="18" y1="6" x2="6" y2="18" />
+                    <line x1="6" y1="6" x2="18" y2="18" />
+                  </svg>
+                </button>
               </div>
             </div>
           ))}
@@ -994,7 +1017,9 @@ function VariantsDisplay({
   );
 }
 
-export default function ProductCard({
+// React.memo prevents re-renders when parent state changes but this card's
+// props haven't changed. Critical for product grids with many cards.
+const ProductCard = React.memo(function ProductCard({
   product,
   index,
   isEcommerce,
@@ -1021,6 +1046,54 @@ export default function ProductCard({
   >(null);
   const [isVariantPanelOpen, setIsVariantPanelOpen] = React.useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = React.useState(false);
+  const [isDeletingProduct, setIsDeletingProduct] = React.useState(false);
+
+  // State for variant deletion confirmation
+  const [variantToDelete, setVariantToDelete] =
+    React.useState<{ variant: ProductVariant; index: number } | null>(null);
+  const [isDeletingVariant, setIsDeletingVariant] = React.useState(false);
+
+  // Open variant delete confirmation
+  const handleDeleteVariantRequest = (
+    variant: ProductVariant,
+    index: number,
+  ) => {
+    setVariantToDelete({ variant, index });
+  };
+
+  // Confirmed — permanently delete variant from DB + Cloudinary
+  const handleDeleteVariantConfirm = async () => {
+    if (!variantToDelete) return;
+    const { variant } = variantToDelete;
+
+    setIsDeletingVariant(true);
+    try {
+      const response = await fetch(
+        `/api/products/${product.id}/variants/${variant.id}`,
+        { method: "DELETE" },
+      );
+
+      if (!response.ok) {
+        const err = await response.json().catch(() => ({}));
+        console.error("Variant delete failed:", err);
+        // Still close the modal — don't leave user stuck
+      } else {
+        // Remove variant from local state immediately
+        const newVariants = (product.variants as ProductVariant[]).filter(
+          (_, i) => i !== variantToDelete.index,
+        );
+        onUpdate(product.id, "variants", newVariants);
+        if (onSave) {
+          setTimeout(() => onSave({ ...product, variants: newVariants }), 100);
+        }
+      }
+    } catch (error) {
+      console.error("Error deleting variant:", error);
+    } finally {
+      setIsDeletingVariant(false);
+      setVariantToDelete(null);
+    }
+  };
 
   // Handle variant edit
   const handleEditVariant = (variant: ProductVariant, index: number) => {
@@ -1769,6 +1842,7 @@ export default function ProductCard({
           <VariantsDisplay
             variants={product.variants as ProductVariant[]}
             onEditVariant={handleEditVariant}
+            onDeleteVariant={handleDeleteVariantRequest}
           />
         )}
 
@@ -1796,18 +1870,41 @@ export default function ProductCard({
       {/* Confirmation Modal for product deletion */}
       <ConfirmationModal
         isOpen={showDeleteConfirm}
-        onClose={() => setShowDeleteConfirm(false)}
-        onConfirm={() => {
-          onRemove(product.id);
-          setShowDeleteConfirm(false);
+        onClose={() => !isDeletingProduct && setShowDeleteConfirm(false)}
+        onConfirm={async () => {
+          setIsDeletingProduct(true);
+          try {
+            await onRemove(product.id);
+          } finally {
+            setIsDeletingProduct(false);
+            setShowDeleteConfirm(false);
+          }
         }}
         title="Delete Product"
         message={`Are you sure you want to delete "${product.name}"? This action cannot be undone.`}
         confirmText="Delete Product"
         type="danger"
+        isLoading={isDeletingProduct}
+      />
+
+      {/* Confirmation Modal for variant deletion */}
+      <ConfirmationModal
+        isOpen={!!variantToDelete}
+        onClose={() => !isDeletingVariant && setVariantToDelete(null)}
+        onConfirm={handleDeleteVariantConfirm}
+        title="Delete Variant"
+        message={
+          variantToDelete
+            ? `Are you sure you want to delete the "${[variantToDelete.variant.color, variantToDelete.variant.size].filter(Boolean).join(" / ")}" variant? Its image will also be removed from storage. This cannot be undone.`
+            : ""
+        }
+        confirmText="Delete Variant"
+        type="danger"
+        isLoading={isDeletingVariant}
       />
     </div>
   );
-}
+});
 
+export default ProductCard;
 export type { ProductService, ProductCardProps };

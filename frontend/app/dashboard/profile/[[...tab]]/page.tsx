@@ -45,6 +45,7 @@ export default function ProfilePage() {
     razorpayKeyId: "",
     razorpayKeySecret: "",
     paymentsEnabled: false,
+    codAvailable: false,
   });
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -71,74 +72,63 @@ export default function ProfilePage() {
     null,
   );
 
-  // Load profile data + feature check
+  // Load profile data + feature checks in PARALLEL (batched for performance)
   useEffect(() => {
-    const loadProfile = async () => {
+    const loadAll = async () => {
       try {
-        const response = await fetch("/api/business/get");
-        if (response.ok) {
-          const result = await response.json();
+        // Fire all requests in parallel instead of sequentially
+        const [profileRes, slugFeatureRes, invoiceFeatureRes] = await Promise.all([
+          fetch("/api/business/get"),
+          fetch("/api/features/check?feature=custom_domain"),
+          fetch("/api/features/check?feature=invoice_customization"),
+        ]);
+
+        // Process profile
+        if (profileRes.ok) {
+          const result = await profileRes.json();
           if (result.data) {
             setProfile({
               businessName: result.data.businessName || "",
               logoUrl: result.data.logoUrl || "",
               logoPublicId: result.data.logoPublicId || "",
             });
+            const ep = result.data.ecommercePolicies || result.data.ecommerce_policies || {};
             setPaymentData({
               razorpayKeyId: result.data.razorpayKeyId || "",
               razorpayKeySecret: result.data.razorpayKeySecret || "",
               paymentsEnabled: result.data.paymentsEnabled || false,
+              codAvailable: ep.codAvailable ?? ep.cod_available ?? false,
             });
-            // ✅ Store original business name and slug for comparison
             setOriginalBusinessName(result.data.businessName || "");
             setUrlSlug(result.data.urlSlug || "");
           }
         }
+
+        // Process feature checks
+        if (slugFeatureRes.ok) {
+          const data = await slugFeatureRes.json();
+          setCanEditSlug(data.allowed === true);
+        } else {
+          setCanEditSlug(false);
+        }
+
+        if (invoiceFeatureRes.ok) {
+          const data = await invoiceFeatureRes.json();
+          setCanAccessInvoice(data.allowed === true);
+        } else {
+          setCanAccessInvoice(false);
+        }
       } catch (error) {
         console.error("Error loading profile:", error);
+        setCanEditSlug(false);
+        setCanAccessInvoice(false);
       } finally {
         setLoading(false);
       }
     };
 
-    // ✅ Check custom_domain feature (slug editing entitlement)
-    const checkSlugFeature = async () => {
-      try {
-        const res = await fetch(
-          "/api/console/features/check?feature=custom_domain",
-        );
-        if (res.ok) {
-          const data = await res.json();
-          setCanEditSlug(data.allowed === true);
-        } else {
-          setCanEditSlug(false);
-        }
-      } catch {
-        setCanEditSlug(false);
-      }
-    };
-
-    // ✅ Check invoice_customization feature
-    const checkInvoiceFeature = async () => {
-      try {
-        const res = await fetch(
-          "/api/console/features/check?feature=invoice_customization",
-        );
-        if (res.ok) {
-          const data = await res.json();
-          setCanAccessInvoice(data.allowed === true);
-        } else {
-          setCanAccessInvoice(false);
-        }
-      } catch {
-        setCanAccessInvoice(false);
-      }
-    };
-
     if (!authLoading) {
-      loadProfile();
-      checkSlugFeature();
-      checkInvoiceFeature();
+      loadAll();
     }
   }, [authLoading]);
 
@@ -222,6 +212,18 @@ export default function ProfilePage() {
         setMessage({ type: "success", text: "Profile saved successfully!" });
         setOriginalBusinessName(profile.businessName);
         setShowSlugWarning(false);
+        // Re-fetch to get the latest urlSlug (may have been auto-migrated by backend)
+        try {
+          const refreshRes = await fetch("/api/business/get");
+          if (refreshRes.ok) {
+            const refreshData = await refreshRes.json();
+            if (refreshData.data?.urlSlug) {
+              setUrlSlug(refreshData.data.urlSlug);
+            }
+          }
+        } catch {
+          // Non-critical — slug preview may be stale until next page load
+        }
       } else {
         const data = await response.json().catch(() => ({}));
 

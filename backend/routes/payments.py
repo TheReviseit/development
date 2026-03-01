@@ -30,7 +30,7 @@ except ImportError:
 import requests
 from functools import wraps
 from flask import Blueprint, request, jsonify, g
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from typing import Optional, Tuple, Dict, Any
 from contextlib import contextmanager
 
@@ -1326,20 +1326,34 @@ def verify_subscription():
         subscription = razorpay_client.subscription.fetch(subscription_id)
         
         # Calculate period dates (handle None values safely)
+        # Razorpay sets current_start/current_end to None for brand-new subscriptions
+        # that haven't been charged yet. We must never let current_end == current_start
+        # because that breaks proration. Fall back to a proper 30-day window.
         current_start_ts = subscription.get('current_start')
         current_end_ts = subscription.get('current_end')
-        
+
         now = datetime.now(timezone.utc)
-        
-        current_start = datetime.fromtimestamp(
+
+        start_dt = datetime.fromtimestamp(
             current_start_ts if current_start_ts is not None else now.timestamp(),
             tz=timezone.utc
-        ).isoformat()
-        
-        current_end = datetime.fromtimestamp(
-            current_end_ts if current_end_ts is not None else now.timestamp(),
-            tz=timezone.utc
-        ).isoformat()
+        )
+
+        if current_end_ts is not None:
+            end_dt = datetime.fromtimestamp(current_end_ts, tz=timezone.utc)
+            # Guard: end must be strictly after start (defensive check)
+            if end_dt <= start_dt:
+                logger.warning(
+                    f"[{request_id}] Razorpay returned current_end ({end_dt}) <= current_start ({start_dt}). "
+                    f"Reconstructing end as start + 30 days."
+                )
+                end_dt = start_dt + timedelta(days=30)
+        else:
+            # Subscription not yet charged — default to a 30-day window from start
+            end_dt = start_dt + timedelta(days=30)
+
+        current_start = start_dt.isoformat()
+        current_end = end_dt.isoformat()
         
         # Update subscription to ACTIVE immediately (don't wait for webhook)
         # Signature verification already confirms payment is valid
@@ -1437,12 +1451,42 @@ def get_subscription_status():
             })
         
         subscription = result.data[0]
-        
+
         # Normalize status for frontend
         status = subscription['status']
         if status == 'completed':
             status = 'active'
-        
+
+        # Resolve the authoritative plan name.
+        # The upgrade flow writes pricing_plan_id (the FK to pricing_plans) but
+        # historically did not always update the denormalized plan_name column.
+        # Derive from pricing_plan_id when available so feature gates (e.g.
+        # canAccessAnalytics checks plan_name !== "starter") are always correct.
+        plan_name = subscription.get('plan_name') or 'starter'
+        pricing_plan_id = subscription.get('pricing_plan_id')
+        if pricing_plan_id:
+            try:
+                plan_row = supabase.table('pricing_plans').select('plan_slug').eq(
+                    'id', pricing_plan_id
+                ).limit(1).execute()
+                if plan_row.data and plan_row.data[0].get('plan_slug'):
+                    resolved_slug = plan_row.data[0]['plan_slug']
+                    # If the stored plan_name is stale, patch it silently
+                    if resolved_slug != plan_name:
+                        logger.info(
+                            f"[{request_id}] plan_name drift: stored={plan_name!r} "
+                            f"resolved={resolved_slug!r} — using resolved value"
+                        )
+                        try:
+                            supabase.table('subscriptions').update(
+                                {'plan_name': resolved_slug}
+                            ).eq('id', subscription['id']).execute()
+                        except Exception:
+                            pass  # best-effort correction; don't fail the request
+                    plan_name = resolved_slug
+            except Exception as resolve_err:
+                logger.warning(f"[{request_id}] Could not resolve plan_slug: {resolve_err}")
+
         response_data = {
             'success': True,
             'request_id': request_id,
@@ -1450,7 +1494,7 @@ def get_subscription_status():
             'subscription': {
                 'id': subscription['id'],
                 'razorpay_subscription_id': subscription.get('razorpay_subscription_id'),
-                'plan_name': subscription['plan_name'],
+                'plan_name': plan_name,
                 'status': status,
                 'ai_responses_limit': subscription['ai_responses_limit'],
                 'ai_responses_used': subscription['ai_responses_used'],

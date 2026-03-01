@@ -314,13 +314,8 @@ export async function fetchAnalyticsOverview(
   userId: string,
   period: "7d" | "30d" | "90d" = "7d",
 ): Promise<AnalyticsOverview | null> {
-  try {
-    return await apiRequest(`/api/analytics/overview?period=${period}`, userId);
-  } catch (error) {
-    // Gracefully handle analytics service unavailability
-    console.warn(`⚠️ Analytics service unavailable: ${error}`);
-    return null;
-  }
+  // Let errors propagate so the caller (AnalyticsView) can show them in the UI.
+  return await apiRequest(`/api/analytics/overview?period=${period}`, userId);
 }
 
 export async function fetchMessageAnalytics(

@@ -272,6 +272,15 @@ export async function DELETE(request: NextRequest, context: RouteContext) {
       );
     }
 
+    // Count variants BEFORE soft-deleting (for accurate counter decrement)
+    const { data: variants } = await supabase
+      .from("product_variants")
+      .select("id", { count: "exact" })
+      .eq("product_id", id)
+      .eq("user_id", userId);
+    const variantCount = variants?.length ?? 0;
+    const totalItemsRemoved = 1 + variantCount; // 1 product + N variants
+
     // Soft delete - set is_deleted = true (trigger will set deleted_at)
     const { error: deleteError } = await supabase
       .from("products")
@@ -287,16 +296,66 @@ export async function DELETE(request: NextRequest, context: RouteContext) {
       return NextResponse.json({ error: deleteError.message }, { status: 500 });
     }
 
+    // Decrement usage counter by total items removed (product + variants)
+    // This keeps the feature gate counter in sync with actual data
+    try {
+      // Resolve Firebase UID → Supabase UUID (usage_counters uses Supabase UUID)
+      const { data: userRow } = await supabase
+        .from("users")
+        .select("id")
+        .eq("firebase_uid", userId)
+        .limit(1)
+        .single();
+
+      if (userRow) {
+        const supabaseUserId = userRow.id;
+        const { data: counterRow } = await supabase
+          .from("usage_counters")
+          .select("current_value")
+          .match({
+            user_id: supabaseUserId,
+            feature_key: "create_product",
+            domain: "shop",
+          })
+          .limit(1)
+          .single();
+
+        if (counterRow) {
+          const currentValue = counterRow.current_value || 0;
+          const newValue = Math.max(0, currentValue - totalItemsRemoved);
+          await supabase
+            .from("usage_counters")
+            .update({ current_value: newValue })
+            .match({
+              user_id: supabaseUserId,
+              feature_key: "create_product",
+              domain: "shop",
+            });
+          console.log(
+            `📉 Decremented create_product counter by ${totalItemsRemoved} (${currentValue} → ${newValue}) for user ${userId}`,
+          );
+        }
+      }
+    } catch (counterError) {
+      // Non-critical — counter will self-heal via reconciliation
+      console.error("Counter decrement failed (non-critical):", counterError);
+    }
+
     // Log audit
-    await logAudit(supabase, userId, id, "delete", { name: existing.name });
+    await logAudit(supabase, userId, id, "delete", {
+      name: existing.name,
+      variantsRemoved: variantCount,
+      totalItemsRemoved,
+    });
 
     console.log(
-      `🗑️ Soft-deleted product "${existing.name}" for user ${userId}`,
+      `🗑️ Soft-deleted product "${existing.name}" (${totalItemsRemoved} items) for user ${userId}`,
     );
 
     return NextResponse.json({
       success: true,
       message: "Product deleted (can be restored)",
+      itemsRemoved: totalItemsRemoved,
     });
   } catch (error) {
     console.error("Error in DELETE /api/products/[id]:", error);

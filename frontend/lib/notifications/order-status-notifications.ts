@@ -388,6 +388,7 @@ async function sendWhatsAppNotification(
           user_id: business.user_id, // Firebase UID - backend will fetch credentials
           to: phoneNumber,
           message: generateWhatsAppMessage(order, status, business),
+          customer_name: order.customer_name || null, // For chat DB storage
         }),
       },
     );

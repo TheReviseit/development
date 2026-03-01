@@ -154,7 +154,7 @@ export default function ProductCardStore({
       stockByVariant: {},
     };
 
-    // CASE 1: Product with variants - check variant stock
+    // CASE 1: Product with variants - check variant stock + base product stock
     if (product.variants && product.variants.length > 0) {
       let totalVariantStock = 0;
       const allSizesStock: Record<string, number> = {};
@@ -194,6 +194,18 @@ export default function ProductCardStore({
       });
 
       status.totalStock = totalVariantStock;
+
+      // ALSO include base product's own stock (sizeStocks)
+      // A product can have its own inventory independent of variants
+      const baseProductSizeStocks = parseSizeStocks(product.sizeStocks);
+      if (Object.keys(baseProductSizeStocks).length > 0) {
+        Object.entries(baseProductSizeStocks).forEach(([size, stock]) => {
+          const stockNum =
+            typeof stock === "number" ? stock : parseInt(String(stock)) || 0;
+          status.totalStock += stockNum;
+          allSizesStock[size] = (allSizesStock[size] || 0) + stockNum;
+        });
+      }
 
       // Detect out of stock sizes
       Object.entries(allSizesStock).forEach(([size, stock]) => {

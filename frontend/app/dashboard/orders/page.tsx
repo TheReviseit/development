@@ -98,13 +98,32 @@ export default function OrdersPage() {
   const { subscription, isLoading: subLoading } = useSubscription(
     userId ?? undefined,
   );
+  const STARTER_SLUGS = ["starter", "pending", ""];
   const canAccessSheets =
-    !subLoading && !!subscription && subscription.plan_name !== "starter";
+    !subLoading &&
+    !!subscription &&
+    !STARTER_SLUGS.includes(subscription.plan_name?.toLowerCase?.() ?? "");
 
   // Feature usage for live_order_updates and email_invoices
   const [notifUsage, setNotifUsage] = useState<FeatureUsage | null>(null);
   const [invoiceUsage, setInvoiceUsage] = useState<FeatureUsage | null>(null);
   const [usageLoading, setUsageLoading] = useState(true);
+
+  const refreshNotifUsage = useCallback(async () => {
+    try {
+      const res = await fetch("/api/features/check?feature=live_order_updates");
+      if (res.ok) {
+        const data = await res.json();
+        setNotifUsage({
+          used: data.used ?? 0,
+          limit: data.hard_limit ?? null,
+          allowed: data.allowed ?? false,
+        });
+      }
+    } catch (err) {
+      console.error("Error refreshing order updates usage:", err);
+    }
+  }, []);
 
   useEffect(() => {
     const fetchUsage = async () => {
@@ -734,6 +753,8 @@ export default function OrdersPage() {
       }
       // Success! The optimistic update is already applied.
       // Realtime subscription may send a confirmation, but we don't depend on it.
+      // Refresh the Order Updates usage counter so the UI reflects the new count.
+      refreshNotifUsage();
     } catch (error) {
       clearTimeout(timeoutId);
 
