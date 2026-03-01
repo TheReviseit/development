@@ -170,7 +170,7 @@ export const softwareAppSchema = {
     priceCurrency: "INR",
     priceValidUntil: "2026-12-31",
     availability: "https://schema.org/InStock",
-    description: "14-day free trial available",
+    description: "Flexible plans available — get started instantly",
   },
   aggregateRating: {
     "@type": "AggregateRating",
@@ -236,10 +236,10 @@ export const faqSchema = {
     },
     {
       "@type": "Question",
-      name: "Is there a free trial?",
+      name: "How do I get started with Flowauxi?",
       acceptedAnswer: {
         "@type": "Answer",
-        text: "Yes! Flowauxi offers a 14-day free trial with full access to all features. No credit card required to start.",
+        text: "Getting started with Flowauxi is quick and easy. Sign up, connect your WhatsApp Business account, and instantly access all features including AI auto-responses, broadcasting, and analytics.",
       },
     },
     {

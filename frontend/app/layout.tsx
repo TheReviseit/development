@@ -49,11 +49,11 @@ export const viewport: Viewport = {
 const baseMetadata: Metadata = {
   // Primary Meta Tags - Enhanced for better CTR
   title: {
-    default: "Flowauxi - AI WhatsApp Automation Platform | Free Trial",
+    default: "Flowauxi — AI WhatsApp Automation Platform",
     template: "%s | Flowauxi",
   },
   description:
-    "Transform your WhatsApp into a powerful business tool with AI automation. Get instant customer responses, automated follow-ups, and CRM integration. Trusted by 500+ businesses. Start your 14-day free trial today!",
+    "Transform your WhatsApp into a powerful business tool with AI automation. Get instant customer responses, automated follow-ups, and CRM integration. Trusted by 500+ businesses. Get started today!",
   keywords: [
     // Primary keywords
     "WhatsApp automation",
@@ -125,7 +125,7 @@ const baseMetadata: Metadata = {
     type: "website",
     locale: "en_US",
     siteName: "Flowauxi - WhatsApp Automation Platform",
-    title: "Flowauxi - AI WhatsApp Automation Platform | Free Trial",
+    title: "Flowauxi — AI WhatsApp Automation Platform",
     description:
       "Transform your WhatsApp into a powerful business tool with AI automation. Get instant customer responses, automated follow-ups, and CRM integration. Trusted by 500+ businesses. Start free!",
     images: [
@@ -151,7 +151,7 @@ const baseMetadata: Metadata = {
     card: "summary_large_image",
     site: "@flowauxi",
     creator: "@flowauxi",
-    title: "Flowauxi - AI WhatsApp Automation Platform | Free Trial",
+    title: "Flowauxi — AI WhatsApp Automation Platform",
     description:
       "Transform your WhatsApp into a powerful business tool with AI automation. Get instant customer responses, automated follow-ups, and CRM integration. Start free today!",
     images: {
@@ -208,16 +208,6 @@ const baseMetadata: Metadata = {
   },
 };
 
-/**
- * Domain-Aware Root Metadata — SCHEMA FIREWALL
- *
- * For the main domain (www.flowauxi.com), returns the full baseMetadata.
- * For subdomains (shop, marketing, api, pages), returns domain-specific
- * metadata from generateDomainMetadata() so that subdomain title,
- * description, canonical, and OG tags are correct at the root level.
- *
- * This prevents the main domain's SEO from bleeding into subdomains.
- */
 export async function generateMetadata(): Promise<Metadata> {
   const headersList = await headers();
   const host = headersList.get("host") || "www.flowauxi.com";

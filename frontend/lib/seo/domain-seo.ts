@@ -212,7 +212,7 @@ const DOMAIN_SEO_CONFIGS: Record<ProductDomain, DomainSeoConfig> = {
       {
         question: "What is the best online store builder for small businesses?",
         answer:
-          "Flowauxi Shop is an AI-powered online store builder designed for small businesses. It includes built-in payments, WhatsApp integration for orders, automated inventory management, and beautiful storefront themes — all without coding. Start your 14-day free trial today.",
+          "Flowauxi Shop is an AI-powered online store builder designed for small businesses. It includes built-in payments, WhatsApp integration for orders, automated inventory management, and beautiful storefront themes — all without coding. Get started today.",
       },
       {
         question: "How do I create an online store without coding?",
@@ -228,7 +228,7 @@ const DOMAIN_SEO_CONFIGS: Record<ProductDomain, DomainSeoConfig> = {
         question:
           "What are the pricing plans for Flowauxi Shop ecommerce platform?",
         answer:
-          "Flowauxi Shop offers a 14-day free trial with full access. Paid plans start from affordable tiers for small businesses, scaling up to enterprise plans for high-volume stores. No credit card is required to start.",
+          "Flowauxi Shop offers flexible pricing plans starting from affordable tiers for small businesses, scaling up to enterprise plans for high-volume stores. Get started instantly with no setup fees.",
       },
     ],
     breadcrumb: [
@@ -592,9 +592,9 @@ const DOMAIN_SEO_CONFIGS: Record<ProductDomain, DomainSeoConfig> = {
           "Flowauxi connects to the WhatsApp Business API and uses AI to automatically respond to customer messages, send broadcasts, manage conversations, and trigger workflows based on your business rules. Setup takes minutes with no coding required.",
       },
       {
-        question: "Is there a free trial for Flowauxi WhatsApp automation?",
+        question: "How do I get started with Flowauxi WhatsApp automation?",
         answer:
-          "Yes! Flowauxi offers a 14-day free trial with full access to all features including AI auto-responses, broadcasting, analytics, and CRM integration. No credit card required to start.",
+          "Getting started with Flowauxi is quick and easy. Sign up, connect your WhatsApp Business account, and instantly access AI auto-responses, broadcasting, analytics, and CRM integration. No technical setup required.",
       },
       {
         question: "Can I integrate Flowauxi with my CRM?",
@@ -837,7 +837,7 @@ export function generateDomainSchemas(host: string): Record<string, unknown>[] {
         "@type": "Offer",
         price: "0",
         priceCurrency: "INR",
-        description: "Free tier available — 14-day trial",
+        description: "Flexible plans available — get started instantly",
         availability: "https://schema.org/InStock",
       },
       aggregateRating: {
@@ -871,7 +871,7 @@ export function generateDomainSchemas(host: string): Record<string, unknown>[] {
         "@type": "Offer",
         price: "0",
         priceCurrency: "INR",
-        description: "Free tier available — 14-day trial",
+        description: "Flexible plans available — get started instantly",
       },
       aggregateRating: {
         "@type": "AggregateRating",
