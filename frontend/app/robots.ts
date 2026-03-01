@@ -1,21 +1,21 @@
 import { MetadataRoute } from "next";
 import { headers } from "next/headers";
+import { resolveProductDomain } from "@/lib/seo/domain-seo";
 
 /**
  * ENTERPRISE ROBOTS.TXT — Multi-Domain Aware
  * ============================================
  *
- * Generates per-host robots.txt with proper rules for:
- *   ✅ All major crawlers (Googlebot, Bingbot, *)
- *   ✅ Private routes (dashboard, admin, settings)
- *   ✅ Checkout/payment flows (should never be indexed)
- *   ✅ API endpoints (not web pages)
- *   ✅ Internal utility routes
- *   ✅ Dynamic sitemap reference
+ * Generates per-domain robots.txt with:
+ *   ✅ Domain-specific disallow rules
+ *   ✅ Per-domain sitemap references
+ *   ✅ Main domain lists ALL subdomain sitemaps (sitemap index pattern)
+ *   ✅ Proper crawl budget protection per subdomain
  *
- * Multi-domain safety:
- *   - Sitemap URL uses the current host (works on subdomains)
- *   - Rules are consistent across all domains
+ * Multi-domain strategy:
+ *   - Each subdomain has its own sitemap reference
+ *   - Main domain additionally lists all subdomain sitemaps for cross-discovery
+ *   - Private routes are disallowed consistently across all domains
  *
  * @see https://developers.google.com/search/docs/crawling-indexing/robots/robots_txt
  */
@@ -26,10 +26,11 @@ export default async function robots(): Promise<MetadataRoute.Robots> {
   const isLocalhost = host.includes("localhost") || host.includes("127.0.0.1");
   const protocol = isLocalhost ? "http" : "https";
   const baseUrl = `${protocol}://${host}`;
+  const domain = resolveProductDomain(host);
 
-  // Comprehensive disallow list — all private / non-indexable paths
-  const disallowPaths = [
-    // Admin & Dashboard
+  // ── Comprehensive disallow list — shared across all domains ──────────
+  const sharedDisallowPaths = [
+    // Admin & Dashboard (private, not indexable)
     "/admin/",
     "/dashboard/",
     "/settings/",
@@ -37,7 +38,7 @@ export default async function robots(): Promise<MetadataRoute.Robots> {
     "/onboarding-embedded/",
     "/whatsapp-admin/",
 
-    // API Endpoints (not web pages)
+    // API Endpoints (data endpoints, not pages)
     "/api/",
 
     // Authentication flows (contain tokens, one-time use)
@@ -60,6 +61,39 @@ export default async function robots(): Promise<MetadataRoute.Robots> {
     "/manifest.webmanifest",
   ];
 
+  // ── Per-domain additional disallows ──────────────────────────────────
+  const domainDisallows: Record<string, string[]> = {
+    api: ["/console/"], // Private developer console
+    shop: [], // Store pages are public
+    marketing: [],
+    showcase: [],
+    dashboard: [],
+  };
+
+  const disallowPaths = [
+    ...sharedDisallowPaths,
+    ...(domainDisallows[domain] || []),
+  ];
+
+  // ── Sitemap references ──────────────────────────────────────────────
+  // Main domain lists ALL sitemaps (acts as sitemap index pattern)
+  // Subdomains list only their own sitemap
+  const sitemaps: string[] = [];
+
+  if (domain === "dashboard") {
+    // Main domain: list all sitemaps for cross-domain discovery
+    sitemaps.push(
+      `${baseUrl}/sitemap.xml`,
+      "https://shop.flowauxi.com/sitemap.xml",
+      "https://marketing.flowauxi.com/sitemap.xml",
+      "https://pages.flowauxi.com/sitemap.xml",
+      "https://api.flowauxi.com/sitemap.xml",
+    );
+  } else {
+    // Subdomain: only own sitemap
+    sitemaps.push(`${baseUrl}/sitemap.xml`);
+  }
+
   return {
     rules: [
       {
@@ -71,17 +105,15 @@ export default async function robots(): Promise<MetadataRoute.Robots> {
         userAgent: "Googlebot",
         allow: "/",
         disallow: disallowPaths,
-        // Googlebot: no crawl delay (Google ignores it, but shows good intent)
         crawlDelay: 0,
       },
       {
         userAgent: "Bingbot",
         allow: "/",
         disallow: disallowPaths,
-        // Bing respects crawl delay — 1s is polite without being slow
         crawlDelay: 1,
       },
     ],
-    sitemap: `${baseUrl}/sitemap.xml`,
+    sitemap: sitemaps,
   };
 }

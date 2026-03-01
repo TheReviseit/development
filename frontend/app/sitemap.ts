@@ -1,27 +1,21 @@
 import { MetadataRoute } from "next";
 import { headers } from "next/headers";
 import { getAllActiveStoreSlugs } from "@/lib/store";
+import { resolveProductDomain } from "@/lib/seo/domain-seo";
 
 /**
- * ENTERPRISE DYNAMIC SITEMAP
- * ==========================
+ * ENTERPRISE DYNAMIC SITEMAP — Per-Domain Aware
+ * ==============================================
  *
- * This sitemap combines:
- *   ✅ Static platform pages (homepage, signup, login, legal)
- *   ✅ Dynamic store pages (all active merchant stores)
- *   ✅ Per-store product pages (top products from each store)
- *   ✅ SEO-optimized priorities and change frequencies
- *   ✅ Multi-domain aware (works on any host)
+ * Generates domain-specific sitemaps:
+ *   shop.flowauxi.com/sitemap.xml  → shop pages only
+ *   marketing.flowauxi.com/sitemap.xml → marketing pages only
+ *   api.flowauxi.com/sitemap.xml   → API docs/console pages only
+ *   pages.flowauxi.com/sitemap.xml → showcase pages only
+ *   www.flowauxi.com/sitemap.xml   → main domain + cross-references to all subdomains
  *
- * Google Search Console Integration:
- *   - Auto-discovered via /robots.txt → Sitemap: /sitemap.xml
- *   - All URLs use absolute canonical paths
- *   - lastModified uses real database timestamps
- *
- * Performance:
- *   - Store slugs fetched with lightweight SELECT (no products loaded)
- *   - Capped at 5000 stores per sitemap (Google's 50k URL limit)
- *   - Static entries use stable dates (prevents unnecessary re-crawling)
+ * This ensures each subdomain's sitemap only contains its own URLs,
+ * which is critical for Google to treat them as separate properties.
  *
  * @see https://developers.google.com/search/docs/crawling-indexing/sitemaps/build-sitemap
  */
@@ -32,12 +26,107 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const isLocalhost = host.includes("localhost") || host.includes("127.0.0.1");
   const protocol = isLocalhost ? "http" : "https";
   const baseUrl = `${protocol}://${host}`;
+  const domain = resolveProductDomain(host);
 
-  // Stable date for static pages (update when making significant changes)
-  const staticLastModified = new Date("2026-02-27T00:00:00Z");
+  const staticLastModified = new Date("2026-03-01T00:00:00Z");
 
   // =====================================================
-  // STATIC PLATFORM PAGES
+  // SHOP SUBDOMAIN SITEMAP
+  // =====================================================
+  if (domain === "shop") {
+    const entries: MetadataRoute.Sitemap = [
+      {
+        url: baseUrl,
+        lastModified: staticLastModified,
+        changeFrequency: "weekly",
+        priority: 1.0,
+      },
+      {
+        url: `${baseUrl}/pricing`,
+        lastModified: staticLastModified,
+        changeFrequency: "monthly",
+        priority: 0.8,
+      },
+    ];
+
+    // Dynamic store pages
+    try {
+      const stores = await getAllActiveStoreSlugs();
+      stores.forEach((store) => {
+        entries.push({
+          url: `${baseUrl}/store/${store.slug}`,
+          lastModified: new Date(store.updatedAt),
+          changeFrequency: "daily",
+          priority: 0.8,
+        });
+      });
+      console.log(
+        `[sitemap:shop] ✅ Generated ${entries.length} entries (incl. ${stores.length} stores)`,
+      );
+    } catch (err) {
+      console.error("[sitemap:shop] ⚠️ Failed to fetch stores:", err);
+    }
+
+    return entries;
+  }
+
+  // =====================================================
+  // MARKETING SUBDOMAIN SITEMAP
+  // =====================================================
+  if (domain === "marketing") {
+    return [
+      {
+        url: baseUrl,
+        lastModified: staticLastModified,
+        changeFrequency: "weekly",
+        priority: 1.0,
+      },
+    ];
+  }
+
+  // =====================================================
+  // API SUBDOMAIN SITEMAP
+  // =====================================================
+  if (domain === "api") {
+    return [
+      {
+        url: baseUrl,
+        lastModified: staticLastModified,
+        changeFrequency: "weekly",
+        priority: 1.0,
+      },
+      {
+        url: `${baseUrl}/docs`,
+        lastModified: staticLastModified,
+        changeFrequency: "weekly",
+        priority: 0.9,
+      },
+      {
+        url: `${baseUrl}/console`,
+        lastModified: staticLastModified,
+        changeFrequency: "monthly",
+        priority: 0.7,
+      },
+    ];
+  }
+
+  // =====================================================
+  // SHOWCASE/PAGES SUBDOMAIN SITEMAP
+  // =====================================================
+  if (domain === "showcase") {
+    return [
+      {
+        url: baseUrl,
+        lastModified: staticLastModified,
+        changeFrequency: "weekly",
+        priority: 1.0,
+      },
+    ];
+  }
+
+  // =====================================================
+  // MAIN DOMAIN SITEMAP (www.flowauxi.com)
+  // Includes own pages + cross-references to all subdomains
   // =====================================================
 
   const staticPages: MetadataRoute.Sitemap = [
@@ -48,24 +137,31 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       changeFrequency: "daily",
       priority: 1.0,
     },
-    // Product Domain Landing Pages — each ranks independently
+    // Cross-domain references to subdomain landing pages
+    // This helps Google discover subdomains from the main domain
     {
-      url: `${baseUrl}/shop`,
+      url: "https://shop.flowauxi.com",
       lastModified: staticLastModified,
       changeFrequency: "weekly",
-      priority: 1.0,
+      priority: 0.9,
     },
     {
-      url: `${baseUrl}/marketing`,
+      url: "https://marketing.flowauxi.com",
       lastModified: staticLastModified,
       changeFrequency: "weekly",
-      priority: 1.0,
+      priority: 0.9,
     },
     {
-      url: `${baseUrl}/showcase`,
+      url: "https://pages.flowauxi.com",
       lastModified: staticLastModified,
       changeFrequency: "weekly",
-      priority: 1.0,
+      priority: 0.9,
+    },
+    {
+      url: "https://api.flowauxi.com",
+      lastModified: staticLastModified,
+      changeFrequency: "weekly",
+      priority: 0.9,
     },
     // Conversion Pages
     {
@@ -112,25 +208,9 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       changeFrequency: "yearly",
       priority: 0.5,
     },
-    // Utility Pages
-    {
-      url: `${baseUrl}/forgot-password`,
-      lastModified: staticLastModified,
-      changeFrequency: "yearly",
-      priority: 0.4,
-    },
-    {
-      url: `${baseUrl}/verify-email`,
-      lastModified: staticLastModified,
-      changeFrequency: "yearly",
-      priority: 0.4,
-    },
   ];
 
-  // =====================================================
-  // DYNAMIC STORE PAGES
-  // =====================================================
-
+  // Dynamic store pages (on main domain path /store/...)
   let storePages: MetadataRoute.Sitemap = [];
   try {
     const stores = await getAllActiveStoreSlugs();
@@ -143,16 +223,11 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     }));
 
     console.log(
-      `[sitemap] ✅ Generated ${storePages.length} dynamic store entries`,
+      `[sitemap:main] ✅ Generated ${storePages.length} dynamic store entries`,
     );
   } catch (err) {
-    console.error("[sitemap] ⚠️ Failed to fetch stores for sitemap:", err);
-    // Graceful degradation — static pages still work
+    console.error("[sitemap:main] ⚠️ Failed to fetch stores for sitemap:", err);
   }
-
-  // =====================================================
-  // COMBINE ALL ENTRIES
-  // =====================================================
 
   return [...staticPages, ...storePages];
 }

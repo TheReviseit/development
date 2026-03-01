@@ -59,9 +59,9 @@ export default function ShowcaseLandingPage() {
           {/* Top Section - Centered Title, Subtitle, Buttons, Rating */}
           <div className={styles.heroTopSection}>
             <h1 className={styles.heroTitle}>
-              The Future of Portfolio
+              Free Portfolio Website
               <br />
-              with Latest Technology
+              Builder for Professionals
             </h1>
             <p className={styles.heroSubtitle}>
               Expert tech to elevate your portfolio. Let&apos;s take your
@@ -247,14 +247,64 @@ export default function ShowcaseLandingPage() {
         </div>
       </section>
 
-      {/* Footer */}
+      {/* Footer with Cross-Domain Links */}
       <footer className={styles.footer}>
         <div className={styles.footerContent}>
-          <div className={styles.footerLogo}>Flowauxi Showcase</div>
+          <div className={styles.footerLogo}>Flowauxi Pages</div>
           <p className={styles.footerText}>
             Professional portfolio platform built for creators
           </p>
-          <p className={styles.footerText}>
+          <div
+            style={{
+              marginTop: "1.5rem",
+              display: "flex",
+              gap: "1.5rem",
+              justifyContent: "center",
+              flexWrap: "wrap",
+            }}
+          >
+            <a
+              href="https://www.flowauxi.com"
+              style={{
+                color: "#9ca3af",
+                textDecoration: "none",
+                fontSize: "0.875rem",
+              }}
+            >
+              Flowauxi — WhatsApp Automation
+            </a>
+            <a
+              href="https://shop.flowauxi.com"
+              style={{
+                color: "#9ca3af",
+                textDecoration: "none",
+                fontSize: "0.875rem",
+              }}
+            >
+              Online Store Builder
+            </a>
+            <a
+              href="https://marketing.flowauxi.com"
+              style={{
+                color: "#9ca3af",
+                textDecoration: "none",
+                fontSize: "0.875rem",
+              }}
+            >
+              Marketing Automation
+            </a>
+            <a
+              href="https://api.flowauxi.com"
+              style={{
+                color: "#9ca3af",
+                textDecoration: "none",
+                fontSize: "0.875rem",
+              }}
+            >
+              OTP Verification API
+            </a>
+          </div>
+          <p className={styles.footerText} style={{ marginTop: "1.5rem" }}>
             &copy; 2026 Flowauxi. All rights reserved.
           </p>
         </div>

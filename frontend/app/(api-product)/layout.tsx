@@ -1,77 +1,50 @@
 /**
- * API Product Layout
+ * API Product Layout — Domain-Aware SEO
  *
  * Server component layout for api.flowauxi.com routes.
  * Dark developer-focused theme with API-specific navigation.
+ *
+ * FIXED: Replaced static `export const metadata` with dynamic
+ * `generateMetadata()` using domain-seo.ts for correct schema types
+ * (SoftwareApplication + APIReference) and domain-specific metadata.
  */
 
 import React from "react";
 import type { Metadata } from "next";
 import { headers } from "next/headers";
 import "./api-layout.css";
+import {
+  generateDomainMetadata,
+  generateDomainSchemas,
+} from "@/lib/seo/domain-seo";
 
-// SEO for API product
-export const metadata: Metadata = {
-  metadataBase: new URL("https://api.flowauxi.com"),
-  title: {
-    default: "Flowauxi OTP API | Enterprise WhatsApp & SMS Verification",
-    template: "%s | Flowauxi OTP API",
-  },
-  description:
-    "Enterprise-grade OTP verification API for WhatsApp and SMS. Sub-200ms delivery, 99.9% uptime SLA, and developer-friendly.",
-  keywords: [
-    "OTP API",
-    "WhatsApp OTP",
-    "SMS verification API",
-    "two-factor authentication",
-    "2FA API",
-    "phone verification",
-    "OTP verification",
-  ],
-  openGraph: {
-    type: "website",
-    locale: "en_US",
-    siteName: "Flowauxi OTP API",
-    title: "Enterprise OTP Verification API",
-    description: "Production-grade OTP delivery via WhatsApp and SMS",
-    images: [
-      {
-        url: "https://api.flowauxi.com/og-api.png",
-        width: 1200,
-        height: 630,
-        alt: "Flowauxi OTP API",
-      },
-    ],
-  },
-  twitter: {
-    card: "summary_large_image",
-    site: "@flowauxi",
-    creator: "@flowauxi",
-  },
-  robots: {
-    index: true,
-    follow: true,
-  },
-};
+// Dynamic SEO — uses domain-seo.ts for correct SoftwareApplication + APIReference schemas
+export async function generateMetadata(): Promise<Metadata> {
+  const headersList = await headers();
+  const host = headersList.get("host") || "api.flowauxi.com";
+  return generateDomainMetadata(host);
+}
 
 export default async function ApiProductLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
-  // Get product context from headers (set by middleware)
   const headersList = await headers();
+  const host = headersList.get("host") || "api.flowauxi.com";
   const productContext = headersList.get("x-product-context") || "api";
-  const canonicalUrl = headersList.get("x-canonical-url") || "";
+  const schemas = generateDomainSchemas(host);
 
   return (
     <div className="api-product-wrapper" data-product={productContext}>
-      {/* Inject canonical URL */}
-      {canonicalUrl && (
-        <head>
-          <link rel="canonical" href={canonicalUrl} />
-        </head>
-      )}
+      {/* Domain-specific structured data (SoftwareApplication + APIReference + FAQ) */}
+      {schemas.map((schema, i) => (
+        <script
+          key={`api-schema-${i}`}
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{ __html: JSON.stringify(schema) }}
+        />
+      ))}
 
       {children}
     </div>

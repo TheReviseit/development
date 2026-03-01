@@ -73,9 +73,9 @@ export default function ShopLandingPage() {
                 <span>Trusted by 10,000+ businesses worldwide</span>
               </div>
               <h1 className="text-5xl md:text-6xl lg:text-7xl font-bold text-gray-900 leading-tight mb-6">
-                Commerce Platform
+                Online Store Builder
                 <span className="block bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-600 bg-clip-text text-transparent animate-gradient">
-                  Built for Scale
+                  Create Your Ecommerce Website
                 </span>
               </h1>
               <p className="text-xl md:text-2xl text-gray-600 mb-8 leading-relaxed">
@@ -351,7 +351,7 @@ export default function ShopLandingPage() {
         </div>
       </section>
 
-      {/* Footer */}
+      {/* Footer with Cross-Domain Links */}
       <footer className="bg-gray-900 text-gray-400 py-12">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="grid md:grid-cols-4 gap-8 mb-8">
@@ -367,7 +367,44 @@ export default function ShopLandingPage() {
               </p>
             </div>
             <div>
-              <h3 className="text-white font-semibold mb-4">Product</h3>
+              <h3 className="text-white font-semibold mb-4">Products</h3>
+              <ul className="space-y-2 text-sm">
+                <li>
+                  <a
+                    href="https://www.flowauxi.com"
+                    className="hover:text-white transition-colors"
+                  >
+                    Flowauxi — WhatsApp Automation
+                  </a>
+                </li>
+                <li>
+                  <a
+                    href="https://marketing.flowauxi.com"
+                    className="hover:text-white transition-colors"
+                  >
+                    Marketing Automation
+                  </a>
+                </li>
+                <li>
+                  <a
+                    href="https://api.flowauxi.com"
+                    className="hover:text-white transition-colors"
+                  >
+                    OTP Verification API
+                  </a>
+                </li>
+                <li>
+                  <a
+                    href="https://pages.flowauxi.com"
+                    className="hover:text-white transition-colors"
+                  >
+                    Portfolio Website Builder
+                  </a>
+                </li>
+              </ul>
+            </div>
+            <div>
+              <h3 className="text-white font-semibold mb-4">Resources</h3>
               <ul className="space-y-2 text-sm">
                 <li>
                   <Link
@@ -387,39 +424,10 @@ export default function ShopLandingPage() {
                 </li>
                 <li>
                   <Link
-                    href="/demo"
-                    className="hover:text-white transition-colors"
-                  >
-                    Demo
-                  </Link>
-                </li>
-              </ul>
-            </div>
-            <div>
-              <h3 className="text-white font-semibold mb-4">Resources</h3>
-              <ul className="space-y-2 text-sm">
-                <li>
-                  <Link
                     href="/docs"
                     className="hover:text-white transition-colors"
                   >
                     Documentation
-                  </Link>
-                </li>
-                <li>
-                  <Link
-                    href="/api"
-                    className="hover:text-white transition-colors"
-                  >
-                    API Reference
-                  </Link>
-                </li>
-                <li>
-                  <Link
-                    href="/support"
-                    className="hover:text-white transition-colors"
-                  >
-                    Support
                   </Link>
                 </li>
               </ul>
@@ -437,18 +445,18 @@ export default function ShopLandingPage() {
                 </li>
                 <li>
                   <Link
-                    href="/security"
-                    className="hover:text-white transition-colors"
-                  >
-                    Security
-                  </Link>
-                </li>
-                <li>
-                  <Link
                     href="/privacy"
                     className="hover:text-white transition-colors"
                   >
                     Privacy
+                  </Link>
+                </li>
+                <li>
+                  <Link
+                    href="/terms"
+                    className="hover:text-white transition-colors"
+                  >
+                    Terms
                   </Link>
                 </li>
               </ul>

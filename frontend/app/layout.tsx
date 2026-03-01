@@ -7,6 +7,11 @@ import { ServiceWorkerRegistration } from "@/components/pwa/ServiceWorkerRegistr
 import { PWAInstallPrompt } from "@/components/pwa/PWAInstallPrompt";
 import CookieConsent from "./components/CookieConsent/CookieConsent";
 import { ALL_SCHEMAS } from "@/lib/seo/structured-data";
+import {
+  resolveProductDomain,
+  generateDomainMetadata,
+  generateDomainSchemas,
+} from "@/lib/seo/domain-seo";
 import QueryProvider from "./components/providers/QueryProvider";
 
 const jakarta = Plus_Jakarta_Sans({
@@ -203,14 +208,30 @@ const baseMetadata: Metadata = {
   },
 };
 
-// Next.js dynamic metadata generation to support multi-tenant subdomains
+/**
+ * Domain-Aware Root Metadata — SCHEMA FIREWALL
+ *
+ * For the main domain (www.flowauxi.com), returns the full baseMetadata.
+ * For subdomains (shop, marketing, api, pages), returns domain-specific
+ * metadata from generateDomainMetadata() so that subdomain title,
+ * description, canonical, and OG tags are correct at the root level.
+ *
+ * This prevents the main domain's SEO from bleeding into subdomains.
+ */
 export async function generateMetadata(): Promise<Metadata> {
   const headersList = await headers();
   const host = headersList.get("host") || "www.flowauxi.com";
+  const domain = resolveProductDomain(host);
   const isLocalhost = host.includes("localhost") || host.includes("127.0.0.1");
   const protocol = isLocalhost ? "http" : "https";
   const baseUrl = `${protocol}://${host}`;
 
+  // Subdomains: use domain-specific metadata (title, desc, canonical, OG)
+  if (domain !== "dashboard") {
+    return generateDomainMetadata(host);
+  }
+
+  // Main domain: use the full baseMetadata
   return {
     ...baseMetadata,
     metadataBase: new URL(baseUrl),
@@ -228,14 +249,29 @@ export async function generateMetadata(): Promise<Metadata> {
   };
 }
 
-// Organization, Website, WebPage, SoftwareApp, Breadcrumb, FAQ, Brand schemas
-// are now in lib/seo/structured-data.ts (extracted for maintainability)
-
-export default function RootLayout({
+/**
+ * Root Layout — Domain-Aware Schema Firewall
+ *
+ * CRITICAL: Structured data injection is now domain-aware.
+ * - Main domain (www.flowauxi.com): injects ALL_SCHEMAS (Organization, WebSite, FAQ, Brand)
+ * - Subdomains: injects domain-specific schemas from generateDomainSchemas()
+ *   with correct schema types (Store, SoftwareApplication, APIReference, WebApplication)
+ *
+ * This prevents Google from seeing conflicting Organization entities on subdomains.
+ */
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const headersList = await headers();
+  const host = headersList.get("host") || "www.flowauxi.com";
+  const domain = resolveProductDomain(host);
+
+  // Schema firewall: subdomains get their own schemas, main domain gets ALL_SCHEMAS
+  const schemas =
+    domain === "dashboard" ? ALL_SCHEMAS : generateDomainSchemas(host);
+
   return (
     <html
       lang="en"
@@ -289,10 +325,10 @@ export default function RootLayout({
           href="/icon-512.png"
         />
 
-        {/* Structured Data — imported from lib/seo/structured-data.ts */}
-        {/* Structured Data — Platform-level schemas (Organization, Website, etc.) */}
-        {/* NOTE: Store pages inject their own per-tenant schemas in page.tsx */}
-        {ALL_SCHEMAS.map((schema, i) => (
+        {/* Domain-Aware Structured Data — SCHEMA FIREWALL */}
+        {/* Main domain: ALL_SCHEMAS (Organization, WebSite, SoftwareApp, FAQ, Brand) */}
+        {/* Subdomains: domain-specific schemas (Store/WebApp/APIRef + FAQ + Breadcrumb) */}
+        {schemas.map((schema, i) => (
           <script
             key={`schema-${i}`}
             type="application/ld+json"

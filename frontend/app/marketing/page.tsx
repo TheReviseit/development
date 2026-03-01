@@ -67,9 +67,9 @@ export default function MarketingLandingPage() {
               <span>Trusted by 5,000+ marketing teams worldwide</span>
             </div>
             <h1 className="text-5xl md:text-6xl lg:text-7xl font-bold text-gray-900 leading-tight mb-6">
-              Marketing Automation
+              WhatsApp Marketing
               <span className="block bg-gradient-to-r from-purple-600 via-pink-600 to-rose-600 bg-clip-text text-transparent animate-gradient">
-                That Drives Growth
+                Automation Platform
               </span>
             </h1>
             <p className="text-xl md:text-2xl text-gray-600 mb-8 leading-relaxed">
@@ -194,19 +194,89 @@ export default function MarketingLandingPage() {
         </div>
       </section>
 
-      {/* Footer */}
+      {/* Footer with Cross-Domain Links */}
       <footer className="bg-gray-900 text-gray-400 py-12">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
-          <div className="flex items-center justify-center mb-4">
-            <Megaphone className="h-6 w-6 text-purple-400" />
-            <span className="ml-2 text-white font-semibold text-lg">
-              Flowauxi Marketing
-            </span>
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="grid md:grid-cols-3 gap-8 mb-8">
+            <div>
+              <div className="flex items-center mb-4">
+                <Megaphone className="h-6 w-6 text-purple-400" />
+                <span className="ml-2 text-white font-semibold text-lg">
+                  Flowauxi Marketing
+                </span>
+              </div>
+              <p className="text-sm">
+                Enterprise marketing automation platform built for modern teams
+              </p>
+            </div>
+            <div>
+              <h3 className="text-white font-semibold mb-4">Products</h3>
+              <ul className="space-y-2 text-sm">
+                <li>
+                  <a
+                    href="https://www.flowauxi.com"
+                    className="hover:text-white transition-colors"
+                  >
+                    Flowauxi — WhatsApp Automation
+                  </a>
+                </li>
+                <li>
+                  <a
+                    href="https://shop.flowauxi.com"
+                    className="hover:text-white transition-colors"
+                  >
+                    Online Store Builder
+                  </a>
+                </li>
+                <li>
+                  <a
+                    href="https://api.flowauxi.com"
+                    className="hover:text-white transition-colors"
+                  >
+                    OTP Verification API
+                  </a>
+                </li>
+                <li>
+                  <a
+                    href="https://pages.flowauxi.com"
+                    className="hover:text-white transition-colors"
+                  >
+                    Portfolio Website Builder
+                  </a>
+                </li>
+              </ul>
+            </div>
+            <div>
+              <h3 className="text-white font-semibold mb-4">Company</h3>
+              <ul className="space-y-2 text-sm">
+                <li>
+                  <a
+                    href="https://www.flowauxi.com/pricing"
+                    className="hover:text-white transition-colors"
+                  >
+                    Pricing
+                  </a>
+                </li>
+                <li>
+                  <a
+                    href="https://www.flowauxi.com/privacy"
+                    className="hover:text-white transition-colors"
+                  >
+                    Privacy Policy
+                  </a>
+                </li>
+                <li>
+                  <a
+                    href="https://www.flowauxi.com/terms"
+                    className="hover:text-white transition-colors"
+                  >
+                    Terms of Service
+                  </a>
+                </li>
+              </ul>
+            </div>
           </div>
-          <p className="text-sm">
-            Enterprise marketing platform built for modern teams
-          </p>
-          <div className="mt-8 text-sm">
+          <div className="border-t border-gray-800 pt-8 text-center text-sm">
             <p>&copy; 2026 Flowauxi. All rights reserved.</p>
           </div>
         </div>
