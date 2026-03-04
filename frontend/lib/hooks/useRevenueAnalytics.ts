@@ -96,6 +96,12 @@ export function useRevenueAnalytics(
           currencies: errorData.currencies,
         });
 
+        // Don't retry on 503 (backend unavailable) - it won't help
+        if (response.status === 503) {
+          setError(errorData.error || "Analytics service is temporarily unavailable");
+          return;
+        }
+
         throw new Error(
           errorData.error || `Failed to fetch revenue data: ${response.status}`,
         );

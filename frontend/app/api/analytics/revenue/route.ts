@@ -66,21 +66,38 @@ export async function GET(request: NextRequest) {
 
     // Get backend URL from environment
     const backendUrl =
-      process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:5000";
+      process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
 
-    // Call Flask backend
-    const response = await fetch(
-      `${backendUrl}/api/analytics/revenue?range=${range}`,
-      {
-        method: "GET",
-        headers: {
-          "Content-Type": "application/json",
-          "X-User-ID": userId,
+    // Call Flask backend with timeout
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 10000);
+
+    let response: Response;
+    try {
+      response = await fetch(
+        `${backendUrl}/api/analytics/revenue?range=${range}`,
+        {
+          method: "GET",
+          headers: {
+            "Content-Type": "application/json",
+            "X-User-ID": userId,
+          },
+          cache: "no-store",
+          signal: controller.signal,
         },
-        // Don't cache at the fetch level, let the hook handle caching
-        cache: "no-store",
-      },
-    );
+      );
+    } catch (fetchError) {
+      clearTimeout(timeout);
+      console.error("Backend unreachable for revenue analytics:", fetchError);
+      return NextResponse.json(
+        {
+          success: false,
+          error: "Analytics service is temporarily unavailable. Please try again later.",
+        },
+        { status: 503 },
+      );
+    }
+    clearTimeout(timeout);
 
     if (!response.ok) {
       const errorData = await response
