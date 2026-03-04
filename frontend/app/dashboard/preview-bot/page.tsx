@@ -79,6 +79,8 @@ export default function PreviewBotPage() {
   const [loading, setLoading] = useState(true);
   const [previewQuery, setPreviewQuery] = useState("");
   const [previewLoading, setPreviewLoading] = useState(false);
+  const [streamingText, setStreamingText] = useState("");
+  const [isStreaming, setIsStreaming] = useState(false);
   const [chatMessages, setChatMessages] = useState<
     { role: "user" | "bot"; content: string; time: string; intent?: string }[]
   >([]);
@@ -110,9 +112,9 @@ export default function PreviewBotPage() {
       setChatMessages([
         {
           role: "bot",
-          content: `Hi! I'm your AI Business Assistant. I've learned all about ${
-            data.businessName || "your business"
-          }. Ask me anything to see how I'll respond to your customers!`,
+          content: `Hi! 👋 Welcome to ${
+            data.businessName || "our store"
+          }. How can we help you today?`,
           time: new Date().toLocaleTimeString([], {
             hour: "2-digit",
             minute: "2-digit",
@@ -205,55 +207,180 @@ export default function PreviewBotPage() {
 
     setPreviewQuery("");
     setPreviewLoading(true);
+    setStreamingText("");
+    setIsStreaming(false);
+
+    const requestBody = {
+      business_id: data.businessId || "user_business",
+      business_data: convertToApiFormat(data),
+      user_message: query,
+      history: chatMessages.map((m) => ({
+        role: m.role === "bot" ? "assistant" : "user",
+        content: m.content,
+      })),
+    };
 
     try {
-      const response = await fetch("/api/ai/preview", {
+      // Try streaming first
+      const response = await fetch("/api/ai/preview-stream", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          business_data: convertToApiFormat(data),
-          user_message: query,
-          history: chatMessages.map((m) => ({
-            role: m.role === "bot" ? "assistant" : "user",
-            content: m.content,
-          })),
-        }),
+        body: JSON.stringify(requestBody),
       });
 
-      const result = await response.json();
+      if (
+        response.ok &&
+        response.headers.get("content-type")?.includes("text/event-stream")
+      ) {
+        // SSE streaming mode
+        const reader = response.body?.getReader();
+        const decoder = new TextDecoder();
+        let accumulated = "";
+        let intent = "";
 
-      // Add bot response to chat
-      setChatMessages((prev) => [
-        ...prev,
-        {
-          role: "bot",
-          content:
-            result.reply ||
-            result.error ||
-            "I'm sorry, I couldn't generate a response.",
-          time: new Date().toLocaleTimeString([], {
-            hour: "2-digit",
-            minute: "2-digit",
-          }),
-          intent: result.intent,
-        },
-      ]);
+        if (reader) {
+          setIsStreaming(true);
+
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+
+            const chunk = decoder.decode(value, { stream: true });
+            const lines = chunk.split("\n");
+
+            for (const line of lines) {
+              if (!line.startsWith("data: ")) continue;
+              try {
+                const event = JSON.parse(line.slice(6));
+
+                if (event.type === "start") {
+                  intent = event.intent || "";
+                } else if (event.type === "token") {
+                  accumulated += event.content;
+                  setStreamingText(accumulated);
+                } else if (event.type === "done") {
+                  const finalText = event.full_response || accumulated;
+                  // Add completed message to chat
+                  setChatMessages((prev) => [
+                    ...prev,
+                    {
+                      role: "bot",
+                      content: finalText,
+                      time: new Date().toLocaleTimeString([], {
+                        hour: "2-digit",
+                        minute: "2-digit",
+                      }),
+                      intent: event.metadata?.intent || intent,
+                    },
+                  ]);
+                  setStreamingText("");
+                  setIsStreaming(false);
+                } else if (event.type === "error") {
+                  setChatMessages((prev) => [
+                    ...prev,
+                    {
+                      role: "bot",
+                      content: event.message || "Something went wrong.",
+                      time: new Date().toLocaleTimeString([], {
+                        hour: "2-digit",
+                        minute: "2-digit",
+                      }),
+                    },
+                  ]);
+                  setStreamingText("");
+                  setIsStreaming(false);
+                }
+              } catch {
+                // Skip malformed SSE lines
+              }
+            }
+          }
+
+          // If stream ended without a "done" event, use accumulated text
+          if (accumulated && isStreaming) {
+            setChatMessages((prev) => [
+              ...prev,
+              {
+                role: "bot",
+                content: accumulated,
+                time: new Date().toLocaleTimeString([], {
+                  hour: "2-digit",
+                  minute: "2-digit",
+                }),
+                intent,
+              },
+            ]);
+            setStreamingText("");
+            setIsStreaming(false);
+          }
+        }
+      } else {
+        // Fallback to non-streaming
+        const fallbackResponse = await fetch("/api/ai/preview", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(requestBody),
+        });
+        const result = await fallbackResponse.json();
+
+        setChatMessages((prev) => [
+          ...prev,
+          {
+            role: "bot",
+            content:
+              result.reply ||
+              result.error ||
+              "I'm sorry, I couldn't generate a response.",
+            time: new Date().toLocaleTimeString([], {
+              hour: "2-digit",
+              minute: "2-digit",
+            }),
+            intent: result.intent,
+          },
+        ]);
+      }
     } catch (error) {
-      const errorMsg =
-        "Could not connect to AI Brain. Make sure backend is running.";
-      setChatMessages((prev) => [
-        ...prev,
-        {
-          role: "bot",
-          content: errorMsg,
-          time: new Date().toLocaleTimeString([], {
-            hour: "2-digit",
-            minute: "2-digit",
-          }),
-        },
-      ]);
+      // Fallback: try non-streaming endpoint
+      try {
+        const fallbackResponse = await fetch("/api/ai/preview", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(requestBody),
+        });
+        const result = await fallbackResponse.json();
+        setChatMessages((prev) => [
+          ...prev,
+          {
+            role: "bot",
+            content:
+              result.reply ||
+              result.error ||
+              "I'm sorry, I couldn't generate a response.",
+            time: new Date().toLocaleTimeString([], {
+              hour: "2-digit",
+              minute: "2-digit",
+            }),
+            intent: result.intent,
+          },
+        ]);
+      } catch {
+        setChatMessages((prev) => [
+          ...prev,
+          {
+            role: "bot",
+            content:
+              "Could not connect to AI Brain. Make sure backend is running.",
+            time: new Date().toLocaleTimeString([], {
+              hour: "2-digit",
+              minute: "2-digit",
+            }),
+          },
+        ]);
+      }
     } finally {
       setPreviewLoading(false);
+      setStreamingText("");
+      setIsStreaming(false);
     }
   };
 
@@ -390,7 +517,28 @@ export default function PreviewBotPage() {
               </div>
             ))}
 
-            {previewLoading && (
+            {/* Streaming text display */}
+            {isStreaming && streamingText && (
+              <div className={`${styles.message} ${styles.botMessage}`}>
+                <div className={styles.bubble}>
+                  {streamingText}
+                  <span
+                    style={{
+                      display: "inline-block",
+                      width: "2px",
+                      height: "1em",
+                      background: "#25D366",
+                      marginLeft: "2px",
+                      animation: "blink 0.7s infinite",
+                      verticalAlign: "text-bottom",
+                    }}
+                  />
+                </div>
+              </div>
+            )}
+
+            {/* Thinking indicator (before streaming starts) */}
+            {previewLoading && !isStreaming && (
               <div className={`${styles.message} ${styles.botMessage}`}>
                 <div className={styles.typingBubble}>
                   <div className={styles.dot}></div>

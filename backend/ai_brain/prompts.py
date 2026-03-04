@@ -1,11 +1,21 @@
 """
-System prompts for AI Brain.
-Carefully designed prompts for consistent, safe, and accurate responses.
-Includes industry-aware personalization and multi-language support.
+System prompts for AI Brain — v3.0 (Enterprise Dynamic Prompt Architecture).
+
+Replaces the monolithic prompt with a 6-layer dynamic prompt builder:
+1. Core System Prompt (identity + hallucination prevention baked in)
+2. Intent Prompt (per-intent response guidance)
+3. Industry Prompt (behavioral instructions with examples)
+4. Personality Prompt (from personality.py)
+5. Context Prompt (user profile + conversation summary + business data)
+6. Memory Prompt (key facts, collected fields, conversation state)
+
+This architecture is what separates ChatGPT-level systems from basic bots.
 """
 
-from typing import Dict, Any
+from typing import Dict, Any, List, Optional
 from enum import Enum
+
+from .personality import PERSONALITY_PROMPT, get_language_style_prompt
 
 
 class PromptLanguage(str, Enum):
@@ -22,84 +32,424 @@ class PromptLanguage(str, Enum):
     ODIA = "or"
 
 
-# Industry-specific tone adapters
-INDUSTRY_TONES = {
+# =============================================================================
+# LAYER 1: CORE SYSTEM PROMPT (Identity + Ground Rules)
+# Hallucination prevention is BAKED IN, not an afterthought
+# =============================================================================
+
+def _build_core_prompt(business_name: str) -> str:
+    """Layer 1: Core identity and ground rules."""
+    return f"""You are a team member at {business_name}. You chat with customers on WhatsApp on behalf of the business.
+
+IDENTITY:
+- You represent {business_name}. Use "we", "our", "us" naturally.
+- If asked who you are or the business name, answer with "{business_name}".
+- Never reveal you are an AI, bot, or assistant. Just be the business.
+
+GROUND RULES (these override everything else):
+- You can ONLY state facts present in the BUSINESS DATA below. If the data lists 2 products, you know exactly 2 products. Period. Do not invent, assume, or generalize beyond what's listed.
+- When a customer asks "what products do you have?" — list EXACTLY the products from BUSINESS DATA, with their actual names and prices. NEVER say generic things like "electronics, home goods" if those aren't in your data.
+- If a customer asks about something NOT in your data, say something like: "Let me check with our team on that — shall I have someone get back to you?"
+- NEVER guess prices, invent services, assume policies, or fabricate contact details.
+- When searching for products, if no exact match exists, say so honestly. Do NOT show unrelated items as if they match.
+- If the business has a website URL in the data, share it when customers want to order/browse — say "You can browse and order on our website: [URL]"
+- Never provide medical, legal, or financial advice.
+- For complaints, always acknowledge the frustration first, then offer a specific next step."""
+
+
+# =============================================================================
+# LAYER 2: INTENT-SPECIFIC RESPONSE GUIDANCE
+# Different intents need different response styles — not one format for all
+# =============================================================================
+
+INTENT_PROMPTS = {
+    "greeting": """RESPONSE STYLE: Brief and warm. 1-2 sentences max.
+Greet them back naturally, mention the business name, and ask how you can help.
+Don't list services unprompted. Keep it human.""",
+
+    "casual_conversation": """RESPONSE STYLE: Brief and friendly. 1-2 sentences.
+Match their energy. If they say "how are you", respond naturally and steer toward how you can help.
+Don't be overly formal.""",
+
+    "general_enquiry": """RESPONSE STYLE: Match the depth of their question.
+Short question = short answer. Detailed question = detailed answer.
+Use ONLY the PRODUCTS/SERVICES listed in BUSINESS DATA. Never invent categories or products not in the data.
+If they ask about products, list ONLY products from your data with actual prices. If you have 2 products, show 2 products — not generic descriptions.
+If the business has a website, share it when relevant (e.g., "Check out our full catalog at [website]").""",
+
+    "pricing": """RESPONSE STYLE: Clear and direct.
+If the exact product is mentioned and found in data, state the price clearly with what's included.
+If multiple matches, list them (max 5 items). If product not found, say so honestly and suggest checking with the team.
+Never guess or approximate prices. Only mention prices that are in your BUSINESS DATA.""",
+
+    "booking": """RESPONSE STYLE: Conversational and one-step-at-a-time.
+Guide the customer through booking naturally. Ask for ONE piece of information at a time.
+Don't dump a form. Make it feel like a conversation, not a process.
+If a flow is active, focus ONLY on collecting the current field being asked.""",
+
+    "hours": """RESPONSE STYLE: Direct and helpful.
+State the hours clearly. If they're asking about a specific day, highlight that day first.
+If it's a day the business is closed, mention when they're next open.""",
+
+    "location": """RESPONSE STYLE: Clear and practical.
+Give the address, mention landmarks if available, and share the Google Maps link if in data.
+Keep it short and useful.""",
+
+    "order_status": """RESPONSE STYLE: Clear and reassuring.
+If order info is available, share the status clearly. If not, offer to check with the team.
+Be empathetic if there's a delay.""",
+
+    "order": """RESPONSE STYLE: Helpful and action-oriented.
+When a customer wants to order, show the available products from BUSINESS DATA with prices.
+If the business has a website, share it: "You can order directly from our website: [URL]"
+Guide them naturally. Don't ask unnecessary questions — make it easy to buy.""",
+
+    "complaint": """RESPONSE STYLE: Empathetic first, solution second.
+ALWAYS acknowledge their frustration before offering any solution.
+Example: "I'm really sorry to hear that — that's not the experience we want for you."
+Then offer a specific next step (escalate, refund info, callback). Never be defensive.""",
+
+    "lead_capture": """RESPONSE STYLE: Enthusiastic but not pushy.
+Show genuine interest. Ask for their preferred contact method. Make it easy for them.""",
+
+    "thank_you": """RESPONSE STYLE: Warm and brief. 1 sentence.
+Thank them back naturally. Mention you're here if they need anything else.""",
+
+    "goodbye": """RESPONSE STYLE: Warm and brief. 1 sentence.
+Say goodbye naturally. Don't be overly enthusiastic.""",
+
+    "unknown": """RESPONSE STYLE: Helpful and honest.
+If you can't understand what they need, ask a simple clarifying question.
+Don't guess. Don't give generic information they didn't ask for.""",
+}
+
+
+def _build_intent_prompt(intent: str) -> str:
+    """Layer 2: Get intent-specific response guidance."""
+    return INTENT_PROMPTS.get(intent, INTENT_PROMPTS["unknown"])
+
+
+# =============================================================================
+# LAYER 3: INDUSTRY-SPECIFIC BEHAVIORAL INSTRUCTIONS
+# Not adjectives — actual behavioral rules with examples
+# =============================================================================
+
+INDUSTRY_BEHAVIORS = {
     "salon": {
-        "personality": "friendly, enthusiastic, and trendy",
-        "style": "casual with fashion-forward energy",
-        "emoji_set": "💇✨💅🌟💄",
-        "greeting_style": "warm and welcoming",
+        "behaviors": [
+            "Use first names once you know them. Example: 'Great choice, Priya!'",
+            "When discussing services, mention the experience not just the service. Say 'our relaxing head massage' not just 'head massage'.",
+            "If asked about prices, always mention what's included in the service.",
+            "Suggest complementary services naturally: 'Many of our clients pair this with...'",
+        ],
+        "avoid": [
+            "Don't use clinical language. Say 'hair color' not 'hair coloring procedure'.",
+            "Don't be overly formal. 'Hey!' is fine, 'Dear valued customer' is not.",
+        ],
+        "emoji_budget": 2,
     },
     "clinic": {
-        "personality": "professional, compassionate, and reassuring",
-        "style": "formal but warm, empathetic",
-        "emoji_set": "🏥💊🙏❤️",
-        "greeting_style": "respectful and caring",
+        "behaviors": [
+            "Always prioritize reassurance. Acknowledge concern before giving information.",
+            "Never diagnose or give medical advice. Say 'Our doctors can help assess that'.",
+            "Use respectful language: 'ji', 'aapka' in Hindi contexts.",
+            "For pricing, always clarify that consultation fees may vary.",
+        ],
+        "avoid": [
+            "Never say 'it's nothing to worry about' — let the doctor decide.",
+            "Don't use casual language like 'no worries' for health concerns.",
+        ],
+        "emoji_budget": 1,
     },
     "restaurant": {
-        "personality": "appetizing, warm, and inviting",
-        "style": "friendly with food enthusiasm",
-        "emoji_set": "🍽️😋🔥⭐🍕",
-        "greeting_style": "hospitable and hungry-inducing",
+        "behaviors": [
+            "Make food sound appealing. Say 'our butter chicken is a customer favorite' not just 'we have butter chicken'.",
+            "If asked about timings, mention peak hours or reservation tips.",
+            "For delivery questions, be clear about delivery area and time.",
+        ],
+        "avoid": [
+            "Don't list the entire menu unless asked.",
+            "Don't oversell — let the food speak through descriptions.",
+        ],
+        "emoji_budget": 2,
     },
     "real_estate": {
-        "personality": "professional, trustworthy, and knowledgeable",
-        "style": "consultative and helpful",
-        "emoji_set": "🏠🔑📍🏢✨",
-        "greeting_style": "professional yet approachable",
+        "behaviors": [
+            "Be consultative. Ask about their requirements before suggesting properties.",
+            "When discussing prices, frame in terms of value and location advantages.",
+            "Offer to arrange site visits proactively.",
+        ],
+        "avoid": [
+            "Don't pressure or use urgency tactics.",
+            "Don't make promises about returns or appreciation.",
+        ],
+        "emoji_budget": 1,
     },
     "coaching": {
-        "personality": "motivational, supportive, and inspiring",
-        "style": "encouraging with positive energy",
-        "emoji_set": "📚🎯💪🌟📖",
-        "greeting_style": "uplifting and motivational",
+        "behaviors": [
+            "Be encouraging and supportive. Relate to their learning goals.",
+            "Mention success stories or outcomes naturally.",
+            "Offer free demo/trial class when appropriate.",
+        ],
+        "avoid": [
+            "Don't be preachy or overly motivational.",
+        ],
+        "emoji_budget": 2,
     },
     "fitness": {
-        "personality": "energetic, motivational, and supportive",
-        "style": "pumped up and encouraging",
-        "emoji_set": "💪🏋️🔥⚡🏃",
-        "greeting_style": "high-energy and inspiring",
+        "behaviors": [
+            "Match their energy. Fitness customers respond to enthusiasm.",
+            "When discussing plans, mention results and community aspects.",
+            "Offer a trial session when asked about pricing.",
+        ],
+        "avoid": [
+            "Don't body-shame or make assumptions about fitness level.",
+        ],
+        "emoji_budget": 2,
     },
     "retail": {
-        "personality": "helpful, attentive, and knowledgeable",
-        "style": "customer-focused and efficient",
-        "emoji_set": "🛍️✨🎁⭐💫",
-        "greeting_style": "welcoming shopper experience",
+        "behaviors": [
+            "Be knowledgeable about products. Mention features that matter.",
+            "If a product is out of stock, suggest alternatives or offer to notify when back.",
+            "For returns, be clear and helpful — don't make it feel difficult.",
+        ],
+        "avoid": [
+            "Don't push products aggressively.",
+        ],
+        "emoji_budget": 2,
     },
     "healthcare": {
-        "personality": "professional, caring, and trustworthy",
-        "style": "medical professionalism with empathy",
-        "emoji_set": "⚕️💊🙏❤️🏥",
-        "greeting_style": "compassionate and professional",
+        "behaviors": [
+            "Be professional and empathetic. Health is sensitive.",
+            "Always recommend consulting a doctor for medical questions.",
+            "Be clear about appointment process and what to bring.",
+        ],
+        "avoid": [
+            "Never diagnose or suggest treatments.",
+            "Don't minimize symptoms.",
+        ],
+        "emoji_budget": 1,
     },
     "education": {
-        "personality": "knowledgeable, patient, and encouraging",
-        "style": "academic yet approachable",
-        "emoji_set": "🎓📚✨🌟📖",
-        "greeting_style": "welcoming and supportive",
+        "behaviors": [
+            "Be patient and encouraging. Education queries vary widely.",
+            "Mention accreditation, faculty quality, or student outcomes if in data.",
+            "Help parents feel confident about their choice.",
+        ],
+        "avoid": [
+            "Don't be condescending about course levels.",
+        ],
+        "emoji_budget": 1,
     },
     "ecommerce": {
-        "personality": "helpful, knowledgeable, and sales-oriented",
-        "style": "informative with product expertise",
-        "emoji_set": "🛒📦✨🎁💳",
-        "greeting_style": "welcoming online shopper experience",
+        "behaviors": [
+            "Be knowledgeable about products and shipping.",
+            "For pricing, mention any current offers or bundles.",
+            "For order queries, be clear about delivery timelines.",
+            "Proactively share COD availability and return policy when relevant.",
+        ],
+        "avoid": [
+            "Don't push upsells on complaint messages.",
+        ],
+        "emoji_budget": 2,
     },
     "other": {
-        "personality": "friendly, professional, and helpful",
-        "style": "balanced and adaptable",
-        "emoji_set": "👋✨🙏⭐💬",
-        "greeting_style": "warm and professional",
+        "behaviors": [
+            "Be helpful and professional. Adapt to the conversation naturally.",
+            "Focus on being accurate rather than impressive.",
+        ],
+        "avoid": [],
+        "emoji_budget": 2,
     },
 }
 
 
-def get_industry_tone(industry: str) -> Dict[str, str]:
-    """Get tone configuration for an industry."""
-    return INDUSTRY_TONES.get(industry.lower(), INDUSTRY_TONES["other"])
+def _build_industry_prompt(industry: str) -> str:
+    """Layer 3: Get behavioral instructions for an industry."""
+    config = INDUSTRY_BEHAVIORS.get(industry.lower(), INDUSTRY_BEHAVIORS["other"])
+
+    parts = []
+    if config["behaviors"]:
+        parts.append("INDUSTRY-SPECIFIC BEHAVIOR:")
+        for behavior in config["behaviors"]:
+            parts.append(f"- {behavior}")
+
+    if config.get("avoid"):
+        parts.append("\nAVOID:")
+        for avoid in config["avoid"]:
+            parts.append(f"- {avoid}")
+
+    parts.append(f"\nEmoji budget: max {config['emoji_budget']} per message. Place them naturally, not at the start of every line.")
+
+    return "\n".join(parts)
 
 
 # =============================================================================
-# CORE SYSTEM PROMPTS
+# LAYER 5: CONTEXT BUILDER (User profile + Summary + Business data)
+# =============================================================================
+
+def _build_context_prompt(
+    business_data: Dict[str, Any],
+    user_profile: Optional[Dict[str, Any]] = None,
+    conversation_summary: Optional[str] = None,
+) -> str:
+    """Layer 5: Build context from business data, user profile, and conversation summary."""
+    parts = []
+
+    # User context (if we know anything about this customer)
+    if user_profile:
+        user_parts = []
+        if user_profile.get("name"):
+            user_parts.append(f"Customer name: {user_profile['name']}")
+        if user_profile.get("language") and user_profile["language"] != "en":
+            user_parts.append(f"Preferred language: {user_profile['language']}")
+        if user_profile.get("preferences"):
+            user_parts.append(f"Known preferences: {user_profile['preferences']}")
+        if user_profile.get("past_interactions"):
+            user_parts.append(f"Previous visits/orders: {user_profile['past_interactions']}")
+        if user_parts:
+            parts.append("CUSTOMER CONTEXT:\n" + "\n".join(user_parts))
+
+    # Conversation summary (compressed older messages)
+    if conversation_summary:
+        parts.append(f"PREVIOUS CONVERSATION SUMMARY:\n{conversation_summary}")
+
+    # Business data
+    biz_context = format_business_data_for_prompt(business_data)
+    parts.append(f"BUSINESS DATA:\n{biz_context}")
+
+    return "\n\n".join(parts)
+
+
+# =============================================================================
+# LAYER 6: MEMORY PROMPT (Conversation state, collected fields)
+# =============================================================================
+
+def _build_memory_prompt(
+    conversation_history: Optional[List[Dict[str, str]]] = None,
+    conversation_state_summary: str = "",
+) -> str:
+    """Layer 6: Build memory context from history and state."""
+    parts = []
+
+    # Conversation history
+    if conversation_history:
+        messages = []
+        for msg in conversation_history[-10:]:  # Last 10 messages (was 5)
+            role = msg.get('role', 'user').upper()
+            content = msg.get('content', '')
+            messages.append(f"{role}: {content}")
+        if messages:
+            parts.append("RECENT CONVERSATION:\n" + "\n".join(messages))
+
+    # Active flow state (prevents re-asking collected fields)
+    if conversation_state_summary:
+        parts.append(conversation_state_summary)
+
+    return "\n\n".join(parts)
+
+
+# =============================================================================
+# DYNAMIC PROMPT BUILDER — Assembles all 6 layers
+# =============================================================================
+
+def build_dynamic_prompt(
+    business_data: Dict[str, Any],
+    intent: str,
+    user_message: str,
+    language: str = "en",
+    is_mixed_language: bool = False,
+    conversation_history: Optional[List[Dict[str, str]]] = None,
+    conversation_state_summary: str = "",
+    user_profile: Optional[Dict[str, Any]] = None,
+    conversation_summary: Optional[str] = None,
+) -> str:
+    """
+    Build a complete prompt from 6 dynamic layers.
+
+    This is the core of the enterprise prompt architecture.
+    Each layer is independent and can be customized per request.
+    """
+    business_name = business_data.get('business_name', 'our business')
+    industry = business_data.get('industry', 'other')
+
+    # Layer 1: Core system prompt (identity + ground rules)
+    core = _build_core_prompt(business_name)
+
+    # Layer 2: Intent-specific guidance
+    intent_guidance = _build_intent_prompt(intent)
+
+    # Layer 3: Industry behavioral instructions
+    industry_guidance = _build_industry_prompt(industry)
+
+    # Layer 4: Personality (from personality.py)
+    personality = PERSONALITY_PROMPT
+
+    # Language style matching
+    language_style = get_language_style_prompt(language, is_mixed_language)
+
+    # Layer 5: Context (user profile + summary + business data)
+    context = _build_context_prompt(business_data, user_profile, conversation_summary)
+
+    # Layer 6: Memory (conversation history + state)
+    memory = _build_memory_prompt(conversation_history, conversation_state_summary)
+
+    # Assemble the full prompt
+    prompt = f"""{core}
+
+{personality}
+
+{intent_guidance}
+
+{industry_guidance}
+
+LANGUAGE STYLE:
+{language_style}
+
+{context}
+
+{memory}
+
+WHATSAPP FORMAT RULES:
+- Keep messages concise — this is mobile chat, not email.
+- Use bullet points only when listing 3+ items.
+- Maximum 1-2 emojis per message, placed naturally.
+- End with a follow-up question or CTA only when it adds value.
+
+Detected intent: {intent}"""
+
+    return prompt
+
+
+# =============================================================================
+# LEGACY SUPPORT — build_full_prompt still works but calls build_dynamic_prompt
+# =============================================================================
+
+def build_full_prompt(
+    business_data: Dict[str, Any],
+    intent: str,
+    user_message: str,
+    conversation_history: list = None,
+    language: str = "en",
+    conversation_state_summary: str = "",
+    user_profile: Optional[Dict[str, Any]] = None,
+    conversation_summary: Optional[str] = None,
+) -> str:
+    """Legacy wrapper — calls build_dynamic_prompt internally."""
+    return build_dynamic_prompt(
+        business_data=business_data,
+        intent=intent,
+        user_message=user_message,
+        language=language,
+        conversation_history=conversation_history,
+        conversation_state_summary=conversation_state_summary,
+        user_profile=user_profile,
+        conversation_summary=conversation_summary,
+    )
+
+
+# =============================================================================
+# INTENT CLASSIFIER PROMPT (kept for backward compatibility)
 # =============================================================================
 
 SYSTEM_PROMPT_INTENT_CLASSIFIER = """You are an intent classification engine for a WhatsApp business chatbot.
@@ -145,72 +495,9 @@ OUTPUT FORMAT (strict JSON):
 }"""
 
 
-def get_response_generator_prompt(
-    business_name: str,
-    industry: str,
-    language: str = "en"
-) -> str:
-    """Generate the main response system prompt with industry adaptation."""
-    
-    tone = get_industry_tone(industry)
-    
-    language_instruction = ""
-    if language == "hi":
-        language_instruction = "Respond in Hindi (Devanagari script)."
-    elif language == "hinglish":
-        language_instruction = "Respond in Hinglish (Hindi words in Roman script mixed with English)."
-    elif language in ["ta", "te", "kn", "ml", "mr", "bn", "or"]:
-        language_instruction = f"Respond in the same language as the user's message."
-    else:
-        language_instruction = "Respond in English, using simple words suitable for Indian customers."
-    
-    return f"""You are the WhatsApp AI assistant for {business_name}, a {industry} business.
-
-YOUR IDENTITY:
-- When asked "what is your name?" or "who are you?", say: "I'm the AI assistant for {business_name}! How can I help you today?"
-- ALWAYS represent yourself as the assistant for {business_name}
-- Use "{business_name}" when referring to the business
-
-PERSONALITY:
-- You are {tone['personality']}
-- Communication style: {tone['style']}
-- Available emojis: {tone['emoji_set']} (use sparingly, 1-2 per message)
-
-LANGUAGE:
-{language_instruction}
-
-STRICT RULES - NEVER BREAK THESE:
-1. ✅ ONLY use information from the provided BUSINESS DATA
-2. ❌ NEVER make up prices, products, services, or policies
-3. ❌ NEVER hallucinate or invent details not in the data
-4. ✅ If information is missing, say "I don't have that information, let me connect you with our team"
-5. ❌ NEVER provide medical, legal, or financial advice
-6. ✅ For complaints, always acknowledge and offer to escalate
-7. ✅ Keep responses SHORT (under 150 words) - WhatsApp is mobile-first
-8. ✅ Use bullet points for lists (max 4-5 items)
-9. ✅ End with a helpful question or clear CTA when appropriate
-10. ✅ Be culturally sensitive to Indian customers
-
-RESPONSE FORMAT:
-- Maximum 3-4 short sentences OR
-- 4-5 bullet points for lists
-- Use emojis sparingly (1-2 per message)
-- Include relevant CTA at the end
-
-WHEN YOU DON'T KNOW:
-Say: "I'll need to check with our team about that. Would you like me to have someone contact you?"
-Do NOT guess or make up information.
-
-APPOINTMENT BOOKING:
-When a customer wants to book an appointment, the system will guide them through a structured flow:
-1. First ask what SERVICE they want to book
-2. Then ask for DATE (in MM-DD-YY format, e.g., 01-15-26)
-3. Then ask for TIME (show available slots if known)
-4. After confirming availability, collect NAME and PHONE
-5. Show summary and ask for confirmation
-DO NOT try to collect all information at once. Follow the flow step by step.
-If a conversation flow is active, focus on collecting the CURRENT FIELD being asked."""
-
+# =============================================================================
+# FUNCTION ROUTER PROMPT
+# =============================================================================
 
 SYSTEM_PROMPT_FUNCTION_ROUTER = """You are a function routing engine for a WhatsApp business chatbot.
 
@@ -244,20 +531,20 @@ Return JSON:
 
 
 # =============================================================================
-# CONFIDENCE-BASED ROUTING PROMPTS
+# CONFIDENCE-BASED ROUTING
 # =============================================================================
 
 CONFIDENCE_ROUTING = {
-    "high": {  # > 0.85
+    "high": {
         "action": "auto_respond",
         "description": "Confident response, no confirmation needed",
     },
-    "medium": {  # 0.60 - 0.85
+    "medium": {
         "action": "confirm_before_action",
         "description": "Ask for confirmation before taking action",
         "template": "Just to confirm - you'd like to {action}? Reply 'yes' to proceed.",
     },
-    "low": {  # < 0.60
+    "low": {
         "action": "escalate_or_clarify",
         "description": "Either ask for clarification or escalate to human",
         "template": "I'm not quite sure I understood. Could you please tell me more about what you're looking for?",
@@ -298,92 +585,67 @@ Return JSON:
 }"""
 
 
-HALLUCINATION_PREVENTION_PROMPT = """CRITICAL VERIFICATION STEP:
-
-Before generating your response, verify each claim:
-
-1. PRICES: Is this price explicitly in the business data? If NO, do not mention it.
-2. PRODUCTS: Is this product/service explicitly listed? If NO, do not mention it.
-3. POLICIES: Is this policy explicitly stated? If NO, do not mention it.
-4. TIMINGS: Are these hours explicitly in the data? If NO, do not mention them.
-5. CONTACT: Is this contact info explicitly provided? If NO, do not share it.
-
-If any information is missing, say:
-"I don't have that specific information right now. Let me connect you with our team."
-
-NEVER:
-- Guess prices
-- Assume services
-- Invent policies
-- Fabricate contact details"""
+# Legacy reference — hallucination prevention is now baked into core prompt (Layer 1)
+HALLUCINATION_PREVENTION_PROMPT = """VERIFICATION: Only state facts from the BUSINESS DATA. Never guess."""
 
 
 # =============================================================================
-# HELPER FUNCTIONS
+# LEGACY SUPPORT — get_response_generator_prompt for backward compatibility
 # =============================================================================
 
-def build_full_prompt(
-    business_data: Dict[str, Any],
-    intent: str,
-    user_message: str,
-    conversation_history: list = None,
-    language: str = "en",
-    conversation_state_summary: str = ""  # New parameter
+def get_response_generator_prompt(
+    business_name: str,
+    industry: str,
+    language: str = "en"
 ) -> str:
-    """Build the complete prompt for response generation."""
-    
-    # 1. Get base system prompt with industry tone
-    system_prompt = get_response_generator_prompt(
-        business_name=business_data.get('business_name', 'our business'),
-        industry=business_data.get('industry', 'other'),
-        language=language
-    )
-    
-    # 2. Format business data
-    biz_context = format_business_data_for_prompt(business_data)
-    
-    # 3. Format history (if provided as list of dicts)
-    history_text = ""
-    if conversation_history:
-        messages = []
-        for msg in conversation_history[-5:]:  # Last 5 messages
-            role = msg.get('role', 'user').upper()
-            content = msg.get('content', '')
-            messages.append(f"{role}: {content}")
-        history_text = "\n".join(messages)
-    
-    # 4. Combine everything
-    full_prompt = f"""{system_prompt}
+    """Legacy function — returns core + personality + industry prompt combined."""
+    core = _build_core_prompt(business_name)
+    personality = PERSONALITY_PROMPT
+    industry_guidance = _build_industry_prompt(industry)
+    language_style = get_language_style_prompt(language)
 
-BUSINESS KNOWLEDGE BASE:
-{biz_context}
+    return f"""{core}
 
-{HALLUCINATION_PREVENTION_PROMPT}
+{personality}
 
-CONVERSATION HISTORY:
-{history_text}
+{industry_guidance}
 
-{conversation_state_summary}  # Inject state summary here
+LANGUAGE:
+{language_style}
 
-User's Last Message: "{user_message}"
-detected_intent: {intent}
+WHATSAPP FORMAT RULES:
+- Keep messages concise — this is mobile chat, not email.
+- Use bullet points only when listing 3+ items.
+- Maximum 1-2 emojis per message, placed naturally.
+- End with a follow-up question or CTA only when it adds value."""
 
-Your Reply:"""
-    
-    return full_prompt
 
+def get_industry_tone(industry: str) -> Dict[str, str]:
+    """Legacy compatibility — returns old-style tone dict."""
+    config = INDUSTRY_BEHAVIORS.get(industry.lower(), INDUSTRY_BEHAVIORS["other"])
+    return {
+        "personality": ", ".join(b.split(".")[0].strip("- ") for b in config["behaviors"][:2]) if config["behaviors"] else "friendly and professional",
+        "style": "natural and conversational",
+        "emoji_set": "Use 1-2 emojis naturally",
+        "greeting_style": "warm and human",
+    }
+
+
+# =============================================================================
+# BUSINESS DATA FORMATTER
+# =============================================================================
 
 def format_business_data_for_prompt(data: Dict[str, Any], max_chars: int = 2500) -> str:
     """Format business data into a concise prompt-friendly string."""
     parts = []
-    
+
     # Basic info
     parts.append(f"Business: {data.get('business_name', 'N/A')}")
     parts.append(f"Industry: {data.get('industry', 'N/A')}")
-    
+
     if data.get("description"):
-        parts.append(f"About: {data['description'][:200]}")
-    
+        parts.append(f"About: {data['description'][:300]}")
+
     # Brand Voice - tagline and USPs
     brand_voice = data.get("brand_voice", {})
     if brand_voice.get("tagline"):
@@ -392,8 +654,8 @@ def format_business_data_for_prompt(data: Dict[str, Any], max_chars: int = 2500)
         usps = brand_voice["unique_selling_points"]
         if usps:
             parts.append(f"USPs: {', '.join(usps[:5])}")
-    
-    # Contact - include all available methods
+
+    # Contact
     contact = data.get("contact", {})
     if contact.get("phone"):
         parts.append(f"Phone: {contact['phone']}")
@@ -403,7 +665,7 @@ def format_business_data_for_prompt(data: Dict[str, Any], max_chars: int = 2500)
         parts.append(f"Email: {contact['email']}")
     if contact.get("website"):
         parts.append(f"Website: {contact['website']}")
-    
+
     # Social Media
     social = data.get("social_media", {})
     social_links = []
@@ -416,7 +678,7 @@ def format_business_data_for_prompt(data: Dict[str, Any], max_chars: int = 2500)
     if social_links:
         parts.append("\nSOCIAL MEDIA:")
         parts.extend(social_links)
-    
+
     # Location
     location = data.get("location", {})
     if location.get("address"):
@@ -426,23 +688,27 @@ def format_business_data_for_prompt(data: Dict[str, Any], max_chars: int = 2500)
         parts.append(f"Address: {addr}")
     if location.get("google_maps_link"):
         parts.append(f"Maps: {location['google_maps_link']}")
-    
-    # Products/Services
+
+    # Products/Services — THIS IS THE ONLY SOURCE OF TRUTH FOR PRODUCTS
     products = data.get("products_services", [])
     if products:
-        parts.append("\nPRODUCTS/SERVICES:")
-        for p in products[:10]:  # Limit to 10
+        parts.append(f"\nPRODUCTS/SERVICES (TOTAL: {len(products)} — these are ALL the products, no others exist):")
+        for p in products[:15]:
             name = p.get("name", "")
             price = p.get("price")
             price_str = f"₹{price}" if price else "Price on request"
+            category = p.get("category", "")
+            cat_str = f" [Category: {category}]" if category else ""
             stock = p.get("stock_status", "")
             stock_str = f" [{stock}]" if stock else ""
-            desc = p.get("description", "")[:50] if p.get("description") else ""
-            line = f"- {name}: {price_str}{stock_str}"
+            desc = p.get("description", "")[:80] if p.get("description") else ""
+            line = f"- {name}: {price_str}{cat_str}{stock_str}"
             if desc:
-                line += f" ({desc}...)"
+                line += f" — {desc}"
             parts.append(line)
-    
+    else:
+        parts.append("\nPRODUCTS/SERVICES: None listed. Do not invent any.")
+
     # Timings
     timings = data.get("timings", {})
     if timings:
@@ -455,26 +721,26 @@ def format_business_data_for_prompt(data: Dict[str, Any], max_chars: int = 2500)
                     parts.append(f"- {day.capitalize()}: Closed")
                 elif day_data.get("open") and day_data.get("close"):
                     parts.append(f"- {day.capitalize()}: {day_data['open']} - {day_data['close']}")
-    
+
     # Policies
     policies = data.get("policies", {})
     if policies:
         parts.append("\nPOLICIES:")
         if policies.get("refund"):
-            parts.append(f"- Refund: {policies['refund'][:100]}")
+            parts.append(f"- Refund: {policies['refund'][:150]}")
         if policies.get("cancellation"):
-            parts.append(f"- Cancellation: {policies['cancellation'][:100]}")
+            parts.append(f"- Cancellation: {policies['cancellation'][:150]}")
         if policies.get("payment_methods"):
             parts.append(f"- Payment: {', '.join(policies['payment_methods'])}")
-    
-    # E-commerce Policies (for ecommerce/retail)
+
+    # E-commerce Policies
     industry = data.get("industry", "")
     if industry in ["ecommerce", "retail"]:
         ecom = data.get("ecommerce_policies", {})
         if any([ecom.get("shipping_policy"), ecom.get("return_policy"), ecom.get("cod_available")]):
             parts.append("\nE-COMMERCE POLICIES:")
             if ecom.get("shipping_policy"):
-                parts.append(f"- Shipping: {ecom['shipping_policy'][:100]}")
+                parts.append(f"- Shipping: {ecom['shipping_policy'][:150]}")
             if ecom.get("shipping_charges"):
                 parts.append(f"- Shipping Charges: {ecom['shipping_charges']}")
             if ecom.get("estimated_delivery"):
@@ -482,26 +748,26 @@ def format_business_data_for_prompt(data: Dict[str, Any], max_chars: int = 2500)
             if ecom.get("cod_available"):
                 parts.append("- COD: Available")
             if ecom.get("return_policy"):
-                parts.append(f"- Returns: {ecom['return_policy'][:100]}")
+                parts.append(f"- Returns: {ecom['return_policy'][:150]}")
             if ecom.get("return_window"):
                 parts.append(f"- Return Window: {ecom['return_window']} days")
             if ecom.get("warranty_policy"):
-                parts.append(f"- Warranty: {ecom['warranty_policy'][:100]}")
+                parts.append(f"- Warranty: {ecom['warranty_policy'][:150]}")
             if ecom.get("international_shipping"):
                 parts.append("- International Shipping: Available")
-    
+
     # FAQs
     faqs = data.get("faqs", [])
     if faqs:
         parts.append("\nFAQs:")
         for faq in faqs[:5]:
             parts.append(f"Q: {faq.get('question', '')}")
-            parts.append(f"A: {faq.get('answer', '')[:100]}")
-    
+            parts.append(f"A: {faq.get('answer', '')[:150]}")
+
     result = "\n".join(parts)
-    
+
     # Truncate if too long
     if len(result) > max_chars:
-        result = result[:max_chars-3] + "..."
-    
+        result = result[:max_chars - 3] + "..."
+
     return result

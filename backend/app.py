@@ -1755,7 +1755,8 @@ def _require_limit_ai_responses(f):
 def _require_body_auth(f):
     """
     Auth decorator for endpoints that receive user_id in the JSON body.
-    Sets g.user_id so feature gate decorators can work.
+    Sets g.user_id and g.product_domain so feature gate decorators can work.
+    AI endpoints are shop-domain features, so product_domain is forced to 'shop'.
     """
     @wraps(f)
     def decorated(*args, **kwargs):
@@ -1764,6 +1765,10 @@ def _require_body_auth(f):
         if not user_id:
             return jsonify({'success': False, 'error': 'user_id or business_id is required'}), 401
         g.user_id = str(user_id)
+        # ai_responses is a shop-domain feature. The domain middleware resolves
+        # Origin (dashboard page → 'dashboard'), but the AI feature lives on the
+        # shop plan. Force overwrite so the feature gate checks the right subscription.
+        g.product_domain = 'shop'
         return f(*args, **kwargs)
     return decorated
 
@@ -1810,6 +1815,53 @@ def generate_ai_reply():
     except Exception as e:
         logger.error(f"AI generation error: {e}")
         return jsonify({'success': False, 'error': f'AI generation error: {str(e)}'}), 500
+
+
+@app.route('/api/ai/generate-reply-stream', methods=['POST'])
+@_require_body_auth
+def generate_ai_reply_stream():
+    """Stream AI reply for customer message via SSE."""
+    if not AI_BRAIN_AVAILABLE:
+        return jsonify({
+            'success': False,
+            'error': 'AI Brain not available.'
+        }), 503
+
+    try:
+        from flask import Response
+        from ai_brain.streaming import stream_ai_response
+
+        data = request.get_json()
+        business_data = data.get('business_data')
+        user_message = data.get('user_message', '').strip()
+        history = data.get('history', [])
+        user_id = data.get('user_id')
+
+        if not user_message:
+            return jsonify({'success': False, 'error': 'user_message is required'}), 400
+
+        def generate():
+            yield from stream_ai_response(
+                engine=ai_brain.engine,
+                message=user_message,
+                business_data=business_data or {},
+                conversation_history=history,
+                user_id=user_id,
+            )
+
+        return Response(
+            generate(),
+            mimetype='text/event-stream',
+            headers={
+                'Cache-Control': 'no-cache',
+                'Connection': 'keep-alive',
+                'X-Accel-Buffering': 'no',
+            }
+        )
+
+    except Exception as e:
+        logger.error(f"AI streaming error: {e}")
+        return jsonify({'success': False, 'error': f'AI streaming error: {str(e)}'}), 500
 
 
 @app.route('/api/ai/detect-intent', methods=['POST'])

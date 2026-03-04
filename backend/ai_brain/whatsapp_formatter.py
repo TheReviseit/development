@@ -11,12 +11,12 @@ from dataclasses import dataclass
 @dataclass
 class FormattingRules:
     """Configurable formatting rules for WhatsApp."""
-    max_chars: int = 500
-    max_lines: int = 15
-    max_bullets: int = 5
+    max_chars: int = 650              # was 500 — allows richer responses without being heavy
+    max_lines: int = 20              # was 15
+    max_bullets: int = 7             # was 5
     max_emojis: int = 3
-    split_threshold: int = 800
-    sentence_limit: int = 4
+    split_threshold: int = 1000      # was 800
+    sentence_limit: int = 6          # was 4
 
 
 DEFAULT_RULES = FormattingRules()

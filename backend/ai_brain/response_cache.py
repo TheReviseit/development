@@ -1,6 +1,9 @@
 """
-Response caching layer for AI Brain.
+Response caching layer for AI Brain v3.0.
 Reduces API costs by caching common responses.
+
+v3.0: Better cache keys — includes language, stops stripping semantic words
+that could change meaning (e.g. "what" in "what haircut" vs "haircut").
 """
 
 import time
@@ -68,23 +71,32 @@ class ResponseCache:
         business_id: str,
         intent: str,
         query: str = "",
-        entities: Dict[str, Any] = None
+        entities: Dict[str, Any] = None,
+        language: str = "en"
     ) -> str:
-        """Generate a cache key from components."""
-        # Normalize query
+        """
+        Generate a cache key from components.
+
+        v3.0: Includes language in key (different languages = different responses).
+        Only strips punctuation and extra whitespace — does NOT strip semantic words
+        like "what", "how", etc. that could change meaning.
+        """
+        # Light normalization: lowercase, strip, collapse whitespace, remove trailing punctuation
         normalized_query = query.lower().strip()
-        
+        import re
+        normalized_query = re.sub(r'\s+', ' ', normalized_query)
+        normalized_query = re.sub(r'[?!.,]+$', '', normalized_query)
+
         # Include relevant entities
         entity_str = ""
         if entities:
-            # Sort entities for consistent hashing
             sorted_entities = sorted(entities.items())
             entity_str = json.dumps(sorted_entities)
-        
-        # Create hash of query + entities
-        content = f"{normalized_query}:{entity_str}"
+
+        # v3.0: Include language in hash so Hindi and English responses don't collide
+        content = f"{normalized_query}:{entity_str}:{language}"
         content_hash = hashlib.md5(content.encode()).hexdigest()[:12]
-        
+
         return f"{business_id}:{intent}:{content_hash}"
     
     def get(
@@ -92,15 +104,16 @@ class ResponseCache:
         business_id: str,
         intent: str,
         query: str = "",
-        entities: Dict[str, Any] = None
+        entities: Dict[str, Any] = None,
+        language: str = "en"
     ) -> Optional[Dict[str, Any]]:
         """
         Get cached response if available.
-        
+
         Returns:
             Cached response dict or None if not found/expired
         """
-        key = self._generate_key(business_id, intent, query, entities)
+        key = self._generate_key(business_id, intent, query, entities, language)
         
         # Try Redis first
         if self.redis:
@@ -132,11 +145,12 @@ class ResponseCache:
         query: str,
         response: Dict[str, Any],
         entities: Dict[str, Any] = None,
-        ttl: int = None
+        ttl: int = None,
+        language: str = "en"
     ):
         """
         Cache a response.
-        
+
         Args:
             business_id: Business identifier
             intent: Detected intent
@@ -144,8 +158,9 @@ class ResponseCache:
             response: Response to cache
             entities: Relevant entities
             ttl: Optional TTL override
+            language: Language code for cache isolation
         """
-        key = self._generate_key(business_id, intent, query, entities)
+        key = self._generate_key(business_id, intent, query, entities, language)
         ttl = ttl or self.default_ttl
         
         # Store in Redis if available

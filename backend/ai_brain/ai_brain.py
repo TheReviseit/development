@@ -1,7 +1,7 @@
 """
-Main AI Brain orchestrator class - v2.0 (Refactored).
+Main AI Brain orchestrator class - v3.0 (Enterprise).
 Coordinates ChatGPT-powered intent detection, function calling, and response generation.
-Now with LLM usage tracking for per-business budgets.
+Now with LLM usage tracking, memory management, user profiles, and streaming support.
 """
 
 import time
@@ -23,8 +23,8 @@ from .response_cache import ResponseCache, get_response_cache, get_cache_ttl
 from .whatsapp_formatter import WhatsAppFormatter, get_formatter
 from .language_detector import LanguageDetector, get_language_detector, Language
 from .analytics import (
-    AnalyticsTracker, 
-    get_analytics_tracker, 
+    AnalyticsTracker,
+    get_analytics_tracker,
     ResolutionOutcome,
     RateLimiter,
     get_rate_limiter
@@ -32,6 +32,7 @@ from .analytics import (
 from .cost_optimizer import CostOptimizer, get_cost_optimizer, CostDecision
 from .business_retriever import BusinessRetriever, get_retriever
 from .appointment_handler import AppointmentHandler
+from .memory_manager import get_memory_manager, AdvancedMemoryManager
 
 # LLM Usage tracking for per-business budgets
 try:
@@ -123,7 +124,12 @@ class AIBrain:
         # Cost optimization (50-80% savings)
         self.cost_optimizer = get_cost_optimizer()
         self.retriever = get_retriever(max_tokens=400)
-        
+
+        # v3.0: Memory manager for user profiles, conversation summarization, fact extraction
+        self.memory_manager = get_memory_manager(
+            redis_url=redis_url,
+        )
+
         # LLM Usage tracking (for per-business budgets)
         self.usage_tracker = None
         self.supabase_client = supabase_client  # Store for appointment handler
@@ -205,9 +211,10 @@ class AIBrain:
         # Record usage
         self.rate_limiter.record_usage(biz_id)
         
-        # Detect language
+        # Detect language (v3.0: also detect mixed language for style matching)
         lang_result = self.language_detector.detect(user_message)
         detected_language = lang_result.language.value
+        is_mixed_language = getattr(lang_result, 'is_mixed', False)
         
         # =====================================================
         # OUT-OF-SCOPE CHECK - Reject irrelevant queries early
@@ -442,7 +449,21 @@ class AIBrain:
         state_summary = ""
         if user_id:
             state_summary = self.conversation_manager.build_state_context(user_id)
-        
+
+        # v3.0: Gather user profile and conversation summary from memory manager
+        user_profile = None
+        conversation_summary = None
+        if user_id:
+            try:
+                profile = self.memory_manager.get_or_create_profile(user_id)
+                user_profile = profile.to_prompt_dict() if profile else None
+                conversation_summary = self.memory_manager.get_conversation_summary(user_id)
+
+                # Auto-extract facts from user message and update profile
+                self.memory_manager.add_message(user_id, "user", user_message)
+            except Exception as e:
+                logger.warning(f"Memory manager error (non-blocking): {e}")
+
         # Process message with ChatGPT engine
         try:
             result = self.engine.process_message(
@@ -450,7 +471,10 @@ class AIBrain:
                 business_data=business,
                 conversation_history=optimized_history,
                 user_id=user_id,
-                conversation_state_summary=state_summary
+                conversation_state_summary=state_summary,
+                user_profile=user_profile,
+                conversation_summary=conversation_summary,
+                is_mixed_language=is_mixed_language,
             )
             
             # TRACK LLM USAGE after successful call (non-blocking)
@@ -509,6 +533,12 @@ class AIBrain:
             if user_id:
                 self.conversation_manager.add_message(user_id, "assistant", reply)
                 self.conversation_manager.set_last_intent(user_id, result.intent.value)
+
+                # v3.0: Track assistant reply in memory manager for summarization
+                try:
+                    self.memory_manager.add_message(user_id, "assistant", reply)
+                except Exception:
+                    pass  # Non-blocking
             
             # Cache response if appropriate
             if use_cache and self.config.enable_caching:
@@ -6356,15 +6386,15 @@ class AIBrain:
         
         # Fast template lookup (O(1) hash map)
         TEMPLATES = {
-            IntentType.GREETING: f"Hello! 👋 Welcome to {business_name}. How can I help you today?",
-            IntentType.CASUAL_CONVERSATION: "I'm doing great, thanks for asking! 😊 How can I help you today?",
-            IntentType.PRICING: f"For pricing details, please message us directly or check our website. Our team at {business_name} will help you! 💰",
-            IntentType.HOURS: "Our business hours are available on our website. Feel free to reach out! 🕐",
-            IntentType.LOCATION: f"You can find us on Google Maps. Contact {business_name} for directions! 📍",
-            IntentType.BOOKING: f"To book an appointment with {business_name}, please share your preferred date and time. We'll confirm shortly! 📅",
-            IntentType.THANK_YOU: "You're welcome! Happy to help. 😊",
-            IntentType.GOODBYE: "Goodbye! Have a great day! 👋",
-            IntentType.GENERAL_ENQUIRY: f"Thanks for reaching out to {business_name}! Our team will assist you shortly. 🙏",
+            IntentType.GREETING: f"Hey! 👋 Welcome to {business_name}. How can we help you today?",
+            IntentType.CASUAL_CONVERSATION: f"We're doing great, thanks for asking! 😊 How can we help you at {business_name}?",
+            IntentType.PRICING: f"For pricing details, feel free to ask us directly! Our team at {business_name} will get you the right info. 💰",
+            IntentType.HOURS: f"You can check our timings or reach out to us at {business_name} and we'll confirm! 🕐",
+            IntentType.LOCATION: f"We'd love to have you visit us at {business_name}! Drop us a message and we'll share our location. 📍",
+            IntentType.BOOKING: f"We'd love to book you in! Share your preferred date and time and we'll confirm your slot at {business_name}. 📅",
+            IntentType.THANK_YOU: "You're most welcome! Happy to help. 😊",
+            IntentType.GOODBYE: "Thanks for reaching out! Have a great day! 👋",
+            IntentType.GENERAL_ENQUIRY: f"Thanks for reaching out to {business_name}! We'll get back to you shortly. 🙏",
         }
         
         # Get template or default

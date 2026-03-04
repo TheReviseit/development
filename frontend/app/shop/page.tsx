@@ -13,6 +13,7 @@ import ShopShowcase from "./components/ShopShowcase";
 import ShopSteps from "./components/ShopSteps";
 import ShopTrust from "./components/ShopTrust";
 import ShopCTA from "./components/ShopCTA";
+import ShopGetInTouch from "./components/ShopGetInTouch";
 import ShopFooter from "./components/ShopFooter";
 
 export default function ShopLandingPage() {
@@ -26,6 +27,7 @@ export default function ShopLandingPage() {
         <ShopSteps />
         {/* <ShopTrust /> */}
         <ShopCTA />
+        <ShopGetInTouch />
       </main>
       <ShopFooter />
     </div>

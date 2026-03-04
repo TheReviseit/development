@@ -1,7 +1,13 @@
 """
-Cost Optimizer for AI Brain v2.0.
+Cost Optimizer for AI Brain v3.0.
 Implements smart routing, caching, and token optimization strategies
 to reduce OpenAI API costs by 50-80%.
+
+v3.0 changes:
+- Dual-model routing (classification=gpt-4o-mini, generation=gpt-4o)
+- Confidence-based model escalation
+- Adaptive history window per intent
+- Updated model tiers
 """
 
 import re
@@ -137,36 +143,56 @@ def check_hardcoded_reply(message: str) -> Optional[Tuple[str, str, int]]:
 # =============================================================================
 
 # Intent to model tier mapping
+# v3.0: Most intents use MINI for classification, STANDARD for generation
+# The actual generation model is determined by chatgpt_engine's dual-model logic
 INTENT_MODEL_MAP = {
     # Trivial - use hardcoded (checked before this)
     IntentType.GREETING: ModelTier.MINI,
     IntentType.THANK_YOU: ModelTier.MINI,
     IntentType.GOODBYE: ModelTier.MINI,
-    
+
     # Simple - fast model is fine
     IntentType.PRICING: ModelTier.MINI,
     IntentType.HOURS: ModelTier.MINI,
     IntentType.LOCATION: ModelTier.MINI,
-    IntentType.BOOKING: ModelTier.MINI,
-    
+    IntentType.BOOKING: ModelTier.STANDARD,  # v3: bookings use quality model
+
     # Medium - may need better reasoning
     IntentType.GENERAL_ENQUIRY: ModelTier.MINI,
     IntentType.LEAD_CAPTURE: ModelTier.MINI,
     IntentType.ORDER_STATUS: ModelTier.MINI,
-    
+
     # Complex - use better model
     IntentType.COMPLAINT: ModelTier.STANDARD,
     IntentType.UNKNOWN: ModelTier.STANDARD,
 }
 
 
+# v3.0: Adaptive history depth per intent
+# Booking needs more context, greetings need none
+INTENT_HISTORY_DEPTH = {
+    IntentType.GREETING: 0,
+    IntentType.THANK_YOU: 0,
+    IntentType.GOODBYE: 0,
+    IntentType.HOURS: 1,
+    IntentType.LOCATION: 1,
+    IntentType.PRICING: 3,
+    IntentType.GENERAL_ENQUIRY: 5,
+    IntentType.BOOKING: 8,
+    IntentType.LEAD_CAPTURE: 5,
+    IntentType.ORDER_STATUS: 5,
+    IntentType.COMPLAINT: 8,
+    IntentType.UNKNOWN: 5,
+}
+
+
 def get_model_for_intent(intent: IntentType, confidence: float) -> str:
     """Get optimal model based on intent and confidence."""
-    
-    # Low confidence always uses better model
-    if confidence < 0.5:
+
+    # v3.0: Low confidence uses better model for quality
+    if confidence < 0.6:
         return ModelTier.STANDARD.value
-    
+
     # Get mapped model
     model = INTENT_MODEL_MAP.get(intent, ModelTier.MINI)
     return model.value
@@ -182,35 +208,31 @@ def get_history_depth(
     is_followup: bool = False
 ) -> int:
     """
-    Determine how much history to include based on context.
-    
-    High confidence simple queries: 0 messages
-    Medium confidence: 2-3 messages
-    Low confidence or complex: 5-10 messages
+    v3.0: Adaptive history window based on intent type and confidence.
+
+    Uses per-intent depth from INTENT_HISTORY_DEPTH, adjusted by confidence.
+    Booking=8, pricing=3, greeting=0, etc.
     """
-    
-    # Follow-ups need some history
+    # Follow-ups always need some history for continuity
     if is_followup:
-        return 3
-    
-    # High confidence simple queries - no history needed
-    if confidence >= 0.85:
-        if intent in [
-            IntentType.GREETING, IntentType.THANK_YOU, IntentType.GOODBYE,
-            IntentType.HOURS, IntentType.LOCATION
-        ]:
-            return 0
-        return 2
-    
-    # Medium confidence - some history
-    if confidence >= 0.6:
-        return 3
-    
-    # Low confidence - more context needed
-    if confidence >= 0.4:
         return 5
-    
-    # Very low - maximum context
+
+    # Get base depth for this intent
+    base_depth = INTENT_HISTORY_DEPTH.get(intent, 5)
+
+    # High confidence: use intent-specific depth as-is
+    if confidence >= 0.85:
+        return base_depth
+
+    # Medium confidence: add 2 messages for safety
+    if confidence >= 0.6:
+        return min(base_depth + 2, 10)
+
+    # Low confidence: more context needed
+    if confidence >= 0.4:
+        return min(base_depth + 4, 10)
+
+    # Very low: maximum context
     return 10
 
 

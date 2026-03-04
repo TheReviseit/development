@@ -369,9 +369,9 @@ class ToolExecutor:
         if not self.business_owner_id:
             logger.error("No business_owner_id available for availability check")
             return ToolResult(
-                success=True,  # Assume available if we can't check
-                data={"date": date, "time": time, "available": True},
-                message="Slot appears to be available. Please provide your details to confirm booking."
+                success=False,
+                data={"date": date, "time": time, "error": "configuration_error"},
+                message="I'm unable to check availability right now. Please contact us directly to book."
             )
         
         try:
@@ -448,20 +448,18 @@ class ToolExecutor:
                         )
             else:
                 logger.warning(f"Availability check failed: {response.status_code}")
-                # Fall back to assuming available
                 return ToolResult(
-                    success=True,
-                    data={"date": date, "time": time, "available": True},
-                    message="Slot appears to be available. Please provide your details to confirm booking."
+                    success=False,
+                    data={"date": date, "time": time, "error": "api_error"},
+                    message="I couldn't check availability right now. Please try again in a moment, or contact us directly."
                 )
-                
+
         except Exception as e:
             logger.error(f"Error checking availability: {e}")
-            # Fall back to assuming available
             return ToolResult(
-                success=True,
-                data={"date": date, "time": time, "available": True},
-                message="Slot appears to be available. Please provide your details to confirm booking."
+                success=False,
+                data={"date": date, "time": time, "error": str(e)},
+                message="I'm having trouble checking availability right now. Please try again shortly."
             )
     
     def _normalize_date(self, date_str: str) -> str:

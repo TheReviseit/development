@@ -130,9 +130,15 @@ class BusinessRetriever:
             if any(term in name or name in term for term in query_terms):
                 matched.append(p)
         
-        # If no matches, return top 5 products
+        # If no matches, DON'T return random products — that causes hallucination
         if not matched:
-            matched = products[:5]
+            # Return category overview instead of unrelated products
+            categories = list(set(p.get("category", "") for p in products if p.get("category")))
+            parts.append(f"\nNo exact match found for this query.")
+            parts.append(f"Total products/services available: {len(products)}")
+            if categories:
+                parts.append(f"Categories: {', '.join(categories[:5])}")
+            return "\n".join(parts), sources
         else:
             matched = matched[:5]  # Limit matches
         
@@ -313,7 +319,15 @@ class BusinessRetriever:
                 desc = p.get("description", "").lower()
                 if any(term in name or term in desc for term in query_terms):
                     matched.append(p)
-            products = matched[:5] if matched else products[:5]
+            if matched:
+                products = matched[:5]
+            else:
+                # No match — show summary, not random products
+                parts.append(f"\n{len(products)} products/services available (no direct match to query).")
+                categories = list(set(p.get("category", "") for p in products if p.get("category")))
+                if categories:
+                    parts.append(f"Categories: {', '.join(categories[:5])}")
+                products = []  # Don't list unrelated products
         else:
             products = products[:5]
         

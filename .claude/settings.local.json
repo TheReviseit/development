@@ -1,7 +1,10 @@
 {
   "permissions": {
     "allow": [
-      "Bash(find \"c:\\\\Users\\\\Sugan001\\\\Desktop\\\\Flowauxi\\\\backend\\\\routes\" -name \"*.py\" -exec wc -l {} ;)"
+      "Bash(find \"c:\\\\Users\\\\Sugan001\\\\Desktop\\\\Flowauxi\\\\backend\\\\routes\" -name \"*.py\" -exec wc -l {} ;)",
+      "Bash(xargs grep -l \"webhook\\\\|message_received\\\\|incoming_message\")",
+      "Bash(xargs grep -l \"useChat\\\\|useChatMessages\\\\|ChatContext\")",
+      "Bash(xargs grep -l \"ai.*toggle\\\\|ai.*enabled\\\\|ai.*brain\")"
     ]
   }
 }
