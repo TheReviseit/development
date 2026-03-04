@@ -50,7 +50,8 @@ ALLOWED_HOSTS: dict[str, str] = {
     'localhost:3003': 'marketing',
     'localhost:3004': 'api',
 
-    # Backend dev server (Flask default)
+    # Backend server (Render production + local dev)
+    'revsieit.onrender.com': 'api',
     'localhost:5000': 'dashboard',
     'localhost:5001': 'dashboard',
     '127.0.0.1:5000': 'dashboard',
@@ -107,6 +108,7 @@ def resolve_product_domain():
         'localhost:5000', 'localhost:5001',
         '127.0.0.1:5000', '127.0.0.1:5001',
         'api.flowauxi.com',
+        'revsieit.onrender.com',
     }
     
     domain = None
