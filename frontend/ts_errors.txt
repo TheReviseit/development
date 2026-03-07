@@ -1,0 +1,2 @@
+__tests__/api/auth/sync.test.ts(13,65): error TS2307: Cannot find module 'vitest' or its corresponding type declarations.
+__tests__/api/products/activate.test.ts(6,54): error TS2307: Cannot find module 'vitest' or its corresponding type declarations.

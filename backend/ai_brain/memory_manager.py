@@ -350,24 +350,24 @@ class AdvancedMemoryManager:
         compression_threshold: int = 20,
         relevance_threshold: float = 0.3,
         redis_url: str = None,
-        openai_client=None,
+        llm_client=None,
     ):
         self.session_limit = session_limit
         self.session_timeout = session_timeout
         self.decay_half_life = decay_half_life
         self.compression_threshold = compression_threshold
         self.relevance_threshold = relevance_threshold
-        # Auto-create OpenAI client if not provided (for LLM summarization)
-        self.openai_client = openai_client
-        if not self.openai_client:
+        # Auto-create Gemini client if not provided (for LLM summarization)
+        self.llm_client = llm_client
+        if not self.llm_client:
             try:
                 import os
-                api_key = os.getenv("OPENAI_API_KEY")
+                from .gemini_client import GeminiClient
+                api_key = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
                 if api_key:
-                    from openai import OpenAI
-                    self.openai_client = OpenAI(api_key=api_key)
+                    self.llm_client = GeminiClient(api_key=api_key)
             except ImportError:
-                logger.warning("Memory Manager: openai package not available, summarization disabled")
+                logger.warning("Memory Manager: google-genai package not available, summarization disabled")
 
         # Storage
         self._contexts: Dict[str, ConversationContext] = {}
@@ -447,33 +447,30 @@ class AdvancedMemoryManager:
 
     def summarize_conversation(self, messages: List[Message]) -> Optional[str]:
         """
-        Use gpt-4o-mini to summarize older messages into key facts.
+        Use Gemini 2.5 Flash to summarize older messages into key facts.
         Called when conversation exceeds threshold.
         Falls back to basic entity extraction if LLM unavailable.
         Cost: ~100-150 tokens per summarization (very cheap).
         """
-        if not self.openai_client or len(messages) < 5:
+        if not self.llm_client or len(messages) < 5:
             return self._basic_summary(messages)
 
         try:
+            from .gemini_client import extract_text
+
             conversation_text = "\n".join([
                 f"{'Customer' if m.role == 'user' else 'Business'}: {m.content}"
                 for m in messages[-15:]  # Summarize last 15 messages max
             ])
 
-            response = self.openai_client.chat.completions.create(
-                model="gpt-4o-mini",
-                messages=[{
-                    "role": "system",
-                    "content": "Summarize this customer conversation into key facts. Include: customer name (if mentioned), products/services discussed, preferences, decisions made, unresolved questions. Bullet points, max 100 words."
-                }, {
-                    "role": "user",
-                    "content": conversation_text
-                }],
+            response = self.llm_client.generate(
+                model="gemini-2.5-flash",
+                system_prompt="Summarize this customer conversation into key facts. Include: customer name (if mentioned), products/services discussed, preferences, decisions made, unresolved questions. Bullet points, max 100 words.",
+                messages=[{"role": "user", "content": conversation_text}],
                 temperature=0.3,
-                max_tokens=150
+                max_tokens=150,
             )
-            return response.choices[0].message.content.strip()
+            return extract_text(response).strip()
 
         except Exception as e:
             logger.warning(f"LLM summarization failed: {e}")

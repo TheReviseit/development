@@ -1174,6 +1174,7 @@ def webhook():
         # Generate AI response
         # Track button metadata for interactive messages
         ai_metadata = {}
+        tokens_used = 0
         
         if message_type == 'text':
             if AI_BRAIN_AVAILABLE and ai_brain:
@@ -1191,6 +1192,16 @@ def webhook():
                     needs_human = result.get('needs_human', False)
                     ai_metadata = result.get('metadata', {})
                     
+                    # Calculate total tokens used for this request
+                    prompt_tokens = ai_metadata.get('prompt_tokens', 0)
+                    completion_tokens = ai_metadata.get('completion_tokens', 0)
+                    tokens_used = prompt_tokens + completion_tokens
+
+                    # Fast-path for empty replies (e.g. rate limit rejections or explicit ignores)
+                    if not reply_text:
+                        logger.warning(f"⚠️ AI brain returned empty reply for user {from_number}. Skipping response.")
+                        return jsonify({'status': 'ok'}), 200
+
                     # Track metrics
                     if METRICS_AVAILABLE:
                         elapsed_ms = (time.time() - start_time) * 1000
@@ -1241,15 +1252,35 @@ def webhook():
                 parts.append(current_part)
             
             # Send parts
+            last_message_id = None
             for i, part in enumerate(parts):
                 if credentials and credentials.get('access_token'):
-                    whatsapp_service.send_message_with_credentials(
+                    part_result = whatsapp_service.send_message_with_credentials(
                         phone_number_id=credentials['phone_number_id'],
                         access_token=credentials['access_token'],
                         to=from_number,
                         message=f"({i+1}/{len(parts)}) {part}" if len(parts) > 1 else part
                     )
+                    if part_result.get('success') and part_result.get('message_id'):
+                        last_message_id = part_result.get('message_id')
                 time.sleep(0.5)
+            
+            # Store AI message in database for analytics tracking
+            if SUPABASE_AVAILABLE and store_message and user_id:
+                store_message(
+                    user_id=user_id,
+                    phone_number_id=phone_number_id,
+                    message_id=last_message_id or f"long_reply_{msg_id}",
+                    direction='outbound',
+                    from_number=display_phone,
+                    to_number=from_number,
+                    message_type='text',
+                    message_body=reply_text,
+                    status='sent',
+                    wamid=last_message_id or f"long_reply_{msg_id}",
+                    conversation_origin='business_initiated',
+                    is_ai_generated=True
+                )
             
             return jsonify({'status': 'ok'}), 200
         
@@ -1388,6 +1419,25 @@ def webhook():
                     
                     if send_result['success']:
                         logger.info(f"✅ Product catalog sent to {from_number}")
+
+                        # Store AI message in database for analytics tracking
+                        if SUPABASE_AVAILABLE and store_message and user_id:
+                            store_message(
+                                user_id=user_id,
+                                phone_number_id=phone_number_id,
+                                message_id=f"product_cards_{msg_id}",
+                                direction='outbound',
+                                from_number=display_phone,
+                                to_number=from_number,
+                                message_type='interactive',
+                                message_body=reply_text,
+                                status='sent',
+                                wamid=f"product_cards_{msg_id}",
+                                conversation_origin='business_initiated',
+                                is_ai_generated=True,
+                                tokens_used=tokens_used
+                            )
+
                         return jsonify({'status': 'ok'}), 200
             
             # Check if we should send URL button (for payment links, store links, etc.)
@@ -1534,7 +1584,8 @@ def webhook():
                     status='sent',
                     wamid=reply_message_id,
                     conversation_origin='business_initiated',
-                    is_ai_generated=True
+                    is_ai_generated=True,
+                    tokens_used=tokens_used
                 )
         else:
             logger.error(f"❌ Failed to send reply: {send_result.get('error')}")

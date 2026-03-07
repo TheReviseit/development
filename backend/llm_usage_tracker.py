@@ -39,7 +39,8 @@ class UsageStatus:
 
 
 # SaaS Plans - No free tier (Starter = ₹1,499)
-# GPT-4o mini pricing: Input $0.15/1M, Output $0.60/1M
+# Gemini 2.5 Flash pricing: Input $0.15/1M, Output $0.60/1M (under 200k context)
+# ~70% cheaper than GPT-4o, comparable to GPT-4o-mini
 # Average tokens per reply: ~1600 (input + output combined)
 # Exchange rate: 1 USD = ₹89.58
 
@@ -51,9 +52,9 @@ PLANS = {
         # Detailed token breakdown
         "input_token_limit": 1_000_000,
         "output_token_limit": 600_000,
-        # Cost estimates (GPT-4o mini @ ₹89.58/USD)
-        "avg_cost_per_reply_inr": 0.036,
-        "estimated_monthly_llm_cost_inr": 36,
+        # Cost estimates (Gemini 2.5 Flash @ ₹89.58/USD)
+        "avg_cost_per_reply_inr": 0.012,
+        "estimated_monthly_llm_cost_inr": 12,
         # Rate limits
         "rate_limit_per_minute": 10,
         "rate_limit_per_hour": 100,
@@ -67,8 +68,8 @@ PLANS = {
         "monthly_price_inr": 2999,
         "input_token_limit": 3_000_000,
         "output_token_limit": 1_800_000,
-        "avg_cost_per_reply_inr": 0.036,
-        "estimated_monthly_llm_cost_inr": 108,
+        "avg_cost_per_reply_inr": 0.012,
+        "estimated_monthly_llm_cost_inr": 36,
         "rate_limit_per_minute": 30,
         "rate_limit_per_hour": 500,
         "conversation_history_limit": 10,
@@ -80,8 +81,8 @@ PLANS = {
         "monthly_price_inr": 5999,
         "input_token_limit": 8_000_000,
         "output_token_limit": 4_800_000,
-        "avg_cost_per_reply_inr": 0.036,
-        "estimated_monthly_llm_cost_inr": 288,
+        "avg_cost_per_reply_inr": 0.012,
+        "estimated_monthly_llm_cost_inr": 96,
         "rate_limit_per_minute": 100,
         "rate_limit_per_hour": 2000,
         "conversation_history_limit": 20,
@@ -95,10 +96,10 @@ DEFAULT_PLAN = "starter"
 # Realistic average tokens per reply (system prompt + business context + user msg + response)
 AVG_TOKENS_PER_REPLY = 1600
 
-# Cost calculation constants (GPT-4o mini)
+# Cost calculation constants (Gemini 2.5 Flash — under 200k context)
 INPUT_COST_PER_1M_USD = 0.15      # $0.15 per 1M input tokens
 OUTPUT_COST_PER_1M_USD = 0.60     # $0.60 per 1M output tokens
-CACHED_COST_PER_1M_USD = 0.075    # $0.075 per 1M cached tokens
+CACHED_COST_PER_1M_USD = 0.0375   # $0.0375 per 1M cached tokens (Gemini context caching)
 USD_TO_INR = 89.58                # Current exchange rate
 
 
@@ -342,7 +343,7 @@ class LLMUsageTracker:
         # Skip DB operations if business_id is not a valid UUID
         # (e.g., Firebase UIDs are not valid PostgreSQL UUIDs)
         if not is_valid_uuid(business_id):
-            logger.debug(f"Skipping DB sync for non-UUID business_id: {business_id[:15]}...")
+            logger.warning(f"⚠️ Skipping DB sync for non-UUID business_id: {business_id[:15]}... — tokens tracked in-memory only (will be lost on restart)")
             self._dirty.discard(business_id)
             return
         
@@ -364,7 +365,7 @@ class LLMUsageTracker:
                 'cached_tokens': usage.cached_tokens,
                 'cost_usd': usage.cost_usd,
                 'cost_inr': usage.cost_inr,
-                'model_name': model_name or 'gpt-4o-mini'
+                'model_name': model_name or 'gemini-2.5-flash'
             }, on_conflict='business_id').execute()
             
             usage.last_sync = time.time()

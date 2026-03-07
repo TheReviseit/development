@@ -144,11 +144,10 @@ def get_overview():
         USD_TO_INR = 89.58
         
         if llm_usage:
-            # Use real-time tracker data (most accurate for current billing period)
+            # Use real-time tracker data for tokens and cost
             ai_tokens_used = llm_usage.get('tokens_used', 0)
             ai_tokens_limit = llm_usage.get('tokens_limit', 1_600_000)
             ai_tokens_percent = llm_usage.get('tokens_percent', 0)
-            ai_replies = llm_usage.get('replies_used', 0)
             ai_cost_usd = llm_usage.get('cost_usd', 0)
             ai_cost_inr = llm_usage.get('cost_inr', 0)
         else:
@@ -156,9 +155,13 @@ def get_overview():
             ai_tokens_used = totals['ai_tokens_used']
             ai_tokens_limit = 1_600_000  # Default starter plan
             ai_tokens_percent = round((ai_tokens_used / ai_tokens_limit) * 100, 1) if ai_tokens_limit > 0 else 0
-            ai_replies = totals['ai_replies_generated']
             ai_cost_usd = totals['ai_cost_usd']
             ai_cost_inr = round(ai_cost_usd * USD_TO_INR, 2)
+        
+        # ALWAYS use analytics_daily for AI reply count — it's the persistent
+        # source of truth written by store_message(is_ai_generated=True).
+        # The LLM tracker's replies_used is in-memory and resets on restart.
+        ai_replies = totals['ai_replies_generated']
         
         # Build trends data
         trends = {
@@ -540,6 +543,17 @@ def aggregate_daily_analytics():
             
             msg_data = messages.data or []
             
+            # Fetch existing analytics record for today to preserve real-time AI tokens
+            existing_tokens = 0
+            try:
+                existing_result = client.table('analytics_daily').select('ai_tokens_used').eq(
+                    'user_id', user_id
+                ).eq('date', target_date).limit(1).execute()
+                if existing_result.data:
+                    existing_tokens = existing_result.data[0].get('ai_tokens_used', 0) or 0
+            except Exception as e:
+                pass
+
             stats = {
                 'user_id': user_id,
                 'date': target_date,
@@ -548,7 +562,8 @@ def aggregate_daily_analytics():
                 'messages_delivered': sum(1 for m in msg_data if m.get('status') == 'delivered'),
                 'messages_read': sum(1 for m in msg_data if m.get('status') == 'read'),
                 'messages_failed': sum(1 for m in msg_data if m.get('status') == 'failed'),
-                'ai_replies_generated': sum(1 for m in msg_data if m.get('is_ai_generated'))
+                'ai_replies_generated': sum(1 for m in msg_data if m.get('is_ai_generated')),
+                'ai_tokens_used': existing_tokens # Preserve tokens gathered real-time via webhook
             }
             
             # Upsert analytics

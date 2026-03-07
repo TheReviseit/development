@@ -5,7 +5,13 @@ import styles from "../dashboard.module.css";
 import { useAuth } from "@/app/components/auth/AuthProvider";
 import { fetchAnalyticsOverview, AnalyticsOverview } from "@/lib/api/whatsapp";
 import { RevenueAnalyticsChart } from "../orders/components/RevenueAnalyticsChart";
+import {
+  useRevenueAnalytics,
+  formatCurrency,
+  TimeRange,
+} from "@/lib/hooks/useRevenueAnalytics";
 import { useSubscription } from "@/lib/hooks/useSubscription";
+import LoadingSpinner from "@/app/components/ui/LoadingSpinner";
 
 // Icon components
 const SendIcon = () => (
@@ -109,13 +115,72 @@ const ConversationIcon = () => (
   </svg>
 );
 
+const OrdersIcon = () => (
+  <svg
+    width="24"
+    height="24"
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+  >
+    <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+    <line x1="9" y1="9" x2="9" y2="15"></line>
+    <line x1="15" y1="9" x2="15" y2="15"></line>
+  </svg>
+);
+
+const RevenueIcon = () => (
+  <svg
+    width="24"
+    height="24"
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+  >
+    <line x1="12" y1="1" x2="12" y2="23"></line>
+    <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path>
+  </svg>
+);
+
+const UsersIcon = () => (
+  <svg
+    width="24"
+    height="24"
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+  >
+    <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
+    <circle cx="9" cy="7" r="4"></circle>
+    <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
+    <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
+  </svg>
+);
+
 export default function AnalyticsView() {
   const { user, firebaseUser } = useAuth();
   const [analytics, setAnalytics] = useState<AnalyticsOverview | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [period, setPeriod] = useState<"7d" | "30d" | "90d">("7d");
-  const [chartGrouping, setChartGrouping] = useState<"Daily" | "Weekly" | "Monthly">("Daily");
+  const [chartGrouping, setChartGrouping] = useState<
+    "Daily" | "Weekly" | "Monthly"
+  >("Daily");
+
+  // Map period to TimeRange for revenue analytics
+  const revenueRange: TimeRange =
+    period === "7d" ? "week" : period === "30d" ? "month" : "month";
+  const { data: revenueData, loading: revenueLoading } =
+    useRevenueAnalytics(revenueRange);
 
   // Use Firebase UID for backend API calls (X-User-Id header expects Firebase UID)
   // user?.id is the Supabase UUID which the backend cannot map
@@ -166,35 +231,41 @@ export default function AnalyticsView() {
   const stats = analytics
     ? [
         {
-          id: "sent",
-          label: "Messages Sent",
-          value: formatNumber(analytics.messages.sent),
-          subtitle: "Outbound messages",
-          icon: <SendIcon />,
+          id: "orders",
+          label: "Orders Placed",
+          value: revenueData?.metadata?.total_orders
+            ? revenueData.metadata.total_orders.toString()
+            : "0",
+          subtitle: "Completed orders",
+          icon: <OrdersIcon />,
           color: "#4ade80",
         },
         {
-          id: "received",
-          label: "Messages Received",
-          value: formatNumber(analytics.messages.received),
-          subtitle: "Inbound messages",
-          icon: <DeliveredIcon />,
+          id: "revenue",
+          label: "Revenue Generated",
+          value: revenueData
+            ? formatCurrency(revenueData.totalRevenue, revenueData.currency)
+            : "₹0",
+          subtitle: "Total revenue",
+          icon: <RevenueIcon />,
           color: "#60a5fa",
         },
         {
-          id: "read",
-          label: "Read Rate",
-          value: `${analytics.messages.read_rate}%`,
-          subtitle: "Of sent messages",
-          icon: <ReadIcon />,
+          id: "customers",
+          label: "Total Customers",
+          value: revenueData?.metadata?.total_orders
+            ? revenueData.metadata.total_orders.toString()
+            : "0",
+          subtitle: "Unique buyers",
+          icon: <UsersIcon />,
           color: "#a78bfa",
         },
         {
-          id: "conversations",
-          label: "Active Conversations",
-          value: analytics.conversations.active.toString(),
-          subtitle: `${analytics.conversations.started} started`,
-          icon: <ConversationIcon />,
+          id: "ai-replies",
+          label: "AI Replies Sent",
+          value: formatNumber(analytics?.ai?.replies_generated || 0),
+          subtitle: "Automated responses",
+          icon: <AIIcon />,
           color: "#fbbf24",
         },
       ]
@@ -272,9 +343,16 @@ export default function AnalyticsView() {
             </p>
           </div>
         </div>
-        <div style={{ textAlign: "center", padding: "60px", color: "#6b7280" }}>
-          <div style={{ fontSize: "32px", marginBottom: "16px" }}>📊</div>
-          Loading analytics...
+        <div
+          style={{
+            display: "flex",
+            flex: 1,
+            alignItems: "center",
+            justifyContent: "center",
+            minHeight: "60vh",
+          }}
+        >
+          <LoadingSpinner text="Loading analytics..." />
         </div>
       </div>
     );
@@ -639,9 +717,16 @@ export default function AnalyticsView() {
 
       {/* Loading State */}
       {loading && !analytics && (
-        <div style={{ textAlign: "center", padding: "60px", color: "#6b7280" }}>
-          <div style={{ fontSize: "32px", marginBottom: "16px" }}>📊</div>
-          Loading analytics...
+        <div
+          style={{
+            display: "flex",
+            flex: 1,
+            alignItems: "center",
+            justifyContent: "center",
+            minHeight: "60vh",
+          }}
+        >
+          <LoadingSpinner text="Loading analytics..." />
         </div>
       )}
 
@@ -743,26 +828,31 @@ export default function AnalyticsView() {
                         gap: "4px",
                       }}
                     >
-                      {(["Daily", "Weekly", "Monthly"] as const).map((label) => (
-                        <button
-                          key={label}
-                          onClick={() => setChartGrouping(label)}
-                          style={{
-                            padding: "6px 12px",
-                            fontSize: "12px",
-                            fontWeight: 500,
-                            border: "none",
-                            borderRadius: "6px",
-                            cursor: "pointer",
-                            background:
-                              chartGrouping === label ? "#2a2a2a" : "transparent",
-                            color: chartGrouping === label ? "#ffffff" : "#6b7280",
-                            transition: "all 0.2s",
-                          }}
-                        >
-                          {label}
-                        </button>
-                      ))}
+                      {(["Daily", "Weekly", "Monthly"] as const).map(
+                        (label) => (
+                          <button
+                            key={label}
+                            onClick={() => setChartGrouping(label)}
+                            style={{
+                              padding: "6px 12px",
+                              fontSize: "12px",
+                              fontWeight: 500,
+                              border: "none",
+                              borderRadius: "6px",
+                              cursor: "pointer",
+                              background:
+                                chartGrouping === label
+                                  ? "#2a2a2a"
+                                  : "transparent",
+                              color:
+                                chartGrouping === label ? "#ffffff" : "#6b7280",
+                              transition: "all 0.2s",
+                            }}
+                          >
+                            {label}
+                          </button>
+                        ),
+                      )}
                     </div>
                   </div>
 
@@ -835,7 +925,8 @@ export default function AnalyticsView() {
 
                         {/* Bars */}
                         {chartData.map((value, index) => {
-                          const barHeight = maxValue > 0 ? (value / maxValue) * 100 : 0;
+                          const barHeight =
+                            maxValue > 0 ? (value / maxValue) * 100 : 0;
                           return (
                             <div
                               key={index}
@@ -919,7 +1010,14 @@ export default function AnalyticsView() {
                         {chartData.map((_, index) => {
                           // Show label only for every Nth bar to avoid crowding
                           const total = chartData.length;
-                          const showEvery = total <= 10 ? 1 : total <= 20 ? 2 : total <= 31 ? 3 : 7;
+                          const showEvery =
+                            total <= 10
+                              ? 1
+                              : total <= 20
+                                ? 2
+                                : total <= 31
+                                  ? 3
+                                  : 7;
                           const showLabel = index % showEvery === 0;
                           return (
                             <div

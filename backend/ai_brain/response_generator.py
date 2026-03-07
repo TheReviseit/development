@@ -29,14 +29,15 @@ class ResponseGenerator:
     
     def _create_llm_client(self):
         """Create LLM client based on config."""
-        if self.config.llm.provider == "openai":
-            try:
-                from openai import OpenAI
-                return OpenAI(api_key=self.config.llm.api_key)
-            except ImportError:
-                raise ImportError("openai package required. Install with: pip install openai")
-        else:
-            raise ValueError(f"Unsupported LLM provider: {self.config.llm.provider}")
+        from .gemini_client import GeminiClient
+        api_key = self.config.llm.api_key
+        if not api_key:
+            raise ValueError("GEMINI_API_KEY not set.")
+        return GeminiClient(
+            api_key=api_key,
+            max_retries=self.config.llm.max_retries,
+            timeout_seconds=self.config.llm.timeout_seconds,
+        )
     
     def generate(
         self,
@@ -169,17 +170,17 @@ class ResponseGenerator:
         user_prompt = self._build_user_prompt(data, message, intent, history)
         
         try:
-            response = self.llm_client.chat.completions.create(
+            from .gemini_client import extract_text
+
+            response = self.llm_client.generate(
                 model=self.config.llm.model,
-                messages=[
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": user_prompt}
-                ],
+                system_prompt=system_prompt,
+                messages=[{"role": "user", "content": user_prompt}],
                 temperature=self.config.llm.temperature,
                 max_tokens=self.config.tokens.max_output_tokens,
             )
-            
-            reply = response.choices[0].message.content.strip()
+
+            reply = extract_text(response).strip()
             return self._enforce_response_limits(reply)
             
         except Exception as e:

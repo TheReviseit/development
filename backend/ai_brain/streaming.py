@@ -1,11 +1,11 @@
 """
-SSE Streaming for AI Brain v3.0.
+SSE Streaming for AI Brain v4.0 (Gemini).
 Streams AI responses token-by-token for real-time chat experience.
 
 Features:
 - Server-Sent Events (SSE) protocol
 - Human pause simulation (random 120-200ms before first token)
-- Token-by-token streaming from OpenAI
+- Token-by-token streaming from Gemini 2.5 Flash
 - Graceful error handling with fallback to full response
 """
 
@@ -40,25 +40,13 @@ def stream_ai_response(
     format_response: bool = True,
 ) -> Generator[str, None, None]:
     """
-    Stream an AI response as SSE events.
+    Stream an AI response as SSE events using Gemini 2.5 Flash.
 
     Yields SSE-formatted strings:
     - data: {"type": "start", "intent": "...", "confidence": 0.9}
     - data: {"type": "token", "content": "Hello"}
     - data: {"type": "done", "full_response": "...", "metadata": {...}}
     - data: {"type": "error", "message": "..."}
-
-    Args:
-        engine: ChatGPTEngine instance
-        message: User's message
-        business_data: Business profile
-        conversation_history: Prior messages
-        user_id: User identifier
-        conversation_state_summary: State context
-        user_profile: User memory profile
-        conversation_summary: LLM-generated conversation summary
-        is_mixed_language: Whether user is mixing languages
-        format_response: Whether to apply WhatsApp formatting
     """
     try:
         # Step 1: Classify intent (non-streaming, fast)
@@ -74,7 +62,7 @@ def stream_ai_response(
         # Step 2: Human pause — feels natural
         human_pause()
 
-        # Step 3: Build the prompt for generation using engine's methods
+        # Step 3: Build the prompt for generation
         from .prompts import build_dynamic_prompt
 
         complexity = engine.detect_message_complexity(message, intent_result.intent.value)
@@ -93,15 +81,9 @@ def stream_ai_response(
 
         max_tokens = engine._get_max_tokens_for_complexity(complexity, intent_result.confidence)
 
-        # Step 4: Stream from OpenAI
-        client = engine.client
+        # Step 4: Build messages with conversation history
+        messages = [{"role": "user", "content": message}]
 
-        messages = [
-            {"role": "system", "content": prompt},
-            {"role": "user", "content": message},
-        ]
-
-        # Add conversation history
         if conversation_history:
             history_messages = []
             for msg in conversation_history[-8:]:
@@ -110,33 +92,35 @@ def stream_ai_response(
                 if role in ("user", "assistant") and content:
                     history_messages.append({"role": role, "content": content})
             # Insert history before the current user message
-            messages = [messages[0]] + history_messages + [messages[1]]
+            messages = history_messages + messages
 
-        stream = client.chat.completions.create(
+        # Step 5: Stream from Gemini
+        client = engine.client
+
+        full_response = ""
+        for chunk in client.generate_stream(
             model=engine.config.llm.generation_model,
+            system_prompt=prompt,
             messages=messages,
             max_tokens=max_tokens,
             temperature=engine.config.llm.temperature,
-            stream=True,
-        )
+        ):
+            full_response += chunk
+            yield _sse_event({
+                "type": "token",
+                "content": chunk,
+            })
 
-        full_response = ""
-        for chunk in stream:
-            if chunk.choices and chunk.choices[0].delta.content:
-                token = chunk.choices[0].delta.content
-                full_response += token
-                yield _sse_event({
-                    "type": "token",
-                    "content": token,
-                })
-
-        # Step 5: Format if needed
+        # Step 6: Format if needed
         formatted_response = full_response
         if format_response:
-            from .whatsapp_formatter import format_for_whatsapp
-            formatted_response = format_for_whatsapp(full_response)
+            try:
+                from .whatsapp_formatter import format_for_whatsapp
+                formatted_response = format_for_whatsapp(full_response)
+            except ImportError:
+                pass
 
-        # Step 6: Emit done event
+        # Step 7: Emit done event
         yield _sse_event({
             "type": "done",
             "full_response": formatted_response,
@@ -145,6 +129,7 @@ def stream_ai_response(
                 "confidence": round(intent_result.confidence, 2),
                 "complexity": complexity.value if hasattr(complexity, 'value') else str(complexity),
                 "streamed": True,
+                "model": engine.config.llm.generation_model,
             },
         })
 

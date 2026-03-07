@@ -457,10 +457,10 @@ class AIBrain:
             try:
                 profile = self.memory_manager.get_or_create_profile(user_id)
                 user_profile = profile.to_prompt_dict() if profile else None
-                conversation_summary = self.memory_manager.get_conversation_summary(user_id)
+                conversation_summary = self.memory_manager.get_conversation_summary(user_id, biz_id)
 
                 # Auto-extract facts from user message and update profile
-                self.memory_manager.add_message(user_id, "user", user_message)
+                self.memory_manager.add_message(user_id, biz_id, "user", user_message)
             except Exception as e:
                 logger.warning(f"Memory manager error (non-blocking): {e}")
 
@@ -484,17 +484,23 @@ class AIBrain:
                     output_tokens = result.metadata.get('completion_tokens', 0)
                     model_name = result.metadata.get('model', 'unknown')
                     
-                    usage_result = self.usage_tracker.track_usage(biz_id, input_tokens, output_tokens)
+                    # FIX: Use Supabase business manager ID (valid PostgreSQL UUID) for DB persistence.
+                    # The default biz_id is a Firebase UID which fails UUID validation in _sync_to_db,
+                    # causing tokens to never persist to the database.
+                    tracking_biz_id = business.get('supabase_business_manager_id') or biz_id
+                    
+                    usage_result = self.usage_tracker.track_usage(tracking_biz_id, input_tokens, output_tokens)
                     
                     # Log for debugging (recommended by user)
                     logger.info(
-                        f"Tracked LLM usage | biz={biz_id} | model={model_name} | "
+                        f"Tracked LLM usage | biz={tracking_biz_id[:15]}... | model={model_name} | "
                         f"in={input_tokens} | out={output_tokens} | "
                         f"intent_in={result.metadata.get('intent_prompt_tokens', 0)} | "
                         f"intent_out={result.metadata.get('intent_completion_tokens', 0)} | "
                         f"gen_in={result.metadata.get('generation_prompt_tokens', 0)} | "
                         f"gen_out={result.metadata.get('generation_completion_tokens', 0)}"
                     )
+
             except Exception as e:
                 logger.warning(f"Usage tracking skipped: {e}")
             
@@ -813,14 +819,34 @@ class AIBrain:
         # =====================================================
         # PRIORITY 4: New Order Intent
         # =====================================================
-        order_keywords = ["order", "buy", "purchase", "want to order", "want to buy", "get me"]
+        order_keywords = [
+            # English
+            "order", "buy", "purchase", "want to order", "want to buy", "get me",
+            "add to cart", "checkout", "place order", "how to order", "how to buy",
+            "how do i order", "how do i buy", "how can i order", "how can i buy",
+            "i want", "i need",
+            # Hindi
+            "order karna", "kharidna", "lena hai", "mangwana", "order karu",
+            "kaise order", "kaise kharide", "order chahiye",
+            # Tamil
+            "vangurathu", "vaangi", "vaanga", "edukka", "edukanum", "vangi",
+            "epdi order", "order pannu", "order pannunga", "vanganum",
+            "epdi vangurathu", "items vangurathu", "product vangurathu",
+            "vaangi edukka", "eduka", "vaanganum",
+            # Kannada
+            "order maadi", "kharidisu", "bekaagide", "hege order",
+            # Telugu
+            "order cheyandi", "konali", "konu", "ela order", "order cheyali",
+            # Malayalam
+            "order cheyyanam", "vaangaan", "vangikko", "epadi order",
+        ]
         order_patterns = [
             r"\b\d+\s*(x|nos?|pieces?|items?|qty)\b",  # "2 pieces", "3x"
             r"\b(quantity|qty)\s*:?\s*\d+",
         ]
         
         # Check for product mentions from business catalog
-        products = business_data.get("products_services", [])
+        products = business_data.get("products_services", []) if isinstance(business_data, dict) else []
         product_names = [p.get("name", "").lower() for p in products if isinstance(p, dict) and p.get("name")]
         has_product_mention = any(name in msg_lower for name in product_names if name and len(name) > 2)
         

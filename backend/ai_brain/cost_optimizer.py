@@ -1,13 +1,12 @@
 """
-Cost Optimizer for AI Brain v3.0.
+Cost Optimizer for AI Brain v4.0 (Gemini).
 Implements smart routing, caching, and token optimization strategies
-to reduce OpenAI API costs by 50-80%.
+to reduce LLM API costs by 50-80%.
 
-v3.0 changes:
-- Dual-model routing (classification=gpt-4o-mini, generation=gpt-4o)
-- Confidence-based model escalation
+v4.0 changes:
+- Migrated to Gemini 2.5 Flash (single model)
+- Simplified model tiers (no dual-model routing needed)
 - Adaptive history window per intent
-- Updated model tiers
 """
 
 import re
@@ -21,9 +20,9 @@ from .intents import IntentType
 
 class ModelTier(str, Enum):
     """Model tiers for cost optimization."""
-    MINI = "gpt-4o-mini"        # Cheapest, fastest
-    STANDARD = "gpt-4o"         # High quality
-    PREMIUM = "gpt-4-turbo"     # Best quality
+    MINI = "gemini-2.5-flash"       # Fast + capable (primary)
+    STANDARD = "gemini-2.5-flash"   # Same model — Gemini Flash handles all tiers
+    PREMIUM = "gemini-2.5-pro"      # Pro tier for edge cases
 
 
 class QueryComplexity(str, Enum):

@@ -1,13 +1,15 @@
 """
-Core ChatGPT Engine for AI Brain — v3.0.
+Core AI Engine for AI Brain — v4.0 (Gemini).
 
 Enterprise features:
-- Dual-model architecture (gpt-4o-mini classification, gpt-4o generation)
+- Google Gemini 2.5 Flash (single model for classification + generation)
 - Response Style Engine (SHORT/MEDIUM/LONG dynamic adjustment)
 - Smart Clarification Layer (ask instead of guess)
 - Response Self-Check Layer (quality validation)
-- Confidence-based model escalation
+- Confidence-based token escalation
 - Single-call optimization for simple queries
+- Retry with exponential backoff
+- Timeout protection
 """
 
 import json
@@ -27,6 +29,15 @@ from .prompts import (
     SAFETY_FILTER_PROMPT,
 )
 from .tools import TOOL_SCHEMAS, ToolExecutor, ToolResult
+from .gemini_client import (
+    GeminiClient,
+    RateLimitError,
+    convert_openai_tools_to_gemini,
+    extract_text,
+    extract_json,
+    extract_tool_call,
+    extract_usage,
+)
 
 logger = logging.getLogger('reviseit.engine')
 
@@ -89,30 +100,38 @@ CLARIFICATION_RULES = {
 
 class ChatGPTEngine:
     """
-    Core ChatGPT engine — v3.0 with enterprise intelligence layers.
+    Core AI engine — v4.0 powered by Google Gemini 2.5 Flash.
+
+    Despite the legacy class name (kept for backward compatibility),
+    this now uses Gemini exclusively.
     """
 
     def __init__(self, config: AIBrainConfig = None):
         self.config = config or default_config
-        self._client = None
+        self._client: Optional[GeminiClient] = None
 
     @property
-    def client(self):
-        """Lazy initialization of OpenAI client."""
+    def client(self) -> GeminiClient:
+        """Lazy initialization of Gemini client."""
         if self._client is None:
             self._client = self._create_client()
         return self._client
 
-    def _create_client(self):
-        """Create OpenAI client."""
-        if self.config.llm.provider == "openai":
-            try:
-                from openai import OpenAI
-                return OpenAI(api_key=self.config.llm.api_key)
-            except ImportError:
-                raise ImportError("openai package required. Install with: pip install openai")
-        else:
-            raise ValueError(f"Unsupported LLM provider: {self.config.llm.provider}")
+    def _create_client(self) -> GeminiClient:
+        """Create Gemini client with retry and timeout from config."""
+        api_key = self.config.llm.api_key
+        if not api_key:
+            raise ValueError(
+                "GEMINI_API_KEY (or GOOGLE_API_KEY) not set. "
+                "Set it in your environment or .env file."
+            )
+        return GeminiClient(
+            api_key=api_key,
+            max_retries=self.config.llm.max_retries,
+            timeout_seconds=self.config.llm.timeout_seconds,
+            rate_limit_max_retries=self.config.llm.rate_limit_max_retries,
+            min_request_interval_ms=self.config.llm.min_request_interval_ms,
+        )
 
     # =========================================================================
     # RESPONSE STYLE ENGINE — Detect complexity, adjust tokens/style
@@ -122,9 +141,9 @@ class ChatGPTEngine:
         """
         Detect how complex the user's message is to calibrate response depth.
 
-        SHORT: "price?" "hi" "hours" → 1-2 sentences, direct
-        MEDIUM: "Tell me about your services" → structured, moderate detail
-        LONG: "I need help choosing between X and Y for my wedding" → detailed
+        SHORT: "price?" "hi" "hours" -> 1-2 sentences, direct
+        MEDIUM: "Tell me about your services" -> structured, moderate detail
+        LONG: "I need help choosing between X and Y for my wedding" -> detailed
         """
         msg_lower = message.strip().lower()
         word_count = len(msg_lower.split())
@@ -159,7 +178,7 @@ class ChatGPTEngine:
             MessageComplexity.LONG: style.long_max_tokens,
         }[complexity]
 
-        # Low confidence → more tokens for better reasoning
+        # Low confidence -> more tokens for better reasoning
         if confidence < self.config.llm.low_confidence_threshold:
             base = max(base, self.config.llm.low_confidence_max_tokens)
 
@@ -179,8 +198,6 @@ class ChatGPTEngine:
         """
         Check if critical info is missing for the detected intent.
         Returns a clarification question if needed, None otherwise.
-
-        This prevents hallucination by asking instead of guessing.
         """
         if not self.config.enable_smart_clarification:
             return None
@@ -199,7 +216,7 @@ class ChatGPTEngine:
         return None
 
     # =========================================================================
-    # INTENT CLASSIFICATION — Uses classification_model (gpt-4o-mini)
+    # INTENT CLASSIFICATION — Uses Gemini 2.5 Flash with JSON mode
     # =========================================================================
 
     def classify_intent(
@@ -207,9 +224,9 @@ class ChatGPTEngine:
         message: str,
         conversation_history: List[Dict[str, str]] = None
     ) -> IntentResult:
-        """Classify user intent. Uses gpt-4o-mini for speed and cost."""
+        """Classify user intent using Gemini 2.5 Flash."""
 
-        # QUICK PRE-CHECK: Obvious intents without LLM call (saves ~300ms + tokens)
+        # QUICK PRE-CHECK: Obvious intents without LLM call (saves ~200ms + tokens)
         msg_clean = message.strip().lower()
 
         if msg_clean in ['hi', 'hello', 'hey', 'hii', 'hiii', 'namaste', 'namaskar', 'hola', 'yo', 'sup']:
@@ -243,38 +260,31 @@ class ChatGPTEngine:
                 raw_response={"quick_match": "goodbye"}
             )
 
-        # LLM classification using classification_model (gpt-4o-mini)
-        messages = [{"role": "system", "content": SYSTEM_PROMPT_INTENT_CLASSIFIER}]
-
+        # LLM classification using Gemini 2.5 Flash with JSON mode
         if conversation_history:
             context_text = "\n".join([
                 f"{m['role'].upper()}: {m['content']}"
                 for m in conversation_history[-3:]
             ])
-            messages.append({
-                "role": "user",
-                "content": f"Conversation context:\n{context_text}\n\nClassify this message: \"{message}\""
-            })
+            user_content = f"Conversation context:\n{context_text}\n\nClassify this message: \"{message}\""
         else:
-            messages.append({
-                "role": "user",
-                "content": f"Classify this message: \"{message}\""
-            })
+            user_content = f"Classify this message: \"{message}\""
 
         try:
-            response = self.client.chat.completions.create(
-                model=self.config.llm.classification_model,  # gpt-4o-mini
-                messages=messages,
+            response = self.client.generate(
+                model=self.config.llm.classification_model,
+                system_prompt=SYSTEM_PROMPT_INTENT_CLASSIFIER,
+                messages=[{"role": "user", "content": user_content}],
                 temperature=self.config.llm.classification_temperature,
                 max_tokens=200,
-                response_format={"type": "json_object"}
+                json_mode=True,
             )
 
-            usage = getattr(response, "usage", None) or type('obj', (object,), {'prompt_tokens': 0, 'completion_tokens': 0})()
-            intent_prompt_tokens = getattr(usage, "prompt_tokens", 0) or 0
-            intent_completion_tokens = getattr(usage, "completion_tokens", 0) or 0
+            usage = extract_usage(response)
+            intent_prompt_tokens = usage["prompt_tokens"]
+            intent_completion_tokens = usage["completion_tokens"]
 
-            result = json.loads(response.choices[0].message.content)
+            result = extract_json(response, default={"intent": "unknown", "confidence": 0.0, "language": "en"})
 
             intent_str = result.get("intent", "unknown").lower()
             try:
@@ -295,7 +305,19 @@ class ChatGPTEngine:
                 raw_response=result
             )
 
+        except RateLimitError as e:
+            logger.warning(f"⚠️ Intent classification rate-limited (429): {e}")
+            # Return a reasonable fallback instead of "unknown" with 0.0
+            # This lets generate_response still produce something useful
+            return IntentResult(
+                intent=IntentType.GENERAL_ENQUIRY, confidence=0.5, language="en",
+                entities={}, needs_clarification=False,
+                clarification_question=None,
+                raw_response={"error": str(e), "rate_limited": True}
+            )
+
         except Exception as e:
+            logger.error(f"Intent classification error: {e}")
             return IntentResult(
                 intent=IntentType.UNKNOWN, confidence=0.0, language="en",
                 entities={}, needs_clarification=True,
@@ -304,7 +326,7 @@ class ChatGPTEngine:
             )
 
     # =========================================================================
-    # RESPONSE GENERATION — Uses generation_model (gpt-4o)
+    # RESPONSE GENERATION — Uses Gemini 2.5 Flash with function calling
     # =========================================================================
 
     def generate_response(
@@ -320,7 +342,7 @@ class ChatGPTEngine:
         conversation_summary: str = None,
         is_mixed_language: bool = False,
     ) -> GenerationResult:
-        """Generate response using gpt-4o with enterprise intelligence layers."""
+        """Generate response using Gemini 2.5 Flash with enterprise intelligence layers."""
 
         confidence_action = get_confidence_action(intent_result.confidence)
 
@@ -341,8 +363,14 @@ class ChatGPTEngine:
                 }
             )
 
-        # If intent classifier already asked for clarification
-        if intent_result.needs_clarification and intent_result.clarification_question:
+        # If intent classifier asked for clarification, only short-circuit for
+        # actionable intents where specific info is truly missing.
+        actionable_intents = {
+            IntentType.BOOKING, IntentType.PRICING, IntentType.ORDER_STATUS,
+            IntentType.ORDER_BOOKING,
+        }
+        if (intent_result.needs_clarification and intent_result.clarification_question
+                and intent_result.intent in actionable_intents):
             return GenerationResult(
                 reply=intent_result.clarification_question,
                 intent=intent_result.intent,
@@ -372,46 +400,42 @@ class ChatGPTEngine:
             conversation_summary=conversation_summary,
         )
 
-        # Split into proper system + user roles for stronger instruction following
-        messages = [
-            {"role": "system", "content": full_prompt},
-            {"role": "user", "content": message},
-        ]
+        # Build messages list (user message only — system goes in config)
+        messages = [{"role": "user", "content": message}]
 
-        # Prepare tools if enabled
-        tools = TOOL_SCHEMAS if use_tools and self.config.enable_function_calling else None
+        # Convert OpenAI tool schemas to Gemini format
+        gemini_tools = None
+        if use_tools and self.config.enable_function_calling:
+            gemini_tools = convert_openai_tools_to_gemini(TOOL_SCHEMAS)
 
-        # Layer 4: Model selection — confidence-based escalation
+        # Layer 4: Token escalation for low confidence
         generation_model = self.config.llm.generation_model
         if intent_result.confidence < self.config.llm.low_confidence_threshold:
-            # Low confidence → use generation model with more tokens for better reasoning
             max_tokens = max(max_tokens, self.config.llm.low_confidence_max_tokens)
-            logger.info(f"🧠 Low confidence ({intent_result.confidence:.2f}) → boosted tokens to {max_tokens}")
+            logger.info(f"Low confidence ({intent_result.confidence:.2f}) -> boosted tokens to {max_tokens}")
 
         try:
-            response = self.client.chat.completions.create(
+            response = self.client.generate(
                 model=generation_model,
+                system_prompt=full_prompt,
                 messages=messages,
                 temperature=self.config.llm.temperature,
                 max_tokens=max_tokens,
-                tools=tools,
-                tool_choice="auto" if tools else None
+                tools=gemini_tools,
             )
 
-            choice = response.choices[0]
-
-            usage = getattr(response, "usage", None) or type('obj', (object,), {'prompt_tokens': 0, 'completion_tokens': 0})()
-            gen_prompt_tokens = getattr(usage, "prompt_tokens", 0) or 0
-            gen_completion_tokens = getattr(usage, "completion_tokens", 0) or 0
+            usage = extract_usage(response)
+            gen_prompt_tokens = usage["prompt_tokens"]
+            gen_completion_tokens = usage["completion_tokens"]
 
             # Handle tool calls
             tool_called = None
             tool_result = None
 
-            if choice.message.tool_calls:
-                tool_call = choice.message.tool_calls[0]
-                tool_called = tool_call.function.name
-                tool_args = json.loads(tool_call.function.arguments)
+            tool_call_data = extract_tool_call(response)
+            if tool_call_data:
+                tool_called = tool_call_data["name"]
+                tool_args = tool_call_data["arguments"]
 
                 business_owner_id = business_data.get("business_id") or business_data.get("user_id")
                 executor = ToolExecutor(business_data, user_id=user_id, business_owner_id=business_owner_id)
@@ -426,7 +450,7 @@ class ChatGPTEngine:
                     tool_called, result, business_data, intent_result.language
                 )
             else:
-                reply = choice.message.content.strip()
+                reply = extract_text(response).strip()
 
             # Layer 5: Response Self-Check (quality validation)
             if self.config.enable_self_check and not tool_called:
@@ -464,10 +488,20 @@ class ChatGPTEngine:
                 }
             )
 
+        except RateLimitError as e:
+            logger.warning(f"⚠️ Response generation rate-limited (429): {e}")
+            return GenerationResult(
+                reply="We're experiencing high demand right now. Please try again in a moment — I'll be right here to help! 🙏",
+                intent=intent_result.intent, confidence=intent_result.confidence,
+                tool_called=None, tool_result=None, needs_human=False,
+                language=intent_result.language,
+                metadata={"generation_method": "rate_limit_fallback", "error": str(e), "rate_limited": True}
+            )
+
         except Exception as e:
             logger.error(f"Generation error: {e}")
             return GenerationResult(
-                reply="I'm having trouble processing your request. Let me connect you with our team. 🙏",
+                reply="I'm having trouble processing your request. Let me connect you with our team.",
                 intent=intent_result.intent, confidence=0.0,
                 tool_called=None, tool_result=None, needs_human=True,
                 language=intent_result.language,
@@ -486,15 +520,14 @@ class ChatGPTEngine:
         business_data: Dict[str, Any],
     ) -> str:
         """
-        Post-generation quality check. Catches:
-        - Did not answer the actual question
-        - Response is too generic / robotic
-        - Missing critical info the AI should have provided
-
-        Uses gpt-4o-mini for speed (this is a quick check, not a full regen).
+        Post-generation quality check using Gemini.
         Only regenerates if the check FAILS — cost-efficient.
         """
         try:
+            # Skip self-check if we're already rate-limited — save quota
+            if any('rate_limit' in str(v) for v in [response] if 'high demand' in str(v)):
+                return response
+
             check_prompt = f"""You are a quality checker for a WhatsApp business chatbot response.
 
 User asked: "{user_message}"
@@ -509,21 +542,22 @@ Check:
 Return JSON:
 {{"passes": true/false, "issue": "<brief description if fails>", "fix_hint": "<what to fix>"}}"""
 
-            check_response = self.client.chat.completions.create(
-                model=self.config.llm.classification_model,  # gpt-4o-mini for speed
+            check_response = self.client.generate(
+                model=self.config.llm.classification_model,
+                system_prompt="You are a response quality checker. Return only valid JSON.",
                 messages=[{"role": "user", "content": check_prompt}],
                 temperature=0.2,
                 max_tokens=100,
-                response_format={"type": "json_object"}
+                json_mode=True,
             )
 
-            result = json.loads(check_response.choices[0].message.content)
+            result = extract_json(check_response, default={"passes": True})
 
             if result.get("passes", True):
                 return response
 
             # Self-check failed — regenerate with fix hint
-            logger.info(f"🔄 Self-check failed: {result.get('issue', 'unknown')} → regenerating")
+            logger.info(f"Self-check failed: {result.get('issue', 'unknown')} -> regenerating")
 
             fix_prompt = f"""The previous response to "{user_message}" was not good enough.
 Issue: {result.get('issue', '')}
@@ -532,15 +566,20 @@ Fix: {result.get('fix_hint', '')}
 Business: {business_data.get('business_name', '')}
 Generate a better response. Be natural and directly answer the question."""
 
-            fix_response = self.client.chat.completions.create(
+            fix_response = self.client.generate(
                 model=self.config.llm.generation_model,
+                system_prompt="Generate a natural, helpful WhatsApp business response.",
                 messages=[{"role": "user", "content": fix_prompt}],
                 temperature=self.config.llm.temperature,
                 max_tokens=300,
             )
 
-            fixed = fix_response.choices[0].message.content.strip()
+            fixed = extract_text(fix_response).strip()
             return fixed if fixed else response
+
+        except RateLimitError:
+            logger.info("Self-check skipped: rate limited (429) — preserving quota")
+            return response
 
         except Exception as e:
             logger.warning(f"Self-check skipped: {e}")
@@ -571,7 +610,6 @@ Generate a better response. Be natural and directly answer the question."""
         # Check each claimed price
         for claimed in price_claims:
             clean = claimed.replace(",", "")
-            # Allow approximate matches (within 10% or exact)
             try:
                 claimed_val = float(clean)
                 is_valid = any(
@@ -580,7 +618,7 @@ Generate a better response. Be natural and directly answer the question."""
                     if actual.replace(".", "").isdigit()
                 )
                 if not is_valid and actual_prices:
-                    logger.warning(f"⚠️ HALLUCINATION: Price ₹{claimed} not in business data")
+                    logger.warning(f"HALLUCINATION: Price Rs.{claimed} not in business data")
                     response = response.replace(f"₹{claimed}", "price on request")
             except (ValueError, ZeroDivisionError):
                 pass
@@ -588,7 +626,7 @@ Generate a better response. Be natural and directly answer the question."""
         return response
 
     # =========================================================================
-    # TOOL RESPONSE FORMATTING (unchanged from v2)
+    # TOOL RESPONSE FORMATTING
     # =========================================================================
 
     def _generate_tool_response(
@@ -606,7 +644,7 @@ Generate a better response. Be natural and directly answer the question."""
         if tool_name == "get_pricing":
             products = result.data.get("products", [])
             if products:
-                lines = ["Here are the prices you asked about: 💰\n"]
+                lines = ["Here are the prices you asked about:\n"]
                 for p in products[:5]:
                     name = p.get("name", "")
                     price = p.get("price")
@@ -619,7 +657,7 @@ Generate a better response. Be natural and directly answer the question."""
         elif tool_name == "search_products":
             products = result.data.get("products", [])
             if products:
-                lines = ["Here's what we have: ✨\n"]
+                lines = ["Here's what we have:\n"]
                 for p in products[:5]:
                     name = p.get("name", "")
                     price = p.get("price")
@@ -671,7 +709,7 @@ Generate a better response. Be natural and directly answer the question."""
                 lines.append(f"\nLandmarks: {', '.join(landmarks)}")
             if maps:
                 lines.append(f"\nGoogle Maps: {maps}")
-            lines.append("\nSee you soon! 😊")
+            lines.append("\nSee you soon!")
             return "\n".join(lines)
 
         elif tool_name == "book_appointment":
@@ -696,9 +734,9 @@ Generate a better response. Be natural and directly answer the question."""
                 except Exception:
                     time_display = time_str
 
-                lines = ["Your appointment is confirmed! ✅\n"]
-                lines.append(f"📅 Date: {date_display}")
-                lines.append(f"⏰ Time: {time_display}")
+                lines = ["Your appointment is confirmed!\n"]
+                lines.append(f"Date: {date_display}")
+                lines.append(f"Time: {time_display}")
                 if booking.get('service'):
                     lines.append(f"Service: {booking.get('service')}")
                 lines.append("\nWe look forward to seeing you!")
@@ -708,14 +746,14 @@ Generate a better response. Be natural and directly answer the question."""
 
         elif tool_name == "escalate_to_human":
             contact = result.data.get("contact")
-            msg = "I'll connect you with our team who can help better. 🙏\n"
+            msg = "I'll connect you with our team who can help better.\n"
             if contact:
                 msg += f"\nYou can also reach us at: {contact}"
             msg += "\n\nSomeone will respond to you shortly!"
             return msg
 
         elif tool_name == "collect_lead":
-            return "Thank you for your interest! Our team will contact you shortly. 🎉"
+            return "Thank you for your interest! Our team will contact you shortly."
 
         else:
             return result.message
@@ -725,26 +763,25 @@ Generate a better response. Be natural and directly answer the question."""
     # =========================================================================
 
     def check_safety(self, message: str) -> Tuple[bool, str]:
-        """Check if a message is safe to process."""
+        """Check if a message is safe to process using Gemini."""
         try:
-            response = self.client.chat.completions.create(
-                model=self.config.llm.classification_model,  # Use mini for speed
-                messages=[
-                    {"role": "system", "content": SAFETY_FILTER_PROMPT},
-                    {"role": "user", "content": f"Check this message: \"{message}\""}
-                ],
+            response = self.client.generate(
+                model=self.config.llm.classification_model,
+                system_prompt=SAFETY_FILTER_PROMPT,
+                messages=[{"role": "user", "content": f"Check this message: \"{message}\""}],
                 temperature=0.1,
                 max_tokens=100,
-                response_format={"type": "json_object"}
+                json_mode=True,
             )
 
-            result = json.loads(response.choices[0].message.content)
+            result = extract_json(response, default={"is_safe": True})
             is_safe = result.get("is_safe", True)
             reason = result.get("reason", "")
 
             return is_safe, reason
 
         except Exception:
+            # Fail open — don't block messages if safety check fails
             return True, ""
 
     # =========================================================================
@@ -767,7 +804,6 @@ Generate a better response. Be natural and directly answer the question."""
 
         Optimization: For high-confidence quick-match intents (greeting, thank_you, etc.),
         skips the separate classification API call — goes straight to generation.
-        Saves ~300-500ms and ~200 tokens per simple message.
         """
         # Step 1: Classify intent
         intent_result = self.classify_intent(message, conversation_history)

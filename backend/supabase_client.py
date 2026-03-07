@@ -1027,7 +1027,8 @@ def store_message(
     media_url: Optional[str] = None,
     media_id: Optional[str] = None,
     conversation_origin: Optional[str] = None,
-    is_ai_generated: bool = False
+    is_ai_generated: bool = False,
+    tokens_used: int = 0
 ) -> Optional[Dict[str, Any]]:
     """
     Store a WhatsApp message in the database.
@@ -1049,6 +1050,7 @@ def store_message(
         media_id: Meta media ID
         conversation_origin: 'user_initiated' or 'business_initiated'
         is_ai_generated: Whether this is an AI-generated response
+        tokens_used: Number of AI tokens used (if is_ai_generated is true)
         
     Returns:
         The created message record or None on error
@@ -1117,7 +1119,8 @@ def store_message(
             update_analytics_daily(
                 user_id=user_id,
                 direction=direction,
-                is_ai_generated=is_ai_generated
+                is_ai_generated=is_ai_generated,
+                tokens_used=tokens_used
             )
             
             return result.data[0]
@@ -1140,7 +1143,8 @@ def update_analytics_daily(
     user_id: str,
     direction: str,
     is_ai_generated: bool = False,
-    status: str = None
+    status: str = None,
+    tokens_used: int = 0
 ) -> None:
     """
     Update analytics_daily counters in real-time when a message is processed.
@@ -1150,6 +1154,7 @@ def update_analytics_daily(
         direction: 'inbound' or 'outbound'
         is_ai_generated: Whether this is an AI-generated response
         status: Message status for updating delivery/read counts
+        tokens_used: Amount of AI tokens used (if any)
     """
     client = get_supabase_client()
     if not client:
@@ -1167,6 +1172,8 @@ def update_analytics_daily(
             increments['messages_sent'] = 1
             if is_ai_generated:
                 increments['ai_replies_generated'] = 1
+                if tokens_used > 0:
+                    increments['ai_tokens_used'] = tokens_used
         
         # Handle status updates (delivered, read, failed)
         if status == 'delivered':

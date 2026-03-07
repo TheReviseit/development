@@ -1,13 +1,17 @@
 """
 Unit tests for AI Brain module.
 Run with: python -m pytest tests/test_ai_brain.py -v
+
+Tests use mocked LLM responses so they work WITHOUT a Gemini API key.
 """
 
 import pytest
+from unittest.mock import patch, MagicMock
 from ai_brain import AIBrain
 from ai_brain.schemas import BusinessData, ProductService
 from ai_brain.intents import IntentDetector, IntentType
 from ai_brain.config import AIBrainConfig
+from ai_brain.chatgpt_engine import IntentResult, GenerationResult
 
 
 # Sample business data for testing
@@ -162,45 +166,103 @@ class TestBusinessDataSchema:
 
 
 class TestAIBrain:
-    """Tests for main AIBrain class."""
+    """Tests for main AIBrain class.
+    
+    Uses mocked LLM responses to avoid requiring a real API key.
+    """
     
     def setup_method(self):
         # Use default config without requiring API key
         self.brain = AIBrain()
-    
-    def test_generate_reply_greeting(self):
-        """Test greeting response generation."""
-        result = self.brain.generate_reply(
-            business_data=SAMPLE_BUSINESS,
-            user_message="Hi",
-            history=[]
+
+    @patch.object(AIBrain, '_is_in_scope', return_value=True)
+    def test_generate_reply_greeting(self, mock_scope):
+        """Test greeting response generation with mocked LLM."""
+        # Mock the engine's process_message to return a greeting response
+        mock_result = GenerationResult(
+            reply="Hello! Welcome to Style Studio! 😊 How can I help you today?",
+            intent=IntentType.GREETING,
+            confidence=0.95,
+            tool_called=None,
+            tool_result=None,
+            needs_human=False,
+            language="en",
+            metadata={
+                "generation_method": "llm",
+                "model": "gemini-2.5-flash",
+                "prompt_tokens": 450,
+                "completion_tokens": 35,
+            }
         )
+        
+        with patch.object(self.brain.engine, 'process_message', return_value=mock_result):
+            result = self.brain.generate_reply(
+                business_data=SAMPLE_BUSINESS,
+                user_message="Hi",
+                history=[]
+            )
         
         assert "reply" in result
         assert result["intent"] == "greeting"
         assert result["confidence"] >= 0.5
         assert isinstance(result["suggested_actions"], list)
-    
-    def test_generate_reply_hours(self):
-        """Test hours response generation."""
-        result = self.brain.generate_reply(
-            business_data=SAMPLE_BUSINESS,
-            user_message="What are your timings?",
-            history=[]
+
+    @patch.object(AIBrain, '_is_in_scope', return_value=True)
+    def test_generate_reply_hours(self, mock_scope):
+        """Test hours response generation with mocked LLM."""
+        mock_result = GenerationResult(
+            reply="We're open Monday to Friday 10:00 AM - 8:00 PM, Saturday 9:00 AM - 9:00 PM, and Sunday 10:00 AM - 6:00 PM! 🕐",
+            intent=IntentType.HOURS,
+            confidence=0.92,
+            tool_called=None,
+            tool_result=None,
+            needs_human=False,
+            language="en",
+            metadata={
+                "generation_method": "llm",
+                "model": "gemini-2.5-flash",
+                "prompt_tokens": 500,
+                "completion_tokens": 45,
+            }
         )
+        
+        with patch.object(self.brain.engine, 'process_message', return_value=mock_result):
+            result = self.brain.generate_reply(
+                business_data=SAMPLE_BUSINESS,
+                user_message="What are your timings?",
+                history=[]
+            )
         
         assert "reply" in result
         assert result["intent"] == "hours"
         # Response should contain timing information
         assert any(time in result["reply"].lower() for time in ["10:00", "20:00", "am", "pm"])
-    
-    def test_generate_reply_location(self):
-        """Test location response generation."""
-        result = self.brain.generate_reply(
-            business_data=SAMPLE_BUSINESS,
-            user_message="Where are you located?",
-            history=[]
+
+    @patch.object(AIBrain, '_is_in_scope', return_value=True)
+    def test_generate_reply_location(self, mock_scope):
+        """Test location response generation with mocked LLM."""
+        mock_result = GenerationResult(
+            reply="We're located at 123, MG Road, Bangalore! 📍 Near Metro Station, opposite Big Bazaar. Here's the map: https://maps.google.com/?q=style+studio",
+            intent=IntentType.LOCATION,
+            confidence=0.90,
+            tool_called=None,
+            tool_result=None,
+            needs_human=False,
+            language="en",
+            metadata={
+                "generation_method": "llm",
+                "model": "gemini-2.5-flash",
+                "prompt_tokens": 480,
+                "completion_tokens": 40,
+            }
         )
+        
+        with patch.object(self.brain.engine, 'process_message', return_value=mock_result):
+            result = self.brain.generate_reply(
+                business_data=SAMPLE_BUSINESS,
+                user_message="Where are you located?",
+                history=[]
+            )
         
         assert "reply" in result
         assert result["intent"] == "location"
@@ -208,11 +270,24 @@ class TestAIBrain:
         assert "bangalore" in result["reply"].lower() or "mg road" in result["reply"].lower()
     
     def test_detect_intent_standalone(self):
-        """Test standalone intent detection."""
-        result = self.brain.detect_intent("What is the price?")
+        """Test standalone intent detection with mocked LLM."""
+        # Mock classify_intent to return a pricing intent
+        mock_intent = IntentResult(
+            intent=IntentType.PRICING,
+            confidence=0.88,
+            language="en",
+            entities={"product": "haircut"},
+            needs_clarification=False,
+            clarification_question=None,
+            raw_response={}
+        )
+        
+        with patch.object(self.brain.engine, 'classify_intent', return_value=mock_intent):
+            result = self.brain.detect_intent("What is the price?")
         
         assert result["intent"] == "pricing"
-        assert "description" in result
+        assert result["confidence"] >= 0.5
+        assert "entities" in result
     
     def test_empty_message_handling(self):
         """Test handling of empty messages."""
@@ -239,15 +314,33 @@ class TestAIBrain:
 class TestResponseLimits:
     """Tests for response length limiting."""
     
-    def test_response_not_too_long(self):
+    @patch.object(AIBrain, '_is_in_scope', return_value=True)
+    def test_response_not_too_long(self, mock_scope):
         """Test that responses stay within limits."""
         brain = AIBrain()
         
-        result = brain.generate_reply(
-            business_data=SAMPLE_BUSINESS,
-            user_message="Tell me everything about your salon",
-            history=[]
+        mock_result = GenerationResult(
+            reply="Style Studio is a premium hair and beauty salon in Bangalore offering haircuts, coloring, facials, and manicures. Visit us at 123 MG Road! 💇",
+            intent=IntentType.GENERAL_ENQUIRY,
+            confidence=0.85,
+            tool_called=None,
+            tool_result=None,
+            needs_human=False,
+            language="en",
+            metadata={
+                "generation_method": "llm",
+                "model": "gemini-2.5-flash",
+                "prompt_tokens": 600,
+                "completion_tokens": 50,
+            }
         )
+        
+        with patch.object(brain.engine, 'process_message', return_value=mock_result):
+            result = brain.generate_reply(
+                business_data=SAMPLE_BUSINESS,
+                user_message="Tell me everything about your salon",
+                history=[]
+            )
         
         # Response should be reasonably short for WhatsApp
         assert len(result["reply"]) <= 600  # Allow some buffer

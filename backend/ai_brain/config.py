@@ -1,12 +1,13 @@
 """
-Configuration for AI Brain module — v3.0.
+Configuration for AI Brain module — v4.0 (Gemini).
 Contains LLM settings, token budgets, rate limits, and response constraints.
 
-v3.0 changes:
-- Dual model: classification_model (fast/cheap) + generation_model (quality)
-- Confidence-based model escalation
-- Adjusted token limits for better quality
-- Response style engine settings
+v4.0 changes:
+- Migrated from OpenAI (gpt-4o-mini/gpt-4o) to Google Gemini 2.5 Flash
+- Single-model architecture: Gemini 2.5 Flash handles classification + generation
+- ~70% cost reduction vs OpenAI
+- Retry/timeout configuration
+- Provider-agnostic API key resolution
 """
 
 import os
@@ -54,32 +55,36 @@ PLAN_LIMITS = {
 
 @dataclass
 class LLMConfig:
-    """LLM provider configuration with dual-model support."""
-    provider: str = "openai"
+    """LLM provider configuration — Gemini 2.5 Flash (single model)."""
+    provider: str = "gemini"
 
-    # Dual model architecture:
-    # classification_model = fast + cheap (intent detection, entity extraction)
-    # generation_model = quality (response generation, complex reasoning)
-    classification_model: str = "gpt-4o-mini"
-    generation_model: str = "gpt-4o"
+    # Single model architecture: Gemini 2.5 Flash is fast AND capable
+    # No need for separate classification/generation models
+    classification_model: str = "gemini-2.5-flash"
+    generation_model: str = "gemini-2.5-flash"
 
     # Legacy field — used as fallback if code references config.llm.model
-    model: str = "gpt-4o-mini"
+    model: str = "gemini-2.5-flash"
 
     api_key: Optional[str] = None
     temperature: float = 0.7
     classification_temperature: float = 0.3     # Lower for deterministic classification
     max_retries: int = 3
     timeout_seconds: int = 30
+    retry_base_delay: float = 1.0               # Base delay for exponential backoff (seconds)
 
-    # Confidence-based model escalation
-    # When confidence < this threshold, use generation_model with more tokens
+    # 429 rate-limit resilience
+    rate_limit_max_retries: int = 2             # Max retries specifically for 429 RESOURCE_EXHAUSTED
+    min_request_interval_ms: int = 200          # Min milliseconds between API calls (burst prevention)
+
+    # Confidence-based token escalation
+    # When confidence < this threshold, use more tokens for better reasoning
     low_confidence_threshold: float = 0.6
     low_confidence_max_tokens: int = 700        # More tokens for uncertain queries
 
     def __post_init__(self):
         if self.api_key is None:
-            self.api_key = os.getenv("OPENAI_API_KEY")
+            self.api_key = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
 
 
 # =============================================================================
@@ -159,11 +164,11 @@ class AIBrainConfig:
         """Create config from environment variables."""
         return cls(
             llm=LLMConfig(
-                provider=os.getenv("AI_BRAIN_LLM_PROVIDER", "openai"),
-                classification_model=os.getenv("AI_BRAIN_CLASSIFICATION_MODEL", "gpt-4o-mini"),
-                generation_model=os.getenv("AI_BRAIN_GENERATION_MODEL", "gpt-4o"),
-                model=os.getenv("AI_BRAIN_LLM_MODEL", "gpt-4o-mini"),
-                api_key=os.getenv("OPENAI_API_KEY"),
+                provider=os.getenv("AI_BRAIN_LLM_PROVIDER", "gemini"),
+                classification_model=os.getenv("AI_BRAIN_CLASSIFICATION_MODEL", "gemini-2.5-flash"),
+                generation_model=os.getenv("AI_BRAIN_GENERATION_MODEL", "gemini-2.5-flash"),
+                model=os.getenv("AI_BRAIN_LLM_MODEL", "gemini-2.5-flash"),
+                api_key=os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY"),
                 temperature=float(os.getenv("AI_BRAIN_TEMPERATURE", "0.7")),
             ),
             # Feature toggles from env
@@ -194,9 +199,9 @@ def validate_config(config: AIBrainConfig) -> list:
     issues = []
 
     if not config.llm.api_key:
-        issues.append("OPENAI_API_KEY not set. AI features will not work.")
+        issues.append("GEMINI_API_KEY (or GOOGLE_API_KEY) not set. AI features will not work.")
 
-    valid_models = ["gpt-4o", "gpt-4o-mini", "gpt-4-turbo", "gpt-4", "gpt-3.5-turbo"]
+    valid_models = ["gemini-2.5-flash", "gemini-2.5-pro", "gemini-2.0-flash"]
     if config.llm.classification_model not in valid_models:
         issues.append(f"Unknown classification model '{config.llm.classification_model}'.")
     if config.llm.generation_model not in valid_models:

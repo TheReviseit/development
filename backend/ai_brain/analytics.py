@@ -55,7 +55,7 @@ class InteractionEvent:
     # Metadata
     language: str = "en"
     is_cached: bool = False
-    model: str = "gpt-4o-mini"
+    model: str = "gemini-2.5-flash"
 
 
 @dataclass
@@ -143,7 +143,7 @@ class AnalyticsTracker:
         tool_called: str = None,
         language: str = "en",
         is_cached: bool = False,
-        model: str = "gpt-4o-mini"
+        model: str = "gemini-2.5-flash"
     ) -> str:
         """
         Track an AI interaction.

@@ -104,6 +104,13 @@ When a customer wants to order, show the available products from BUSINESS DATA w
 If the business has a website, share it: "You can order directly from our website: [URL]"
 Guide them naturally. Don't ask unnecessary questions — make it easy to buy.""",
 
+    "order_booking": """RESPONSE STYLE: Helpful and action-oriented.
+The customer wants to ORDER, BUY, or PURCHASE a product.
+Show the available products from BUSINESS DATA with their actual prices and categories.
+If the business has a website/store URL, share it.
+Guide them to pick a product. List products clearly with names and prices.
+Don't ask unnecessary questions — make it easy to buy.""",
+
     "complaint": """RESPONSE STYLE: Empathetic first, solution second.
 ALWAYS acknowledge their frustration before offering any solution.
 Example: "I'm really sorry to hear that — that's not the experience we want for you."
@@ -462,22 +469,29 @@ INTENTS:
 - casual_conversation: User is making casual chat like "how are you", "what's up", "kaise ho"
 - general_enquiry: User wants general information about the business or services
 - pricing: User is asking about prices, costs, rates, or fees
-- booking: User wants to book an appointment, schedule, or reserve
+- booking: User wants to book an appointment, schedule, or reserve a time slot
+- order_booking: User wants to ORDER, BUY, or PURCHASE a product/item. Examples: "I want to order", "buy this", "get me 2 pieces", "items vangurathu" (Tamil), "order karna hai" (Hindi), "vaangi edukka" (Tamil), "how to buy", "how do I order", "epdi order panrathu" (Tamil). This is for PRODUCT purchases, not time-based appointments.
 - hours: User is asking about operating hours, timings, when open/closed
 - location: User is asking about address, directions, where to find the business
-- order_status: User is asking about an order, delivery, or tracking
+- order_status: User is asking about an EXISTING order's status, delivery, or tracking
 - complaint: User has a complaint, issue, is unhappy or frustrated
 - lead_capture: User is interested and wants to be contacted (callback, more info)
 - thank_you: User is expressing thanks or gratitude
 - goodbye: User is ending the conversation
-- unknown: Cannot determine intent from the message
+- out_of_scope: Message is completely unrelated to the business (weather, politics, sports, etc.)
+- unknown: Intent cannot be determined from the message
 
 RULES:
 1. Return ONLY valid JSON, nothing else
 2. Consider the conversation context when classifying
 3. If multiple intents are possible, choose the PRIMARY intent
 4. For ambiguous messages, use confidence score to indicate uncertainty
-5. Support messages in English, Hindi, Hinglish, and regional languages
+5. You MUST understand messages in ALL Indian languages — English, Hindi, Hinglish, Tamil, Telugu, Kannada, Malayalam, Marathi, Bengali, Odia, Gujarati, etc. Translate them mentally and classify by meaning.
+6. Questions like "what is your name", "unga name enathu" (Tamil), "aapka naam kya hai" (Hindi) are casual_conversation — NOT unknown.
+7. Only set "needs_clarification": true for actionable intents (booking, pricing, order_status, order_booking) where specific info is genuinely missing. NEVER set it for greeting, casual_conversation, general_enquiry, or unknown intents.
+8. If the message is conversational (asking about the business, its identity, how it works, etc.), classify as general_enquiry or casual_conversation with reasonable confidence — do NOT classify as unknown.
+9. CRITICAL: When a user asks HOW to buy/order/purchase items (in ANY language), classify as order_booking — NOT general_enquiry. Examples: "how to order", "epdi order panrathu" (Tamil), "how can I buy", "items epdi vangurathu" (Tamil), "kaise order karu" (Hindi).
+10. Distinguish between order_booking (wanting to BUY something) vs order_status (asking about an EXISTING order). "I want to order" = order_booking. "Where is my order" = order_status.
 
 OUTPUT FORMAT (strict JSON):
 {

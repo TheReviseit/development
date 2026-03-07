@@ -1,14 +1,14 @@
-# AI Brain dependencies
+# AI Brain dependencies (Gemini 2.5 Flash)
 # Add these to your existing requirements.txt or install separately
 
-# Core LLM support
-openai>=1.0.0
+# Core LLM support (Google Gemini)
+google-genai>=1.0.0
 
 # Data validation
 pydantic>=2.0.0
 
-# Token counting for budget management
-tiktoken>=0.5.0
+# Retry logic (used by gemini_client.py)
+tenacity>=8.2.0
 
 # Optional: Database loaders (uncomment as needed)
 # pymongo>=4.0.0          # For MongoDB

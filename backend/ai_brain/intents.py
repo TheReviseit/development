@@ -64,6 +64,19 @@ INTENT_KEYWORDS: Dict[IntentType, List[str]] = {
         r"\b\d+\s*(x|nos?|pieces?|items?|qty)\b",  # Quantity patterns: "2 pieces", "3x"
         r"\b(quantity|qty)\s*:?\s*\d+\b",
         r"\b(add to cart|checkout|place order)\b",
+        r"\b(how to order|how to buy|how do i order|how can i buy|how can i order)\b",
+        # Hindi
+        r"\b(kharidna|lena hai|mangwana|order karna|order karu|kaise order|order chahiye)\b",
+        # Tamil
+        r"\b(vangurathu|vaangi|vaanga|edukka|edukanum|vangi|vanganum|vaanganum)\b",
+        r"\b(epdi order|order pannu|order pannunga|epdi vangurathu)\b",
+        r"\b(items vangurathu|product vangurathu|vaangi edukka)\b",
+        # Kannada
+        r"\b(order maadi|kharidisu|bekaagide|hege order)\b",
+        # Telugu
+        r"\b(order cheyandi|konali|konu|ela order|order cheyali)\b",
+        # Malayalam
+        r"\b(order cheyyanam|vaangaan|vangikko)\b",
     ],
     IntentType.HOURS: [
         r"\b(timing|timings|time|hours|open|close|kab|kitne baje|working hours)\b",

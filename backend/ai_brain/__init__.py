@@ -1,9 +1,9 @@
 """
-WhatsApp AI Brain Package v3.0
+WhatsApp AI Brain Package v4.0 (Gemini)
 Intelligent response generation for WhatsApp business chatbots.
 
 Features:
-- ChatGPT-powered intent classification (dual-model: gpt-4o-mini + gpt-4o)
+- Google Gemini 2.5 Flash powered (single-model, ~70% cheaper than OpenAI)
 - Dynamic 6-layer prompt builder with AI personality
 - Function calling for actionable intents
 - Conversation context management with LLM summarization
@@ -13,6 +13,7 @@ Features:
 - Smart clarification, self-check, and response validation
 - SSE streaming with human pause simulation
 - Cost optimization (50-80% savings)
+- Retry with exponential backoff + timeout protection
 """
 
 from .ai_brain import AIBrain, generate_reply
@@ -22,6 +23,7 @@ from .config import AIBrainConfig, default_config, validate_config
 
 # v2.0 Components
 from .chatgpt_engine import ChatGPTEngine, IntentResult, GenerationResult
+from .gemini_client import RateLimitError
 from .conversation_manager import (
     ConversationManager, 
     get_conversation_manager,
