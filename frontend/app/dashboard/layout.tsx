@@ -10,6 +10,7 @@ import { getDomainVisibility, type ProductDomain } from "@/lib/domain/config";
 import { getProductDomainFromBrowser } from "@/lib/domain/client";
 import SoftLimitBanner from "./components/SoftLimitBanner";
 import SubscriptionGateOverlay from "./components/SubscriptionGateOverlay";
+import BillingLockScreen, { type BillingLockReason } from "./components/BillingLockScreen";
 import styles from "./dashboard.module.css";
 
 type Section =
@@ -105,6 +106,11 @@ export default function DashboardLayout({
     "dashboard",
   ]);
   const [domainAccessLoaded, setDomainAccessLoaded] = useState(false);
+  // ── Billing Status Gate ───────────────────────────────────────────
+  // Blocks the entire dashboard when subscription is suspended/expired/missing.
+  const [billingLocked, setBillingLocked] = useState(false);
+  const [billingLockReason, setBillingLockReason] = useState<BillingLockReason>("unknown");
+  const [billingStatusLoaded, setBillingStatusLoaded] = useState(false);
   const router = useRouter();
   const pathname = usePathname();
 
@@ -193,6 +199,53 @@ export default function DashboardLayout({
     const domain = getProductDomainFromBrowser();
     setCurrentDomain(domain);
   }, []);
+
+  // ── Billing Status Gate ─────────────────────────────────────────────────────
+  // Fetches /api/subscription/billing-status after auth is complete.
+  // If the subscription is suspended/expired/missing, the entire dashboard
+  // is replaced with BillingLockScreen (early-return below).
+  useEffect(() => {
+    if (loading) return; // Wait for auth to resolve first
+
+    const checkBillingStatus = async () => {
+      try {
+        const res = await fetch("/api/subscription/billing-status", {
+          credentials: "include",
+          // Short cache: always fresh, but avoid hammering on every render
+          cache: "no-store",
+        });
+
+        if (!res.ok) {
+          // Fail open — don't block dashboard on API error
+          setBillingStatusLoaded(true);
+          return;
+        }
+
+        const data = await res.json();
+
+        if (data.locked) {
+          setBillingLocked(true);
+          setBillingLockReason((data.reason as BillingLockReason) || "unknown");
+        }
+      } catch (err) {
+        console.warn("[BillingGate] Failed to check billing status:", err);
+        // Fail open — network error should not lock the user out
+      } finally {
+        setBillingStatusLoaded(true);
+      }
+    };
+
+    checkBillingStatus();
+
+    // Re-check when subscription is updated (e.g. after payment)
+    const handleSubUpdated = () => {
+      setBillingStatusLoaded(false);
+      setBillingLocked(false);
+      checkBillingStatus();
+    };
+    window.addEventListener("subscription-updated", handleSubUpdated);
+    return () => window.removeEventListener("subscription-updated", handleSubUpdated);
+  }, [loading]);
 
   useEffect(() => {
     setDomainAccessLoaded(false);
@@ -383,6 +436,33 @@ export default function DashboardLayout({
       router.push(`/dashboard/${section}`);
     }
   };
+
+  // ════════════════════════════════════════════════════════════════════
+  // BILLING SUSPENSION GATE — Full dashboard lock
+  // ════════════════════════════════════════════════════════════════════
+  // Fires BEFORE the domain gate. If the subscription is suspended,
+  // expired, or missing, the ENTIRE dashboard is replaced with
+  // BillingLockScreen. Nothing is mounted behind it — zero bypass.
+  //
+  // Fails OPEN (doesn't lock) on:
+  //   - Auth still loading (wait for auth first)
+  //   - Billing status not yet loaded (show spinner)
+  //   - API error (network/server failure = don't punish user)
+  if (!loading && billingStatusLoaded && billingLocked) {
+    return (
+      <AuthProvider>
+        <DashboardAuthGuard
+          setUser={setUser}
+          setLoading={setLoading}
+          user={user}
+        />
+        <BillingLockScreen
+          reason={billingLockReason}
+          userEmail={user?.email}
+        />
+      </AuthProvider>
+    );
+  }
 
   // ════════════════════════════════════════════════════════════════════
   // DOMAIN ACCESS GATE — Production-grade: NO dashboard content renders

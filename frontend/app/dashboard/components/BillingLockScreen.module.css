@@ -1,0 +1,381 @@
+/* =============================================================================
+ * BillingLockScreen — Premium Suspension Wall
+ * =============================================================================
+ * Full-screen standalone page. Zero dashboard content behind it.
+ * Deep dark aesthetic with amber/red accent for urgency.
+ * =========================================================================== */
+
+/* ─── Page Wrapper ─────────────────────────────────────────────────────────── */
+.lockOverlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Inter", sans-serif;
+  background: #030303;
+  animation: pageFadeIn 0.35s ease-out forwards;
+  overflow: auto;
+}
+
+@keyframes pageFadeIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+/* ─── Ambient Rings ─────────────────────────────────────────────────────────── */
+.ambientRing1,
+.ambientRing2 {
+  position: fixed;
+  border-radius: 50%;
+  pointer-events: none;
+  animation: ringPulse 6s ease-in-out infinite alternate;
+}
+
+.ambientRing1 {
+  width: 600px;
+  height: 600px;
+  top: -200px;
+  right: -200px;
+  background: radial-gradient(circle, rgba(220, 38, 38, 0.04) 0%, transparent 70%);
+}
+
+.ambientRing2 {
+  width: 400px;
+  height: 400px;
+  bottom: -150px;
+  left: -100px;
+  background: radial-gradient(circle, rgba(245, 158, 11, 0.03) 0%, transparent 70%);
+  animation-delay: -3s;
+}
+
+@keyframes ringPulse {
+  from { transform: scale(1);   opacity: 0.6; }
+  to   { transform: scale(1.1); opacity: 1; }
+}
+
+/* ─── Card ──────────────────────────────────────────────────────────────────── */
+.lockCard {
+  position: relative;
+  width: 100%;
+  max-width: 520px;
+  border-radius: 20px;
+  overflow: hidden;
+  background: #0c0c0c;
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  box-shadow:
+    0 0 0 1px rgba(255, 255, 255, 0.02) inset,
+    0 32px 80px rgba(0, 0, 0, 0.6);
+  animation: cardEnter 0.5s cubic-bezier(0.16, 1, 0.3, 1) 0.05s both;
+}
+
+@keyframes cardEnter {
+  from { opacity: 0; transform: translateY(20px) scale(0.98); }
+  to   { opacity: 1; transform: translateY(0)   scale(1);    }
+}
+
+/* Top shimmer — thin accent line */
+.cardShimmer {
+  height: 1px;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(220, 38, 38, 0.5) 40%,
+    rgba(245, 158, 11, 0.4) 60%,
+    transparent 100%
+  );
+  animation: shimmerSlide 3s ease-in-out infinite;
+}
+
+@keyframes shimmerSlide {
+  0%   { background-position: -200% center; }
+  100% { background-position: 200% center; }
+}
+
+/* ─── Card Body ─────────────────────────────────────────────────────────────── */
+.cardBody {
+  padding: 48px 44px 40px;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+/* ─── Icon ──────────────────────────────────────────────────────────────────── */
+.iconWrapper {
+  position: relative;
+  display: inline-flex;
+  margin-bottom: 24px;
+}
+
+.iconInner {
+  width: 72px;
+  height: 72px;
+  border-radius: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(220, 38, 38, 0.08);
+  border: 1px solid rgba(220, 38, 38, 0.18);
+}
+
+.iconInner svg {
+  width: 34px;
+  height: 34px;
+  color: #ef4444;
+}
+
+.lockBadge {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  width: 26px;
+  height: 26px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #ffffff;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+}
+
+.lockBadge svg {
+  width: 12px;
+  height: 12px;
+  color: #000;
+}
+
+/* ─── Status Badge ──────────────────────────────────────────────────────────── */
+.statusBadge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 12px;
+  border-radius: 100px;
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  margin-bottom: 20px;
+}
+
+.statusDot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  animation: dotPulse 2s ease-in-out infinite;
+}
+
+@keyframes dotPulse {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.4; }
+}
+
+/* Badge variants */
+.badge_red {
+  background: rgba(220, 38, 38, 0.12);
+  border: 1px solid rgba(220, 38, 38, 0.25);
+  color: #f87171;
+}
+.badge_red .statusDot { background: #ef4444; }
+
+.badge_amber {
+  background: rgba(245, 158, 11, 0.1);
+  border: 1px solid rgba(245, 158, 11, 0.25);
+  color: #fbbf24;
+}
+.badge_amber .statusDot { background: #f59e0b; }
+
+.badge_grey {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: rgba(255, 255, 255, 0.5);
+}
+.badge_grey .statusDot { background: rgba(255, 255, 255, 0.4); }
+
+/* ─── Headline ──────────────────────────────────────────────────────────────── */
+.headline {
+  margin: 0 0 12px;
+  font-size: 26px;
+  font-weight: 700;
+  letter-spacing: -0.04em;
+  color: #ffffff;
+  line-height: 1.25;
+}
+
+/* ─── Subtext ───────────────────────────────────────────────────────────────── */
+.subtext {
+  margin: 0 0 28px;
+  font-size: 14px;
+  line-height: 1.75;
+  color: rgba(255, 255, 255, 0.38);
+  max-width: 380px;
+}
+
+/* ─── Divider ───────────────────────────────────────────────────────────────── */
+.divider {
+  width: 100%;
+  height: 1px;
+  background: rgba(255, 255, 255, 0.05);
+  margin-bottom: 24px;
+}
+
+/* ─── Locked Features ───────────────────────────────────────────────────────── */
+.lockedFeatures {
+  width: 100%;
+  margin-bottom: 32px;
+  text-align: left;
+}
+
+.lockedLabel {
+  margin: 0 0 12px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.2);
+}
+
+.lockedGrid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+}
+
+.lockedChip {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.3);
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.chipLock {
+  width: 11px;
+  height: 11px;
+  flex-shrink: 0;
+  color: rgba(220, 38, 38, 0.5);
+}
+
+/* ─── CTA Button ────────────────────────────────────────────────────────────── */
+.ctaButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  padding: 15px 28px;
+  border: none;
+  border-radius: 12px;
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  background: #ffffff;
+  color: #000000;
+  box-shadow: 0 4px 20px rgba(255, 255, 255, 0.12);
+}
+
+.ctaButton:hover {
+  background: #f0f0f0;
+  transform: translateY(-2px);
+  box-shadow: 0 8px 28px rgba(255, 255, 255, 0.16);
+}
+
+.ctaButton:active {
+  transform: translateY(0);
+  background: #e0e0e0;
+}
+
+.ctaButton svg {
+  width: 16px;
+  height: 16px;
+  transition: transform 0.15s ease;
+}
+
+.ctaButton:hover svg {
+  transform: translateX(3px);
+}
+
+/* ─── Support Link ──────────────────────────────────────────────────────────── */
+.supportLink {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 14px;
+  font-size: 12.5px;
+  color: rgba(255, 255, 255, 0.2);
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+  transition: color 0.15s ease;
+}
+
+.supportLink:hover {
+  color: rgba(255, 255, 255, 0.45);
+}
+
+.supportIcon {
+  display: inline-flex;
+}
+
+.supportIcon svg {
+  width: 14px;
+  height: 14px;
+}
+
+/* ─── Footer ────────────────────────────────────────────────────────────────── */
+.cardFooter {
+  padding: 14px 44px;
+  border-top: 1px solid rgba(255, 255, 255, 0.04);
+  text-align: center;
+}
+
+.footerText {
+  margin: 0;
+  font-size: 11.5px;
+  color: rgba(255, 255, 255, 0.18);
+  letter-spacing: 0.01em;
+}
+
+.footerEmail {
+  color: rgba(255, 255, 255, 0.35);
+}
+
+/* ─── Responsive ────────────────────────────────────────────────────────────── */
+@media (max-width: 560px) {
+  .cardBody {
+    padding: 36px 24px 28px;
+  }
+
+  .lockCard {
+    border-radius: 16px;
+  }
+
+  .headline {
+    font-size: 22px;
+  }
+
+  .lockedGrid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .cardFooter {
+    padding: 12px 24px;
+  }
+}
+
+@media (max-width: 360px) {
+  .lockedGrid {
+    grid-template-columns: 1fr 1fr;
+  }
+}

@@ -377,7 +377,7 @@ export async function openRazorpayCheckout(options: {
     return;
   }
 
-  const razorpayOptions = {
+  const razorpayOptions: Record<string, any> = {
     key: options.keyId,
     subscription_id: options.subscriptionId,
     name: "Flowauxi",
@@ -386,17 +386,6 @@ export async function openRazorpayCheckout(options: {
       name: options.customerName || "",
       email: options.customerEmail,
       contact: options.customerPhone || "",
-    },
-    timeout: 300, // 5 minutes for UPI QR
-    retry: {
-      enabled: true,
-      max_count: 4,
-    },
-    method: {
-      netbanking: true,
-      card: true,
-      upi: true,
-      wallet: true,
     },
     theme: {
       color: "#22c15a",
@@ -417,6 +406,9 @@ export async function openRazorpayCheckout(options: {
         options.onClose?.();
       },
     },
+    // NOTE: Do NOT pass timeout, retry, or method for subscription checkout.
+    // These options are for one-time payments only. Razorpay subscription
+    // checkout determines supported methods from the plan configuration.
   };
 
   const razorpay = new (window as any).Razorpay(razorpayOptions);
