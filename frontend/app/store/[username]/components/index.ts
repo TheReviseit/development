@@ -7,6 +7,8 @@ export { default as ProductDetailModal } from "./ProductDetailModal";
 export { default as CartDrawer } from "./CartDrawer";
 export { default as SearchOverlay } from "./SearchOverlay";
 export { default as CarouselBanner } from "./CarouselBanner";
+export { default as NewArrivalsSection } from "./NewArrivalsSection";
+export { default as CategorySection } from "./CategorySection";
 export { StoreFooter } from "./StoreFooter";
 
 export type { Product } from "./ProductCardStore";

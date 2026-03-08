@@ -386,6 +386,22 @@ try:
 except ImportError as e:
     logger.warning(f"Upgrade API routes not available: {e}")
 
+# Register Subscription Webhook routes (lifecycle events)
+try:
+    from routes.subscription_webhooks import subscription_webhooks_bp
+    app.register_blueprint(subscription_webhooks_bp)
+    logger.info("Subscription webhook routes registered (/api/webhooks/subscription)")
+except ImportError as e:
+    logger.warning(f"Subscription webhook routes not available: {e}")
+
+# Register Billing Admin routes (monitoring + management)
+try:
+    from routes.billing_admin import billing_admin_bp
+    app.register_blueprint(billing_admin_bp)
+    logger.info("Billing admin routes registered (/api/admin/billing/*)")
+except ImportError as e:
+    logger.warning(f"Billing admin routes not available: {e}")
+
 
 # Initialize webhook security
 webhook_security = None
@@ -1986,6 +2002,53 @@ def rate_limited(error):
 # Application Entry Point
 # =============================================================================
 
+def _start_dev_billing_scheduler():
+    """
+    Start a lightweight billing cycle scheduler for development mode.
+
+    Production uses Celery Beat (Procfile: beat process).
+    Dev mode uses threading.Timer since Celery is not running locally.
+
+    SAFETY:
+    - Only runs when Flask is started directly (py app.py)
+    - Never runs under gunicorn (GUNICORN_CMD_ARGS would be set)
+    - Single-threaded: no duplicate execution risk
+    - Fire-and-forget: errors logged but never crash the server
+    """
+    import threading
+
+    INTERVAL_SECONDS = 600  # 10 minutes
+
+    def _billing_tick():
+        """Execute one billing cycle, then schedule the next."""
+        try:
+            logger.info("🔄 [DEV] Running scheduled billing cycle...")
+            from scripts.run_billing_cycle import run_billing_cycle
+            summary = run_billing_cycle(dry_run=False)
+            overdue = summary.get('overdue_detected', 0)
+            transitioned = summary.get('overdue_transitioned', 0)
+            logger.info(
+                f"✅ [DEV] Billing cycle complete: "
+                f"overdue={overdue} transitioned={transitioned}"
+            )
+        except Exception as e:
+            logger.error(f"❌ [DEV] Billing cycle error: {e}")
+        finally:
+            # Schedule next run
+            timer = threading.Timer(INTERVAL_SECONDS, _billing_tick)
+            timer.daemon = True  # Don't block shutdown
+            timer.start()
+
+    # Initial run after 60 seconds (let the server finish starting)
+    timer = threading.Timer(60, _billing_tick)
+    timer.daemon = True
+    timer.start()
+    logger.info(
+        f"⏰ [DEV] Billing scheduler started "
+        f"(interval={INTERVAL_SECONDS}s, first run in 60s)"
+    )
+
+
 if __name__ == '__main__':
     port = int(os.getenv('PORT', os.getenv('FLASK_PORT', 5000)))
     debug = os.getenv('FLASK_ENV') == 'development'
@@ -1997,7 +2060,16 @@ if __name__ == '__main__':
     print(f'🧠 AI Brain: {"Ready ✅" if AI_BRAIN_AVAILABLE else "Not configured ⚠️"}')
     print(f'💾 Cache: {"Redis ✅" if ADVANCED_CACHE_AVAILABLE else "In-memory ⚠️"}')
     print(f'📊 Metrics: {"Enabled ✅" if METRICS_AVAILABLE else "Disabled ⚠️"}')
-    print(f'🛡️ Resilience: {"Enabled ✅" if RESILIENCE_AVAILABLE else "Disabled ⚠️"}\n')
+    print(f'🛡️ Resilience: {"Enabled ✅" if RESILIENCE_AVAILABLE else "Disabled ⚠️"}')
+
+    # Start dev-mode billing scheduler (only when running directly, not gunicorn)
+    if not os.getenv('GUNICORN_CMD_ARGS'):
+        print(f'💰 Billing Monitor: Dev scheduler ✅ (every 10 min)')
+        _start_dev_billing_scheduler()
+    else:
+        print(f'💰 Billing Monitor: Production mode (Celery Beat)')
+
+    print()
     
     # On Windows, use_reloader=False to prevent threading/socket issues
     # The reloader spawns a child process that can cause socket conflicts

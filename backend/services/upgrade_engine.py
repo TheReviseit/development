@@ -393,6 +393,19 @@ class UpgradeEngine:
                     # Refresh after recovery
                     current_sub = self._get_subscription(user_id, domain)
                     current_plan = self._resolve_plan_metadata(current_sub) if current_sub else None
+
+                elif sub_status in ('suspended', 'cancelled', 'expired', 'halted', 'past_due'):
+                    # Billing-recovery path: treat expired/suspended/cancelled subs
+                    # as "no active subscription" so the user can choose a new plan.
+                    # This enables the /payment page checkout flow for lapsed users.
+                    self.logger.info(
+                        "allowing_recovery_subscription",
+                        extra={"user_id": user_id, "domain": domain, "status": sub_status}
+                    )
+                    # Treat as fresh start — no tier enforcement from old lapsed plan
+                    current_sub = None
+                    current_plan = None
+
                 else:
                     return UpgradePath(
                         action=UpgradeAction.SUBSCRIPTION_INACTIVE,
@@ -538,11 +551,17 @@ class UpgradeEngine:
         return period_start, period_end
 
     def _get_subscription(self, user_id: str, domain: str) -> Optional[Dict]:
-        """Get active subscription for user+domain."""
+        """Get most recent subscription for user+domain (any status)."""
+        # Include active AND inactive statuses so billing-recovery users
+        # (suspended, cancelled, expired, halted) can view their current plan
+        # context and re-subscribe without losing their plan history.
         result = self._supabase.table('subscriptions').select('*').match({
             'user_id': user_id,
             'product_domain': domain,
-        }).in_('status', ['active', 'trialing', 'grace_period', 'pending_upgrade']).order(
+        }).in_('status', [
+            'active', 'trialing', 'grace_period', 'pending_upgrade',
+            'suspended', 'cancelled', 'expired', 'halted', 'past_due',
+        ]).order(
             'created_at', desc=True
         ).limit(1).execute()
 

@@ -4,8 +4,8 @@ import React, { useState, useMemo, useEffect, useCallback } from "react";
 import styles from "./store.module.css";
 import {
   StoreHeader,
-  CategoryNav,
-  ProductGrid,
+  NewArrivalsSection,
+  CategorySection,
   ProductDetailModal,
   CartDrawer,
   SearchOverlay,
@@ -20,9 +20,6 @@ import {
 } from "@/app/utils/storeSync";
 import { PublicStore } from "@/lib/store";
 
-// ============================================================
-// Demo/Mock Data - Shown only if store has no real products
-// ============================================================
 const DEMO_PRODUCTS: Product[] = [
   {
     id: "demo-1",
@@ -32,7 +29,7 @@ const DEMO_PRODUCTS: Product[] = [
     description:
       "Handwoven pure silk saree with intricate zari work. Perfect for weddings and festive occasions. Features traditional temple border design with pallu motifs.",
     imageUrl:
-      "https://images.unsplash.com/photo-1610030469983-98e550d6193c?w=600",
+      "https://images.unsplash.com/photo-1583391733956-f086e3f49ce1?w=600",
     sizes: ["Free Size"],
     colors: ["Red", "Gold", "Maroon", "Green"],
   },
@@ -44,7 +41,7 @@ const DEMO_PRODUCTS: Product[] = [
     description:
       "Comfortable pure cotton kurta with traditional block print patterns. Ideal for daily wear and casual occasions.",
     imageUrl:
-      "https://images.unsplash.com/photo-1594938298603-c8148c4dae35?w=600",
+      "https://images.unsplash.com/photo-1617114919297-3c8ddb01f599?w=600",
     sizes: ["S", "M", "L", "XL", "XXL"],
     colors: ["Blue", "White", "Yellow"],
   },
@@ -56,7 +53,7 @@ const DEMO_PRODUCTS: Product[] = [
     description:
       "Stunning designer lehenga with heavy embroidery work. Includes matching choli and dupatta. Perfect for sangeet and reception.",
     imageUrl:
-      "https://images.unsplash.com/photo-1583391733956-3750e0ff4e8b?w=600",
+      "https://images.unsplash.com/photo-1595777457583-95e059d581b8?w=600",
     sizes: ["S", "M", "L", "XL"],
     colors: ["Pink", "Peach", "Wine"],
   },
@@ -68,7 +65,7 @@ const DEMO_PRODUCTS: Product[] = [
     description:
       "Authentic Banarasi silk dupatta with golden zari weaving. Versatile piece that elevates any outfit.",
     imageUrl:
-      "https://images.unsplash.com/photo-1617627143750-d86bc21e42bb?w=600",
+      "https://images.unsplash.com/photo-1583391733975-dae3a71ef3cc?w=600",
     sizes: ["Free Size"],
     colors: ["Red", "Blue", "Purple", "Orange"],
   },
@@ -92,7 +89,7 @@ const DEMO_PRODUCTS: Product[] = [
     description:
       "Trendy palazzo set with digital print kurta. Comfortable rayon fabric ideal for summer.",
     imageUrl:
-      "https://images.unsplash.com/photo-1583391733975-dae3a71ef3cc?w=600",
+      "https://images.unsplash.com/photo-1512436991641-6745cdb1723f?w=600",
     sizes: ["S", "M", "L", "XL"],
     colors: ["Multicolor", "Black", "White"],
   },
@@ -104,7 +101,7 @@ const DEMO_PRODUCTS: Product[] = [
     description:
       "Authentic handloom cotton saree from Bengal. Breathable fabric with traditional tant weave.",
     imageUrl:
-      "https://images.unsplash.com/photo-1610030469983-98e550d6193c?w=600",
+      "https://images.unsplash.com/photo-1589810635657-232948472d98?w=600",
     sizes: ["Free Size"],
     colors: ["White", "Yellow", "Orange"],
   },
@@ -116,7 +113,7 @@ const DEMO_PRODUCTS: Product[] = [
     description:
       "Elegant white kurta with hand-embroidered chikankari work from Lucknow. Timeless classic piece.",
     imageUrl:
-      "https://images.unsplash.com/photo-1594938291221-94f18cbb5660?w=600",
+      "https://images.unsplash.com/photo-1496747611176-843222e1e57c?w=600",
     sizes: ["S", "M", "L", "XL", "XXL"],
     colors: ["White", "Peach", "Light Blue"],
   },
@@ -136,7 +133,6 @@ export default function StoreClientPage({
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [isProductModalOpen, setIsProductModalOpen] = useState(false);
   const [isSearchOpen, setIsSearchOpen] = useState(false);
-  const [activeCategory, setActiveCategory] = useState("All");
   const [realtimeStatus, setRealtimeStatus] =
     useState<ConnectionStatus>("disconnected");
 
@@ -156,7 +152,7 @@ export default function StoreClientPage({
           );
           if (updated) setSelectedProduct(updated);
         }
-        console.log("[StorePage] 🔄 Store data refreshed in real-time!");
+        console.log("[StorePage] Store data refreshed in real-time!");
       }
     } catch (err) {
       console.error("[StorePage] Error refreshing store:", err);
@@ -166,8 +162,6 @@ export default function StoreClientPage({
   }, [username, selectedProduct]);
 
   // Real-time sync: Subscribe to updates from Dashboard
-  // CRITICAL: Use Firebase UID (storeData.userId) for the Supabase Realtime
-  // filter, NOT the URL slug. The DB filter is `user_id=eq.${storeId}`.
   const realtimeStoreId = storeData?.userId || username;
 
   useEffect(() => {
@@ -203,15 +197,21 @@ export default function StoreClientPage({
 
   const isDemoMode = !storeData || storeData.products.length === 0;
 
-  const categories = useMemo(() => {
-    const cats = new Set(products.map((p) => p.category).filter(Boolean));
-    return Array.from(cats) as string[];
-  }, [products]);
+  // New arrivals: first 4 products (already sorted newest-first from server)
+  const newArrivals = useMemo(() => products.slice(0, 4), [products]);
 
-  const filteredProducts = useMemo(() => {
-    if (activeCategory === "All") return products;
-    return products.filter((p) => p.category === activeCategory);
-  }, [products, activeCategory]);
+  // Group remaining products by category (preserving order)
+  const categorySections = useMemo(() => {
+    const categoryMap = new Map<string, Product[]>();
+    products.forEach((p) => {
+      const cat = p.category || "Other";
+      if (!categoryMap.has(cat)) {
+        categoryMap.set(cat, []);
+      }
+      categoryMap.get(cat)!.push(p);
+    });
+    return Array.from(categoryMap.entries());
+  }, [products]);
 
   const storeName = storeData?.businessName || formatSlugToName(username);
 
@@ -240,21 +240,24 @@ export default function StoreClientPage({
         {isDemoMode && (
           <div className={styles.demoBanner}>
             <span>
-              📦 Demo Products - Add your own products to see them here
+              Demo Products — Add your own products to see them here
             </span>
           </div>
         )}
 
-        <CategoryNav
-          categories={categories}
-          activeCategory={activeCategory}
-          onCategoryChange={setActiveCategory}
-        />
-
-        <ProductGrid
-          products={filteredProducts}
+        <NewArrivalsSection
+          products={newArrivals}
           onProductClick={handleProductClick}
         />
+
+        {categorySections.map(([categoryName, categoryProducts]) => (
+          <CategorySection
+            key={categoryName}
+            categoryName={categoryName}
+            products={categoryProducts}
+            onProductClick={handleProductClick}
+          />
+        ))}
       </main>
 
       <StoreFooter

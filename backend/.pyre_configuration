@@ -1,0 +1,12 @@
+{
+  "site_package_search_strategy": "all",
+  "source_directories": [
+    {
+      "import_root": ".",
+      "source": "."
+    }
+  ],
+  "search_path": [
+    "firebase-env/Lib/site-packages"
+  ]
+}

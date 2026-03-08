@@ -248,6 +248,196 @@
 }
 
 /* ============================================
+   Store Sections — Layout
+   ============================================ */
+
+.storeSection {
+  margin-bottom: 56px;
+}
+
+.storeSection:last-child {
+  margin-bottom: 0;
+}
+
+/* ── Section Header ─────────────────────────── */
+
+.sectionHeader {
+  margin-bottom: 24px;
+}
+
+.sectionHeaderLeft {
+  display: inline-flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 16px 24px;
+  background: #ffffff;
+  border-left: 6px solid #1a1a1a;
+  border-radius: 12px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.04);
+}
+
+.sectionTitle {
+  font-family: var(--font-outfit), sans-serif;
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  color: var(--text-primary);
+  margin: 0;
+  line-height: 1.2;
+}
+
+.sectionSubtitle {
+  font-size: 14px;
+  font-weight: 400;
+  color: var(--text-muted);
+  margin: 0;
+  line-height: 1.4;
+}
+
+.sectionDivider {
+  height: 1px;
+  background: linear-gradient(
+    90deg,
+    rgba(0, 0, 0, 0.08) 0%,
+    rgba(0, 0, 0, 0.04) 100%
+  );
+  margin-bottom: 24px;
+}
+
+/* ── New Arrivals Carousel ──────────────────── */
+
+.arrivalsCarouselWrapper {
+  position: relative;
+}
+
+.arrivalsCarousel {
+  display: flex;
+  gap: 20px;
+  overflow-x: auto;
+  scroll-behavior: smooth;
+  scroll-snap-type: x mandatory;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+  padding: 4px 0 12px;
+  margin: 0 -24px;
+  padding-left: 24px;
+  padding-right: 24px;
+}
+
+.arrivalsCarousel::-webkit-scrollbar {
+  display: none;
+}
+
+.arrivalsCard {
+  flex: 0 0 280px;
+  scroll-snap-align: start;
+  min-width: 0;
+}
+
+/* Carousel Navigation Arrows */
+.carouselArrow {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 10;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  background: rgba(255, 255, 255, 0.95);
+  color: var(--text-primary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08);
+}
+
+.carouselArrow:hover {
+  background: #ffffff;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+  border-color: rgba(0, 0, 0, 0.15);
+}
+
+.carouselArrowLeft {
+  left: 4px;
+}
+
+.carouselArrowRight {
+  right: 4px;
+}
+
+/* ── Responsive — Sections ──────────────────── */
+
+@media (max-width: 768px) {
+  .storeSection {
+    margin-bottom: 40px;
+  }
+
+  .sectionHeaderLeft {
+    padding: 14px 20px;
+    border-radius: 10px;
+    border-left-width: 5px;
+    width: 100%;
+    box-sizing: border-box;
+  }
+
+  .sectionTitle {
+    font-size: 20px;
+  }
+
+  .sectionSubtitle {
+    font-size: 13px;
+  }
+
+  .arrivalsCard {
+    flex: 0 0 240px;
+  }
+
+  .arrivalsCarousel {
+    gap: 14px;
+    margin: 0 -16px;
+    padding-left: 16px;
+    padding-right: 16px;
+  }
+
+  .carouselArrow {
+    display: none;
+  }
+}
+
+@media (max-width: 480px) {
+  .storeSection {
+    margin-bottom: 32px;
+  }
+
+  .sectionHeader {
+    margin-bottom: 16px;
+  }
+
+  .sectionHeaderLeft {
+    padding: 12px 16px;
+    border-radius: 8px;
+    border-left-width: 4px;
+    width: 100%;
+    box-sizing: border-box;
+  }
+
+  .sectionTitle {
+    font-size: 18px;
+  }
+
+  .arrivalsCard {
+    flex: 0 0 200px;
+  }
+
+  .arrivalsCarousel {
+    gap: 12px;
+  }
+}
+
+/* ============================================
    Product Grid
    ============================================ */
 
@@ -255,7 +445,7 @@
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
   gap: 24px;
-  padding-bottom: 80px;
+  padding-bottom: 24px;
 }
 
 .productGridEmpty {

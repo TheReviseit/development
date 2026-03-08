@@ -290,6 +290,11 @@ function MultiSelectDropdown({
 // LocalStorage key for draft product
 const DRAFT_PRODUCT_KEY = "draft_product_add";
 
+// Prevent scroll wheel from changing number input values
+const handleNumberInputWheel = (e: React.WheelEvent<HTMLInputElement>) => {
+  (e.target as HTMLInputElement).blur();
+};
+
 export default function AddProductPage() {
   const router = useRouter();
   const { firebaseUser } = useAuth();
@@ -970,7 +975,7 @@ export default function AddProductPage() {
                   className={`${styles.input} ${styles.inputWithPrefixField}`}
                   value={formData.price || ""}
                   onChange={(e) => {
-                    const newPrice = parseFloat(e.target.value) || 0;
+                    const newPrice = Math.max(0, parseFloat(e.target.value) || 0);
                     updateField("price", newPrice);
                     // If offer price is OFF and size pricing is ON, propagate change to sizes
                     if (
@@ -987,6 +992,8 @@ export default function AddProductPage() {
                     }
                   }}
                   placeholder="180.00"
+                  min="0"
+                  onWheel={handleNumberInputWheel}
                 />
               </div>
             </div>
@@ -1063,7 +1070,7 @@ export default function AddProductPage() {
                       className={`${styles.input} ${styles.inputWithPrefixField}`}
                       value={formData.compareAtPrice || ""}
                       onChange={(e) => {
-                        const newOfferPrice = parseFloat(e.target.value) || 0;
+                        const newOfferPrice = Math.max(0, parseFloat(e.target.value) || 0);
                         updateField("compareAtPrice", newOfferPrice);
                         // If offer price is ON and size pricing is ON, propagate change to sizes
                         if (
@@ -1080,6 +1087,8 @@ export default function AddProductPage() {
                         }
                       }}
                       placeholder="320.00"
+                      min="0"
+                      onWheel={handleNumberInputWheel}
                       style={{ paddingRight: "40px" }}
                     />
                   </div>
@@ -1232,7 +1241,7 @@ export default function AddProductPage() {
                               ""
                             }
                             onChange={(e) => {
-                              const newPrice = parseFloat(e.target.value) || 0;
+                              const newPrice = Math.max(0, parseFloat(e.target.value) || 0);
                               updateField("sizePrices", {
                                 ...(formData.sizePrices || {}),
                                 [size]: newPrice,
@@ -1241,6 +1250,7 @@ export default function AddProductPage() {
                             placeholder="0"
                             min="0"
                             step="1"
+                            onWheel={handleNumberInputWheel}
                           />
                         </div>
                       </div>
@@ -1360,7 +1370,7 @@ The CBD USED
                     }
                     onChange={(e) => {
                       const val = e.target.value;
-                      const newQuantity = val === "" ? 0 : parseInt(val, 10);
+                      const newQuantity = val === "" ? 0 : Math.max(0, parseInt(val, 10));
                       updateField("sizeStocks", {
                         ...(formData.sizeStocks || {}),
                         [size]: newQuantity,
@@ -1368,6 +1378,7 @@ The CBD USED
                     }}
                     placeholder="0"
                     min="0"
+                    onWheel={handleNumberInputWheel}
                   />
                 </div>
               ))}
@@ -1383,10 +1394,11 @@ The CBD USED
                 value={formData.quantity === 0 ? "" : formData.quantity}
                 onChange={(e) => {
                   const val = e.target.value;
-                  updateField("quantity", val === "" ? 0 : parseInt(val, 10));
+                  updateField("quantity", val === "" ? 0 : Math.max(0, parseInt(val, 10)));
                 }}
                 placeholder="1020"
                 min="0"
+                onWheel={handleNumberInputWheel}
               />
             </div>
           )}
@@ -1552,10 +1564,12 @@ The CBD USED
                           updateVariant(
                             variant.id,
                             "price",
-                            parseFloat(e.target.value) || 0,
+                            Math.max(0, parseFloat(e.target.value) || 0),
                           )
                         }
                         placeholder="Price"
+                        min="0"
+                        onWheel={handleNumberInputWheel}
                         style={{ margin: 0, paddingLeft: "24px" }}
                       />
                     </div>
@@ -1640,15 +1654,18 @@ The CBD USED
                             value={variant.compareAtPrice ?? ""}
                             onChange={(e) => {
                               const value = e.target.value;
+                              const parsed = parseFloat(value);
                               updateVariant(
                                 variant.id,
                                 "compareAtPrice",
                                 value === ""
                                   ? undefined
-                                  : parseFloat(value) || undefined,
+                                  : parsed > 0 ? parsed : undefined,
                               );
                             }}
                             placeholder="Offer Price"
+                            min="0"
+                            onWheel={handleNumberInputWheel}
                             style={{
                               margin: 0,
                               paddingLeft: "24px",
@@ -1849,7 +1866,7 @@ The CBD USED
                                     }
                                     onChange={(e) => {
                                       const newPrice =
-                                        parseFloat(e.target.value) || 0;
+                                        Math.max(0, parseFloat(e.target.value) || 0);
                                       updateVariant(variant.id, "sizePrices", {
                                         ...(variant.sizePrices || {}),
                                         [sz]: newPrice,
@@ -1857,6 +1874,7 @@ The CBD USED
                                     }}
                                     placeholder="0"
                                     min="0"
+                                    onWheel={handleNumberInputWheel}
                                     style={{
                                       width: "100%",
                                       padding: "8px 10px 8px 24px",
@@ -1904,7 +1922,7 @@ The CBD USED
                                 onChange={(e) => {
                                   const val = e.target.value;
                                   const newQty =
-                                    val === "" ? 0 : parseInt(val, 10);
+                                    val === "" ? 0 : Math.max(0, parseInt(val, 10));
                                   updateVariant(variant.id, "sizeStocks", {
                                     ...(variant.sizeStocks || {}),
                                     [sz]: newQty,
@@ -1912,6 +1930,7 @@ The CBD USED
                                 }}
                                 placeholder="0"
                                 min="0"
+                                onWheel={handleNumberInputWheel}
                               />
                             </div>
                           ))}
@@ -1933,10 +1952,12 @@ The CBD USED
                               updateVariant(
                                 variant.id,
                                 "stock",
-                                val === "" ? 0 : parseInt(val, 10),
+                                val === "" ? 0 : Math.max(0, parseInt(val, 10)),
                               );
                             }}
                             placeholder="Stock"
+                            min="0"
+                            onWheel={handleNumberInputWheel}
                           />
                         </div>
                       )}

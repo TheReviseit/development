@@ -138,7 +138,9 @@ def can_create_live_keys(subscription: Optional[Dict[str, Any]], user_id: Option
         return _check_feature_via_engine(user_id, 'console', 'live_api_keys')
 
     # Legacy path: if billing is active/trialing/grace_period, allow
-    return billing_status in ('active', 'trialing', 'grace_period', 'past_due', 'pending_upgrade', 'upgrade_failed')
+    # NOTE: past_due is intentionally excluded — expired subscription period
+    # should not grant access. The billing monitor will schedule suspension.
+    return billing_status in ('active', 'trialing', 'grace_period', 'pending_upgrade', 'upgrade_failed')
 
 
 def can_send_live_otps(subscription: Optional[Dict[str, Any]], user_id: Optional[str] = None) -> bool:

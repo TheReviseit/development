@@ -35,6 +35,7 @@ try:
             "tasks.maintenance",
             "tasks.orders",  # Order processing tasks
             "tasks.otp_delivery",  # OTP delivery tasks
+            "tasks.billing_monitor",  # Subscription lifecycle monitoring
         ]
     )
     
@@ -95,6 +96,11 @@ celery_app.conf.task_routes = {
     "tasks.analytics.generate_report": {"queue": "low"},
     "tasks.maintenance.cleanup_sessions": {"queue": "low"},
     "tasks.maintenance.warm_cache": {"queue": "low"},
+
+    # Billing monitor tasks (default priority — critical for revenue)
+    "tasks.billing_monitor.run_billing_cycle": {"queue": "default"},
+    "tasks.billing_monitor.sync_razorpay_state": {"queue": "default"},
+    "tasks.billing_monitor.generate_mrr_report": {"queue": "low"},
 }
 
 # =============================================================================
@@ -213,6 +219,31 @@ celery_app.conf.beat_schedule = {
         "task": "tasks.maintenance.health_check",
         "schedule": 300.0,  # Every 5 minutes
         "options": {"queue": "default"},
+    },
+
+    # =========================================================================
+    # Billing Monitor Tasks
+    # =========================================================================
+
+    # Main billing cycle: detect overdue, process retries, expire grace periods
+    "billing-monitor-cycle": {
+        "task": "tasks.billing_monitor.run_billing_cycle",
+        "schedule": 600.0,  # Every 10 minutes
+        "options": {"queue": "default"},
+    },
+
+    # Razorpay state sync: verify our DB matches Razorpay (safety net)
+    "razorpay-state-sync": {
+        "task": "tasks.billing_monitor.sync_razorpay_state",
+        "schedule": 21600.0,  # Every 6 hours
+        "options": {"queue": "default"},
+    },
+
+    # MRR report: daily revenue snapshot
+    "mrr-daily-report": {
+        "task": "tasks.billing_monitor.generate_mrr_report",
+        "schedule": 86400.0,  # Every 24 hours
+        "options": {"queue": "low"},
     },
 }
 

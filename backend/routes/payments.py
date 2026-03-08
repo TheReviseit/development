@@ -837,9 +837,15 @@ def store_razorpay_customer_new(
         return True
         
     except Exception as e:
-        if 'does not exist' not in str(e).lower():
+        error_str = str(e).lower()
+        if 'does not exist' not in error_str and 'foreign key constraint' not in error_str:
             logger.warning(f"[{request_id}] Store customer error: {e}")
-        return True  # Don't block flow
+        elif 'foreign key constraint' in error_str:
+            logger.warning(
+                f"[{request_id}] Store customer skipped (user not in Supabase users table yet). "
+                f"Customer {razorpay_customer_id} is still created in Razorpay."
+            )
+        return True  # Don't block flow, customer ID will be saved on subscription row anyway
 
 
 @payments_bp.route('/subscriptions/create', methods=['POST'])
@@ -952,12 +958,19 @@ def create_subscription():
         # This guarantees: max 1 pending/created sub per user per domain.
         # =================================================================
         
-        # Generate idempotency key scoped to user + plan + domain
+        # Generate idempotency key scoped to user + plan + domain + current month.
+        # This prevents accidental double-charges today, but allows re-subscribing
+        # to the identical plan next month if the old one expired or was cancelled.
+        current_month = datetime.now(timezone.utc).strftime('%Y-%m')
         idempotency_key = generate_stable_idempotency_key(
-            user_id, razorpay_plan_id, currency, 'monthly'
+            user_id, razorpay_plan_id, currency, f"monthly_{current_month}"
         )
         
-        # --- Find the user's existing incomplete subscription (if any) ---
+        # --- Find the user's existing subscription (if any) ---
+        # CRITICAL: Must check ALL non-terminal statuses, not just pending/created.
+        # Without 'active', a user who already has an active subscription and
+        # hits the create endpoint again (frontend retry, back-navigation, etc.)
+        # would get a SECOND subscription row inserted — causing duplicate charges.
         existing_sub = None
         if SUPABASE_AVAILABLE:
             try:
@@ -967,17 +980,75 @@ def create_subscription():
                 ).eq(
                     'product_domain', product_domain
                 ).in_(
-                    'status', ['pending', 'created']
+                    'status', [
+                        'pending', 'created', 'active', 'trialing',
+                        'past_due', 'grace_period', 'processing',
+                        'pending_upgrade', 'upgrade_failed',
+                        'suspended', 'paused',
+                    ]
                 ).order(
                     'created_at', desc=True
                 ).limit(1).execute()
-                
+
                 if result.data:
                     existing_sub = result.data[0]
             except Exception as e:
                 logger.warning(f"[{request_id}] ⚠️ Error checking existing subs: {e}")
         
-        # --- CASE 1: Same plan already pending → reuse (zero work) ---
+        # --- CASE 0: Existing non-terminal subscription — prevent duplicates ---
+        # If the user already has a subscription in any non-terminal state,
+        # do NOT create a new Razorpay subscription. Route to the correct
+        # action (reuse, upgrade, or reactivate).
+        if existing_sub and existing_sub.get('status') in (
+            'active', 'trialing', 'processing', 'past_due', 'grace_period',
+            'pending_upgrade', 'upgrade_failed', 'suspended', 'paused',
+        ):
+            existing_plan = existing_sub.get('plan_name', '')
+            existing_status = existing_sub['status']
+
+            # Suspended/paused: tell frontend to go through payment recovery
+            if existing_status in ('suspended', 'paused'):
+                logger.info(
+                    f"[{request_id}] ⚠️ User has {existing_status} subscription "
+                    f"({existing_plan}) — needs reactivation, not new subscription"
+                )
+                return error_response(
+                    f'Your subscription is {existing_status}. '
+                    f'Please complete payment to reactivate your account.',
+                    'SUBSCRIPTION_SUSPENDED',
+                    409
+                )
+
+            if existing_plan == plan_name:
+                # Same plan, already active — nothing to do
+                logger.info(
+                    f"[{request_id}] ✅ User already has active {plan_name} subscription "
+                    f"(status={existing_status})"
+                )
+                return success_response({
+                    'subscription_id': existing_sub['razorpay_subscription_id'],
+                    'key_id': RAZORPAY_KEY_ID,
+                    'amount': existing_sub.get('amount_paise', amount_paise),
+                    'currency': existing_sub.get('currency', currency),
+                    'plan_name': display_name,
+                    'already_active': True,
+                    'status': existing_status,
+                })
+            else:
+                # Different plan while active — this is a plan CHANGE, not new subscription.
+                # Redirect to upgrade flow instead of creating a duplicate subscription.
+                logger.info(
+                    f"[{request_id}] 🔄 User has active {existing_plan}, "
+                    f"requesting {plan_name} — should use upgrade flow"
+                )
+                return error_response(
+                    f'You already have an active {existing_plan} subscription. '
+                    f'Use the upgrade/downgrade flow to switch to {plan_name}.',
+                    'USE_UPGRADE_FLOW',
+                    409
+                )
+
+        # --- CASE 1: Same plan already pending/created → reuse (zero work) ---
         if existing_sub and existing_sub.get('plan_name') == plan_name:
             logger.info(
                 f"[{request_id}] ♻️ Reusing existing {plan_name} subscription: "
@@ -993,8 +1064,8 @@ def create_subscription():
                 'plan_name': display_name,
                 'idempotency_hit': True
             })
-        
-        # --- CASE 2: Different plan pending → cancel old, UPDATE row ---
+
+        # --- CASE 2: Different plan pending/created → cancel old, UPDATE row ---
         if existing_sub:
             old_sub_id = existing_sub['razorpay_subscription_id']
             old_plan = existing_sub.get('plan_name', 'unknown')
@@ -1355,29 +1426,66 @@ def verify_subscription():
         current_start = start_dt.isoformat()
         current_end = end_dt.isoformat()
         
-        # Update subscription to ACTIVE immediately (don't wait for webhook)
-        # Signature verification already confirms payment is valid
+        # Activate subscription through the lifecycle engine for proper:
+        # - State transition validation
+        # - Billing event recording (audit trail)
+        # - Cache invalidation (version increment)
+        # - Console subscription sync
+        # - Pending retry cancellation (if reactivating from past_due/suspended)
         if SUPABASE_AVAILABLE:
             supabase = get_supabase_client()
-            
-            # Set to ACTIVE immediately - payment signature is verified
-            supabase.table('subscriptions').update({
-                'status': 'active',  # Must match subscriptions_status_check constraint
-                'current_period_start': current_start,
-                'current_period_end': current_end,
-                'ai_responses_used': 0  # Reset usage on activation
-            }).eq('razorpay_subscription_id', subscription_id).execute()
-            
-            # Record payment using UPSERT for idempotency
-            # This handles: retry by user, concurrent verify + webhook
-            payment = razorpay_client.payment.fetch(payment_id)
-            
-            # Get subscription UUID for foreign key
-            sub_result = supabase.table('subscriptions').select('id').eq(
+
+            # Get subscription UUID and current status
+            sub_result = supabase.table('subscriptions').select(
+                'id, status'
+            ).eq(
                 'razorpay_subscription_id', subscription_id
             ).limit(1).execute()
             subscription_uuid = sub_result.data[0]['id'] if sub_result.data else None
-            
+            sub_current_status = sub_result.data[0]['status'] if sub_result.data else None
+
+            if subscription_uuid:
+                # Use lifecycle engine for state transition + audit + cache
+                try:
+                    from services.subscription_lifecycle import get_lifecycle_engine
+                    lifecycle = get_lifecycle_engine()
+                    lifecycle.handle_payment_success(
+                        subscription_id=subscription_uuid,
+                        razorpay_payment_id=payment_id,
+                        period_start=current_start,
+                        period_end=current_end,
+                    )
+                except Exception as lifecycle_err:
+                    # Fallback: direct update if lifecycle engine fails
+                    # (e.g. Redis down, missing tables on fresh deploy)
+                    logger.warning(
+                        f"[{request_id}] Lifecycle engine failed, falling back to direct update: {lifecycle_err}"
+                    )
+                    supabase.table('subscriptions').update({
+                        'status': 'active',
+                        'current_period_start': current_start,
+                        'current_period_end': current_end,
+                        'ai_responses_used': 0,
+                    }).eq('razorpay_subscription_id', subscription_id).execute()
+
+                # Reset usage counter (lifecycle engine doesn't handle this)
+                supabase.table('subscriptions').update({
+                    'ai_responses_used': 0,
+                }).eq('id', subscription_uuid).execute()
+            else:
+                # Subscription row not found — direct update as last resort
+                logger.warning(f"[{request_id}] No subscription row found for {subscription_id}")
+                supabase.table('subscriptions').update({
+                    'status': 'active',
+                    'current_period_start': current_start,
+                    'current_period_end': current_end,
+                    'ai_responses_used': 0,
+                }).eq('razorpay_subscription_id', subscription_id).execute()
+
+            # Record payment using UPSERT for idempotency
+            # This handles: retry by user, concurrent verify + webhook
+            payment = razorpay_client.payment.fetch(payment_id)
+
             payment_result = upsert_payment_history(
                 user_id=user_id,
                 razorpay_payment_id=payment_id,
@@ -1389,7 +1497,7 @@ def verify_subscription():
                 razorpay_order_id=payment.get('order_id'),
                 razorpay_signature=signature
             )
-            
+
             if payment_result.get('success'):
                 if payment_result.get('is_new'):
                     logger.info(f"[{request_id}] Payment {payment_id} recorded via verify")
@@ -1397,16 +1505,20 @@ def verify_subscription():
                     logger.info(f"[{request_id}] Payment {payment_id} already recorded (verify retry or webhook)")
             else:
                 logger.warning(f"[{request_id}] Payment recording issue: {payment_result.get('error')}")
-            
+
             # Update payment attempt status
-            # Note: payment_attempts.status CHECK constraint allows:
-            # 'initiated', 'checkout_opened', 'payment_completed', 'verification_started', 'verification_completed', 'failed'
             supabase.table('payment_attempts').update({
                 'status': 'verification_completed',
                 'razorpay_payment_id': payment_id
             }).eq('razorpay_subscription_id', subscription_id).eq('user_id', user_id).execute()
-        
-        logger.info(f"[{request_id}] Subscription {subscription_id} → COMPLETED (immediate activation)")
+
+        # CRITICAL: Invalidate status cache so the polling page sees 'active' immediately
+        # Without this, the 10-second TTL cache returns stale 'pending' status
+        if cache_manager:
+            cache_manager.delete(f"subscription_status:{user_id}")
+            logger.debug(f"[{request_id}] 🗑️ Invalidated subscription status cache after verify")
+
+        logger.info(f"[{request_id}] Subscription {subscription_id} → ACTIVE (via lifecycle engine)")
         
         return success_response({
             'message': 'Payment verified and subscription activated',

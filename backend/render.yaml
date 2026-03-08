@@ -43,15 +43,24 @@ services:
         sync: false # Set in dashboard (Redis Cloud connection string)
       - key: GOOGLE_SHEETS_CREDENTIALS
         sync: false # Set in dashboard (JSON service account key)
+      - key: RAZORPAY_KEY_ID
+        sync: false
+      - key: RAZORPAY_KEY_SECRET
+        sync: false
+      - key: RAZORPAY_WEBHOOK_SECRET
+        sync: false # Razorpay Dashboard > Webhooks > Secret
+      - key: ADMIN_API_KEY
+        sync: false # For /api/admin/billing/* endpoints
 
   # Celery Worker for Background Tasks (Google Sheets sync, notifications, etc.)
+  # Also runs beat scheduler (--beat flag) for periodic billing monitor tasks
   - type: worker
     name: flowauxi-celery-worker
     runtime: python
     region: singapore
     rootDir: backend
     buildCommand: pip install -r requirements.txt
-    startCommand: celery -A celery_app worker --loglevel=info --concurrency=2 --pool=solo -Q high,default,low
+    startCommand: celery -A celery_app worker --beat --loglevel=info --concurrency=2 --pool=solo -Q high,default,low
     plan: free
     envVars:
       - key: FLASK_ENV
@@ -65,4 +74,10 @@ services:
       - key: GOOGLE_SHEETS_CREDENTIALS
         sync: false
       - key: FIREBASE_SERVICE_ACCOUNT_KEY
+        sync: false
+      - key: RAZORPAY_KEY_ID
+        sync: false
+      - key: RAZORPAY_KEY_SECRET
+        sync: false
+      - key: RAZORPAY_WEBHOOK_SECRET
         sync: false

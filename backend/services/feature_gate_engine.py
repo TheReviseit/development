@@ -46,7 +46,7 @@ ALLOWED_STATUSES = frozenset({"active", "completed", "trialing", "grace_period"}
 WARN_STATUSES = frozenset({"past_due"})
 
 # Statuses that BLOCK all feature access
-BLOCKED_STATUSES = frozenset({"cancelled", "expired", "halted", "paused", "pending"})
+BLOCKED_STATUSES = frozenset({"cancelled", "expired", "halted", "paused", "pending", "suspended"})
 
 # Cache TTLs (seconds)
 SUBSCRIPTION_CACHE_TTL = 60      # 1 minute — may change on payment events
@@ -1005,7 +1005,7 @@ class FeatureGateEngine:
             # updated when the plan changes (upgrade, webhook, verify-payment).
             # plan_id (Razorpay plan ID) may lag if an older code path didn't update it.
             result = self.supabase.table('subscriptions').select(
-                'id, user_id, plan_id, pricing_plan_id, plan_name, status, product_domain, created_at'
+                'id, user_id, plan_id, pricing_plan_id, plan_name, status, product_domain, created_at, current_period_end'
             ).match({
                 'user_id': supabase_uuid,
                 'product_domain': domain,
@@ -1072,9 +1072,58 @@ class FeatureGateEngine:
                 'plan_version': plan.get('pricing_version', 1),
                 'product_domain': plan.get('product_domain'),
                 'razorpay_plan_id': sub.get('plan_id'),
+                'current_period_end': sub.get('current_period_end'),
             }
 
-            # Cache
+            # =================================================================
+            # LAYER 2: Real-time subscription expiry detection
+            # =================================================================
+            # Defense-in-depth: even if Celery Beat is dead, this catches
+            # expired subscriptions the moment a user hits any feature-gated
+            # endpoint. Prevents revenue leakage.
+            #
+            # Logic: if status is still 'active' but current_period_end has
+            # passed, immediately treat it as expired and trigger the
+            # lifecycle engine to formally transition the status.
+            # =================================================================
+            current_status = combined.get('status', '')
+            period_end_str = combined.get('current_period_end')
+
+            if current_status in ('active', 'trialing', 'completed') and period_end_str:
+                try:
+                    from datetime import datetime as _dt, timezone as _tz
+                    if isinstance(period_end_str, str):
+                        period_end_dt = _dt.fromisoformat(
+                            period_end_str.replace('Z', '+00:00')
+                        )
+                    else:
+                        period_end_dt = period_end_str
+
+                    if period_end_dt < _dt.now(_tz.utc):
+                        # Subscription period has expired — override status
+                        combined['status'] = 'expired'
+                        logger.warning(
+                            f"[FEATURE_GATE] 🚨 Real-time expiry detected: "
+                            f"sub={combined['id']} user={combined['user_id']} "
+                            f"period_end={period_end_str} — blocking access "
+                            f"and triggering lifecycle transition"
+                        )
+                        # Fire-and-forget: trigger formal state transition
+                        self._trigger_expiry_detection(
+                            subscription_id=combined['id'],
+                            user_id=combined['user_id'],
+                            domain=combined.get('product_domain', ''),
+                            current_status=current_status,
+                            period_end=period_end_str,
+                        )
+                        # Do NOT cache the overridden status — let the
+                        # lifecycle engine update the DB, then the next
+                        # request will fetch the correct status from DB.
+                        return combined
+                except (ValueError, TypeError, AttributeError) as e:
+                    logger.debug(f"[FEATURE_GATE] Period end parse error: {e}")
+
+            # Cache (only for non-expired subscriptions)
             if self.cache and combined:
                 try:
                     self.cache.set(cache_key, combined, ttl=SUBSCRIPTION_CACHE_TTL)
@@ -1437,6 +1486,69 @@ class FeatureGateEngine:
         except Exception as e:
             # Audit failure must NEVER block the main flow
             logger.warning(f"Denial audit failed: {e}")
+
+
+    # =========================================================================
+    # LAYER 2: Expiry Detection Trigger (fire-and-forget)
+    # =========================================================================
+
+    def _trigger_expiry_detection(
+        self,
+        subscription_id: str,
+        user_id: str,
+        domain: str,
+        current_status: str,
+        period_end: str,
+    ):
+        """
+        Asynchronously trigger the lifecycle engine to formally transition
+        an expired subscription. Called by the real-time expiry check in
+        _get_subscription().
+
+        This is fire-and-forget — failure here must NEVER block the request.
+        The feature gate has already overridden the status to 'expired' for
+        the current request, so access is denied regardless.
+        """
+        try:
+            from services.subscription_lifecycle import get_lifecycle_engine
+            lifecycle = get_lifecycle_engine()
+
+            success = lifecycle.transition_state(
+                subscription_id=subscription_id,
+                expected_state=current_status,
+                new_state='past_due',
+                reason=f'Subscription period expired (period_end={period_end}). '
+                       f'Detected by feature gate real-time check.',
+                triggered_by='feature_gate_realtime',
+                idempotency_key=f'realtime_expiry:{subscription_id}:{period_end}',
+            )
+
+            if success:
+                logger.info(
+                    f"[FEATURE_GATE] ✅ Lifecycle transition triggered: "
+                    f"sub={subscription_id} {current_status} → past_due"
+                )
+                # Invalidate caches so the next request sees the new status.
+                # Increment the subscription version to force cache miss.
+                if self.cache:
+                    try:
+                        version_key = f"subscription_version:{user_id}:{domain}"
+                        current = self.cache.get(version_key) or 1
+                        self.cache.set(version_key, int(current) + 1, ttl=86400)
+                    except Exception:
+                        pass
+            else:
+                logger.debug(
+                    f"[FEATURE_GATE] Lifecycle transition no-op: "
+                    f"sub={subscription_id} (already transitioned)"
+                )
+
+        except Exception as e:
+            # Fire-and-forget: log but never fail the request
+            logger.error(
+                f"[FEATURE_GATE] Expiry detection trigger error: "
+                f"sub={subscription_id} error={e}"
+            )
 
 
 # =============================================================================
