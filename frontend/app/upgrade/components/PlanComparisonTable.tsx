@@ -25,6 +25,13 @@ interface Plan {
     hard_limit?: number | null;
     display: string;
   }>;
+  // Proration fields (attached by backend when user has active subscription)
+  proration_charge_paise?: number;
+  proration_percentage?: number;
+  remaining_days?: number;
+  total_period_days?: number;
+  unused_credit_paise?: number;
+  pay_today_paise?: number;
 }
 
 interface PlanComparisonTableProps {

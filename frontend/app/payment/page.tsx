@@ -355,6 +355,7 @@ export default function PaymentPage() {
           userName={user?.displayName ?? undefined}
           userId={user?.uid ?? undefined}
           onSubscriptionSuccess={handleSubscriptionSuccess}
+          theme="dark"
         />
       </div>
 
@@ -386,90 +387,10 @@ export default function PaymentPage() {
         </p>
       </footer>
 
-      {/* CSS overrides for dark payment page theme onto PricingCards */}
       <style>{`
         @keyframes pulseAnim {
           0%, 100% { opacity: 1; }
           50% { opacity: 0.4; }
-        }
-
-        /* ─── DARK THEME OVERRIDES FOR PRICING CARDS ─── */
-        
-        /* Make the main section transparent instead of white gradient */
-        div[class*="PricingCards_pricingSection"] {
-          background: transparent !important;
-          padding: 0 !important;
-        }
-
-        /* Remove the green ambient glow */
-        div[class*="PricingCards_pricingSection"]::before {
-          display: none !important;
-        }
-
-        /* Darken the plan cards */
-        div[class*="PricingCards_card"] {
-          background: #0a0a0a !important;
-          border-color: rgba(255, 255, 255, 0.08) !important;
-          box-shadow: 0 4px 20px rgba(0,0,0,0.5) !important;
-        }
-
-        /* Make the featured card slightly lighter dark */
-        div[class*="PricingCards_featured"] {
-          background: linear-gradient(180deg, #111111 0%, #0d0d0d 100%) !important;
-          border-color: #ef4444 !important; /* Context aware red accent */
-        }
-
-        /* Make text white/gray */
-        h3[class*="PricingCards_planName"], 
-        div[class*="PricingCards_amount"] {
-          color: #ffffff !important;
-        }
-
-        p[class*="PricingCards_planDescription"],
-        span[class*="PricingCards_period"],
-        span[class*="PricingCards_overageNote"] {
-          color: rgba(255,255,255,0.45) !important;
-        }
-
-        /* Feature list text */
-        li[class*="PricingCards_feature"] {
-          color: rgba(255,255,255,0.8) !important;
-        }
-        
-        li[class*="PricingCards_featureDisabled"] {
-          color: rgba(255,255,255,0.3) !important;
-        }
-
-        /* White CTA button instead of black */
-        button[class*="PricingCards_ctaButton"] {
-          background: #ffffff !important;
-          color: #000000 !important;
-          border-color: #ffffff !important;
-        }
-
-        button[class*="PricingCards_ctaButton"]:hover {
-          background: #e5e5e5 !important;
-        }
-
-        /* Red CTA for featured card */
-        button[class*="PricingCards_ctaButtonFeatured"] {
-          background: #ef4444 !important;
-          color: #ffffff !important;
-          border-color: #ef4444 !important;
-        }
-
-        button[class*="PricingCards_ctaButtonFeatured"]:hover {
-          background: #dc2626 !important;
-        }
-
-        /* Trust text in footer */
-        p[class*="PricingCards_trustText"] {
-          color: rgba(255,255,255,0.3) !important;
-        }
-
-        /* Hide the large title/subtitle on PricingCards since we have our own header */
-        div[class*="PricingCards_header"] {
-          display: none !important;
         }
       `}</style>
     </div>

@@ -7,7 +7,7 @@ import styles from "./orders.module.css";
 import { useRealtimeOrders } from "@/lib/hooks/useRealtimeOrders";
 import ImageModal from "../components/ImageModal";
 import Dropdown from "@/app/utils/ui/Dropdown";
-import { useSubscription } from "@/lib/hooks/useSubscription";
+import { useFeatureGate } from "@/lib/hooks/useFeatureGate";
 
 interface FeatureUsage {
   used: number;
@@ -95,14 +95,11 @@ export default function OrdersPage() {
   const [savingSheet, setSavingSheet] = useState(false);
   const [sheetConnected, setSheetConnected] = useState(false);
   const [orderToDelete, setOrderToDelete] = useState<Order | null>(null);
-  const { subscription, isLoading: subLoading } = useSubscription(
-    userId ?? undefined,
-  );
-  const STARTER_SLUGS = ["starter", "pending", ""];
-  const canAccessSheets =
-    !subLoading &&
-    !!subscription &&
-    !STARTER_SLUGS.includes(subscription.plan_name?.toLowerCase?.() ?? "");
+
+  // Feature gate: google_sheets_sync — server-authoritative check via
+  // backend FeatureGateEngine (respects plan limits + subscription status)
+  const { allowed: canAccessSheets } =
+    useFeatureGate("google_sheets_sync");
 
   // Feature usage for live_order_updates and email_invoices
   const [notifUsage, setNotifUsage] = useState<FeatureUsage | null>(null);

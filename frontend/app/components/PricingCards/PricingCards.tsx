@@ -26,6 +26,7 @@ interface PricingCardsProps {
   userId?: string;
   onSubscriptionSuccess?: (planName: string) => void;
   domain?: ProductDomain; // NEW: Domain for pricing
+  theme?: "light" | "dark"; // NEW: Theme selection
 }
 
 type PlanName = PlanTier;
@@ -37,6 +38,7 @@ export default function PricingCards({
   userId,
   onSubscriptionSuccess,
   domain: propDomain,
+  theme = "light",
 }: PricingCardsProps) {
   const [isLoading, setIsLoading] = useState<PlanName | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -250,7 +252,7 @@ export default function PricingCards({
         <ul className={styles.featureList}>{renderFeatures(plan.features)}</ul>
 
         <button
-          className={styles.ctaButton}
+          className={`${styles.ctaButton} ${plan.popular ? styles.ctaButtonFeatured : ""}`}
           onClick={() => handleSubscribe(plan.id)}
           disabled={isLoading !== null}
         >
@@ -265,7 +267,7 @@ export default function PricingCards({
   };
 
   return (
-    <section id="pricing" className={styles.pricingSection}>
+    <section id="pricing" className={styles.pricingSection} data-theme={theme}>
       <div className={styles.container}>
         {/* Section Header */}
         <div className={styles.header}>

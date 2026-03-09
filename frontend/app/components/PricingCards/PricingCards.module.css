@@ -125,6 +125,7 @@
   font-weight: 700;
   letter-spacing: 0.5px;
   text-transform: uppercase;
+  white-space: nowrap; /* Prevents text from breaking into two lines */
   box-shadow: 0 4px 16px rgba(34, 193, 90, 0.4);
 }
 
@@ -414,4 +415,81 @@
 .ctaButton:disabled:hover {
   transform: none;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+}
+
+/* ─── DARK THEME OVERRIDES ─── */
+
+.pricingSection[data-theme="dark"] {
+  background: transparent;
+  padding: 0;
+  overflow: visible; /* Prevents badge clipping */
+}
+
+.pricingSection[data-theme="dark"] .container {
+  padding-top: 24px; /* Extra space for the badge */
+}
+
+.pricingSection[data-theme="dark"]::before {
+  display: none;
+}
+
+.pricingSection[data-theme="dark"] .card {
+  background: #0a0a0a;
+  border-color: rgba(255, 255, 255, 0.08);
+  box-shadow: 0 4px 20px rgba(0,0,0,0.5);
+}
+
+.pricingSection[data-theme="dark"] .featured {
+  background: linear-gradient(180deg, #111111 0%, #0d0d0d 100%);
+  border-color: #22c15a; /* Changed from red to premium green */
+}
+
+.pricingSection[data-theme="dark"] .badge {
+  background: linear-gradient(135deg, #22c15a 0%, #10b981 100%); /* Premium green */
+  box-shadow: 0 4px 16px rgba(34, 193, 90, 0.4);
+}
+
+.pricingSection[data-theme="dark"] .planName,
+.pricingSection[data-theme="dark"] .amount,
+.pricingSection[data-theme="dark"] .currency {
+  color: #ffffff;
+}
+
+.pricingSection[data-theme="dark"] .planDescription,
+.pricingSection[data-theme="dark"] .period,
+.pricingSection[data-theme="dark"] .overageNote {
+  color: rgba(255,255,255,0.45);
+}
+
+.pricingSection[data-theme="dark"] .feature {
+  color: rgba(255,255,255,0.8);
+}
+
+.pricingSection[data-theme="dark"] .featureDisabled {
+  color: rgba(255,255,255,0.3);
+}
+
+.pricingSection[data-theme="dark"] .ctaButton {
+  background: #ffffff;
+  color: #000000;
+  border-color: #ffffff;
+}
+
+.pricingSection[data-theme="dark"] .ctaButton:hover {
+  background: #e5e5e5;
+}
+
+.pricingSection[data-theme="dark"] .ctaButtonFeatured {
+  background: #22c15a; /* Premium green */
+  color: #ffffff;
+  border-color: #22c15a;
+}
+
+.pricingSection[data-theme="dark"] .ctaButtonFeatured:hover {
+  background: #1ea84e; /* Darker green for hover */
+  box-shadow: 0 8px 28px rgba(34, 193, 90, 0.4);
+}
+
+.pricingSection[data-theme="dark"] .header {
+  display: none; /* Hide standard header when in dark mode contexts like payment recovery */
 }

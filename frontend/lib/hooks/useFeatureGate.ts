@@ -63,9 +63,8 @@ export interface UseFeatureGateReturn {
   decision: FeatureDecision | null;
 }
 
-// ─── Constants ────────────────────────────────────────────────
-
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
+// Use relative URL so requests go through the Next.js proxy
+// (which handles auth headers). Do NOT call the Flask backend directly.
 const CACHE_TTL_MS = 30_000; // Client-side cache: 30 seconds
 const STALE_WHILE_REVALIDATE_MS = 60_000; // Show stale data for 60s while refetching
 
@@ -85,7 +84,7 @@ async function fetchFeatureDecision(
   featureKey: string,
   authToken?: string,
 ): Promise<FeatureDecision> {
-  const url = `${API_BASE}/api/features/check?feature=${encodeURIComponent(featureKey)}`;
+  const url = `/api/features/check?feature=${encodeURIComponent(featureKey)}`;
 
   const headers: Record<string, string> = {
     "Content-Type": "application/json",

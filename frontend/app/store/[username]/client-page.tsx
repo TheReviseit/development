@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useMemo, useEffect, useCallback } from "react";
+import React, { useState, useMemo, useEffect, useCallback, useRef } from "react";
 import styles from "./store.module.css";
 import {
   StoreHeader,
@@ -19,6 +19,10 @@ import {
   ConnectionStatus,
 } from "@/app/utils/storeSync";
 import { PublicStore } from "@/lib/store";
+
+// =============================================================================
+// Demo Products (shown when store has no products)
+// =============================================================================
 
 const DEMO_PRODUCTS: Product[] = [
   {
@@ -119,6 +123,10 @@ const DEMO_PRODUCTS: Product[] = [
   },
 ];
 
+// =============================================================================
+// Store Client Page
+// =============================================================================
+
 interface StoreClientPageProps {
   username: string;
   initialData: PublicStore | null;
@@ -129,39 +137,40 @@ export default function StoreClientPage({
   initialData,
 }: StoreClientPageProps) {
   const [storeData, setStoreData] = useState<PublicStore | null>(initialData);
-  const [isRefreshing, setIsRefreshing] = useState(false);
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [isProductModalOpen, setIsProductModalOpen] = useState(false);
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [realtimeStatus, setRealtimeStatus] =
     useState<ConnectionStatus>("disconnected");
 
-  // Refresh store data for real-time updates (not initial load)
+  // Track current version for smart polling
+  const currentVersionRef = useRef<string | null>(
+    initialData?.updatedAt || null,
+  );
+
+  // Full store data refresh (only called when version changes)
   const refreshStoreData = useCallback(async () => {
     try {
-      setIsRefreshing(true);
       const response = await fetch(`/api/store/${username}`, {
         cache: "no-store",
       });
       const result = await response.json();
       if (response.ok && result.success) {
         setStoreData(result.data);
+        currentVersionRef.current = result.data.updatedAt || null;
         if (selectedProduct) {
           const updated = result.data.products?.find(
             (p: Product) => p.id === selectedProduct.id,
           );
           if (updated) setSelectedProduct(updated);
         }
-        console.log("[StorePage] Store data refreshed in real-time!");
       }
     } catch (err) {
       console.error("[StorePage] Error refreshing store:", err);
-    } finally {
-      setIsRefreshing(false);
     }
   }, [username, selectedProduct]);
 
-  // Real-time sync: Subscribe to updates from Dashboard
+  // Real-time sync: Subscribe to Supabase realtime updates
   const realtimeStoreId = storeData?.userId || username;
 
   useEffect(() => {
@@ -177,15 +186,49 @@ export default function StoreClientPage({
     };
   }, [realtimeStoreId, refreshStoreData]);
 
-  // Fallback polling every 30 seconds
+  // =========================================================================
+  // SMART POLLING: Lightweight version check instead of full data refresh
+  // =========================================================================
+  // Instead of fetching ~20KB of store data every 30s, we fetch ~50 bytes
+  // (just the updated_at timestamp). Only triggers a full refresh when the
+  // store data has actually changed. Reduces DB load by ~98%.
   useEffect(() => {
-    const pollInterval = setInterval(() => {
-      if (document.visibilityState === "visible") {
-        refreshStoreData();
+    const pollInterval = setInterval(async () => {
+      if (document.visibilityState !== "visible") return;
+
+      try {
+        const res = await fetch(`/api/store/${username}/version`, {
+          cache: "no-store",
+        });
+        if (!res.ok) return;
+
+        const { version } = await res.json();
+        if (version && version !== currentVersionRef.current) {
+          currentVersionRef.current = version;
+          refreshStoreData();
+        }
+      } catch {
+        // Silent fail — polling is best-effort
       }
     }, 30000);
+
     return () => clearInterval(pollInterval);
-  }, [refreshStoreData]);
+  }, [username, refreshStoreData]);
+
+  // =========================================================================
+  // PRELOAD RAZORPAY SCRIPT (for faster checkout)
+  // =========================================================================
+  // If the store has payments enabled, preload the Razorpay checkout script
+  // in the background so it's ready when the user navigates to checkout.
+  useEffect(() => {
+    if (storeData?.paymentSettings?.paymentsEnabled) {
+      const link = document.createElement("link");
+      link.rel = "preload";
+      link.as = "script";
+      link.href = "https://checkout.razorpay.com/v1/checkout.js";
+      document.head.appendChild(link);
+    }
+  }, [storeData?.paymentSettings?.paymentsEnabled]);
 
   // Products: use real products if available, otherwise fall back to demo
   const products = useMemo(() => {

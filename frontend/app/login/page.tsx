@@ -237,17 +237,17 @@ export default function LoginPage() {
         const result = await signInWithEmailAndPassword(auth, email, password);
         const idToken = await result.user.getIdToken();
 
-        // Step 2: PARALLEL execution - session creation and onboarding check
-        const [sessionSuccess, onboardingCompleted] = await Promise.all([
-          createSessionWithRetry(idToken),
-          checkOnboardingStatus(),
-        ]);
+        // Step 2: Create session cookie first
+        const sessionSuccess = await createSessionWithRetry(idToken);
 
         if (!sessionSuccess) {
           throw new Error("Failed to create session");
         }
 
-        // Step 3: Navigate based on onboarding status
+        // Step 3: Check onboarding AFTER session is set (cookie required)
+        const onboardingCompleted = await checkOnboardingStatus();
+
+        // Step 4: Navigate based on onboarding status
         router.push(onboardingCompleted ? "/dashboard" : "/onboarding");
       } catch (err: any) {
         console.error("Login error:", err);
@@ -306,15 +306,15 @@ export default function LoginPage() {
         }
       }
 
-      // Step 3: Proceed with login
-      const [sessionSuccess, onboardingCompleted] = await Promise.all([
-        createSessionWithRetry(idToken),
-        checkOnboardingStatus(),
-      ]);
+      // Step 3: Create session cookie first
+      const sessionSuccess = await createSessionWithRetry(idToken);
 
       if (!sessionSuccess) {
         throw new Error("Failed to create session");
       }
+
+      // Step 4: Check onboarding AFTER session is set (cookie required)
+      const onboardingCompleted = await checkOnboardingStatus();
 
       router.push(onboardingCompleted ? "/dashboard" : "/onboarding");
     } catch (err: any) {

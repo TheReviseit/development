@@ -594,6 +594,33 @@ def update_business():
         thread = threading.Thread(target=_invalidate_cache, daemon=True)
         thread.start()
 
+    # ── NEXT.JS CACHE INVALIDATION (fire-and-forget) ────────────────────
+    # Notify the Next.js frontend to invalidate its in-memory LRU cache
+    # and trigger ISR revalidation for this store's page.
+    def _invalidate_nextjs_cache():
+        try:
+            import os
+            import requests as req
+            nextjs_url = os.getenv('NEXTJS_URL', 'http://localhost:3001')
+            revalidation_secret = os.getenv('REVALIDATION_SECRET', '')
+            slug = db_data.get('url_slug') or pre_save_slug or user_id
+            req.post(
+                f"{nextjs_url}/api/revalidate",
+                json={
+                    "slug": slug,
+                    "userId": user_id,
+                    "type": "slug_change" if 'url_slug' in db_data else "store",
+                },
+                headers={"Authorization": f"Bearer {revalidation_secret}"},
+                timeout=3,
+            )
+            logger.info(f"✅ Next.js cache invalidated for slug={slug}")
+        except Exception as e:
+            logger.warning(f"⚠️ Next.js cache invalidation failed (non-critical): {e}")
+
+    thread_nextjs = threading.Thread(target=_invalidate_nextjs_cache, daemon=True)
+    thread_nextjs.start()
+
     # ── FIRESTORE SYNC (fire-and-forget for backward compatibility) ──────
     def _sync_firestore():
         try:

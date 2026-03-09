@@ -113,24 +113,6 @@ export default function PaymentSettings({
       </div>
 
       <div className={styles.content}>
-        {/* Enable Toggle */}
-        <div className={styles.toggleRow}>
-          <div className={styles.toggleInfo}>
-            <span className={styles.toggleLabel}>Enable Online Payments</span>
-            <span className={styles.toggleHint}>
-              Allow customers to pay directly in your store
-            </span>
-          </div>
-          <label className={styles.toggle}>
-            <input
-              type="checkbox"
-              checked={paymentsEnabled}
-              onChange={(e) => setPaymentsEnabled(e.target.checked)}
-            />
-            <span className={styles.toggleSlider}></span>
-          </label>
-        </div>
-
         {/* COD Toggle */}
         <div className={styles.toggleRow}>
           <div className={styles.toggleInfo}>
@@ -144,6 +126,24 @@ export default function PaymentSettings({
               type="checkbox"
               checked={codAvailable}
               onChange={(e) => setCodAvailable(e.target.checked)}
+            />
+            <span className={styles.toggleSlider}></span>
+          </label>
+        </div>
+
+        {/* Enable Toggle */}
+        <div className={styles.toggleRow}>
+          <div className={styles.toggleInfo}>
+            <span className={styles.toggleLabel}>Enable Online Payments</span>
+            <span className={styles.toggleHint}>
+              Allow customers to pay directly in your store
+            </span>
+          </div>
+          <label className={styles.toggle}>
+            <input
+              type="checkbox"
+              checked={paymentsEnabled}
+              onChange={(e) => setPaymentsEnabled(e.target.checked)}
             />
             <span className={styles.toggleSlider}></span>
           </label>

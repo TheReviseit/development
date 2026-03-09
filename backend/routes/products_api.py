@@ -380,6 +380,28 @@ def create_product():
 
         logger.info(f"✅ Created product \"{product['name']}\" with {variant_count} variant(s) for user {g.firebase_uid}")
 
+        # ── NEXT.JS CACHE INVALIDATION (fire-and-forget) ────────────────
+        # Product creation changes the store page data — invalidate caches.
+        import threading
+        def _invalidate_nextjs():
+            try:
+                import os
+                import requests as req
+                nextjs_url = os.getenv('NEXTJS_URL', 'http://localhost:3001')
+                revalidation_secret = os.getenv('REVALIDATION_SECRET', '')
+                # Get store slug for this user
+                slug_result = db.table('businesses').select('url_slug').eq('user_id', g.firebase_uid).limit(1).execute()
+                slug = slug_result.data[0]['url_slug'] if slug_result.data else g.firebase_uid
+                req.post(
+                    f"{nextjs_url}/api/revalidate",
+                    json={"slug": slug, "userId": g.firebase_uid, "type": "store"},
+                    headers={"Authorization": f"Bearer {revalidation_secret}"},
+                    timeout=3,
+                )
+            except Exception as e:
+                logger.warning(f"⚠️ Next.js cache invalidation failed (non-critical): {e}")
+        threading.Thread(target=_invalidate_nextjs, daemon=True).start()
+
         return jsonify({
             "success": True,
             "product": product,

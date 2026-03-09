@@ -25,6 +25,13 @@ interface Plan {
     hard_limit?: number | null;
     display: string;
   }>;
+  // Proration fields (attached by backend when user has active subscription)
+  proration_charge_paise?: number;
+  proration_percentage?: number;
+  remaining_days?: number;
+  total_period_days?: number;
+  unused_credit_paise?: number;
+  pay_today_paise?: number;
 }
 
 interface PlanCardProps {
@@ -81,21 +88,52 @@ export default function PlanCard({
   const perMonth =
     billingCycle === "yearly" ? Math.floor(displayPrice / 12) : displayPrice;
 
-  // Upgrade mutation
+  // Proration: if backend attached per-plan proration data, show "pay today" amount
+  const hasProration =
+    typeof plan.pay_today_paise === "number" && plan.pay_today_paise > 0;
+  const payTodayDisplay = hasProration
+    ? Math.ceil(plan.pay_today_paise! / 100)
+    : null;
+  const remainingDays = plan.remaining_days ?? 0;
+  const unusedCredit = plan.unused_credit_paise
+    ? Math.floor(plan.unused_credit_paise / 100)
+    : 0;
+
+  // Upgrade mutation — two paths:
+  // 1. Existing subscription (hasProration) → POST /api/subscriptions/change-plan
+  //    → creates Razorpay ONE-TIME ORDER for prorated difference
+  // 2. New subscription → POST /api/upgrade/checkout
+  //    → creates Razorpay SUBSCRIPTION at full plan price
   const upgradeMutation = useMutation({
     mutationFn: async () => {
-      // Get Firebase auth user ID
       const user = auth.currentUser;
-      if (!user) {
-        throw new Error("Not authenticated");
+      if (!user) throw new Error("Not authenticated");
+
+      // ── Path 1: Prorated upgrade (existing subscription) ──────────
+      if (hasProration) {
+        const res = await fetch("/api/subscriptions/change-plan", {
+          method: "POST",
+          credentials: "include",
+          headers: {
+            "Content-Type": "application/json",
+            "X-User-Id": user.uid,
+          },
+          body: JSON.stringify({ new_plan_slug: plan.plan_slug }),
+        });
+        if (!res.ok) {
+          const err = await res.json();
+          throw new Error(err.message || "Plan change failed");
+        }
+        return res.json();
       }
 
+      // ── Path 2: New subscription (no existing plan) ───────────────
       const res = await fetch("/api/upgrade/checkout", {
         method: "POST",
         credentials: "include",
         headers: {
           "Content-Type": "application/json",
-          "X-User-Id": user.uid, // Send Firebase UID, not JWT token
+          "X-User-Id": user.uid,
         },
         body: JSON.stringify({
           domain,
@@ -103,52 +141,67 @@ export default function PlanCard({
           billing_cycle: billingCycle,
         }),
       });
-
       if (!res.ok) {
         const error = await res.json();
         throw new Error(error.message || "Upgrade failed");
       }
-
       return res.json();
     },
     onMutate: () => setIsProcessing(true),
     onSuccess: (data) => {
-      // Open Razorpay checkout
       if (typeof window === "undefined" || !(window as any).Razorpay) {
         setIsProcessing(false);
-        alert(
-          "Payment gateway failed to load. Please refresh the page and try again.",
-        );
+        alert("Payment gateway failed to load. Please refresh and try again.");
         return;
       }
 
-      const razorpaySubId = data.razorpay_subscription_id;
-
-      if (!razorpaySubId) {
-        setIsProcessing(false);
-        alert("Missing subscription ID from server. Please try again.");
-        return;
-      }
-
-      // Set flag BEFORE opening Razorpay — dashboard reads this on load
       sessionStorage.setItem("flowauxi_upgrade_pending", "1");
 
-      const options = {
-        key: data.razorpay_key_id,
-        subscription_id: razorpaySubId,
-        name: "Flowauxi",
-        description: `${plan.display_name} - ${billingCycle}`,
-        handler: function () {
-          // Redirect to dashboard — backend finds pending upgrade by user_id
-          window.location.href = "/dashboard?upgrade=success";
-        },
-        modal: {
-          ondismiss: function () {
-            setIsProcessing(false);
-            sessionStorage.removeItem("flowauxi_upgrade_pending");
+      let options: Record<string, any>;
+
+      if (data.order_id) {
+        // ── Razorpay ORDER checkout (prorated one-time payment) ────
+        options = {
+          key: data.key_id,
+          order_id: data.order_id,
+          amount: data.amount,
+          currency: data.currency || "INR",
+          name: "Flowauxi",
+          description: `Upgrade to ${plan.display_name} (prorated)`,
+          handler: function () {
+            window.location.href = "/dashboard?upgrade=success";
           },
-        },
-      };
+          modal: {
+            ondismiss: function () {
+              setIsProcessing(false);
+              sessionStorage.removeItem("flowauxi_upgrade_pending");
+            },
+          },
+        };
+      } else {
+        // ── Razorpay SUBSCRIPTION checkout (full price, new sub) ───
+        const razorpaySubId = data.razorpay_subscription_id;
+        if (!razorpaySubId) {
+          setIsProcessing(false);
+          alert("Missing subscription ID from server. Please try again.");
+          return;
+        }
+        options = {
+          key: data.razorpay_key_id,
+          subscription_id: razorpaySubId,
+          name: "Flowauxi",
+          description: `${plan.display_name} - ${billingCycle}`,
+          handler: function () {
+            window.location.href = "/dashboard?upgrade=success";
+          },
+          modal: {
+            ondismiss: function () {
+              setIsProcessing(false);
+              sessionStorage.removeItem("flowauxi_upgrade_pending");
+            },
+          },
+        };
+      }
 
       const rzp = new (window as any).Razorpay(options);
       rzp.on("payment.failed", function () {
@@ -204,16 +257,40 @@ export default function PlanCard({
 
       {/* Pricing */}
       <div className="mt-6">
-        <div className="flex items-baseline">
-          <span className="text-4xl font-bold text-black">
-            ₹{perMonth.toLocaleString()}
-          </span>
-          <span className="ml-2 text-gray-600">/month</span>
-        </div>
-        {billingCycle === "yearly" && (
-          <p className="mt-1 text-sm text-gray-600">
-            ₹{displayPrice.toLocaleString()} billed annually
-          </p>
+        {hasProration && !isCurrent ? (
+          /* ── Prorated upgrade pricing ────────────────────────── */
+          <>
+            <div className="flex items-baseline">
+              <span className="text-4xl font-bold text-black">
+                ₹{payTodayDisplay?.toLocaleString()}
+              </span>
+              <span className="ml-2 text-gray-500 text-sm">pay today</span>
+            </div>
+            <p className="mt-1.5 text-xs text-gray-500 leading-snug">
+              Prorated for {remainingDays} day{remainingDays !== 1 ? "s" : ""} remaining
+              {unusedCredit > 0 && (
+                <> · ₹{unusedCredit.toLocaleString()} credit applied</>
+              )}
+            </p>
+            <p className="mt-1 text-xs text-gray-400">
+              Then ₹{perMonth.toLocaleString()}/mo from next cycle
+            </p>
+          </>
+        ) : (
+          /* ── Standard monthly pricing ────────────────────────── */
+          <>
+            <div className="flex items-baseline">
+              <span className="text-4xl font-bold text-black">
+                ₹{perMonth.toLocaleString()}
+              </span>
+              <span className="ml-2 text-gray-600">/month</span>
+            </div>
+            {billingCycle === "yearly" && (
+              <p className="mt-1 text-sm text-gray-600">
+                ₹{displayPrice.toLocaleString()} billed annually
+              </p>
+            )}
+          </>
         )}
       </div>
 

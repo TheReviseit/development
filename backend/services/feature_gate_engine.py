@@ -40,7 +40,7 @@ logger = logging.getLogger('reviseit.feature_gate')
 # =============================================================================
 
 # Subscription statuses that ALLOW feature access
-ALLOWED_STATUSES = frozenset({"active", "completed", "trialing", "grace_period"})
+ALLOWED_STATUSES = frozenset({"active", "completed", "trialing", "grace_period", "pending_upgrade"})
 
 # Statuses that allow but flag upgrade_required (warn user)
 WARN_STATUSES = frozenset({"past_due"})

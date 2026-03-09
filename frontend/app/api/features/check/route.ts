@@ -86,7 +86,7 @@ export async function GET(request: NextRequest) {
 
     const { data: subscriptionRaw } = await supabase
       .from("subscriptions")
-      .select("pricing_plan_id, plan_id")
+      .select("pricing_plan_id, plan_id, status, pending_plan_slug")
       .eq("user_id", supabaseUserId)
       .eq("product_domain", "shop")
       .in("status", [
@@ -145,6 +145,32 @@ export async function GET(request: NextRequest) {
         console.log(
           `✅ [FeatureCheck] Back-filled pricing_plan_id=${resolvedPricingPlanId} for user ${firebaseUid}`,
         );
+      }
+    }
+
+    // ── PENDING UPGRADE: Use the TARGET plan's features, not the old plan ──
+    // When a user pays for an upgrade, the subscription enters pending_upgrade
+    // with pending_plan_slug set to the new plan (e.g., "business").
+    // Grant them the new plan's features immediately rather than waiting for
+    // the billing cycle to formally switch plan_name.
+    if (
+      subscriptionRaw.status === "pending_upgrade" &&
+      subscriptionRaw.pending_plan_slug
+    ) {
+      const { data: targetPlan } = await supabase
+        .from("pricing_plans")
+        .select("id")
+        .eq("plan_slug", subscriptionRaw.pending_plan_slug)
+        .eq("product_domain", "shop")
+        .eq("is_active", true)
+        .limit(1)
+        .maybeSingle();
+
+      if (targetPlan?.id) {
+        console.log(
+          `🔄 [FeatureCheck] pending_upgrade: using target plan ${subscriptionRaw.pending_plan_slug} (${targetPlan.id}) instead of current plan`,
+        );
+        resolvedPricingPlanId = targetPlan.id;
       }
     }
 

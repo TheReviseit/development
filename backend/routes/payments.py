@@ -997,30 +997,22 @@ def create_subscription():
         
         # --- CASE 0: Existing non-terminal subscription — prevent duplicates ---
         # If the user already has a subscription in any non-terminal state,
-        # do NOT create a new Razorpay subscription. Route to the correct
-        # action (reuse, upgrade, or reactivate).
+        # route to the correct action based on status.
+        #
+        # IMPORTANT: past_due / grace_period / suspended / paused subscriptions
+        # must NOT be returned as "already active". Their old Razorpay subscription
+        # may have stale pricing (e.g. created before a price change). These are
+        # handled by falling through to CASE 2 (cancel old → create new) so the
+        # user always pays the CURRENT price.
         if existing_sub and existing_sub.get('status') in (
-            'active', 'trialing', 'processing', 'past_due', 'grace_period',
-            'pending_upgrade', 'upgrade_failed', 'suspended', 'paused',
+            'active', 'trialing', 'processing',
+            'pending_upgrade', 'upgrade_failed',
         ):
             existing_plan = existing_sub.get('plan_name', '')
             existing_status = existing_sub['status']
 
-            # Suspended/paused: tell frontend to go through payment recovery
-            if existing_status in ('suspended', 'paused'):
-                logger.info(
-                    f"[{request_id}] ⚠️ User has {existing_status} subscription "
-                    f"({existing_plan}) — needs reactivation, not new subscription"
-                )
-                return error_response(
-                    f'Your subscription is {existing_status}. '
-                    f'Please complete payment to reactivate your account.',
-                    'SUBSCRIPTION_SUSPENDED',
-                    409
-                )
-
             if existing_plan == plan_name:
-                # Same plan, already active — nothing to do
+                # Same plan, genuinely active — nothing to do
                 logger.info(
                     f"[{request_id}] ✅ User already has active {plan_name} subscription "
                     f"(status={existing_status})"
@@ -1036,7 +1028,6 @@ def create_subscription():
                 })
             else:
                 # Different plan while active — this is a plan CHANGE, not new subscription.
-                # Redirect to upgrade flow instead of creating a duplicate subscription.
                 logger.info(
                     f"[{request_id}] 🔄 User has active {existing_plan}, "
                     f"requesting {plan_name} — should use upgrade flow"
@@ -1048,8 +1039,27 @@ def create_subscription():
                     409
                 )
 
+        # --- CASE 0b: Degraded subscriptions (past_due, grace_period, suspended, paused) ---
+        # These need a FRESH Razorpay subscription with current pricing.
+        # The old Razorpay sub is cancelled and the DB row is UPDATED in place
+        # (falls through to CASE 2 below).
+        if existing_sub and existing_sub.get('status') in (
+            'past_due', 'grace_period', 'suspended', 'paused',
+        ):
+            existing_status = existing_sub['status']
+            logger.info(
+                f"[{request_id}] 🔄 User has {existing_status} subscription — "
+                f"will cancel old Razorpay sub and create fresh one with current pricing"
+            )
+            # Fall through to CASE 2 (cancel old Razorpay sub → create new → UPDATE row)
+
         # --- CASE 1: Same plan already pending/created → reuse (zero work) ---
-        if existing_sub and existing_sub.get('plan_name') == plan_name:
+        # Only reuse if the subscription is in a truly "waiting for first payment" state.
+        # Degraded states (past_due, grace_period, suspended, paused) must NOT be reused
+        # because their Razorpay subscription may have stale pricing.
+        if (existing_sub
+            and existing_sub.get('plan_name') == plan_name
+            and existing_sub.get('status') in ('pending', 'created')):
             logger.info(
                 f"[{request_id}] ♻️ Reusing existing {plan_name} subscription: "
                 f"{existing_sub['razorpay_subscription_id']} "

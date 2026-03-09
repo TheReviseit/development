@@ -239,6 +239,55 @@ class UpgradeEngine:
             # 4. Sort by tier_level (ascending: starter → business → pro)
             enriched_plans.sort(key=lambda p: p.get('tier_level', 999))
 
+            # 4b. ── Per-plan proration (Stripe-level) ──────────────────────────
+            # If the user has an active subscription, calculate how much they'd
+            # actually pay TODAY for each higher-tier plan (prorated for remaining
+            # days in the current billing cycle).  This enables the frontend to
+            # show "Pay today: ₹X" alongside the monthly rate (₹Y/mo).
+            if current_sub and current_sub.get('status') in (
+                'active', 'trialing', 'grace_period',
+                'pending_upgrade', 'upgrade_failed',  # Were active — period still valid
+            ):
+                try:
+                    period_start, period_end = self._resolve_billing_period(current_sub)
+                    now = datetime.now(timezone.utc)
+
+                    current_amount_paise = current_plan['amount_paise'] if current_plan else 0
+                    current_tier = current_plan['tier_level'] if current_plan else -1
+
+                    for plan in enriched_plans:
+                        # Only calculate proration for plans the user can upgrade TO
+                        if plan.get('tier_level', 999) > current_tier:
+                            try:
+                                proration = self._proration_calc.calculate_proration(
+                                    old_amount_paise=current_amount_paise,
+                                    new_amount_paise=plan['amount_paise'],
+                                    period_start=period_start,
+                                    period_end=period_end,
+                                    now=now
+                                )
+                                plan['proration_charge_paise'] = proration.proration_charge_paise
+                                plan['proration_percentage'] = proration.proration_percentage
+                                plan['remaining_days'] = max(1, proration.remaining_seconds // 86400)
+                                plan['total_period_days'] = max(1, proration.total_seconds // 86400)
+                                plan['unused_credit_paise'] = proration.unused_credit_paise
+                                plan['pay_today_paise'] = proration.proration_charge_paise
+                            except Exception as proration_err:
+                                self.logger.warning(
+                                    "per_plan_proration_failed",
+                                    extra={
+                                        "plan_slug": plan.get('plan_slug'),
+                                        "error": str(proration_err)
+                                    }
+                                )
+                                # Don't block — plan still shows with full price
+                except Exception as period_err:
+                    self.logger.warning(
+                        "billing_period_resolution_failed_for_proration",
+                        extra={"error": str(period_err)}
+                    )
+                    # Non-fatal — plans render with full monthly prices
+
             # 5. Get usage summary from FeatureGateEngine and enrich with plan limits
             usage_raw = self._feature_gate_engine.get_usage_summary(user_id, domain)
 

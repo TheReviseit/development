@@ -283,7 +283,10 @@ class PlanChangeService:
         ).match({
             'user_id': user_id,
             'product_domain': product_domain,
-        }).in_('status', ['active', 'completed']).limit(1).execute()
+        }).in_('status', [
+            'active', 'completed',
+            'pending_upgrade', 'upgrade_failed',  # Were active — eligible for re-upgrade
+        ]).limit(1).execute()
 
         if not result.data:
             raise PlanChangeError(
@@ -304,26 +307,29 @@ class PlanChangeService:
 
         Raises appropriate PlanChangeError subclass if blocked.
         """
-        # 1. Must be active
+        # 1. Must be active (or previously-active upgrade states)
         status = subscription.get('status', '')
-        if status not in ('active', 'completed'):
+        if status not in ('active', 'completed', 'pending_upgrade', 'upgrade_failed'):
             raise SubscriptionNotActiveError(status)
 
         # 2. Not the same plan
         if subscription['plan_name'] == new_plan_slug:
             raise SamePlanError(new_plan_slug)
 
-        # 3. No existing pending change
-        if subscription.get('pending_plan_slug'):
-            raise PlanChangePendingError()
+        # Checks 3-5 only apply for truly active subs.
+        # pending_upgrade / upgrade_failed = user is retrying, stale state is OK to overwrite.
+        if status in ('active', 'completed'):
+            # 3. No existing pending change
+            if subscription.get('pending_plan_slug'):
+                raise PlanChangePendingError()
 
-        # 4. Not locked (subscription.update in flight)
-        if subscription.get('plan_change_locked'):
-            raise PlanChangeLockedError()
+            # 4. Not locked (subscription.update in flight)
+            if subscription.get('plan_change_locked'):
+                raise PlanChangeLockedError()
 
-        # 5. No pending proration payment
-        if subscription.get('proration_payment_status') == 'pending':
-            raise PaymentPendingError()
+            # 5. No pending proration payment
+            if subscription.get('proration_payment_status') == 'pending':
+                raise PaymentPendingError()
 
     def _validate_usage_limits(
         self,

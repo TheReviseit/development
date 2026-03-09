@@ -10,7 +10,7 @@ import {
   formatCurrency,
   TimeRange,
 } from "@/lib/hooks/useRevenueAnalytics";
-import { useSubscription } from "@/lib/hooks/useSubscription";
+import { useFeatureGate } from "@/lib/hooks/useFeatureGate";
 import LoadingSpinner from "@/app/components/ui/LoadingSpinner";
 
 // Icon components
@@ -186,18 +186,11 @@ export default function AnalyticsView() {
   // user?.id is the Supabase UUID which the backend cannot map
   const userId = firebaseUser?.uid || "";
 
-  // Feature gate: advanced_analytics — hidden for Starter plan
-  const { subscription, isLoading: subLoading } = useSubscription(userId);
-  // Grant access when the plan is anything other than "starter".
-  // Also treat "active" subscriptions without a resolved plan_name as having
-  // access — the backend /subscriptions/status now patches stale plan_names
-  // automatically, so if it returned a name we trust it; if it returned
-  // "starter" but status is active we still rely on the name.
-  const STARTER_SLUGS = ["starter", "pending", ""];
-  const canAccessAnalytics =
-    !subLoading &&
-    !!subscription &&
-    !STARTER_SLUGS.includes(subscription.plan_name?.toLowerCase?.() ?? "");
+  // Feature gate: advanced_analytics — server-authoritative check via
+  // backend FeatureGateEngine. Respects subscription status (incl.
+  // pending_upgrade), plan-level feature config, and global flags.
+  const { allowed: canAccessAnalytics, isLoading: subLoading } =
+    useFeatureGate("advanced_analytics");
 
   // Fetch analytics data
   const loadAnalytics = useCallback(async () => {

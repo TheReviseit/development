@@ -90,34 +90,68 @@ export default function CheckoutPage() {
     variantInfo?: string;
   } | null>(null);
 
-  // Fetch payment settings
+  // =========================================================================
+  // OPTIMIZED: Parallel initialization
+  // =========================================================================
+  // Load Razorpay script + fetch payment settings in parallel.
+  // Payment settings now tries the prefetched store data first (via /api/store)
+  // to avoid an extra API call. Falls back to payment-settings endpoint only
+  // if store data doesn't have payment settings embedded.
   useEffect(() => {
-    if (username) {
-      fetch(`/api/store/${username}/payment-settings`)
-        .then((res) => res.json())
-        .then((data) => {
-          if (data.success) {
-            setPaymentSettings(data);
-            // Default to WhatsApp if payments are disabled
-            if (!data.paymentsEnabled) {
-              setPaymentMethod("whatsapp");
-            }
+    if (!username) return;
 
-            // Parse shipping charges
-            if (data.shippingCharges) {
-              const parsedShipping = parseFloat(data.shippingCharges);
-              if (!isNaN(parsedShipping)) {
-                setShippingCost(parsedShipping);
-              } else {
-                setShippingCost(0);
-              }
-            } else {
-              setShippingCost(0);
+    // Fire both operations in parallel
+    const initPromises: Promise<void>[] = [];
+
+    // 1. Preload Razorpay script (non-blocking, starts immediately)
+    initPromises.push(loadRazorpayScript().then(() => {}));
+
+    // 2. Fetch payment settings — try store API first (has prefetched settings)
+    const settingsPromise = fetch(`/api/store/${username}`, { cache: "no-store" })
+      .then((res) => res.json())
+      .then((result) => {
+        if (result.success && result.data?.paymentSettings) {
+          const ps = result.data.paymentSettings;
+          const settings: PaymentSettings = {
+            paymentsEnabled: ps.paymentsEnabled || false,
+            razorpayKeyId: ps.razorpayKeyId || null,
+            storeName: result.data.businessName || "Store",
+            storeUserId: result.data.userId,
+            invoiceEnabled: true, // Default true, refined by payment-settings if needed
+            shippingCharges: ps.shippingCharges || null,
+            codAvailable: ps.codAvailable || false,
+          };
+          return settings;
+        }
+        // Fallback: fetch from dedicated endpoint
+        return fetch(`/api/store/${username}/payment-settings`)
+          .then((r) => r.json())
+          .then((data) => (data.success ? data : null));
+      })
+      .catch(() => {
+        // Last resort fallback
+        return fetch(`/api/store/${username}/payment-settings`)
+          .then((r) => r.json())
+          .then((data) => (data.success ? data : null))
+          .catch(() => null);
+      });
+
+    settingsPromise
+      .then((data: PaymentSettings | null) => {
+        if (data) {
+          setPaymentSettings(data);
+          if (!data.paymentsEnabled) {
+            setPaymentMethod("whatsapp");
+          }
+          if (data.shippingCharges) {
+            const parsedShipping = parseFloat(data.shippingCharges);
+            if (!isNaN(parsedShipping)) {
+              setShippingCost(parsedShipping);
             }
           }
-        })
-        .finally(() => setLoadingSettings(false));
-    }
+        }
+      })
+      .finally(() => setLoadingSettings(false));
   }, [username]);
 
   const finalTotal = cartTotal + shippingCost;
