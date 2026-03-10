@@ -382,6 +382,231 @@ class TestDuplicatePrevention:
         
         # Release lock
         state._persistence_locked = False
+class TestGlobalCancelInterrupt:
+    """
+    Tests that the global interrupt handler catches cancel/stop/exit/quit
+    in EVERY order sub-state. This validates the FAANG architecture:
+    incoming_message → interrupt_handler → state_machine → intent_classifier
+    """
+    
+    def setup_method(self):
+        self.brain = AIBrain()
+        self.conversation_manager = self.brain.conversation_manager
+        self.conversation_manager.clear_all_sessions()
+    
+    # --- Cancel at every sub-state ---
+    
+    def test_cancel_during_category_selection(self):
+        """Cancel while awaiting_category is set."""
+        user_id = "test_cancel_cat"
+        
+        self.brain._start_order_flow(
+            user_id=user_id,
+            business_owner_id="owner_1",
+            initial_message="I want to order",
+            business_data=MULTI_CATEGORY_BUSINESS
+        )
+        
+        state = self.conversation_manager.get_state(user_id)
+        assert state is not None
+        assert state.collected_fields.get("awaiting_category") == True
+        
+        # Global interrupt should cancel
+        result = self.brain._interrupt_handler(user_id, "cancel", "cancel")
+        assert result is not None
+        assert result["intent"] == "order_cancelled"
+        
+        # Session should be fully deleted
+        assert not self.conversation_manager.is_flow_active(user_id)
+    
+    def test_cancel_during_product_selection(self):
+        """Cancel while awaiting_selection is set."""
+        user_id = "test_cancel_prod"
+        
+        self.brain._start_order_flow(
+            user_id=user_id,
+            business_owner_id="owner_1",
+            initial_message="I want to order",
+            business_data=SIMPLE_BUSINESS
+        )
+        
+        state = self.conversation_manager.get_state(user_id)
+        assert state.collected_fields.get("awaiting_selection") == True
+        
+        result = self.brain._interrupt_handler(user_id, "cancel", "cancel")
+        assert result is not None
+        assert result["intent"] == "order_cancelled"
+        assert not self.conversation_manager.is_flow_active(user_id)
+    
+    def test_cancel_during_size_selection(self):
+        """Cancel while _needs_size is set."""
+        user_id = "test_cancel_size"
+        
+        self.brain._start_order_flow(
+            user_id=user_id,
+            business_owner_id="owner_1",
+            initial_message="I want to order a t-shirt",
+            business_data=VARIANT_BUSINESS
+        )
+        
+        state = self.conversation_manager.get_state(user_id)
+        assert state.collected_fields.get("_needs_size") == True
+        
+        result = self.brain._interrupt_handler(user_id, "stop", "stop")
+        assert result is not None
+        assert result["intent"] == "order_cancelled"
+        assert not self.conversation_manager.is_flow_active(user_id)
+    
+    def test_cancel_during_color_selection(self):
+        """Cancel while _needs_color is set."""
+        user_id = "test_cancel_color"
+        
+        self.brain._start_order_flow(
+            user_id=user_id,
+            business_owner_id="owner_1",
+            initial_message="I want to order a t-shirt",
+            business_data=VARIANT_BUSINESS
+        )
+        
+        # Select size first to get to color selection
+        self.brain._handle_order_flow(
+            user_id=user_id,
+            message="L",
+            business_data=VARIANT_BUSINESS
+        )
+        
+        state = self.conversation_manager.get_state(user_id)
+        assert state.collected_fields.get("_needs_color") == True
+        
+        result = self.brain._interrupt_handler(user_id, "exit", "exit")
+        assert result is not None
+        assert result["intent"] == "order_cancelled"
+        assert not self.conversation_manager.is_flow_active(user_id)
+    
+    # --- Multiple cancel keywords ---
+    
+    def test_stop_keyword(self):
+        """Test 'stop' triggers cancel."""
+        user_id = "test_stop"
+        self.brain._start_order_flow(
+            user_id=user_id, business_owner_id="owner_1",
+            initial_message="order", business_data=SIMPLE_BUSINESS
+        )
+        result = self.brain._interrupt_handler(user_id, "stop", "stop")
+        assert result is not None and result["intent"] == "order_cancelled"
+    
+    def test_exit_keyword(self):
+        """Test 'exit' triggers cancel."""
+        user_id = "test_exit"
+        self.brain._start_order_flow(
+            user_id=user_id, business_owner_id="owner_1",
+            initial_message="order", business_data=SIMPLE_BUSINESS
+        )
+        result = self.brain._interrupt_handler(user_id, "exit", "exit")
+        assert result is not None and result["intent"] == "order_cancelled"
+    
+    def test_quit_keyword(self):
+        """Test 'quit' triggers cancel."""
+        user_id = "test_quit"
+        self.brain._start_order_flow(
+            user_id=user_id, business_owner_id="owner_1",
+            initial_message="order", business_data=SIMPLE_BUSINESS
+        )
+        result = self.brain._interrupt_handler(user_id, "quit", "quit")
+        assert result is not None and result["intent"] == "order_cancelled"
+    
+    def test_nevermind_keyword(self):
+        """Test 'nevermind' triggers cancel."""
+        user_id = "test_nevermind"
+        self.brain._start_order_flow(
+            user_id=user_id, business_owner_id="owner_1",
+            initial_message="order", business_data=SIMPLE_BUSINESS
+        )
+        result = self.brain._interrupt_handler(user_id, "nevermind", "nevermind")
+        assert result is not None and result["intent"] == "order_cancelled"
+    
+    # --- False positive prevention ---
+    
+    def test_no_false_positive_substring(self):
+        """'cancelled order yesterday' should NOT trigger cancel (substring match)."""
+        user_id = "test_fp_substring"
+        self.brain._start_order_flow(
+            user_id=user_id, business_owner_id="owner_1",
+            initial_message="order", business_data=SIMPLE_BUSINESS
+        )
+        
+        # Exact match uses .strip().lower() — "cancelled order yesterday" is NOT in CANCEL_WORDS
+        result = self.brain._interrupt_handler(
+            user_id, "cancelled order yesterday", "cancelled order yesterday"
+        )
+        assert result is None  # Should NOT cancel
+        
+        # Flow should still be active
+        assert self.conversation_manager.is_flow_active(user_id)
+    
+    def test_no_false_positive_stopwatch(self):
+        """'stopwatch' should NOT trigger cancel."""
+        user_id = "test_fp_stopwatch"
+        self.brain._start_order_flow(
+            user_id=user_id, business_owner_id="owner_1",
+            initial_message="order", business_data=SIMPLE_BUSINESS
+        )
+        result = self.brain._interrupt_handler(user_id, "stopwatch", "stopwatch")
+        assert result is None
+        assert self.conversation_manager.is_flow_active(user_id)
+    
+    # --- Session cleanup verification ---
+    
+    def test_cancel_deletes_session(self):
+        """After cancel, session should be fully deleted from memory."""
+        user_id = "test_session_del"
+        self.brain._start_order_flow(
+            user_id=user_id, business_owner_id="owner_1",
+            initial_message="order", business_data=SIMPLE_BUSINESS
+        )
+        
+        # Verify session exists
+        assert self.conversation_manager.is_flow_active(user_id)
+        
+        # Cancel
+        result = self.brain._interrupt_handler(user_id, "cancel", "cancel")
+        assert result is not None
+        
+        # Session should be gone
+        assert not self.conversation_manager.is_flow_active(user_id)
+    
+    def test_cancel_no_active_flow_returns_none(self):
+        """Cancel without active flow should return None (no-op)."""
+        user_id = "test_no_flow"
+        result = self.brain._interrupt_handler(user_id, "cancel", "cancel")
+        assert result is None
+    
+    # --- Race condition test ---
+    
+    def test_cancel_race_condition(self):
+        """
+        Simulates concurrent button tap + cancel message.
+        After cancel, _handle_order_flow should return None (no active flow).
+        """
+        user_id = "test_race"
+        self.brain._start_order_flow(
+            user_id=user_id, business_owner_id="owner_1",
+            initial_message="order", business_data=SIMPLE_BUSINESS
+        )
+        
+        # First: cancel fires
+        cancel_result = self.brain._interrupt_handler(user_id, "cancel", "cancel")
+        assert cancel_result is not None
+        
+        # Second: concurrent button tap tries to process
+        # Since session is deleted, _handle_order_flow should handle gracefully
+        flow_result = self.brain._handle_order_flow(
+            user_id=user_id,
+            message="1",
+            business_data=SIMPLE_BUSINESS
+        )
+        # Should return None (no active state found)
+        assert flow_result is None
 
 
 if __name__ == "__main__":

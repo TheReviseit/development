@@ -510,15 +510,15 @@ export default function CheckoutPage() {
       return;
     }
 
-    if (!paymentSettings?.razorpayKeyId) {
-      alert("Online payments are not configured correctly.");
+    if (!paymentSettings?.paymentsEnabled) {
+      alert("Online payments are not enabled for this store.");
       return;
     }
 
     setLoading(true);
 
     try {
-      // 1. Validate stock BEFORE processing payment (enterprise-grade check)
+      // ── Step 1: Validate stock BEFORE processing payment ─────────────
       const stockCheck = await validateStock();
       if (!stockCheck.valid) {
         const errorMatch = stockCheck.error?.match(
@@ -538,6 +538,7 @@ export default function CheckoutPage() {
         return;
       }
 
+      // ── Step 2: Load Razorpay checkout script ────────────────────────
       const scriptLoaded = await loadRazorpayScript();
       if (!scriptLoaded) {
         alert("Failed to load payment gateway. Please try again.");
@@ -545,16 +546,53 @@ export default function CheckoutPage() {
         return;
       }
 
+      // ── Step 3: Create Razorpay Order server-side ────────────────────
+      // CRITICAL: Razorpay Standard Checkout REQUIRES a server-created
+      // order_id. Without it, the checkout will show "Uh oh! Something
+      // went wrong" and the payment will fail.
+      const amountInPaise = Math.round(finalTotal * 100);
+
+      const orderResponse = await fetch(
+        `/api/store/${username}/create-payment`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            amount: amountInPaise,
+            currency: "INR",
+            notes: {
+              customer_name: formData.name,
+              customer_phone: `+91${formData.phone}`,
+              address: `${formData.address}, ${formData.city} - ${formData.pincode}`,
+            },
+          }),
+        },
+      );
+
+      const orderData = await orderResponse.json();
+
+      if (!orderData.success || !orderData.order_id) {
+        console.error("[Checkout] Failed to create Razorpay order:", orderData);
+        alert(
+          orderData.error ||
+            "Failed to initialize payment. Please check if payment gateway is configured in store settings.",
+        );
+        setLoading(false);
+        return;
+      }
+
+      // ── Step 4: Open Razorpay Checkout with server-created order ─────
       const options = {
-        key: paymentSettings.razorpayKeyId,
-        amount: finalTotal * 100,
-        currency: "INR",
-        name: paymentSettings.storeName,
+        key: orderData.key_id,
+        amount: orderData.amount,
+        currency: orderData.currency || "INR",
+        name: orderData.business_name || paymentSettings?.storeName || "Store",
         description: "Order Payment",
+        order_id: orderData.order_id,  // ✅ Server-created order ID
         prefill: {
           name: formData.name,
           email: formData.email,
-          contact: formData.phone,
+          contact: `+91${formData.phone}`,
         },
         notes: {
           address: `${formData.address}, ${formData.city} - ${formData.pincode}`,
@@ -566,14 +604,13 @@ export default function CheckoutPage() {
           color: "#22c15a",
         },
         handler: async function (response: any) {
-          // Payment Successful
+          // ── Step 5: Payment Successful → Create backend order ────────
           const paymentId = response.razorpay_payment_id;
 
-          // Create Order in Backend with API source - also validates stock
+          // Create Order in Backend with API source — also validates stock
           const orderResult = await createBackendOrder(paymentId, "api");
 
           // Handle rare case of stock issue after payment
-          // This can happen if someone else bought the item between validation and payment
           if (orderResult.stockError) {
             alert(
               `⚠️ Order Issue\n\nPayment received (ID: ${paymentId}), but ${orderResult.error}\n\nPlease contact the store for a refund or alternative products.`,
@@ -609,14 +646,17 @@ export default function CheckoutPage() {
 
       const razorpay = new (window as any).Razorpay(options);
       razorpay.on("payment.failed", function (response: any) {
-        alert(`Payment failed: ${response.error.description}`);
+        console.error("[Checkout] Payment failed:", response.error);
+        alert(
+          `Payment failed: ${response.error.description || "Please try again."}`,
+        );
         setLoading(false);
       });
       razorpay.open();
     } catch (error) {
-      console.error(error);
+      console.error("[Checkout] Payment error:", error);
       setLoading(false);
-      alert("Something went wrong");
+      alert("Something went wrong. Please try again.");
     }
   };
 

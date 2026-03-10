@@ -1308,111 +1308,110 @@ def webhook():
         if credentials and credentials.get('access_token'):
             logger.info(f"🏢 Using credentials for: {credentials.get('business_name')}")
             
-            # Send product images with "Order This" button in a SINGLE unified message
-            # Uses WhatsApp interactive message with image header (per Meta documentation)
-            # This provides a professional, cohesive user experience for conversational commerce
+            # Send product cards with "Order This" button
+            # ENTERPRISE-GRADE: Image is OPTIONAL — products without images still get sent
+            # Uses interactive message with image header when image exists, text-only otherwise
             if product_cards:
-                cards_with_images = [c for c in product_cards if c.get('image_url')]
-                if cards_with_images:
-                    logger.info(f"🖼️🔘 Sending {len(cards_with_images)} unified product card(s) (image + button)...")
+                logger.info(f"🖼️🔘 Sending {len(product_cards)} product card(s)...")
+                
+                for card in product_cards:
+                    image_url = card.get('image_url', '')
+                    name = card.get('name', 'Product')
+                    current_price = card.get('price', 0)
+                    original_price = card.get('compare_at_price')  # Original price (if on sale)
+                    product_id = card.get('product_id', name)
                     
-                    # Send all product cards (pagination is handled by AI brain)
-                    for card in cards_with_images:
-                        image_url = card.get('image_url')
-                        name = card.get('name', 'Product')
-                        current_price = card.get('price', 0)
-                        original_price = card.get('compare_at_price')  # Original price (if on sale)
-                        product_id = card.get('product_id', name)
-                        
-                        # Size-based pricing support
-                        price_range = card.get('price_range')  # e.g., "₹700-₹800"
-                        has_size_pricing = card.get('has_size_pricing', False)
-                        size_prices = card.get('size_prices', {}) or {}
-                        
-                        # Debug logging for price information
-                        logger.info(f"💰 Product Card: {name}")
-                        logger.info(f"   current_price: {current_price} (type: {type(current_price)})")
-                        logger.info(f"   original_price (compare_at_price): {original_price} (type: {type(original_price)})")
-                        logger.info(f"   has_size_pricing: {has_size_pricing}")
-                        logger.info(f"   size_prices: {size_prices}")
-                        
-                        # Sanitize product_id for button ID: replace spaces with underscores
-                        # This ensures valid button IDs and proper matching in ai_brain
-                        safe_product_id = str(product_id).replace(' ', '_').replace('-', '_').lower()
-                        
-                        # Build rich product details for body text with professional formatting
-                        body_parts = [f"*{name}*"]
-                        
-                        # Determine the display price (offer price or regular price)
-                        display_price_value = None
-                        if has_size_pricing and size_prices:
-                            # For size-based pricing, use the first available size price
-                            first_size_price = next(iter(size_prices.values()), None)
-                            if first_size_price:
-                                display_price_value = float(first_size_price)
-                            else:
-                                display_price_value = float(current_price) if current_price else 0
+                    # Size-based pricing support
+                    price_range = card.get('price_range')  # e.g., "₹700-₹800"
+                    has_size_pricing = card.get('has_size_pricing', False)
+                    size_prices = card.get('size_prices', {}) or {}
+                    
+                    # Debug logging for price information
+                    logger.info(f"💰 Product Card: {name}")
+                    logger.info(f"   current_price: {current_price} (type: {type(current_price)})")
+                    logger.info(f"   original_price (compare_at_price): {original_price} (type: {type(original_price)})")
+                    logger.info(f"   has_size_pricing: {has_size_pricing}")
+                    logger.info(f"   size_prices: {size_prices}")
+                    logger.info(f"   image_url: {'present' if image_url else 'NONE'}")
+                    
+                    # Sanitize product_id for button ID: replace spaces with underscores
+                    # This ensures valid button IDs and proper matching in ai_brain
+                    safe_product_id = str(product_id).replace(' ', '_').replace('-', '_').lower()
+                    
+                    # Build rich product details for body text with professional formatting
+                    body_parts = [f"*{name}*"]
+                    
+                    # Determine the display price (offer price or regular price)
+                    display_price_value = None
+                    if has_size_pricing and size_prices:
+                        # For size-based pricing, use the first available size price
+                        first_size_price = next(iter(size_prices.values()), None)
+                        if first_size_price:
+                            display_price_value = float(first_size_price)
                         else:
                             display_price_value = float(current_price) if current_price else 0
-                        
-                        logger.info(f"   display_price_value: {display_price_value}")
-                        
-                        # Format price based on available pricing info
-                        # Check if there's an offer (original_price > display_price)
-                        if original_price is not None and original_price != '':
-                            try:
-                                original_price_float = float(original_price)
-                                logger.info(f"   Comparing: original_price_float={original_price_float} > display_price_value={display_price_value}")
-                                if original_price_float > display_price_value and display_price_value > 0:
-                                    # Has offer - show both original and offer price
-                                    logger.info(f"   ✅ Showing offer: original ₹{int(original_price_float)}, offer ₹{int(display_price_value)}")
-                                    body_parts.append(f"original price: ₹{int(original_price_float)}\noffer price: ₹{int(display_price_value)}")
-                                else:
-                                    # Original price exists but not greater than display price - show only display price
-                                    logger.info(f"   ⚠️ Original price not greater, showing only display price")
-                                    body_parts.append(f"price: ₹{int(display_price_value)}")
-                            except (ValueError, TypeError) as e:
-                                # Invalid original_price, just show display price
-                                logger.warning(f"   ❌ Error converting original_price: {e}")
+                    else:
+                        display_price_value = float(current_price) if current_price else 0
+                    
+                    logger.info(f"   display_price_value: {display_price_value}")
+                    
+                    # Format price based on available pricing info
+                    # Check if there's an offer (original_price > display_price)
+                    if original_price is not None and original_price != '':
+                        try:
+                            original_price_float = float(original_price)
+                            logger.info(f"   Comparing: original_price_float={original_price_float} > display_price_value={display_price_value}")
+                            if original_price_float > display_price_value and display_price_value > 0:
+                                # Has offer - show both original and offer price
+                                logger.info(f"   ✅ Showing offer: original ₹{int(original_price_float)}, offer ₹{int(display_price_value)}")
+                                body_parts.append(f"original price: ₹{int(original_price_float)}\noffer price: ₹{int(display_price_value)}")
+                            else:
+                                # Original price exists but not greater than display price - show only display price
+                                logger.info(f"   ⚠️ Original price not greater, showing only display price")
                                 body_parts.append(f"price: ₹{int(display_price_value)}")
-                        else:
-                            # No original price - show regular price
-                            logger.info(f"   ℹ️ No original_price found, showing regular price")
+                        except (ValueError, TypeError) as e:
+                            # Invalid original_price, just show display price
+                            logger.warning(f"   ❌ Error converting original_price: {e}")
                             body_parts.append(f"price: ₹{int(display_price_value)}")
-                        
-                        # Add colors first, then sizes if available
-                        if card.get('colors'):
-                            colors_list = ', '.join(card['colors'][:4])
-                            body_parts.append(f"colors: {colors_list}")
-                        if card.get('sizes'):
-                            sizes_list = ', '.join(card['sizes'][:4])
-                            body_parts.append(f"sizes: {sizes_list}")
-                        
-                        body_text = "\n".join(body_parts)
-                        
-                        # ENTERPRISE-GRADE: Use opaque button ID if available, fallback to legacy card_index
-                        btn_id = card.get("btn_id")
-                        if btn_id:
-                            # New opaque format: order_btn_xxxxxxxx
-                            button_id = f"order_{btn_id}"
-                        else:
-                            # Legacy format: order_card_N (backwards compatibility)
-                            card_index = card.get("card_index", 0)
-                            button_id = f"order_card_{card_index}"
-                        
-                        logger.info(f"🔘 Creating button for: {name}")
-                        logger.info(f"   Full product_id: {product_id}")
-                        logger.info(f"   Button ID: {button_id} ({'opaque' if btn_id else 'legacy'})")
-                        logger.info(f"   Card colors: {card.get('colors')}")
-                        logger.info(f"   Card sizes: {card.get('sizes')}")
-                        logger.info(f"   Card is_variant: {card.get('is_variant', False)}")
-                        
-                        order_buttons = [
-                            {"id": button_id, "title": "Order This"}
-                        ]
-                        
-                        # Send UNIFIED message: image header + product details + order button
-                        # This is the production-ready approach per WhatsApp Cloud API docs
+                    else:
+                        # No original price - show regular price
+                        logger.info(f"   ℹ️ No original_price found, showing regular price")
+                        body_parts.append(f"price: ₹{int(display_price_value)}")
+                    
+                    # Add colors first, then sizes if available
+                    if card.get('colors'):
+                        colors_list = ', '.join(card['colors'][:4])
+                        body_parts.append(f"colors: {colors_list}")
+                    if card.get('sizes'):
+                        sizes_list = ', '.join(card['sizes'][:4])
+                        body_parts.append(f"sizes: {sizes_list}")
+                    
+                    body_text = "\n".join(body_parts)
+                    
+                    # ENTERPRISE-GRADE: Use opaque button ID if available, fallback to legacy card_index
+                    btn_id = card.get("btn_id")
+                    if btn_id:
+                        # New opaque format: order_btn_xxxxxxxx
+                        button_id = f"order_{btn_id}"
+                    else:
+                        # Legacy format: order_card_N (backwards compatibility)
+                        card_index = card.get("card_index", 0)
+                        button_id = f"order_card_{card_index}"
+                    
+                    logger.info(f"🔘 Creating button for: {name}")
+                    logger.info(f"   Full product_id: {product_id}")
+                    logger.info(f"   Button ID: {button_id} ({'opaque' if btn_id else 'legacy'})")
+                    logger.info(f"   Card colors: {card.get('colors')}")
+                    logger.info(f"   Card sizes: {card.get('sizes')}")
+                    logger.info(f"   Card is_variant: {card.get('is_variant', False)}")
+                    
+                    order_buttons = [
+                        {"id": button_id, "title": "Order This"}
+                    ]
+                    
+                    # Send card: WITH image header if image exists, WITHOUT if not
+                    if image_url:
+                        # Full interactive message: image header + product details + order button
                         result = whatsapp_service.send_interactive_image_buttons(
                             phone_number_id=credentials['phone_number_id'],
                             access_token=credentials['access_token'],
@@ -1422,39 +1421,50 @@ def webhook():
                             buttons=order_buttons,
                             footer_text="Tap to place your order"
                         )
-                        
-                        if result.get('success'):
-                            logger.info(f"✅ Sent unified product card for: {name}")
-                        else:
-                            logger.warning(f"⚠️ Failed to send product card: {result.get('error')}")
-                        
-                        time.sleep(0.3)  # Rate limit between messages
+                    else:
+                        # No image — send interactive button with text header only
+                        result = whatsapp_service.send_interactive_buttons(
+                            phone_number_id=credentials['phone_number_id'],
+                            access_token=credentials['access_token'],
+                            to=from_number,
+                            body_text=body_text,
+                            buttons=order_buttons,
+                            header_text=name[:60],
+                            footer_text="Tap to place your order"
+                        )
                     
-                    # All product cards sent successfully
-                    send_result = {'success': True, 'message_id': 'product_cards_sent'}
+                    if result.get('success'):
+                        logger.info(f"✅ Sent product card for: {name} ({'with image' if image_url else 'text only'})")
+                    else:
+                        logger.warning(f"⚠️ Failed to send product card: {result.get('error')}")
                     
-                    if send_result['success']:
-                        logger.info(f"✅ Product catalog sent to {from_number}")
+                    time.sleep(0.3)  # Rate limit between messages
+                
+                # All product cards sent successfully
+                send_result = {'success': True, 'message_id': 'product_cards_sent'}
+                
+                if send_result['success']:
+                    logger.info(f"✅ Product catalog sent to {from_number}")
 
-                        # Store AI message in database for analytics tracking
-                        if SUPABASE_AVAILABLE and store_message and user_id:
-                            store_message(
-                                user_id=user_id,
-                                phone_number_id=phone_number_id,
-                                message_id=f"product_cards_{msg_id}",
-                                direction='outbound',
-                                from_number=display_phone,
-                                to_number=from_number,
-                                message_type='interactive',
-                                message_body=reply_text,
-                                status='sent',
-                                wamid=f"product_cards_{msg_id}",
-                                conversation_origin='business_initiated',
-                                is_ai_generated=True,
-                                tokens_used=tokens_used
-                            )
+                    # Store AI message in database for analytics tracking
+                    if SUPABASE_AVAILABLE and store_message and user_id:
+                        store_message(
+                            user_id=user_id,
+                            phone_number_id=phone_number_id,
+                            message_id=f"product_cards_{msg_id}",
+                            direction='outbound',
+                            from_number=display_phone,
+                            to_number=from_number,
+                            message_type='interactive',
+                            message_body=reply_text,
+                            status='sent',
+                            wamid=f"product_cards_{msg_id}",
+                            conversation_origin='business_initiated',
+                            is_ai_generated=True,
+                            tokens_used=tokens_used
+                        )
 
-                        return jsonify({'status': 'ok'}), 200
+                    return jsonify({'status': 'ok'}), 200
             
             # Check if we should send URL button (for payment links, store links, etc.)
             if ai_metadata.get('use_url_button'):

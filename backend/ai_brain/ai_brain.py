@@ -144,12 +144,66 @@ class AIBrain:
         if supabase_client:
             self.appointment_handler = AppointmentHandler(supabase_client)
         
-        # Cancellation keywords for detecting flow cancellation intent
-        self.CANCELLATION_KEYWORDS = [
+        # ENTERPRISE-GRADE: Global interrupt keywords — frozenset for O(1) exact match
+        # Uses exact match (not substring) to prevent false positives
+        # e.g., "cancelled order yesterday" should NOT trigger cancel
+        self.CANCEL_WORDS = frozenset({
             'cancel', 'stop', 'nevermind', 'never mind', 'dont want', "don't want",
             'no thanks', 'forget it', 'quit', 'exit', 'nahi chahiye', 'rehne do',
             'mat karo', 'bandh karo', 'nako', 'beku illa', 'venda'
-        ]
+        })
+    
+    def _interrupt_handler(self, user_id: str, message: str, msg_normalized: str) -> Optional[Dict[str, Any]]:
+        """
+        GLOBAL INTERRUPT HANDLER — Single cancel interception point.
+        
+        Architecture: Runs BEFORE any state machine logic.
+        Uses exact match (frozenset lookup) to prevent false positives.
+        e.g., "cancelled order yesterday" does NOT match.
+        
+        On match: Fully deletes session (cancel_flow + clear_session).
+        
+        Returns:
+            Cancel response dict if interrupt detected, None otherwise.
+        """
+        if msg_normalized not in self.CANCEL_WORDS:
+            return None
+        if not user_id or not self.conversation_manager.is_flow_active(user_id):
+            return None
+        
+        # Get flow name before cancelling for structured logging
+        state = self.conversation_manager.get_state(user_id)
+        flow_name = state.active_flow if state else "unknown"
+        flow_status = str(state.flow_status.value) if state and state.flow_status else "unknown"
+        
+        # Full session teardown — not just state reset
+        self.conversation_manager.cancel_flow(user_id)
+        self.conversation_manager.clear_session(user_id)
+        
+        # Structured logging
+        logger.info(
+            "order_flow_interrupted",
+            extra={
+                "user_id": user_id[:12] if user_id else "unknown",
+                "trigger_word": msg_normalized,
+                "flow_name": flow_name,
+                "flow_status": flow_status,
+            }
+        )
+        
+        # Record in conversation history (new session will be created)
+        self.conversation_manager.add_message(user_id, "user", message)
+        cancel_msg = "No problem! Your order has been cancelled. How else can I help you? 😊"
+        self.conversation_manager.add_message(user_id, "assistant", cancel_msg)
+        
+        return {
+            "reply": cancel_msg,
+            "intent": "order_cancelled",
+            "confidence": 1.0,
+            "needs_human": False,
+            "suggested_actions": ["Browse products", "Place order", "Contact"],
+            "metadata": {"generation_method": "global_interrupt_cancel", "cancelled_flow": flow_name}
+        }
     
     def generate_reply(
         self,
@@ -224,24 +278,12 @@ class AIBrain:
             return self._out_of_scope_response(business_name)
         
         # =====================================================
-        # CANCELLATION CHECK - Handle "stop", "cancel", etc.
+        # GLOBAL INTERRUPT HANDLER — runs BEFORE any state logic
+        # Single cancel check point (FAANG architecture)
         # =====================================================
-        # If user wants to cancel a flow, handle it immediately
-        if user_id and any(word in user_message.lower() for word in self.CANCELLATION_KEYWORDS):
-            if self.conversation_manager.is_flow_active(user_id):
-                self.conversation_manager.cancel_flow(user_id)
-                response = {
-                    "reply": "No problem, I've cancelled that. How else can I help you? 😊",
-                    "intent": "cancel_flow",
-                    "confidence": 1.0,
-                    "needs_human": False,
-                    "suggested_actions": ["Services", "Book Appointment"],
-                    "metadata": {"generation_method": "flow_cancellation"}
-                }
-                # Add to history
-                self.conversation_manager.add_message(user_id, "user", user_message)
-                self.conversation_manager.add_message(user_id, "assistant", response["reply"])
-                return response
+        interrupt = self._interrupt_handler(user_id, user_message, user_message.lower().strip())
+        if interrupt:
+            return interrupt
 
         # =====================================================
         # STATE-DRIVEN FLOW CHECK - Handle active booking flows
@@ -2537,9 +2579,11 @@ class AIBrain:
             elif msg_lower in ["edit", "edit details", "edit_details"]:
                 # User wants to edit details - show editable fields menu
                 return self._show_edit_details_menu(user_id, state, message)
-            elif msg_lower in ["no", "cancel", "cancel order", "nahi", "nako", "na", "n"]:
-                # User cancelled
+            elif msg_lower in ["no", "nahi", "nako", "na", "n"]:
+                # User declined confirmation (rejection, not cancel)
+                # Note: cancel/stop/exit/quit are handled by _interrupt_handler globally
                 self.conversation_manager.cancel_flow(user_id)
+                self.conversation_manager.clear_session(user_id)
                 self.conversation_manager.add_message(user_id, "user", message)
                 cancel_msg = "No problem! I've cancelled the order. Is there anything else I can help you with? 😊"
                 self.conversation_manager.add_message(user_id, "assistant", cancel_msg)
@@ -2549,7 +2593,7 @@ class AIBrain:
                     "confidence": 1.0,
                     "needs_human": False,
                     "suggested_actions": ["Browse products", "Place order", "Contact"],
-                    "metadata": {"generation_method": "order_flow_cancelled"}
+                    "metadata": {"generation_method": "order_confirmation_declined"}
                 }
             else:
                 # Check if user selected a field to edit directly from the list
