@@ -1859,6 +1859,7 @@ class AIBrain:
             if sizes:
                 state.collect_field("_needs_size", True)
                 state.collect_field("_available_sizes", sizes)
+                state.collect_field("_order_step", "awaiting_size")
                 size_list = ", ".join(sizes[:6])
                 response_text = (
                     f"Great choice! 🎉\n*{product_name}*\n\n"
@@ -1879,6 +1880,7 @@ class AIBrain:
                         qty_text = ""  # Don't show max to user, validation happens server-side
                     except ImportError:
                         qty_text = ""
+                    state.collect_field("_order_step", "awaiting_quantity")
                     response_text = (
                         f"Great choice! 🎉\n*{product_name}*\n\n"
                         f"Color: *{colors[0]}*\n\n"
@@ -1889,6 +1891,7 @@ class AIBrain:
                     # Multiple colors - ask user to select
                     state.collect_field("_needs_color", True)
                     state.collect_field("_available_colors", colors)
+                    state.collect_field("_order_step", "awaiting_color")
                     color_list = ", ".join(colors[:6])
                     response_text = (
                         f"Great choice! 🎉\n*{product_name}*\n\n"
@@ -1905,15 +1908,17 @@ class AIBrain:
                     qty_text = ""  # Don't show max to user, validation happens server-side
                 except ImportError:
                     qty_text = ""
+                state.collect_field("_order_step", "awaiting_quantity")
                 response_text = (
                     f"Great choice! 🎉\n*{product_name}*\n\n"
                     f"How many would you like to order?{qty_text}"
                 )
                 suggested_actions = ["1", "2", "3", "Cancel"]
-        
+
         elif mentioned_category:
             # User mentioned a category in their message - show products from that category
             state.collect_field("awaiting_selection", True)
+            state.collect_field("_order_step", "awaiting_product_selection")
             filtered_products = [
                 p for p in products 
                 if isinstance(p, dict) and p.get("category", "").strip().lower() == mentioned_category.lower()
@@ -1933,6 +1938,7 @@ class AIBrain:
         if not mentioned_product and not mentioned_category and categories:
             # Show category selection: URL button for "Visit Website" + Category list menu
             state.collect_field("awaiting_category", True)
+            state.collect_field("_order_step", "awaiting_category")
             state.collect_field("_available_categories", categories)
             header_text = "Start Shopping ❤️"
             
@@ -2467,6 +2473,7 @@ class AIBrain:
             product_map[name.lower()] = p
         
         state.collect_field("awaiting_selection", True)
+        state.collect_field("_order_step", "awaiting_product_selection")
         state.collect_field("_product_map", product_map)
         state.collect_field("_available_products", [p.get('name') for p in page_products if isinstance(p, dict)])
         
@@ -2549,13 +2556,44 @@ class AIBrain:
         - Confirmation
         """
         logger.info(f"📦 _handle_order_flow called for user: {user_id}, message: '{message}'")
-        
+
         state = self.conversation_manager.get_state(user_id)
         if not state:
             logger.warning(f"📦 No state found for user: {user_id}")
             return None
-        
+
         msg_lower = message.lower().strip()
+
+        # SEV-1 DIAGNOSTIC: Log key state flags on every entry for debugging stale-state issues
+        logger.info(
+            f"📦 STATE SNAPSHOT: _order_step={state.collected_fields.get('_order_step')}, "
+            f"pending_item={bool(state.collected_fields.get('pending_item'))}, "
+            f"awaiting_selection={state.collected_fields.get('awaiting_selection')}, "
+            f"awaiting_category={state.collected_fields.get('awaiting_category')}, "
+            f"_needs_size={state.collected_fields.get('_needs_size')}, "
+            f"_needs_color={state.collected_fields.get('_needs_color')}, "
+            f"quantity={state.collected_fields.get('quantity')}, "
+            f"fields_count={len(state.collected_fields)}"
+        )
+
+        # BACKFILL: Infer _order_step from legacy flags for flows started before this fix
+        if not state.collected_fields.get("_order_step"):
+            inferred_step = None
+            if state.collected_fields.get("items") and state.collected_fields.get("_order_fields") is not None:
+                inferred_step = "collecting_fields"
+            elif state.collected_fields.get("pending_item") and not state.collected_fields.get("quantity"):
+                inferred_step = "awaiting_quantity"
+            elif state.collected_fields.get("_needs_color"):
+                inferred_step = "awaiting_color"
+            elif state.collected_fields.get("_needs_size"):
+                inferred_step = "awaiting_size"
+            elif state.collected_fields.get("awaiting_selection"):
+                inferred_step = "awaiting_product_selection"
+            elif state.collected_fields.get("awaiting_category"):
+                inferred_step = "awaiting_category"
+            if inferred_step:
+                state.collect_field("_order_step", inferred_step)
+                logger.info(f"📦 BACKFILL: Inferred _order_step={inferred_step} from legacy flags")
         
         # Check for payment confirmation
         if state.flow_status == FlowStatus.AWAITING_PAYMENT:
@@ -2662,9 +2700,34 @@ class AIBrain:
         # Handle field selection from edit menu
         if state.collected_fields.get("_awaiting_field_selection"):
             return self._handle_field_selection(user_id, state, message)
-        
-        
-        
+
+        # =====================================================
+        # STEP-AWARE ROUTING (SEV-1 FIX)
+        # Use explicit _order_step to prevent stale-flag mis-routing.
+        # When _order_step is set, it is the AUTHORITATIVE indicator
+        # of what the flow is waiting for. This prevents a stale
+        # awaiting_selection flag from hijacking a quantity response.
+        # =====================================================
+        order_step = state.collected_fields.get("_order_step")
+        if order_step:
+            logger.info(f"📦 STEP-AWARE routing: _order_step={order_step}, message='{message}'")
+
+        if order_step == "awaiting_quantity" and not msg_lower.startswith("order "):
+            # User is expected to type a quantity. Route to quantity handler
+            # UNLESS they clicked an "Order This" button (starts new product).
+            pending_item = state.collected_fields.get("pending_item")
+            if pending_item and not state.collected_fields.get("quantity"):
+                logger.info(f"📦 STEP-AWARE: Routing to quantity handler (pending_item={pending_item})")
+                # Fall through to STEP 2 (quantity) below — skip all earlier steps
+                # by jumping directly to the quantity handling block.
+                return self._handle_quantity_step(user_id, state, message, msg_lower, business_data)
+            else:
+                # _order_step says quantity but pending_item is missing — state is corrupt.
+                # Clear the stale step and let normal flow re-route.
+                logger.warning(f"📦 STEP-AWARE: _order_step=awaiting_quantity but pending_item={pending_item}, quantity={state.collected_fields.get('quantity')} — clearing stale step")
+                if "_order_step" in state.collected_fields:
+                    del state.collected_fields["_order_step"]
+
         # =====================================================
         # PRIORITY: Handle "Order This" button clicks FIRST
         # Pattern: "order {product_id}" from WhatsApp button
@@ -3094,6 +3157,7 @@ class AIBrain:
                         state.collect_field("_needs_size", True)
                         state.collect_field("_available_sizes", available_sizes_from_pricing)
                         state.collect_field("_variant_size_prices", variant_size_prices)
+                        state.collect_field("_order_step", "awaiting_size")
                         
                         size_price_info = []
                         for s in available_sizes_from_pricing[:6]:
@@ -3111,7 +3175,8 @@ class AIBrain:
                         # Variant has multiple sizes but no size pricing - ask for size selection
                         state.collect_field("_needs_size", True)
                         state.collect_field("_available_sizes", available_sizes)
-                        
+                        state.collect_field("_order_step", "awaiting_size")
+
                         size_list = ", ".join(available_sizes[:6])
                         color_display = f"\nColor: *{variant_color}*\n" if variant_color else "\n"
                         response_text = f"Great choice! 🎉\n*{product_name}*{color_display}\nAvailable sizes: {size_list}\n\nWhich size would you like?"
@@ -3152,6 +3217,7 @@ class AIBrain:
                         
                         color_display = f"\nColor: *{variant_color}*\n" if variant_color else "\n"
                         size_display = f"Size: *{available_sizes[0]}*\n" if available_sizes and len(available_sizes) == 1 else ""
+                        state.collect_field("_order_step", "awaiting_quantity")
                         response_text = f"Great choice! 🎉\n*{product_name}*{color_display}{size_display}\nHow many would you like?"
                         suggested_actions = ["1", "2", "3", "Cancel"]
                 else:
@@ -3187,6 +3253,7 @@ class AIBrain:
                             if colors and len(colors) > 1:
                                 state.collect_field("_needs_color", True)
                                 state.collect_field("_available_colors", colors)
+                                state.collect_field("_order_step", "awaiting_color")
                                 color_list = ", ".join(colors[:6])
                                 response_text = f"Great choice! 🎉\n*{product_name}*\n\nSize: *{single_size}*{price_display}\n\nAvailable colors: {color_list}\n\nWhich color would you like?"
                                 suggested_actions = colors[:4] + ["Cancel"]
@@ -3194,15 +3261,18 @@ class AIBrain:
                                 # Auto-select single color too
                                 state.collect_field("selected_color", colors[0])
                                 logger.info(f"🎨 AUTO-SELECTED single color: {colors[0]}")
+                                state.collect_field("_order_step", "awaiting_quantity")
                                 response_text = f"Great choice! 🎉\n*{product_name}*\n\nSize: *{single_size}*{price_display}\nColor: *{colors[0]}*\n\nHow many would you like to order?"
                                 suggested_actions = ["1", "2", "3", "Cancel"]
                             else:
+                                state.collect_field("_order_step", "awaiting_quantity")
                                 response_text = f"Great choice! 🎉\n*{product_name}*\n\nSize: *{single_size}*{price_display}\n\nHow many would you like to order?"
                                 suggested_actions = ["1", "2", "3", "Cancel"]
                         else:
                             # Multiple sizes - ask user to select
                             state.collect_field("_needs_size", True)
                             state.collect_field("_available_sizes", sizes)
+                            state.collect_field("_order_step", "awaiting_size")
                             size_list = ", ".join(sizes[:6])
                             # Show size-specific prices if available
                             if has_size_pricing and size_prices:
@@ -3222,19 +3292,22 @@ class AIBrain:
                         if len(colors) == 1:
                             # Auto-select the single color
                             state.collect_field("selected_color", colors[0])
+                            state.collect_field("_order_step", "awaiting_quantity")
                             response_text = f"Great choice! 🎉\n*{product_name}*\n\nColor: *{colors[0]}*\n\nHow many would you like to order?"
                             suggested_actions = ["1", "2", "3", "Cancel"]
                         else:
                             # Multiple colors - ask user to select
                             state.collect_field("_needs_color", True)
                             state.collect_field("_available_colors", colors)
+                            state.collect_field("_order_step", "awaiting_color")
                             color_list = ", ".join(colors[:6])
                             response_text = f"Great choice! 🎉\n*{product_name}*\n\nAvailable colors: {color_list}\n\nWhich color would you like?"
                             suggested_actions = colors[:4] + ["Cancel"]
                     else:
+                        state.collect_field("_order_step", "awaiting_quantity")
                         response_text = f"Great choice! 🎉\n*{product_name}*\n\nHow many would you like?"
                         suggested_actions = ["1", "2", "3", "Cancel"]
-                
+
                 # Persist state after product selection
                 self.conversation_manager.persist_state(user_id)
                 
@@ -3553,12 +3626,14 @@ class AIBrain:
                 # Priority 1: Use already selected color (from variant selection) - CHECK THIS FIRST
                 if selected_color_already:
                     logger.info(f"🎨 ✅ Priority 1: Using already selected color: {selected_color_already}")
+                    state.collect_field("_order_step", "awaiting_quantity")
                     response_text = f"Size: {matched_size} selected\n\nColor: *{selected_color_already}*\n\nHow many would you like to order?{qty_text}"
                     suggested_actions = ["1", "2", "3", "Cancel"]
                 # Priority 2: Use variant color if variant exists
                 elif selected_variant and variant_color:
                     state.collect_field("selected_color", variant_color)
                     logger.info(f"🎨 ✅ Priority 2: Using variant color after size selection: {variant_color}")
+                    state.collect_field("_order_step", "awaiting_quantity")
                     response_text = f"Size: {matched_size} selected\n\nColor: *{variant_color}*\n\nHow many would you like to order?{qty_text}"
                     suggested_actions = ["1", "2", "3", "Cancel"]
                 # Priority 3: Use stored card colors first, then variant-derived colors
@@ -3573,17 +3648,20 @@ class AIBrain:
                         if len(colors) == 1:
                             state.collect_field("selected_color", colors[0])
                             logger.info(f"🎨 Priority 3: Auto-selecting single color: {colors[0]}")
+                            state.collect_field("_order_step", "awaiting_quantity")
                             response_text = f"Size: {matched_size} selected\n\nColor: *{colors[0]}*\n\nHow many would you like to order?{qty_text}"
                             suggested_actions = ["1", "2", "3", "Cancel"]
                         else:
                             state.collect_field("_needs_color", True)
                             state.collect_field("_available_colors", colors)
+                            state.collect_field("_order_step", "awaiting_color")
                             color_list = ", ".join(colors[:6])
                             logger.info(f"🎨 Priority 3: Multiple colors, asking user to select")
                             response_text = f"Size: {matched_size} selected\n\nAvailable colors: {color_list}\n\nWhich color would you like?"
                             suggested_actions = colors[:4] + ["Cancel"]
                     else:
                         logger.info(f"🎨 No colors available")
+                        state.collect_field("_order_step", "awaiting_quantity")
                         response_text = f"Size: {matched_size} selected\n\nHow many would you like to order?{qty_text}"
                         suggested_actions = ["1", "2", "3", "Cancel"]
                 
@@ -3647,9 +3725,10 @@ class AIBrain:
                     variant_display = f"Color: {matched_color}"
                 state.collect_field("variant_display", variant_display)
                 
+                state.collect_field("_order_step", "awaiting_quantity")
                 response_text = f"Color *{matched_color}* selected. ✓\n\nHow many would you like to order?"
                 suggested_actions = ["1", "2", "3", "Cancel"]
-                
+
                 # Persist state after color selection
                 self.conversation_manager.persist_state(user_id)
                 
@@ -3852,6 +3931,7 @@ class AIBrain:
                     if sizes:
                         state.collect_field("_needs_size", True)
                         state.collect_field("_available_sizes", sizes)
+                        state.collect_field("_order_step", "awaiting_size")
                         size_list = ", ".join(sizes[:6])
                         response_text = f"Great choice! 🎉\n*{matched_product}*\n\nAvailable sizes: {size_list}\n\nWhich size would you like?"
                         suggested_actions = sizes[:4] + ["Cancel"]
@@ -3860,19 +3940,23 @@ class AIBrain:
                         if len(colors) == 1:
                             # Auto-select the single color
                             state.collect_field("selected_color", colors[0])
+                            state.collect_field("_order_step", "awaiting_quantity")
                             response_text = f"Great choice! 🎉\n*{matched_product}*\n\nColor: *{colors[0]}*\n\nHow many would you like to order?"
                             suggested_actions = ["1", "2", "3", "Cancel"]
                         else:
                             # Multiple colors - ask user to select
                             state.collect_field("_needs_color", True)
                             state.collect_field("_available_colors", colors)
+                            state.collect_field("_order_step", "awaiting_color")
                             color_list = ", ".join(colors[:6])
                             response_text = f"Great choice! 🎉\n*{matched_product}*\n\nAvailable colors: {color_list}\n\nWhich color would you like?"
                             suggested_actions = colors[:4] + ["Cancel"]
                     else:
+                        state.collect_field("_order_step", "awaiting_quantity")
                         response_text = f"Great choice! 🎉\n*{matched_product}*\n\nHow many would you like?"
                         suggested_actions = ["1", "2", "3", "Cancel"]
                 else:
+                    state.collect_field("_order_step", "awaiting_quantity")
                     response_text = f"Great choice! 🎉 You want to order *{matched_product}*.\n\nHow many would you like?"
                     suggested_actions = ["1", "2", "3", "Cancel"]
                 
@@ -4155,7 +4239,20 @@ class AIBrain:
                         state.collect_field("customer_name", "Customer")
                         self.conversation_manager.persist_state(user_id)
                         return self._show_order_confirmation(user_id, state, message)
-        
+            else:
+                # Non-numeric input while waiting for quantity — ask again
+                self.conversation_manager.add_message(user_id, "user", message)
+                response_text = f"Please enter a number for the quantity of *{pending_item}* you'd like to order."
+                self.conversation_manager.add_message(user_id, "assistant", response_text)
+                return {
+                    "reply": response_text,
+                    "intent": "order_quantity_prompt",
+                    "confidence": 1.0,
+                    "needs_human": False,
+                    "suggested_actions": ["1", "2", "3", "Cancel"],
+                    "metadata": {"generation_method": "order_flow"}
+                }
+
         # =====================================================
         # STEP 3: Handle dynamic field collection
         # =====================================================
@@ -4241,6 +4338,255 @@ class AIBrain:
             "suggested_actions": ["Cancel order"],
             "metadata": {"generation_method": "order_flow_error"}
         }
+
+    def _handle_quantity_step(
+        self,
+        user_id: str,
+        state,
+        message: str,
+        msg_lower: str,
+        business_data: Dict[str, Any]
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Handle the quantity step of the order flow.
+
+        SEV-1 FIX: Extracted as a standalone method so the step-aware router
+        can jump directly here, bypassing the flag-based checks that are
+        vulnerable to stale state (e.g. awaiting_selection remaining True
+        after a button click due to concurrent webhook race condition).
+
+        Returns the response dict, or None to fall through to normal flow.
+        """
+        pending_item = state.collected_fields.get("pending_item")
+        if not pending_item or state.collected_fields.get("quantity"):
+            return None
+
+        # Try to extract quantity
+        qty_match = re.search(r'\b(\d+)\b', message)
+        if not qty_match:
+            # Not a number — ask again
+            self.conversation_manager.add_message(user_id, "user", message)
+            response_text = f"Please enter a number for the quantity of *{pending_item}* you'd like to order."
+            self.conversation_manager.add_message(user_id, "assistant", response_text)
+            return {
+                "reply": response_text,
+                "intent": "order_quantity_prompt",
+                "confidence": 1.0,
+                "needs_human": False,
+                "suggested_actions": ["1", "2", "3", "Cancel"],
+                "metadata": {"generation_method": "order_flow_step_aware"}
+            }
+
+        quantity = int(qty_match.group(1))
+
+        # AMAZON-GRADE: ALWAYS fetch LIVE stock from DB at quantity validation
+        try:
+            from utils.availability import get_stock_for_selection
+            product_data = state.collected_fields.get("pending_product_data", {})
+            selected_size = state.collected_fields.get("selected_size")
+
+            resolved_sku = state.collected_fields.get("_resolved_sku", {})
+            scope = resolved_sku.get("scope", "BASE")
+            variant_id = resolved_sku.get("variant_id") if scope == "VARIANT" else None
+
+            max_qty = get_stock_for_selection(product_data, variant_id=variant_id, size=selected_size, base_only=(scope == "BASE"))
+            logger.info(f"📦 STEP-AWARE STOCK: scope={scope}, product={product_data.get('name')}, size={selected_size}, variant={variant_id}, available={max_qty}")
+            state.collect_field("_stock_snapshot", max_qty)
+        except (ImportError, Exception) as e:
+            logger.warning(f"⚠️ Live stock lookup failed: {e}, using cached value")
+            max_qty = state.collected_fields.get("_stock_snapshot", 100)
+
+        # BOUNDED VALIDATION
+        if quantity < 1:
+            self.conversation_manager.add_message(user_id, "user", message)
+            response_text = "Please enter a valid quantity (1 or more)."
+            self.conversation_manager.add_message(user_id, "assistant", response_text)
+            return {
+                "reply": response_text,
+                "intent": "order_quantity_invalid",
+                "confidence": 1.0,
+                "needs_human": False,
+                "suggested_actions": ["1", "2", "3", "Cancel"],
+                "metadata": {"generation_method": "order_flow", "error": "quantity_too_low"}
+            }
+
+        if quantity > max_qty and max_qty > 0:
+            product_data = state.collected_fields.get("pending_product_data", {})
+            selected_variant = state.collected_fields.get("selected_variant")
+            selected_size = state.collected_fields.get("selected_size")
+            logger.warning(
+                "INVENTORY_INVARIANT_BLOCKED",
+                extra={
+                    "product_id": product_data.get("id"),
+                    "variant_id": selected_variant.get("id") if selected_variant else None,
+                    "size": selected_size,
+                    "requested": quantity,
+                    "available": max_qty,
+                    "channel": "whatsapp"
+                }
+            )
+
+            self.conversation_manager.add_message(user_id, "user", message)
+            if max_qty == 1:
+                response_text = f"Sorry, only 1 unit is available. Would you like to order 1?"
+            else:
+                response_text = f"Sorry, only {max_qty} units are available.\n\nPlease enter a quantity up to {max_qty}."
+            self.conversation_manager.add_message(user_id, "assistant", response_text)
+            return {
+                "reply": response_text,
+                "intent": "order_quantity_exceeds_stock",
+                "confidence": 1.0,
+                "needs_human": False,
+                "suggested_actions": [str(max_qty), "1", "Cancel"],
+                "metadata": {"generation_method": "order_flow", "max_available": max_qty, "requested": quantity}
+            }
+
+        product_data = state.collected_fields.get("pending_product_data", {})
+        product_max_qty = product_data.get("max_order_qty", 100)
+
+        if quantity > product_max_qty:
+            self.conversation_manager.add_message(user_id, "user", message)
+            response_text = f"Maximum quantity for this item is {product_max_qty}. Please enter a smaller number."
+            self.conversation_manager.add_message(user_id, "assistant", response_text)
+            return {
+                "reply": response_text,
+                "intent": "order_quantity_invalid",
+                "confidence": 1.0,
+                "needs_human": False,
+                "suggested_actions": [str(min(product_max_qty, max_qty)), "1", "Cancel"],
+                "metadata": {"generation_method": "order_flow", "error": "quantity_exceeds_product_max", "max": product_max_qty}
+            }
+
+        # Valid quantity — proceed (delegate to the inline quantity handler in _handle_order_flow)
+        # We set quantity in state and call the item-building logic
+        if quantity > 0 and quantity <= min(max_qty if max_qty > 0 else product_max_qty, product_max_qty):
+            state.collect_field("quantity", quantity)
+
+            # Clear stale _order_step since we're past quantity now
+            if "_order_step" in state.collected_fields:
+                del state.collected_fields["_order_step"]
+
+            # Build complete item with stable product references
+            selected_variant = state.collected_fields.get("selected_variant")
+            selected_size = state.collected_fields.get("selected_size")
+            selected_color = state.collected_fields.get("selected_color")
+            selected_size_price = state.collected_fields.get("selected_size_price")
+            base_price = product_data.get("price", 0)
+            original_price = product_data.get("compare_at_price")
+
+            # Determine price: prefer variant-level over base/size-level
+            item_price = None
+            item_original_price = None
+
+            if selected_variant:
+                if selected_size_price is not None:
+                    item_price = selected_size_price
+                    item_original_price = selected_variant.get("compare_at_price") or original_price
+                elif state.collected_fields.get("selected_variant_price") is not None:
+                    item_price = float(state.collected_fields.get("selected_variant_price"))
+                    item_original_price = selected_variant.get("compare_at_price") or original_price
+                else:
+                    vp = selected_variant.get("price")
+                    if vp is not None:
+                        item_price = float(vp)
+                        item_original_price = selected_variant.get("compare_at_price") or original_price
+                    else:
+                        variant_size_prices = selected_variant.get("size_prices", {}) or {}
+                        if variant_size_prices and len(variant_size_prices) == 1:
+                            single_size = list(variant_size_prices.keys())[0]
+                            item_price = float(variant_size_prices[single_size])
+                            item_original_price = selected_variant.get("compare_at_price") or original_price
+                        else:
+                            item_price = float(base_price) if base_price else 0
+                            item_original_price = original_price
+            else:
+                resolved = self._resolve_variant_for_product(
+                    product_data, selected_size=selected_size, selected_color=selected_color
+                )
+                if resolved:
+                    sp = resolved.get("size_prices") or {}
+                    if selected_size and sp.get(selected_size) is not None:
+                        item_price = float(sp[selected_size])
+                    else:
+                        vp = resolved.get("price")
+                        item_price = float(vp) if vp is not None else (float(base_price) if base_price else 0)
+                    item_original_price = resolved.get("compare_at_price") or original_price
+                elif selected_size_price is not None:
+                    item_price = selected_size_price
+                    item_original_price = original_price
+                else:
+                    item_price = float(base_price) if base_price else 0
+                    item_original_price = original_price
+
+            item = {
+                "name": pending_item,
+                "quantity": quantity,
+                "product_id": state.collected_fields.get("pending_product_id") or product_data.get("id") or product_data.get("sku"),
+                "variant_id": None,
+                "variant_display": state.collected_fields.get("variant_display"),
+                "price": item_price,
+                "original_price": float(item_original_price) if item_original_price else None,
+                "sku": product_data.get("sku"),
+                "size": selected_size,
+                "color": selected_color,
+            }
+
+            # Build variant_id from actual variant UUID
+            size = state.collected_fields.get("selected_size")
+            color = state.collected_fields.get("selected_color")
+
+            if selected_variant and selected_variant.get("id"):
+                item["variant_id"] = selected_variant.get("id")
+            else:
+                resolved = self._resolve_variant_for_product(
+                    product_data, selected_size=size, selected_color=color
+                )
+                if resolved and resolved.get("id"):
+                    item["variant_id"] = resolved.get("id")
+                else:
+                    item["variant_id"] = None
+
+            # Build display string
+            if size and color:
+                if not item["variant_display"]:
+                    item["variant_display"] = f"Size: {size}, Color: {color}"
+            elif size:
+                if not item["variant_display"]:
+                    item["variant_display"] = f"Size: {size}"
+            elif color:
+                if not item["variant_display"]:
+                    item["variant_display"] = f"Color: {color}"
+
+            state.collect_field("items", [item])
+
+            # Get configured order fields
+            order_fields = state.flow_config.get("order_fields", [])
+            if order_fields:
+                state.collect_field("_order_fields", order_fields)
+                state.collect_field("_current_field_index", 0)
+                self.conversation_manager.persist_state(user_id)
+
+                first_field = order_fields[0]
+                question = self._generate_order_field_question(first_field)
+
+                self.conversation_manager.add_message(user_id, "user", message)
+                response_text = f"Great\n{quantity}x {pending_item} added.\n\n{question}"
+                self.conversation_manager.add_message(user_id, "assistant", response_text)
+
+                return {
+                    "reply": response_text,
+                    "intent": "order_quantity_collected",
+                    "confidence": 1.0,
+                    "needs_human": False,
+                    "suggested_actions": [],
+                    "metadata": {"generation_method": "order_flow", "quantity": quantity}
+                }
+            else:
+                state.collect_field("customer_name", "Customer")
+                self.conversation_manager.persist_state(user_id)
+                return self._show_order_confirmation(user_id, state, message)
+
+        return None
 
     def _handle_payment_verification(self, user_id: str, state, message: str, business_data: Dict[str, Any]):
         """Handle messages when waiting for payment."""
