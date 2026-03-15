@@ -659,7 +659,7 @@ export default function ProductsPage() {
             <strong>{productLimit} products</strong>. Upgrade to add more.
           </span>
           <Link
-            href="/upgrade?domain=shop&recommended=business"
+            href="/upgrade?recommended=business"
             className={styles.limitBannerUpgrade}
           >
             Upgrade Plan
@@ -687,7 +687,7 @@ export default function ProductsPage() {
             on your current plan (limit: {productLimit}).
           </span>
           <Link
-            href="/upgrade?domain=shop&recommended=business"
+            href="/upgrade?recommended=business"
             className={styles.limitBannerUpgrade}
           >
             Upgrade

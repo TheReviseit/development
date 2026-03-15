@@ -69,7 +69,13 @@ def get_user_id_from_request():
 
 
 def map_to_supabase_user_id(firebase_uid: str):
-    """Map Firebase UID to Supabase user ID."""
+    """
+    Map Firebase UID to Supabase user UUID.
+
+    Returns the Supabase UUID string, or None if the user does not exist.
+    NEVER falls back to the Firebase UID — that would cause lookups against
+    users.id (UUID column) to silently fail, leading to NO_EMAIL / FK errors.
+    """
     try:
         from supabase_client import get_user_id_from_firebase_uid
         supabase_id = get_user_id_from_firebase_uid(firebase_uid)
@@ -77,7 +83,11 @@ def map_to_supabase_user_id(firebase_uid: str):
             return supabase_id
     except Exception as e:
         logger.warning(f"Could not map Firebase UID {firebase_uid}: {e}")
-    return firebase_uid
+    logger.warning(
+        f"No Supabase user found for Firebase UID {firebase_uid[:10]}... "
+        f"Returning None instead of falling back to Firebase UID."
+    )
+    return None
 
 
 def require_auth(f):
@@ -97,7 +107,14 @@ def require_auth(f):
 
         # Set Flask global context
         g.firebase_uid = user_id
-        g.user_id = map_to_supabase_user_id(user_id)
+        supabase_user_id = map_to_supabase_user_id(user_id)
+        if not supabase_user_id:
+            return error_response(
+                'User account not found. Please complete signup first.',
+                'USER_NOT_FOUND',
+                404
+            )
+        g.user_id = supabase_user_id
 
         return f(*args, **kwargs)
 
@@ -362,33 +379,64 @@ def create_upgrade_checkout():
             )
 
         # 4. Get user email for Razorpay
+        #    Fallback chain:
+        #      1. users table by Supabase UUID (g.user_id)
+        #      2. users table by firebase_uid (g.firebase_uid)
+        #      3. businesses table by firebase_uid
+        #      4. Firebase Admin SDK (authoritative source)
         supabase = get_supabase()
+        firebase_uid = getattr(g, 'firebase_uid', None)
 
-        # Get email from users table (Firebase-based auth, not Supabase Auth)
         user_email = None
+
+        # (1) users.id = Supabase UUID
         try:
             user_result = supabase.table('users').select('email').eq(
                 'id', user_id
-            ).single().execute()
+            ).limit(1).maybe_single().execute()
             if user_result.data:
                 user_email = user_result.data.get('email')
         except Exception:
             pass
 
-        if not user_email:
-            # Fallback: try to get email from businesses table using Firebase UID
+        # (2) users.firebase_uid — covers case where (1) matched but email was NULL
+        if not user_email and firebase_uid:
             try:
-                firebase_uid = getattr(g, 'firebase_uid', None)
-                if firebase_uid:
-                    business_result = supabase.table('businesses').select('email').eq(
-                        'user_id', firebase_uid
-                    ).execute()
-                    if business_result.data and len(business_result.data) > 0:
-                        user_email = business_result.data[0].get('email')
+                fb_result = supabase.table('users').select('email').eq(
+                    'firebase_uid', firebase_uid
+                ).limit(1).maybe_single().execute()
+                if fb_result.data:
+                    user_email = fb_result.data.get('email')
             except Exception:
                 pass
 
+        # (3) businesses table (stores Firebase UID in user_id column)
+        if not user_email and firebase_uid:
+            try:
+                biz_result = supabase.table('businesses').select('email').eq(
+                    'user_id', firebase_uid
+                ).limit(1).execute()
+                if biz_result.data and len(biz_result.data) > 0:
+                    user_email = biz_result.data[0].get('email')
+            except Exception:
+                pass
+
+        # (4) Firebase Admin SDK — authoritative source
+        if not user_email and firebase_uid:
+            try:
+                import firebase_admin
+                from firebase_admin import auth as firebase_auth
+                fb_user = firebase_auth.get_user(firebase_uid)
+                user_email = fb_user.email
+                logger.info(f"Got email from Firebase Admin for {firebase_uid[:10]}...")
+            except Exception as e:
+                logger.warning(f"Firebase Admin email lookup failed: {e}")
+
         if not user_email:
+            logger.error(
+                f"NO_EMAIL: user_id={user_id}, firebase_uid={firebase_uid[:10] if firebase_uid else 'None'}. "
+                f"All 4 email resolution strategies failed."
+            )
             return error_response(
                 'User email not found. Cannot create subscription.',
                 'NO_EMAIL',

@@ -25,6 +25,7 @@ type Section =
   | "orders"
   | "products"
   | "showcase" // ✅ Added showcase
+  | "forms"    // ✅ Added forms
   | "bot-settings"
   | "preview-bot"
   | "settings"
@@ -42,6 +43,7 @@ const sectionLabels: Record<Section, string> = {
   orders: "Orders",
   products: "Products",
   showcase: "Showcase", // ✅ Added showcase
+  forms: "Forms",       // ✅ Added forms
   "bot-settings": "AI Settings",
   "preview-bot": "Preview Bot",
   settings: "Settings",
@@ -52,6 +54,7 @@ const sectionLabels: Record<Section, string> = {
 const getActiveSection = (pathname: string): Section => {
   // Check profile first to avoid defaulting to analytics on profile pages
   if (pathname.includes("/profile")) return "profile";
+  if (pathname.includes("/forms")) return "forms";
 
   if (pathname.includes("/bulk-messages")) return "bulk-messages";
   if (pathname.includes("/messages")) return "messages";
@@ -77,6 +80,7 @@ export default function DashboardLayout({
   const [user, setUser] = useState<any | null>(null); // Local user state for backward compatibility
   const [loading, setLoading] = useState(true);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [isCollapsed, setIsCollapsed] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
   const [showMobileMenu, setShowMobileMenu] = useState(false);
   const [expandedMobileItems, setExpandedMobileItems] = useState<string[]>([]);
@@ -362,6 +366,15 @@ export default function DashboardLayout({
     setShowMobileMenu(false);
     setMobileHideMode(false); // Also exit hide mode when navigating
     if (isMobile) setIsSidebarOpen(false);
+
+    // Auto-collapse sidebar on specific pages like Form Builder
+    if (!isMobile) {
+      if (pathname.includes("/forms/builder")) {
+        setIsCollapsed(true);
+      } else {
+        setIsCollapsed(false);
+      }
+    }
   }, [pathname, isMobile]);
 
   // Load hidden items from localStorage (synced with desktop sidebar)
@@ -521,8 +534,10 @@ export default function DashboardLayout({
                 handleSectionChange(section as Section)
               }
               userEmail={user?.email || undefined}
-              userName={user?.displayName || undefined}
+              userName={user?.full_name || user?.displayName || undefined}
               isSidebarOpen={isSidebarOpen}
+              isCollapsed={isCollapsed}
+              setIsCollapsed={setIsCollapsed}
               productDomain={currentDomain}
             />
           )}

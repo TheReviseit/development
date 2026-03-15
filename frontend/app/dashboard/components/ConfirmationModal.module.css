@@ -1,7 +1,7 @@
 .overlay {
   position: fixed;
   top: 0;
-  left: 0;
+  left: var(--dash-sidebar-width, 280px);
   right: 0;
   bottom: 0;
   background: rgba(0, 0, 0, 0.7);
@@ -12,6 +12,13 @@
   z-index: 9999;
   padding: 1rem;
   animation: fadeIn 0.2s ease-out;
+}
+
+/* When sidebar is collapsed, adjust overlay position */
+@media (max-width: 768px) {
+  .overlay {
+    left: 0;
+  }
 }
 
 @keyframes fadeIn {

@@ -8,6 +8,7 @@ from typing import Dict, Any, List, Optional
 from flask import Blueprint, request, jsonify, g
 from functools import wraps
 from datetime import datetime, timedelta
+import requests
 
 # Feature gate decorators (Phase 1: Revenue-Critical Enforcement)
 from middleware.feature_gate import require_feature, require_limit
@@ -24,15 +25,55 @@ except ImportError:
     get_supabase_client = None
 
 
+def _resolve_firebase_to_supabase_uuid(firebase_uid: str) -> Optional[str]:
+    """
+    Resolve a Firebase UID to its corresponding Supabase UUID.
+
+    Most tables (analytics_daily, connected_business_managers, broadcast_campaigns,
+    contacts, etc.) have user_id typed as UUID referencing users(id).
+    Passing a raw Firebase UID (alphanumeric string, not UUID format) causes
+    PostgreSQL error: 'invalid input syntax for type uuid'.
+
+    Returns the Supabase UUID string, or None if not found.
+    """
+    if not SUPABASE_AVAILABLE or not get_supabase_client:
+        return None
+    try:
+        client = get_supabase_client()
+        result = client.table('users').select('id').eq(
+            'firebase_uid', firebase_uid
+        ).limit(1).execute()
+        if result.data:
+            return result.data[0].get('id')
+    except Exception as e:
+        print(f"⚠️ [Analytics] Firebase UID → Supabase UUID resolution failed: {e}")
+    return None
+
+
 def require_auth(f):
-    """Decorator to require authentication. Sets both request.user_id and g.user_id."""
+    """
+    Decorator to require authentication.
+
+    Sets:
+    - request.user_id     → Supabase UUID (for DB queries against UUID columns)
+    - request.firebase_uid → Original Firebase UID (for tables that use it)
+    - g.user_id           → Supabase UUID (required by feature gate middleware)
+    """
     @wraps(f)
     def decorated(*args, **kwargs):
-        user_id = request.headers.get('X-User-ID')
-        if not user_id:
+        firebase_uid = request.headers.get('X-User-ID')
+        if not firebase_uid:
             return jsonify({'success': False, 'error': 'Authentication required'}), 401
-        request.user_id = user_id
-        g.user_id = user_id  # Required by feature gate middleware
+
+        # Resolve Firebase UID → Supabase UUID so downstream queries
+        # against UUID-typed columns don't crash.
+        supabase_uuid = _resolve_firebase_to_supabase_uuid(firebase_uid)
+
+        # Store both identifiers on the request
+        request.firebase_uid = firebase_uid
+        request.user_id = supabase_uuid or firebase_uid  # Prefer UUID
+        g.user_id = request.user_id  # Required by feature gate middleware
+
         return f(*args, **kwargs)
     return decorated
 
@@ -41,10 +82,14 @@ def get_date_range(period: str) -> tuple:
     """Get start and end dates for a period."""
     end_date = datetime.utcnow().date()
     
-    if period == '7d':
+    if period == 'today':
+        start_date = end_date
+    elif period == '7d':
         start_date = end_date - timedelta(days=7)
     elif period == '30d':
         start_date = end_date - timedelta(days=30)
+    elif period == '80d':
+        start_date = end_date - timedelta(days=80)
     elif period == '90d':
         start_date = end_date - timedelta(days=90)
     else:
@@ -66,25 +111,12 @@ def get_overview():
         return jsonify({'success': False, 'error': 'Database not available'}), 503
     
     try:
-        firebase_uid = request.user_id
+        # request.user_id is now the Supabase UUID (resolved in require_auth)
+        user_id = request.user_id
         period = request.args.get('period', '7d')
         start_date, end_date = get_date_range(period)
 
         client = get_supabase_client()
-
-        # analytics_daily stores Supabase UUIDs, not Firebase UIDs.
-        # Resolve Firebase UID → Supabase UUID before querying.
-        supabase_user_id = None
-        try:
-            uid_result = client.table('users').select('id').eq(
-                'firebase_uid', firebase_uid
-            ).limit(1).execute()
-            if uid_result.data:
-                supabase_user_id = uid_result.data[0].get('id')
-        except Exception:
-            pass
-        # Fall back to firebase_uid if resolution fails (legacy rows)
-        user_id = supabase_user_id or firebase_uid
 
         # Get aggregated analytics from analytics_daily table
         analytics_result = client.table('analytics_daily').select('*').eq(
@@ -369,7 +401,7 @@ def get_campaign_analytics():
         client = get_supabase_client()
         
         result = client.table('broadcast_campaigns').select(
-            'id, name, status, total_recipients, messages_sent, messages_delivered, messages_read, messages_failed, created_at'
+            'id, name, status, total_recipients, messages_sent:sent_count, messages_delivered:delivered_count, messages_read:read_count, messages_failed:failed_count, created_at'
         ).eq('user_id', user_id).gte('created_at', start_date).lt('created_at', end_date).execute()
         
         campaigns = result.data or []
@@ -488,6 +520,344 @@ def get_ai_usage():
         })
     
     except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@analytics_bp.route('/marketing', methods=['GET'])
+@require_auth
+def get_marketing_analytics():
+    """
+    Get marketing-specific analytics dashboard data.
+    Combines campaign performance, messaging stats, contact growth,
+    and AI response metrics — all in one call for the marketing domain.
+
+    Query params:
+    - period: 7d | 30d | 90d (default: 30d)
+
+    Response:
+    {
+        "success": true,
+        "period": "30d",
+        "campaigns": { total, active, completed, draft, total_recipients, total_sent, total_delivered, total_read, total_failed, delivery_rate, read_rate },
+        "messaging": { sent, received, delivered, read, failed, delivery_rate, read_rate, ai_replies },
+        "contacts": { total, opted_in, new_in_period },
+        "ai": { replies_generated, tokens_used, tokens_limit, tokens_percent, cost_inr },
+        "meta_health": { quality, limit_tier },
+        "trends": { dates[], campaigns_sent[], messages_sent[], ai_replies[] },
+        "top_campaigns": [ { name, status, recipients, sent, delivered, read, delivery_rate, read_rate } ]
+    }
+    """
+    if not SUPABASE_AVAILABLE:
+        return jsonify({'success': False, 'error': 'Database not available'}), 503
+
+    try:
+        # request.user_id is now Supabase UUID (resolved by require_auth)
+        # request.firebase_uid is the original Firebase UID
+        user_id = request.user_id
+        period = request.args.get('period', '30d')
+        start_date, end_date = get_date_range(period)
+
+        client = get_supabase_client()
+
+        # ── Safety check: ensure user_id is a valid UUID ────────────────
+        # If require_auth couldn't resolve the Firebase UID to a Supabase
+        # UUID, user_id will be the raw Firebase UID string which will
+        # crash PostgreSQL queries against UUID-typed columns.
+        import re
+        uuid_pattern = re.compile(
+            r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$',
+            re.IGNORECASE
+        )
+        if not uuid_pattern.match(user_id):
+            print(f"⚠️ [Marketing Analytics] user_id is not a valid UUID: {user_id}")
+            return jsonify({
+                'success': True,
+                'period': period,
+                'campaigns': {
+                    'total': 0, 'active': 0, 'completed': 0, 'draft': 0,
+                    'total_recipients': 0, 'total_sent': 0, 'total_delivered': 0,
+                    'total_read': 0, 'total_failed': 0,
+                    'delivery_rate': 0, 'read_rate': 0,
+                },
+                'messaging': {
+                    'sent': 0, 'received': 0, 'delivered': 0, 'read': 0,
+                    'failed': 0, 'delivery_rate': 0, 'read_rate': 0, 'ai_replies': 0,
+                },
+                'contacts': { 'total': 0, 'opted_in': 0, 'new_in_period': 0 },
+                'ai': {
+                    'replies_generated': 0, 'tokens_used': 0, 'tokens_limit': 3000,
+                    'tokens_percent': 0, 'cost_inr': 0,
+                },
+                'meta_health': { 'quality': 'UNKNOWN', 'limit_tier': 'UNKNOWN' },
+                'trends': { 'dates': [], 'campaigns_sent': [], 'messages_sent': [], 'ai_replies': [] },
+                'top_campaigns': [],
+            })
+
+        # ── Get business_id for WhatsApp queries ──────────────────────
+        bm_result = client.table('connected_business_managers').select('id').eq(
+            'user_id', user_id
+        ).limit(1).execute()
+        business_id = bm_result.data[0]['id'] if bm_result.data else None
+
+        # ══════════════════════════════════════════════════════════════
+        # 1. CAMPAIGN ANALYTICS (broadcast_campaigns table)
+        # ══════════════════════════════════════════════════════════════
+        # broadcast_campaigns.user_id is UUID type referencing users(id),
+        # so we MUST use the Supabase UUID (never the raw Firebase UID).
+        campaign_result = client.table('broadcast_campaigns').select(
+            'id, name, status, total_recipients, messages_sent:sent_count, messages_delivered:delivered_count, messages_read:read_count, messages_failed:failed_count, created_at'
+        ).eq('user_id', user_id).gte('created_at', start_date).lt('created_at', end_date).execute()
+
+        campaigns = campaign_result.data or []
+
+        total_campaign_sent = sum(c.get('messages_sent', 0) for c in campaigns)
+        total_campaign_delivered = sum(c.get('messages_delivered', 0) for c in campaigns)
+        total_campaign_read = sum(c.get('messages_read', 0) for c in campaigns)
+        total_campaign_failed = sum(c.get('messages_failed', 0) for c in campaigns)
+        total_campaign_recipients = sum(c.get('total_recipients', 0) for c in campaigns)
+
+        campaign_delivery_rate = round((total_campaign_delivered / total_campaign_sent) * 100, 1) if total_campaign_sent > 0 else 0
+        campaign_read_rate = round((total_campaign_read / total_campaign_sent) * 100, 1) if total_campaign_sent > 0 else 0
+
+        by_status = {}
+        for c in campaigns:
+            s = c.get('status', 'draft')
+            by_status[s] = by_status.get(s, 0) + 1
+
+        # Top 5 campaigns sorted by messages_sent desc
+        top_campaigns = sorted(campaigns, key=lambda x: x.get('messages_sent', 0), reverse=True)[:5]
+        top_campaigns_formatted = []
+        for c in top_campaigns:
+            sent = c.get('messages_sent', 0) or 0
+            delivered = c.get('messages_delivered', 0) or 0
+            read = c.get('messages_read', 0) or 0
+            top_campaigns_formatted.append({
+                'name': c.get('name', 'Untitled'),
+                'status': c.get('status', 'draft'),
+                'recipients': c.get('total_recipients', 0),
+                'sent': sent,
+                'delivered': delivered,
+                'read': read,
+                'delivery_rate': round((delivered / sent) * 100, 1) if sent > 0 else 0,
+                'read_rate': round((read / sent) * 100, 1) if sent > 0 else 0,
+            })
+
+        # ══════════════════════════════════════════════════════════════
+        # 2. MESSAGING ANALYTICS (analytics_daily table)
+        # ══════════════════════════════════════════════════════════════
+        analytics_result = client.table('analytics_daily').select('*').eq(
+            'user_id', user_id
+        ).gte('date', start_date).lt('date', end_date).execute()
+
+        analytics_data = analytics_result.data or []
+
+        msg_sent = sum(d.get('messages_sent', 0) for d in analytics_data)
+        msg_received = sum(d.get('messages_received', 0) for d in analytics_data)
+        msg_delivered = sum(d.get('messages_delivered', 0) for d in analytics_data)
+        msg_read = sum(d.get('messages_read', 0) for d in analytics_data)
+        msg_failed = sum(d.get('messages_failed', 0) for d in analytics_data)
+        ai_replies = sum(d.get('ai_replies_generated', 0) for d in analytics_data)
+        ai_tokens = sum(d.get('ai_tokens_used', 0) for d in analytics_data)
+
+        msg_delivery_rate = round((msg_delivered / msg_sent) * 100, 1) if msg_sent > 0 else 0
+        msg_read_rate = round((msg_read / msg_sent) * 100, 1) if msg_sent > 0 else 0
+
+        # ══════════════════════════════════════════════════════════════
+        # 3. CONTACT ANALYTICS
+        # ══════════════════════════════════════════════════════════════
+        total_contacts = 0
+        opted_in_contacts = 0
+        new_contacts = 0
+
+        if business_id:
+            try:
+                contacts_total = client.table('contacts').select('id', count='exact').eq(
+                    'user_id', user_id
+                ).execute()
+                total_contacts = contacts_total.count if hasattr(contacts_total, 'count') and contacts_total.count else 0
+
+                contacts_opted = client.table('contacts').select('id', count='exact').eq(
+                    'user_id', user_id
+                ).eq('opted_in', True).execute()
+                opted_in_contacts = contacts_opted.count if hasattr(contacts_opted, 'count') and contacts_opted.count else 0
+
+                contacts_new = client.table('contacts').select('id', count='exact').eq(
+                    'user_id', user_id
+                ).gte('created_at', start_date).lt('created_at', end_date).execute()
+                new_contacts = contacts_new.count if hasattr(contacts_new, 'count') and contacts_new.count else 0
+            except Exception as e:
+                print(f"⚠️ [Marketing Analytics] Contact count error: {e}")
+
+        # ══════════════════════════════════════════════════════════════
+        # 4. AI USAGE (real-time tracker or fallback)
+        # ══════════════════════════════════════════════════════════════
+        USD_TO_INR = 89.58
+        ai_tokens_limit = 3000  # Default starter marketing plan
+        ai_cost_usd = 0
+        ai_cost_inr = 0
+
+        if business_id:
+            try:
+                from llm_usage_tracker import get_usage_tracker
+                tracker = get_usage_tracker()
+                llm_usage = tracker.get_usage(business_id)
+                if llm_usage:
+                    ai_tokens = llm_usage.get('tokens_used', ai_tokens)
+                    ai_tokens_limit = llm_usage.get('tokens_limit', ai_tokens_limit)
+                    ai_cost_usd = llm_usage.get('cost_usd', 0)
+                    ai_cost_inr = llm_usage.get('cost_inr', 0)
+            except Exception:
+                pass
+
+        if ai_cost_inr == 0 and ai_cost_usd > 0:
+            ai_cost_inr = round(ai_cost_usd * USD_TO_INR, 2)
+
+        ai_tokens_percent = round((ai_tokens / ai_tokens_limit) * 100, 1) if ai_tokens_limit > 0 else 0
+        
+        # ══════════════════════════════════════════════════════════════
+        # 5. META HEALTH & LIMITS (Graph API)
+        # ══════════════════════════════════════════════════════════════
+        meta_health = {'quality': 'UNKNOWN', 'limit_tier': 'UNKNOWN'}
+        if business_id:
+            try:
+                # Get primary phone number ID and access token
+                phone_res = client.table('connected_phone_numbers').select(
+                    '*'
+                ).eq('user_id', user_id).eq('is_active', True).eq('is_primary', True).limit(1).execute()
+                
+                if phone_res.data:
+                    phone_data = phone_res.data[0]
+                    target_phone_id = phone_data.get('phone_number_id')
+                    db_business_name = phone_data.get('display_name') or phone_data.get('verified_name')
+                    db_phone = phone_data.get('phone_number')
+                    
+                    # Get access token from the chain (matching templates.py logic)
+                    from supabase_client import get_whatsapp_credentials_unified
+                    creds = get_whatsapp_credentials_unified(firebase_uid=request.firebase_uid)
+                    
+                    if creds and creds.get('access_token') and target_phone_id:
+                        waba_id = phone_data.get('whatsapp_account_id')
+                        
+                        # 1. Fetch Phone specific details
+                        phone_url = f"https://graph.facebook.com/v24.0/{target_phone_id}"
+                        phone_params = {
+                            'access_token': creds['access_token'],
+                            'fields': 'quality_rating,messaging_limit_tier,verified_name,display_phone_number,status'
+                        }
+                        phone_res = requests.get(phone_url, params=phone_params, timeout=5)
+                        
+                        # 2. Fetch Account specific details if WABA ID available
+                        account_info = {}
+                        if waba_id:
+                            acc_url = f"https://graph.facebook.com/v24.0/{waba_id}"
+                            acc_params = {
+                                'access_token': creds['access_token'],
+                                'fields': 'verification_status,name'
+                            }
+                            acc_res = requests.get(acc_url, params=acc_params, timeout=5)
+                            if acc_res.status_code == 200:
+                                account_info = acc_res.json()
+
+                        if phone_res.status_code == 200:
+                            meta_data = phone_res.json()
+                            meta_health = {
+                                'quality': meta_data.get('quality_rating', 'GREEN'),
+                                'limit_tier': meta_data.get('messaging_limit_tier', 'TIER_1K'),
+                                'business_name': meta_data.get('verified_name') or db_business_name,
+                                'phone_number': meta_data.get('display_phone_number') or db_phone,
+                                'account_status': meta_data.get('status', 'APPROVED'),
+                                'waba_id': waba_id,
+                                'verification_status': account_info.get('verification_status', 'NOT_VERIFIED'),
+                                'account_name': account_info.get('name')
+                            }
+                            print(f"📊 [Meta Health] Meta: {meta_data.get('verified_name')}, DB: {db_business_name}")
+                            print(f"📊 [Meta Health] Mapping success: {meta_health}")
+            except Exception as e:
+                print(f"⚠️ [Marketing Analytics] Meta health fetch error: {e}")
+
+        # ══════════════════════════════════════════════════════════════
+        # 6. TRENDS (daily time series - continuous timeline)
+        # ══════════════════════════════════════════════════════════════
+        trends = {
+            'dates': [],
+            'campaigns_sent': [],
+            'messages_sent': [],
+            'ai_replies': []
+        }
+
+        # Build maps for existing data
+        campaign_by_date = {}
+        for c in campaigns:
+            created = c.get('created_at', '')[:10]  # YYYY-MM-DD
+            if created:
+                campaign_by_date[created] = campaign_by_date.get(created, 0) + (c.get('messages_sent', 0) or 0)
+
+        analytics_by_date = {d['date']: d for d in analytics_data}
+
+        # Generate continuous timeline from start_date to end_date
+        current_dt = datetime.fromisoformat(start_date)
+        end_dt = datetime.fromisoformat(end_date)
+        
+        # We want to show every day in the range
+        temp_date = current_dt
+        while temp_date < end_dt:
+            date_str = temp_date.date().isoformat()
+            daily_data = analytics_by_date.get(date_str, {})
+            
+            trends['dates'].append(date_str)
+            trends['messages_sent'].append(daily_data.get('messages_sent', 0))
+            trends['ai_replies'].append(daily_data.get('ai_replies_generated', 0))
+            trends['campaigns_sent'].append(campaign_by_date.get(date_str, 0))
+            
+            temp_date += timedelta(days=1)
+
+        return jsonify({
+            'success': True,
+            'period': period,
+            'campaigns': {
+                'total': len(campaigns),
+                'active': by_status.get('sending', 0) + by_status.get('active', 0),
+                'completed': by_status.get('completed', 0),
+                'draft': by_status.get('draft', 0),
+                'total_recipients': total_campaign_recipients,
+                'total_sent': total_campaign_sent,
+                'total_delivered': total_campaign_delivered,
+                'total_read': total_campaign_read,
+                'total_failed': total_campaign_failed,
+                'delivery_rate': campaign_delivery_rate,
+                'read_rate': campaign_read_rate,
+            },
+            'messaging': {
+                'sent': msg_sent,
+                'received': msg_received,
+                'delivered': msg_delivered,
+                'read': msg_read,
+                'failed': msg_failed,
+                'delivery_rate': msg_delivery_rate,
+                'read_rate': msg_read_rate,
+                'ai_replies': ai_replies,
+            },
+            'contacts': {
+                'total': total_contacts,
+                'opted_in': opted_in_contacts,
+                'new_in_period': new_contacts,
+            },
+            'ai': {
+                'replies_generated': ai_replies,
+                'tokens_used': ai_tokens,
+                'tokens_limit': ai_tokens_limit,
+                'tokens_percent': ai_tokens_percent,
+                'cost_inr': round(ai_cost_inr, 2),
+            },
+            'meta_health': meta_health,
+            'trends': trends,
+            'top_campaigns': top_campaigns_formatted,
+        })
+
+    except Exception as e:
+        print(f"❌ Error getting marketing analytics: {e}")
+        import traceback
+        traceback.print_exc()
         return jsonify({'success': False, 'error': str(e)}), 500
 
 

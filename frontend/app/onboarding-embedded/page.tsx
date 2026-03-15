@@ -179,9 +179,15 @@ export default function OnboardingPageEmbedded() {
         let errorMessage = order.error || "Failed to create subscription";
 
         // Customize message based on error type
-        if (errorCode === "DUPLICATE_SUBSCRIPTION") {
+        if (errorCode === "USER_NOT_FOUND") {
+          errorMessage =
+            "Your account setup is incomplete. Please sign out and sign in again to complete setup.";
+        } else if (errorCode === "DUPLICATE_SUBSCRIPTION") {
           errorMessage =
             "You already have an active subscription for this plan. Please check your account.";
+        } else if (errorCode === "USE_UPGRADE_FLOW") {
+          errorMessage =
+            "You already have an active subscription. Please use the upgrade flow to change plans.";
         } else if (errorCode === "DATABASE_ERROR") {
           errorMessage =
             "We're experiencing technical difficulties. Please contact support.";
@@ -190,6 +196,9 @@ export default function OnboardingPageEmbedded() {
             "Payment service is temporarily busy. Please try again in a moment.";
         } else if (errorCode === "RAZORPAY_BAD_REQUEST") {
           errorMessage = "Invalid payment information. Please contact support.";
+        } else if (errorCode === "PLAN_NOT_FOUND" || errorCode === "PRICING_UNAVAILABLE") {
+          errorMessage =
+            "This plan is not available yet. Please contact support or try again later.";
         }
 
         setPaymentError(errorMessage);

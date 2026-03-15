@@ -74,6 +74,7 @@ const PUBLIC_ROUTES = [
   // Product landing pages
   "/shop",
   "/marketing",
+  "/form",
 ];
 
 const PUBLIC_API_ROUTES = [
@@ -93,6 +94,7 @@ const PUBLIC_API_ROUTES = [
   "/api/whatsapp",
   "/api/booking",
   "/api/showcase",
+  "/api/forms/public",
 ];
 
 // =============================================================================
@@ -207,6 +209,11 @@ export async function proxy(request: NextRequest) {
   const hostname = request.nextUrl.hostname;
   const port = request.nextUrl.port;
 
+  // Resolve the full product domain (all 5 products) once — used for all headers.
+  // domain-policy.ts only knows "api" | "dashboard"; resolveDomain() is the
+  // canonical source for shop, marketing, showcase, etc.
+  const resolvedDomain = resolveDomain(hostname, port);
+
   // Only match actual API endpoints (/api/...), NOT /apis (which is a page)
   const isApiPath = pathname.startsWith("/api/") || pathname === "/api";
 
@@ -287,7 +294,7 @@ export async function proxy(request: NextRequest) {
     if (isPublicApiRoute(pathname)) {
       return addProductHeaders(
         NextResponse.next(),
-        domainDecision.product,
+        resolvedDomain,
         domainDecision.seo.canonical,
         hostname,
         port,
@@ -299,7 +306,7 @@ export async function proxy(request: NextRequest) {
     }
     return addProductHeaders(
       NextResponse.next(),
-      domainDecision.product,
+      resolvedDomain,
       domainDecision.seo.canonical,
       hostname,
       port,
@@ -332,7 +339,7 @@ export async function proxy(request: NextRequest) {
 
     return addProductHeaders(
       NextResponse.next(),
-      domainDecision.product,
+      resolvedDomain,
       domainDecision.seo.canonical,
       hostname,
       port,
@@ -352,7 +359,7 @@ export async function proxy(request: NextRequest) {
   // Case 4: Protected route, correct user type - allow
   return addProductHeaders(
     NextResponse.next(),
-    domainDecision.product,
+    resolvedDomain,
     domainDecision.seo.canonical,
     hostname,
     port,
@@ -365,7 +372,7 @@ export async function proxy(request: NextRequest) {
 
 function addProductHeaders(
   response: NextResponse,
-  product: ProductContext,
+  product: ProductContext | string,
   canonical: string,
   hostname?: string,
   port?: string,

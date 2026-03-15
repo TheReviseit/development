@@ -90,6 +90,8 @@ body {
   h5,
   h6 {
     text-wrap: balance;
+    font-family: var(--font-outfit), sans-serif;
+    letter-spacing: -0.02em;
   }
 }
 
@@ -107,6 +109,7 @@ body {
   min-height: 100vh;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  font-family: var(--font-inter), var(--font-jakarta), system-ui, sans-serif;
 }
 
 /* Root layout safety for horizontal overflow */

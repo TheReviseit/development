@@ -457,7 +457,9 @@ export default function ContactSection() {
                 </svg>
               </a>
               <a
-                href="#instagram"
+                href="https://www.instagram.com/flowauxi/"
+                target="_blank"
+                rel="noopener noreferrer"
                 className="contact-social-link"
                 aria-label="Instagram"
               >

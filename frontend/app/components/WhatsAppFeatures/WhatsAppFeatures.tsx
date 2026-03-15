@@ -25,11 +25,11 @@ const WhatsAppFeatures = () => {
       benefit: "3x higher engagement",
     },
     {
-      icon: "workflow",
-      title: "Visual Workflow Builder",
+      icon: "templates",
+      title: "Meta Template Sync",
       description:
-        "Create automated conversation paths with drag-and-drop simplicity. Turn inquiries into confirmed sales without writing a single line of code.",
-      benefit: "45% higher conversion",
+        "Sync your approved Meta templates instantly. Manage, preview, and deploy official WhatsApp message templates directly from your dashboard with zero technical friction.",
+      benefit: "Live in minutes",
     },
     {
       icon: "crm",

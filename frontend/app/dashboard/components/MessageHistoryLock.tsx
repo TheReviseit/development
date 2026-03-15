@@ -58,7 +58,7 @@ const MessageHistoryLock = memo(function MessageHistoryLock({
         </div>
 
         {/* CTA */}
-        <a href="/upgrade?domain=shop" className={msgStyles.historyLockCta}>
+        <a href="/upgrade" className={msgStyles.historyLockCta}>
           <svg
             width="14"
             height="14"

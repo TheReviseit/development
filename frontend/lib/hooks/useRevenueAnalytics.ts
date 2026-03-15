@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 
 export type TimeRange = "day" | "week" | "month" | "6months" | "year";
 
@@ -44,61 +44,67 @@ const revenueCache = new Map<
   { data: RevenueData; timestamp: number }
 >();
 const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes cache
+const MAX_RETRIES = 2;
+const NON_RETRYABLE_STATUSES = new Set([401, 403, 503]);
 
 /**
- * Enterprise-grade hook for fetching revenue analytics data.
- * Features:
- * - Caching per time range
- * - Automatic normalization of missing buckets
- * - Error handling with retries
- * - Data validation
- * - Comprehensive logging
+ * Hook for fetching revenue analytics data.
+ *
+ * Pass `enabled = false` to skip fetching (e.g. when the user's plan
+ * doesn't include analytics). This prevents wasted API calls and avoids
+ * error noise in the console.
  */
 export function useRevenueAnalytics(
   range: TimeRange,
+  enabled: boolean = true,
 ): UseRevenueAnalyticsResult {
   const [data, setData] = useState<RevenueData | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(enabled);
   const [error, setError] = useState<string | null>(null);
-  const [retryCount, setRetryCount] = useState(0);
+
+  // Use refs for retry state to avoid re-creating fetchRevenue on every retry
+  const retryCountRef = useRef(0);
+  const retryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const abortRef = useRef<AbortController | null>(null);
 
   const fetchRevenue = useCallback(async () => {
     // Check cache first
     const cached = revenueCache.get(range);
     if (cached && Date.now() - cached.timestamp < CACHE_TTL_MS) {
-      console.log(`[Revenue Analytics] Cache hit for range: ${range}`);
       setData(cached.data);
       setLoading(false);
       return;
     }
+
+    // Abort any in-flight request
+    abortRef.current?.abort();
+    const controller = new AbortController();
+    abortRef.current = controller;
 
     setLoading(true);
     setError(null);
 
     try {
       const url = `/api/analytics/revenue?range=${range}`;
-      console.log(`[Revenue Analytics] Fetching: ${url}`);
 
       const response = await fetch(url, {
-        headers: {
-          "Cache-Control": "no-cache",
-        },
+        headers: { "Cache-Control": "no-cache" },
+        signal: controller.signal,
       });
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
 
-        // Log detailed error for debugging
         console.error("[Revenue Analytics] API Error:", {
           status: response.status,
           statusText: response.statusText,
-          error: errorData.error,
-          currencies: errorData.currencies,
+          error: errorData.error || "unknown",
         });
 
-        // Don't retry on non-retryable status codes
-        if (response.status === 401 || response.status === 403 || response.status === 503) {
+        // Non-retryable — set error and stop
+        if (NON_RETRYABLE_STATUSES.has(response.status)) {
           setError(errorData.error || `Request failed with status ${response.status}`);
+          setLoading(false);
           return;
         }
 
@@ -110,31 +116,7 @@ export function useRevenueAnalytics(
       const result = await response.json();
 
       if (!result.success) {
-        console.error("[Revenue Analytics] API returned failure:", result);
         throw new Error(result.error || "Failed to fetch revenue data");
-      }
-
-      // Validate the data structure
-      if (!result.buckets || !Array.isArray(result.buckets)) {
-        console.warn("[Revenue Analytics] No buckets in response:", result);
-      }
-
-      if (result.buckets.length === 0) {
-        console.info(
-          "[Revenue Analytics] Empty buckets - no revenue data for this period",
-        );
-      }
-
-      // Log metadata for debugging
-      if (result.metadata) {
-        console.log("[Revenue Analytics] Metadata:", {
-          orders: result.metadata.total_orders,
-          statuses: result.metadata.orders_by_status,
-          dateRange: {
-            earliest: result.metadata.earliest_order,
-            latest: result.metadata.latest_order,
-          },
-        });
       }
 
       // Normalize the data
@@ -147,53 +129,60 @@ export function useRevenueAnalytics(
         metadata: result.metadata,
       };
 
-      console.log(
-        `[Revenue Analytics] Success: ${normalizedData.totalRevenue} ${normalizedData.currency} (${normalizedData.buckets.length} buckets)`,
-      );
-
       // Cache the result
       revenueCache.set(range, { data: normalizedData, timestamp: Date.now() });
 
       setData(normalizedData);
       setError(null);
+      retryCountRef.current = 0; // Reset retries on success
     } catch (err) {
+      // Ignore aborted requests
+      if (err instanceof DOMException && err.name === "AbortError") return;
+
       const errorMessage =
         err instanceof Error ? err.message : "Failed to fetch revenue data";
 
       console.error("[Revenue Analytics] Fetch error:", {
         message: errorMessage,
         range,
-        retryCount,
+        retry: retryCountRef.current,
       });
 
       setError(errorMessage);
 
-      // Retry logic (max 2 retries)
-      if (retryCount < 2) {
-        setTimeout(
-          () => {
-            console.log(
-              `[Revenue Analytics] Retrying (${retryCount + 1}/2)...`,
-            );
-            setRetryCount((prev) => prev + 1);
-          },
-          1000 * (retryCount + 1),
-        ); // Exponential backoff
+      // Retry with exponential backoff (max MAX_RETRIES)
+      if (retryCountRef.current < MAX_RETRIES) {
+        const attempt = retryCountRef.current + 1;
+        retryCountRef.current = attempt;
+        retryTimerRef.current = setTimeout(() => {
+          fetchRevenue();
+        }, 1000 * Math.pow(2, attempt - 1));
       }
     } finally {
       setLoading(false);
     }
-  }, [range, retryCount]);
+  }, [range]); // Only depends on `range` — no retryCount in deps
 
+  // Fetch on mount / range change — only when enabled
   useEffect(() => {
+    if (!enabled) {
+      setLoading(false);
+      return;
+    }
+
+    retryCountRef.current = 0;
     fetchRevenue();
-    // Reset retry count when range changes
-    setRetryCount(0);
-  }, [range, fetchRevenue]);
+
+    return () => {
+      // Cleanup: abort in-flight request and cancel pending retry
+      abortRef.current?.abort();
+      if (retryTimerRef.current) clearTimeout(retryTimerRef.current);
+    };
+  }, [range, fetchRevenue, enabled]);
 
   const refetch = useCallback(() => {
-    // Clear cache for this range and refetch
     revenueCache.delete(range);
+    retryCountRef.current = 0;
     fetchRevenue();
   }, [range, fetchRevenue]);
 

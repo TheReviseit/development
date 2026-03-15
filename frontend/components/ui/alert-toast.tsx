@@ -18,6 +18,7 @@ const alertToastVariants = cva(
       styleVariant: {
         default: "bg-white border border-black/20",
         filled: "",
+        minimal: "shadow-lg bg-white !rounded-[10%] border border-gray-200",
       },
     },
     compoundVariants: [
@@ -61,12 +62,32 @@ const alertToastVariants = cva(
         styleVariant: "filled",
         className: "bg-red-500 text-white",
       },
+      {
+        variant: "success",
+        styleVariant: "minimal",
+        className: "text-black",
+      },
+      {
+        variant: "warning",
+        styleVariant: "minimal",
+        className: "text-black",
+      },
+      {
+        variant: "info",
+        styleVariant: "minimal",
+        className: "text-black",
+      },
+      {
+        variant: "error",
+        styleVariant: "minimal",
+        className: "text-black",
+      },
     ],
     defaultVariants: {
       variant: "info",
       styleVariant: "default",
     },
-  }
+  },
 );
 
 // Define icon map for different variants
@@ -91,10 +112,17 @@ const iconColorClasses: Record<string, Record<string, string>> = {
     info: "text-white",
     error: "text-white",
   },
+  minimal: {
+    success: "text-white fill-green-500",
+    warning: "text-white fill-yellow-500",
+    info: "text-white fill-blue-500",
+    error: "text-white fill-red-500",
+  },
 };
 
 export interface AlertToastProps
-  extends React.HTMLAttributes<HTMLDivElement>,
+  extends
+    React.HTMLAttributes<HTMLDivElement>,
     VariantProps<typeof alertToastVariants> {
   /** The title of the alert. */
   title: string;
@@ -115,7 +143,7 @@ const AlertToast = React.forwardRef<HTMLDivElement, AlertToastProps>(
       onClose,
       ...props
     },
-    ref
+    ref,
   ) => {
     const Icon = iconMap[variant!];
 
@@ -136,17 +164,41 @@ const AlertToast = React.forwardRef<HTMLDivElement, AlertToastProps>(
       >
         {/* Icon - properly centered */}
         <div className="flex items-center justify-center flex-shrink-0">
-          <Icon
-            className={cn("h-5 w-5", iconColorClasses[styleVariant!][variant!])}
-            aria-hidden="true"
-            strokeWidth={2}
-          />
+          {styleVariant === "minimal" && variant === "success" ? (
+            <img src="/icons/success.svg" alt="Success" className="h-6 w-6" />
+          ) : (
+            <Icon
+              className={cn(
+                "h-6 w-6",
+                iconColorClasses[styleVariant!][variant!],
+              )}
+              aria-hidden="true"
+              strokeWidth={2}
+            />
+          )}
         </div>
 
         {/* Content */}
         <div className="flex-1 min-w-0">
-          <p className="text-sm font-semibold text-black">{title}</p>
-          <p className="text-sm text-black/70">{description}</p>
+          <p
+            className={cn(
+              "text-sm font-semibold",
+              styleVariant === "filled" ? "text-white" : "text-black",
+              styleVariant === "minimal" && "font-medium",
+            )}
+          >
+            {title}
+          </p>
+          {description && (
+            <p
+              className={cn(
+                "text-sm",
+                styleVariant === "filled" ? "text-white/80" : "text-gray-500",
+              )}
+            >
+              {description}
+            </p>
+          )}
         </div>
 
         {/* Close Button */}
@@ -154,14 +206,19 @@ const AlertToast = React.forwardRef<HTMLDivElement, AlertToastProps>(
           <button
             onClick={onClose}
             aria-label="Close"
-            className="p-1 rounded-full text-black/50 hover:text-black hover:bg-black/5 focus:outline-none transition-colors"
+            className={cn(
+              "p-1 rounded-full focus:outline-none transition-colors",
+              styleVariant === "filled"
+                ? "text-white/70 hover:text-white hover:bg-white/20"
+                : "text-black/40 hover:text-black hover:bg-black/5",
+            )}
           >
             <X className="h-4 w-4" />
           </button>
         </div>
       </motion.div>
     );
-  }
+  },
 );
 
 AlertToast.displayName = "AlertToast";

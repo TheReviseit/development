@@ -161,6 +161,16 @@ class UpgradeEngine:
     # Breathing room for new plan (150% of current usage)
     BREATHING_ROOM_MULTIPLIER = 1.5
 
+    # Fallback tier map — used when plan_metadata rows are missing.
+    # Prevents false downgrade blocks for newly added domains whose
+    # metadata migration hasn't been run yet.
+    _SLUG_TIER_MAP = {
+        'starter': 0, 'developer': 0, 'free': 0,
+        'growth': 1, 'business': 1,
+        'pro': 2, 'professional': 2,
+        'enterprise': 3,
+    }
+
     def __init__(
         self,
         supabase,
@@ -656,13 +666,27 @@ class UpgradeEngine:
         if result.data:
             return result.data[0]
 
-        # Fallback: default tier if metadata missing
+        # Fallback: infer tier from plan_slug when metadata is missing.
+        # This prevents false downgrade blocks when a new domain's
+        # plan_metadata rows haven't been seeded yet (e.g., marketing
+        # plans added after the metadata migration ran).
+        inferred_tier = 0
+        try:
+            plan_row = self._supabase.table('pricing_plans').select('plan_slug').eq(
+                'id', pricing_plan_id
+            ).limit(1).execute()
+            if plan_row.data:
+                slug = plan_row.data[0].get('plan_slug', '')
+                inferred_tier = self._SLUG_TIER_MAP.get(slug, 0)
+        except Exception:
+            pass  # Non-fatal — worst case we use tier 0
+
         self.logger.warning(
-            "plan_metadata_missing",
-            extra={"plan_id": pricing_plan_id}
+            "plan_metadata_missing_inferred",
+            extra={"plan_id": pricing_plan_id, "inferred_tier": inferred_tier}
         )
         return {
-            'tier_level': 0,
+            'tier_level': inferred_tier,
             'requires_sales_call': False,
             'tagline': None,
             'upgrade_to_plan_id': None

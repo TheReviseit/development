@@ -472,7 +472,7 @@ export default function ProfilePage() {
             Manage your store profile and payment settings
           </p>
         </div>
-        <a href="/upgrade?domain=shop" className={styles.upgradeButton}>
+        <a href="/upgrade" className={styles.upgradeButton}>
           <svg
             style={{ width: "20px", height: "20px", marginRight: "8px" }}
             fill="none"

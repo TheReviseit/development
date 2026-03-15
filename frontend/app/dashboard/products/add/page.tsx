@@ -817,7 +817,7 @@ export default function AddProductPage() {
             Upgrade your plan to add more products to your store.
           </p>
           <Link
-            href="/upgrade?domain=shop&recommended=business"
+            href="/upgrade?recommended=business"
             style={{
               display: "inline-block",
               padding: "12px 28px",

@@ -6,6 +6,7 @@ Handles async tasks like bulk messaging, analytics, image processing, etc.
 import os
 import logging
 from celery import Celery
+from celery.schedules import crontab
 from kombu import Queue, Exchange
 from dotenv import load_dotenv
 
@@ -36,6 +37,7 @@ try:
             "tasks.orders",  # Order processing tasks
             "tasks.otp_delivery",  # OTP delivery tasks
             "tasks.billing_monitor",  # Subscription lifecycle monitoring
+            "tasks.forms_maintenance",  # Form soft-delete purge (enterprise two-phase delete)
         ]
     )
     
@@ -101,6 +103,9 @@ celery_app.conf.task_routes = {
     "tasks.billing_monitor.run_billing_cycle": {"queue": "default"},
     "tasks.billing_monitor.sync_razorpay_state": {"queue": "default"},
     "tasks.billing_monitor.generate_mrr_report": {"queue": "low"},
+
+    # Forms maintenance (low priority — safe background cleanup)
+    "tasks.forms_maintenance.purge_deleted_forms_task": {"queue": "low"},
 }
 
 # =============================================================================
@@ -243,6 +248,19 @@ celery_app.conf.beat_schedule = {
     "mrr-daily-report": {
         "task": "tasks.billing_monitor.generate_mrr_report",
         "schedule": 86400.0,  # Every 24 hours
+        "options": {"queue": "low"},
+    },
+
+    # =========================================================================
+    # Forms Maintenance — Two-Phase Hard-Delete Purge
+    # =========================================================================
+    # Runs daily at 3 AM UTC. Hard-deletes all forms soft-deleted > 24h ago.
+    # DB ON DELETE CASCADE handles form_fields, form_responses, response_values
+    # automatically — this task only deletes the parent forms row.
+    # Audit stamps hard_purged_at in form_deletions table for traceability.
+    "purge-deleted-forms-daily": {
+        "task": "tasks.forms_maintenance.purge_deleted_forms_task",
+        "schedule": crontab(hour=3, minute=0),  # 3:00 AM UTC every day
         "options": {"queue": "low"},
     },
 }

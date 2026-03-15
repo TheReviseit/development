@@ -76,15 +76,19 @@ const decisionCache = new Map<
 
 // ─── Helper ───────────────────────────────────────────────────
 
-function getCacheKey(featureKey: string): string {
-  return `fg:${featureKey}`;
+function getCacheKey(featureKey: string, domain?: string): string {
+  return domain ? `fg:${domain}:${featureKey}` : `fg:${featureKey}`;
 }
 
 async function fetchFeatureDecision(
   featureKey: string,
   authToken?: string,
+  domain?: string,
 ): Promise<FeatureDecision> {
-  const url = `/api/features/check?feature=${encodeURIComponent(featureKey)}`;
+  let url = `/api/features/check?feature=${encodeURIComponent(featureKey)}`;
+  if (domain) {
+    url += `&domain=${encodeURIComponent(domain)}`;
+  }
 
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
@@ -123,6 +127,8 @@ export function useFeatureGate(
     skip?: boolean;
     /** Custom stale time in ms */
     staleTTL?: number;
+    /** Product domain (e.g. "shop", "marketing"). Defaults to "shop". */
+    domain?: string;
   },
 ): UseFeatureGateReturn {
   const [decision, setDecision] = useState<FeatureDecision | null>(null);
@@ -135,7 +141,7 @@ export function useFeatureGate(
   const staleTTL = options?.staleTTL ?? STALE_WHILE_REVALIDATE_MS;
 
   const fetchDecision = useCallback(async () => {
-    const key = getCacheKey(featureKeyRef.current);
+    const key = getCacheKey(featureKeyRef.current, options?.domain);
     const now = Date.now();
 
     // Check client-side cache
@@ -159,6 +165,7 @@ export function useFeatureGate(
       const result = await fetchFeatureDecision(
         featureKeyRef.current,
         options?.authToken,
+        options?.domain,
       );
 
       // Update cache
@@ -195,7 +202,7 @@ export function useFeatureGate(
         setIsLoading(false);
       }
     }
-  }, [featureKey, options?.authToken, staleTTL]);
+  }, [featureKey, options?.authToken, options?.domain, staleTTL]);
 
   // Initial fetch
   useEffect(() => {

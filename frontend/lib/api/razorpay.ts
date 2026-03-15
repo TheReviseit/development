@@ -220,8 +220,13 @@ export async function createSubscriptionWithRetry(
       const isNonRetryable =
         errorCode === "RAZORPAY_BAD_REQUEST" || // 400 - bad data
         errorCode === "DUPLICATE_SUBSCRIPTION" || // 409 - already exists
-        errorCode === "DATABASE_ERROR" || // DB constraint violation
-        errorCode === "UNAUTHORIZED"; // Auth failure
+        errorCode === "USE_UPGRADE_FLOW" ||       // 409 - has active sub, wrong flow
+        errorCode === "DATABASE_ERROR" ||         // DB constraint violation
+        errorCode === "UNAUTHORIZED" ||           // Auth failure
+        errorCode === "USER_NOT_FOUND" ||         // User not in Supabase yet
+        errorCode === "PLAN_NOT_FOUND" ||         // No pricing row in DB for this domain
+        errorCode === "PRICING_CONFIG_ERROR" ||   // Razorpay plan ID not configured
+        errorCode === "DOMAIN_REQUIRED";          // Domain resolution failed
 
       if (isNonRetryable) {
         console.log(

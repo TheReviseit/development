@@ -11,6 +11,7 @@ import {
   TimeRange,
 } from "@/lib/hooks/useRevenueAnalytics";
 import { useFeatureGate } from "@/lib/hooks/useFeatureGate";
+import { getProductDomainFromBrowser } from "@/lib/domain/client";
 import LoadingSpinner from "@/app/components/ui/LoadingSpinner";
 
 // Icon components
@@ -176,21 +177,27 @@ export default function AnalyticsView() {
     "Daily" | "Weekly" | "Monthly"
   >("Daily");
 
-  // Map period to TimeRange for revenue analytics
-  const revenueRange: TimeRange =
-    period === "7d" ? "week" : period === "30d" ? "month" : "month";
-  const { data: revenueData, loading: revenueLoading } =
-    useRevenueAnalytics(revenueRange);
-
   // Use Firebase UID for backend API calls (X-User-Id header expects Firebase UID)
   // user?.id is the Supabase UUID which the backend cannot map
   const userId = firebaseUser?.uid || "";
+
+  // Resolve the current product domain so the feature gate checks the
+  // correct subscription. Without this, it defaults to "shop" and users
+  // on the marketing domain are denied even with an active subscription.
+  // Lazy initializer avoids a wasted first render with wrong domain.
+  const [currentDomain] = useState(() => getProductDomainFromBrowser());
 
   // Feature gate: advanced_analytics — server-authoritative check via
   // backend FeatureGateEngine. Respects subscription status (incl.
   // pending_upgrade), plan-level feature config, and global flags.
   const { allowed: canAccessAnalytics, isLoading: subLoading } =
-    useFeatureGate("advanced_analytics");
+    useFeatureGate("advanced_analytics", { domain: currentDomain });
+
+  // Map period to TimeRange for revenue analytics
+  const revenueRange: TimeRange =
+    period === "7d" ? "week" : period === "30d" ? "month" : "month";
+  const { data: revenueData, loading: revenueLoading } =
+    useRevenueAnalytics(revenueRange, canAccessAnalytics);
 
   // Fetch analytics data
   const loadAnalytics = useCallback(async () => {
@@ -601,7 +608,7 @@ export default function AnalyticsView() {
 
           {/* CTA */}
           <a
-            href="/upgrade?domain=shop"
+            href="/upgrade"
             style={{
               display: "inline-flex",
               alignItems: "center",

@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { headers } from "next/headers";
-import { Outfit, Plus_Jakarta_Sans } from "next/font/google";
+import { Outfit, Plus_Jakarta_Sans, Inter } from "next/font/google";
 import "./globals.css";
 import { SpeedInsights } from "@vercel/speed-insights/next";
 import { ServiceWorkerRegistration } from "@/components/pwa/ServiceWorkerRegistration";
@@ -13,6 +13,13 @@ import {
   generateDomainSchemas,
 } from "@/lib/seo/domain-seo";
 import QueryProvider from "./components/providers/QueryProvider";
+
+const inter = Inter({
+  variable: "--font-inter",
+  subsets: ["latin"],
+  display: "swap",
+  preload: true,
+});
 
 const jakarta = Plus_Jakarta_Sans({
   variable: "--font-jakarta",
@@ -326,7 +333,7 @@ export default async function RootLayout({
           />
         ))}
       </head>
-      <body className={`${jakarta.variable} ${outfit.variable} antialiased`}>
+      <body className={`${inter.variable} ${jakarta.variable} ${outfit.variable} antialiased`}>
         <QueryProvider>
           <ServiceWorkerRegistration />
           <PWAInstallPrompt />

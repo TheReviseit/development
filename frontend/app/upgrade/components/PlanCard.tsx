@@ -168,7 +168,30 @@ export default function PlanCard({
           currency: data.currency || "INR",
           name: "Flowauxi",
           description: `Upgrade to ${plan.display_name} (prorated)`,
-          handler: function () {
+          handler: async function (response: {
+            razorpay_payment_id: string;
+            razorpay_order_id: string;
+          }) {
+            // Immediately verify & apply the plan change server-side
+            // so the user sees upgraded features without waiting for
+            // the Razorpay webhook (can be delayed in sandbox).
+            try {
+              const user = auth.currentUser;
+              await fetch("/api/subscriptions/verify-proration", {
+                method: "POST",
+                credentials: "include",
+                headers: {
+                  "Content-Type": "application/json",
+                  ...(user ? { "X-User-Id": user.uid } : {}),
+                },
+                body: JSON.stringify({
+                  razorpay_payment_id: response.razorpay_payment_id,
+                  razorpay_order_id: response.razorpay_order_id,
+                }),
+              });
+            } catch {
+              // Non-fatal: webhook will apply the change eventually
+            }
             window.location.href = "/dashboard?upgrade=success";
           },
           modal: {

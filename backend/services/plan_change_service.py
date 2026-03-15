@@ -319,17 +319,54 @@ class PlanChangeService:
         # Checks 3-5 only apply for truly active subs.
         # pending_upgrade / upgrade_failed = user is retrying, stale state is OK to overwrite.
         if status in ('active', 'completed'):
-            # 3. No existing pending change
-            if subscription.get('pending_plan_slug'):
-                raise PlanChangePendingError()
-
-            # 4. Not locked (subscription.update in flight)
+            # 3. Not locked (subscription.update in flight or payment captured)
             if subscription.get('plan_change_locked'):
                 raise PlanChangeLockedError()
 
-            # 5. No pending proration payment
-            if subscription.get('proration_payment_status') == 'pending':
-                raise PaymentPendingError()
+            # 4. No pending proration payment that has ALREADY BEEN CAPTURED.
+            #    Captured means money has moved — cannot auto-supersede.
+            if subscription.get('proration_payment_status') == 'captured':
+                raise PlanChangePendingError()
+
+            # 5. Auto-supersede abandoned pending changes (Stripe-level UX).
+            #    If a pending change exists but payment was never captured
+            #    (user closed Razorpay modal), clear it silently so the user
+            #    can pick a different plan without manual cancellation.
+            if subscription.get('pending_plan_slug'):
+                payment_status = subscription.get('proration_payment_status')
+                if payment_status in (None, 'pending', 'failed'):
+                    logger.info(
+                        f"Auto-superseding stale pending change: "
+                        f"plan={subscription.get('pending_plan_slug')}, "
+                        f"payment_status={payment_status}, "
+                        f"sub={subscription.get('id')}"
+                    )
+                    # Clear the stale pending state in DB
+                    self.supabase.table('subscriptions').update({
+                        'pending_plan_slug': None,
+                        'pending_pricing_plan_id': None,
+                        'pending_amount_paise': None,
+                        'pending_pricing_version': None,
+                        'change_scheduled_at': None,
+                        'change_direction': None,
+                        'proration_order_id': None,
+                        'proration_payment_status': None,
+                        'plan_change_locked': False,
+                    }).eq('id', subscription['id']).execute()
+
+                    # Mark old audit trail entry as superseded
+                    try:
+                        self.supabase.table('plan_change_history').update({
+                            'status': 'superseded',
+                            'cancelled_at': datetime.now(timezone.utc).isoformat(),
+                        }).eq('subscription_id', subscription['id']).in_(
+                            'status', ['payment_pending', 'scheduled']
+                        ).execute()
+                    except Exception:
+                        pass  # Non-fatal — audit is best-effort
+                else:
+                    # Payment is in a non-clearable state (e.g., 'processing')
+                    raise PlanChangePendingError()
 
     def _validate_usage_limits(
         self,
@@ -693,17 +730,25 @@ class PlanChangeService:
         2. Verify order_id matches
         3. Mark proration_payment_status = 'captured'
         4. Call Razorpay subscription.update(schedule_change_at='cycle_end')
-        5. Set plan_change_locked = TRUE
-        6. Record payment in audit trail
+        5. IMMEDIATELY apply the new plan to the subscription row
+           (plan_name, pricing_plan_id, plan_id) so the feature gate
+           grants the upgraded plan's features without waiting for the
+           next billing cycle.
+        6. Invalidate subscription cache so in-flight requests re-fetch.
+        7. Record payment in audit trail
 
-        CRITICAL: This is the ONLY place subscription.update is called for upgrades.
+        CRITICAL: The Razorpay subscription.update schedules the billing
+        plan change at cycle_end (so Razorpay charges the new amount next
+        cycle). But we apply the plan LOCALLY right away — the user paid
+        the proration so they deserve immediate access.
         """
         # Find subscription with this proration order
         result = self.supabase.table('subscriptions').select(
-            'id, razorpay_subscription_id, pending_plan_slug, '
+            'id, user_id, razorpay_subscription_id, pending_plan_slug, '
             'pending_pricing_plan_id, pending_amount_paise, '
             'current_period_end, last_processed_event_id, '
-            'plan_change_locked, proration_payment_status'
+            'plan_change_locked, proration_payment_status, '
+            'product_domain, plan_name'
         ).eq('proration_order_id', order_id).limit(1).execute()
 
         if not result.data:
@@ -748,7 +793,7 @@ class PlanChangeService:
             logger.error(f"[{request_id}] Failed to resolve Razorpay plan ID: {e}")
             return {'handled': False, 'reason': 'plan_resolution_failed'}
 
-        # Call Razorpay subscription.update — schedule at cycle end
+        # Call Razorpay subscription.update — schedule billing change at cycle end
         razorpay_sub_id = subscription['razorpay_subscription_id']
         try:
             self.razorpay_client.subscription.update(
@@ -775,29 +820,77 @@ class PlanChangeService:
 
             return {'handled': False, 'reason': 'razorpay_update_failed'}
 
-        # Update DB: mark captured, lock
+        # ── IMMEDIATE PLAN APPLICATION ────────────────────────────────
+        # The user paid the proration — apply the new plan to the local
+        # subscription row RIGHT NOW so the feature gate grants upgraded
+        # features immediately. Razorpay will handle billing at cycle_end.
+        old_plan = subscription.get('plan_name', 'unknown')
         period_end = _parse_timestamp(subscription.get('current_period_end'))
-        self.supabase.table('subscriptions').update({
+
+        update_data = {
             'proration_payment_status': 'captured',
             'plan_change_locked': True,
             'change_scheduled_at': period_end.isoformat() if period_end else None,
             'last_processed_event_id': event_id,
-        }).eq('id', subscription['id']).execute()
+            # Apply the new plan immediately
+            'plan_name': pending_slug,
+            'pricing_plan_id': pending_pricing_plan_id,
+            'plan_id': new_razorpay_plan_id,
+            'amount_paise': subscription.get('pending_amount_paise'),
+            'status': 'active',
+            # Clear pending state — the change is applied
+            'pending_plan_slug': None,
+            'pending_pricing_plan_id': None,
+            'pending_amount_paise': None,
+            'pending_pricing_version': None,
+            'change_direction': None,
+            'proration_order_id': None,
+        }
+
+        self.supabase.table('subscriptions').update(
+            update_data
+        ).eq('id', subscription['id']).execute()
+
+        logger.info(
+            f"[{request_id}] ✅ Plan applied immediately: "
+            f"{old_plan}→{pending_slug}, pricing_plan_id={pending_pricing_plan_id}, "
+            f"plan_id(razorpay)={new_razorpay_plan_id}"
+        )
+
+        # ── CACHE INVALIDATION ────────────────────────────────────────
+        # Bump the subscription version so all in-flight cached reads
+        # miss and re-fetch the updated plan from DB.
+        user_id = subscription.get('user_id')
+        domain = subscription.get('product_domain', 'shop')
+        if user_id:
+            try:
+                from services.feature_gate_engine import get_feature_gate_engine
+                engine = get_feature_gate_engine()
+                engine.increment_subscription_version(str(user_id), domain)
+                engine.invalidate_usage_counter_cache(str(user_id), domain, None)
+                logger.info(
+                    f"[{request_id}] Cache invalidated: user={user_id}, domain={domain}"
+                )
+            except Exception as cache_err:
+                logger.warning(
+                    f"[{request_id}] Cache invalidation failed (non-fatal): {cache_err}"
+                )
 
         # Update audit trail
         self.supabase.table('plan_change_history').update({
-            'status': 'scheduled',
+            'status': 'applied',
             'proration_payment_id': payment_id,
+            'applied_at': datetime.now(timezone.utc).isoformat(),
         }).eq('proration_order_id', order_id).eq(
             'status', 'payment_pending'
         ).execute()
 
         logger.info(
-            f"[{request_id}] ✅ Proration captured, upgrade scheduled: "
-            f"order={order_id}, payment={payment_id}"
+            f"[{request_id}] ✅ Proration captured, upgrade applied immediately: "
+            f"order={order_id}, payment={payment_id}, {old_plan}→{pending_slug}"
         )
 
-        return {'handled': True, 'reason': 'upgrade_scheduled'}
+        return {'handled': True, 'reason': 'upgrade_applied'}
 
     # -------------------------------------------------------------------------
     # WEBHOOK: HANDLE PRORATION PAYMENT FAILED
@@ -1026,28 +1119,62 @@ class PlanChangeService:
         client_ip: str,
     ) -> None:
         """Insert a row into plan_change_history for audit."""
+        row = {
+            'subscription_id': subscription['id'],
+            'user_id': subscription['user_id'],
+            'change_direction': change_direction,
+            'from_plan_slug': subscription['plan_name'],
+            'to_plan_slug': new_plan_slug,
+            'from_amount_paise': subscription['amount_paise'],
+            'to_amount_paise': new_plan['amount_paise'],
+            'from_pricing_version': subscription.get('pricing_version', 1),
+            'to_pricing_version': new_plan.get('pricing_version', 1),
+            'product_domain': subscription.get('product_domain', ''),
+            'proration_amount_paise': proration_amount,
+            'proration_order_id': order_id,
+            'scheduled_for': period_end.isoformat(),
+            'status': status,
+            'request_id': request_id,
+            'client_ip': client_ip,
+        }
         try:
-            self.supabase.table('plan_change_history').insert({
-                'subscription_id': subscription['id'],
-                'user_id': subscription['user_id'],
-                'change_direction': change_direction,
-                'from_plan_slug': subscription['plan_name'],
-                'to_plan_slug': new_plan_slug,
-                'from_amount_paise': subscription['amount_paise'],
-                'to_amount_paise': new_plan['amount_paise'],
-                'from_pricing_version': subscription.get('pricing_version', 1),
-                'to_pricing_version': new_plan.get('pricing_version', 1),
-                'product_domain': subscription.get('product_domain', ''),
-                'proration_amount_paise': proration_amount,
-                'proration_order_id': order_id,
-                'scheduled_for': period_end.isoformat(),
-                'status': status,
-                'request_id': request_id,
-                'client_ip': client_ip,
-            }).execute()
+            self.supabase.table('plan_change_history').insert(row).execute()
         except Exception as e:
-            # Audit failure is non-fatal — log but don't block
-            logger.error(f"[{request_id}] Failed to record change history: {e}")
+            error_str = str(e)
+            # FK violation on user_id — the users row may not exist yet for
+            # this Supabase UUID. Try to auto-create the missing users row
+            # from the subscriptions table data so the audit trail is recorded.
+            if '23503' in error_str and 'user_id' in error_str:
+                user_id = subscription.get('user_id')
+                logger.warning(
+                    f"[{request_id}] plan_change_history FK violation: "
+                    f"user_id={user_id} not in users table. "
+                    f"Attempting to create users row."
+                )
+                try:
+                    # Create a minimal users row so the FK is satisfied.
+                    # The email/name will be back-filled by auth sync later.
+                    from flask import g as flask_g
+                    firebase_uid = getattr(flask_g, 'firebase_uid', None)
+                    self.supabase.table('users').upsert({
+                        'id': user_id,
+                        'firebase_uid': firebase_uid or '',
+                    }, on_conflict='id').execute()
+                    # Retry the insert now that the FK target exists
+                    self.supabase.table('plan_change_history').insert(row).execute()
+                    logger.info(
+                        f"[{request_id}] plan_change_history recorded after "
+                        f"auto-creating users row for {user_id}"
+                    )
+                except Exception as retry_err:
+                    # Still non-fatal — log and move on
+                    logger.error(
+                        f"[{request_id}] Failed to record change history "
+                        f"(auto-create user also failed): {retry_err}"
+                    )
+            else:
+                # Audit failure is non-fatal — log but don't block
+                logger.error(f"[{request_id}] Failed to record change history: {e}")
 
 
 # =============================================================================

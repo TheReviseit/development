@@ -533,7 +533,7 @@ def get_campaign_stats(campaign_id: str):
         
         # Get campaign
         campaign = client.table('broadcast_campaigns').select(
-            'id, name, status, total_recipients, messages_sent, messages_delivered, messages_read, messages_failed, started_at, completed_at'
+            'id, name, status, total_recipients, sent_count, delivered_count, read_count, failed_count, started_at, completed_at'
         ).eq('id', campaign_id).eq('user_id', user_id).limit(1).execute()
         
         if not campaign.data:
@@ -557,9 +557,9 @@ def get_campaign_stats(campaign_id: str):
             'campaign': campaign_data,
             'stats': {
                 'by_status': status_counts,
-                'delivery_rate': round((campaign_data['messages_delivered'] / total) * 100, 1),
-                'read_rate': round((campaign_data['messages_read'] / total) * 100, 1),
-                'failure_rate': round((campaign_data['messages_failed'] / total) * 100, 1),
+                'delivery_rate': round((campaign_data['delivered_count'] / total) * 100, 1) if total > 0 else 0,
+                'read_rate': round((campaign_data['read_count'] / total) * 100, 1) if total > 0 else 0,
+                'failure_rate': round((campaign_data['failed_count'] / total) * 100, 1) if total > 0 else 0,
                 'pending': status_counts.get('pending', 0) + status_counts.get('queued', 0)
             }
         })

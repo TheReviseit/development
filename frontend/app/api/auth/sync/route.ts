@@ -108,6 +108,35 @@ export async function POST(request: NextRequest) {
     );
 
     // ========================================================================
+    // SECTION 2B: CHECK EXISTING SESSION COOKIE
+    // ========================================================================
+    // If a valid session cookie already exists for the SAME Firebase user,
+    // skip createSessionCookie entirely. This prevents race conditions when
+    // multiple tabs (e.g., duplicate tab) call /api/auth/sync simultaneously —
+    // createSessionCookie can invalidate in-flight tokens from other tabs.
+
+    let hasValidSessionCookie = false;
+    try {
+      const cookieStore = await cookies();
+      const existingSession = cookieStore.get("session");
+      if (existingSession?.value) {
+        const decodedSession = await adminAuth.verifySessionCookie(
+          existingSession.value,
+          false, // Don't check revocation (fast path)
+        );
+        if (decodedSession.uid === firebaseUid) {
+          hasValidSessionCookie = true;
+          console.log(
+            `[AUTH_SYNC] Valid session cookie exists for same user — will skip createSessionCookie`,
+          );
+        }
+      }
+    } catch {
+      // No valid session cookie — will create one below
+      hasValidSessionCookie = false;
+    }
+
+    // ========================================================================
     // SECTION 3: INITIALIZE SUPABASE CLIENT
     // ========================================================================
 
@@ -329,37 +358,51 @@ export async function POST(request: NextRequest) {
     if (currentProduct === "dashboard") {
       console.log(`[AUTH_SYNC] Dashboard access granted (always free)`);
 
-      // Create session cookie
-      try {
-        const expiresInMs = 60 * 60 * 24 * 5 * 1000;
-        const sessionCookie = await adminAuth.createSessionCookie(idToken, {
-          expiresIn: expiresInMs,
-        });
+      // Create session cookie ONLY if one doesn't already exist for this user.
+      // This prevents race conditions when multiple tabs sync simultaneously.
+      if (!hasValidSessionCookie) {
+        try {
+          const expiresInMs = 60 * 60 * 24 * 5 * 1000;
+          const sessionCookie = await adminAuth.createSessionCookie(idToken, {
+            expiresIn: expiresInMs,
+          });
 
-        const cookieStore = await cookies();
-        cookieStore.set("session", sessionCookie, {
-          maxAge: 60 * 60 * 24 * 5,
-          httpOnly: true,
-          secure: process.env.NODE_ENV === "production",
-          path: "/",
-          sameSite: "lax",
-        });
-      } catch (cookieError) {
-        console.error(
-          `[AUTH_SYNC] Failed to create session cookie:`,
-          cookieError,
-        );
+          const cookieStore = await cookies();
+          cookieStore.set("session", sessionCookie, {
+            maxAge: 60 * 60 * 24 * 5,
+            httpOnly: true,
+            secure: process.env.NODE_ENV === "production",
+            path: "/",
+            sameSite: "lax",
+          });
+        } catch (cookieError) {
+          console.error(
+            `[AUTH_SYNC] Failed to create session cookie:`,
+            cookieError,
+          );
+        }
       }
 
-      // Update user record (last_sign_in_at, phone, etc.)
-      await supabase
-        .from("users")
-        .update({
-          full_name: fullName,
-          email: email,
-          phone: phoneNumber,
-        })
-        .eq("firebase_uid", firebaseUid);
+      // Update user record (non-destructive update)
+      // Only update if current data is null or a low-quality fallback
+      const isFallbackName = !existingUser.full_name || 
+                           existingUser.full_name === "User" || 
+                           existingUser.full_name === existingUser.email?.split('@')[0];
+      
+      const updatePayload: any = {};
+      if (isFallbackName && fullName && fullName !== existingUser.email?.split('@')[0]) {
+        updatePayload.full_name = fullName;
+      }
+      if (!existingUser.phone && phoneNumber) {
+        updatePayload.phone = phoneNumber;
+      }
+
+      if (Object.keys(updatePayload).length > 0) {
+        await supabase
+          .from("users")
+          .update(updatePayload)
+          .eq("firebase_uid", firebaseUid);
+      }
 
       const elapsedMs = Date.now() - startTime;
       console.log(`[AUTH_SYNC] ✅ Dashboard access - elapsed=${elapsedMs}ms`);
@@ -371,6 +414,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Check product membership for non-dashboard products
+    // Two-layer check: user_products (fast path) → subscriptions (fallback)
     const { data: membership, error: membershipError } = await supabase
       .from("user_products")
       .select("*")
@@ -393,11 +437,48 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // No membership found OR membership is suspended/cancelled
-    if (!membership || !["trial", "active"].includes(membership.status)) {
+    let hasAccess =
+      membership && ["trial", "active"].includes(membership.status);
+
+    // Fallback: check subscriptions table (covers the gap where payment
+    // succeeded but user_products row wasn't created yet)
+    if (!hasAccess) {
+      const { data: activeSub } = await supabase
+        .from("subscriptions")
+        .select("id, status, product_domain")
+        .eq("user_id", existingUser.id)
+        .eq("product_domain", currentProduct)
+        .in("status", ["active", "pending_upgrade"])
+        .limit(1)
+        .maybeSingle();
+
+      if (activeSub) {
+        hasAccess = true;
+        console.log(
+          `[AUTH_SYNC] Subscription fallback hit — active subscription found for ${currentProduct}, auto-healing user_products`,
+        );
+        // Auto-heal: create the missing user_products row so future
+        // requests take the fast path and never hit this fallback again.
+        await supabase.from("user_products").upsert(
+          {
+            user_id: existingUser.id,
+            product: currentProduct,
+            status: "active",
+            activated_by: "system",
+          },
+          { onConflict: "user_id,product" },
+        );
+      }
+    }
+
+    if (!hasAccess) {
       console.warn(
         `[AUTH_SYNC] Product not enabled - user_id=${existingUser.id}, product=${currentProduct}, membership_status=${membership?.status || "none"}`,
       );
+
+      // Check if user has an active subscription (they paid but something
+      // went wrong with membership creation) — already checked above, so
+      // reaching here means genuinely no access.
 
       // Fetch all user's products to show in activation UI
       const { data: userMemberships } = await supabase
@@ -440,41 +521,57 @@ export async function POST(request: NextRequest) {
       `[AUTH_SYNC] Product membership valid - user_id=${existingUser.id}, product=${currentProduct}, status=${membership.status}`,
     );
 
-    // Create session cookie
-    try {
-      const expiresInMs = 60 * 60 * 24 * 5 * 1000;
-      const sessionCookie = await adminAuth.createSessionCookie(idToken, {
-        expiresIn: expiresInMs,
-      });
+    // Create session cookie ONLY if one doesn't already exist for this user.
+    if (!hasValidSessionCookie) {
+      try {
+        const expiresInMs = 60 * 60 * 24 * 5 * 1000;
+        const sessionCookie = await adminAuth.createSessionCookie(idToken, {
+          expiresIn: expiresInMs,
+        });
 
-      const cookieStore = await cookies();
-      cookieStore.set("session", sessionCookie, {
-        maxAge: 60 * 60 * 24 * 5,
-        httpOnly: true,
-        secure: process.env.NODE_ENV === "production",
-        path: "/",
-        sameSite: "lax",
-      });
+        const cookieStore = await cookies();
+        cookieStore.set("session", sessionCookie, {
+          maxAge: 60 * 60 * 24 * 5,
+          httpOnly: true,
+          secure: process.env.NODE_ENV === "production",
+          path: "/",
+          sameSite: "lax",
+        });
 
-      console.log(`[AUTH_SYNC] Session cookie created`);
-    } catch (cookieError) {
-      console.error(
-        `[AUTH_SYNC] Failed to create session cookie:`,
-        cookieError,
-      );
+        console.log(`[AUTH_SYNC] Session cookie created`);
+      } catch (cookieError) {
+        console.error(
+          `[AUTH_SYNC] Failed to create session cookie:`,
+          cookieError,
+        );
+      }
+    } else {
+      console.log(`[AUTH_SYNC] Reusing existing valid session cookie`);
     }
 
-    // Update user record
-    const { data: updatedUser } = await supabase
-      .from("users")
-      .update({
-        full_name: fullName,
-        email: email,
-        phone: phoneNumber,
-      })
-      .eq("firebase_uid", firebaseUid)
-      .select()
-      .single();
+    // Update user record (non-destructive update)
+    const isFallbackName = !existingUser.full_name ||
+                         existingUser.full_name === "User" || 
+                         existingUser.full_name === existingUser.email?.split('@')[0];
+    
+    const updatePayload: any = {};
+    if (isFallbackName && fullName && fullName !== existingUser.email?.split('@')[0]) {
+      updatePayload.full_name = fullName;
+    }
+    if (!existingUser.phone && phoneNumber) {
+      updatePayload.phone = phoneNumber;
+    }
+
+    let updatedUser = null;
+    if (Object.keys(updatePayload).length > 0) {
+      const { data } = await supabase
+        .from("users")
+        .update(updatePayload)
+        .eq("firebase_uid", firebaseUid)
+        .select()
+        .single();
+      updatedUser = data;
+    }
 
     const elapsedMs = Date.now() - startTime;
     console.log(

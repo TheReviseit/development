@@ -576,6 +576,25 @@ class SubscriptionLifecycleEngine:
         # Cancel any pending retries
         self._cancel_pending_retries(subscription_id)
 
+        # Ensure user_products membership exists (auth sync gates on this)
+        if domain and domain != 'dashboard':
+            try:
+                self._supabase.table('user_products').upsert({
+                    'user_id': user_id,
+                    'product': domain,
+                    'status': 'active',
+                    'activated_by': 'system',
+                }, on_conflict='user_id,product').execute()
+                self.logger.info(
+                    f"user_products_upserted sub={subscription_id} "
+                    f"user={user_id} product={domain}"
+                )
+            except Exception as e:
+                # Non-fatal: auth sync has a fallback check on subscriptions
+                self.logger.warning(
+                    f"user_products_upsert_failed sub={subscription_id}: {e}"
+                )
+
         self.logger.info(
             f"payment_success_handled sub={subscription_id} user={user_id} "
             f"domain={domain} previous_status={current_status}"

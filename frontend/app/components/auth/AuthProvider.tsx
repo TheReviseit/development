@@ -24,17 +24,6 @@ import type {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-/**
- * Enterprise Auth Provider Component (Option B)
- * Standard: Google Workspace / Zoho One Architecture
- *
- * CRITICAL RULES:
- * 1. Sync failure = immediate Firebase signout (NO EXCEPTIONS)
- * 2. SESSION_ONLY state MUST trigger signout
- * 3. PRODUCT_NOT_ENABLED state triggers activation flow (NEW)
- * 4. All state transitions are logged for observability
- * 5. Product membership is server-enforced, never frontend-only
- */
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   // ========================================================================
   // STATE MANAGEMENT
@@ -66,14 +55,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const syncInProgressRef = useRef(false);
   const firebaseUserRef = useRef<FirebaseUserType | null>(null);
 
-  // ========================================================================
-  // HELPER FUNCTIONS
-  // ========================================================================
+  // Cross-tab coordination: prevent duplicate syncs from racing
+  const authChannelRef = useRef<BroadcastChannel | null>(null);
+  const lastSyncTimestampRef = useRef<number>(0);
+  const SYNC_DEBOUNCE_MS = 3000; // Minimum 3s between syncs across tabs
 
-  /**
-   * Detect current product domain (client-side)
-   * In production, this should match server-side detection
-   */
   const detectCurrentProduct = useCallback((): ProductDomain => {
     if (typeof window === "undefined") return "dashboard";
 
@@ -204,6 +190,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setCurrentProduct(null);
       setAvailableProducts([]);
       updateAuthState("UNAUTHENTICATED" as AuthState, "SESSION_CLEARED");
+
+      // Notify other tabs about signout
+      try {
+        authChannelRef.current?.postMessage({ type: "SIGNED_OUT" });
+      } catch {
+        // BroadcastChannel may be closed
+      }
     } catch (err: any) {
       console.error("[AUTH] Error during clearSession:", err);
       setError(err);
@@ -464,6 +457,43 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, [clearSession]);
 
+  useEffect(() => {
+    if (typeof window === "undefined" || !("BroadcastChannel" in window))
+      return;
+
+    const channel = new BroadcastChannel("flowauxi_auth");
+    authChannelRef.current = channel;
+
+    channel.onmessage = (event) => {
+      const { type, timestamp } = event.data;
+      if (type === "SYNC_COMPLETE") {
+        // Another tab just completed sync — update our timestamp so we
+        // skip our own redundant sync if it hasn't started yet.
+        lastSyncTimestampRef.current = Math.max(
+          lastSyncTimestampRef.current,
+          timestamp,
+        );
+        console.log(
+          "[AUTH] Cross-tab: another tab completed sync, skipping redundant sync",
+        );
+      } else if (type === "SIGNED_OUT") {
+        // Another tab signed out — mirror locally without calling
+        // auth.signOut() again (it already happened globally via Firebase).
+        console.log("[AUTH] Cross-tab: sign-out detected from another tab");
+        setUser(null);
+        setUserMemberships([]);
+        setCurrentProduct(null);
+        setAvailableProducts([]);
+        updateAuthState("UNAUTHENTICATED" as AuthState, "CROSS_TAB_SIGNOUT");
+      }
+    };
+
+    return () => {
+      channel.close();
+      authChannelRef.current = null;
+    };
+  }, [updateAuthState]);
+
   // ========================================================================
   // FIREBASE AUTH STATE LISTENER
   // ========================================================================
@@ -471,6 +501,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   /**
    * Listen to Firebase auth state changes
    * CRITICAL: Sync failure triggers immediate signout
+   *
+   * DUPLICATE-TAB FIX: When a tab is duplicated, onAuthStateChanged fires
+   * in the new tab. Before, this would race with the original tab's session
+   * cookie, causing createSessionCookie to invalidate the first tab's token.
+   * Now we:
+   * 1. Debounce syncs across tabs via BroadcastChannel
+   * 2. Retry once before calling clearSession (which does auth.signOut globally)
+   * 3. On USER_NOT_FOUND, only sign out the current tab's state, not Firebase
    */
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUserData) => {
@@ -502,10 +540,35 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setFirebaseUser(firebaseUserData);
 
         if (firebaseUserData) {
-          // Re-entrance guard
+          // Re-entrance guard (same tab)
           if (syncInProgressRef.current) {
             return;
           }
+
+          // Cross-tab debounce: if another tab just synced within the
+          // debounce window, skip sync and trust the shared session cookie.
+          const now = Date.now();
+          if (now - lastSyncTimestampRef.current < SYNC_DEBOUNCE_MS) {
+            console.log("[AUTH] Skipping sync — another tab synced recently");
+            // Still need to hydrate local state: fetch the token without
+            // force-refresh and call sync (the server will just return the
+            // existing session without overwriting the cookie).
+            // But first, try to use cached user state if we already have it.
+            // If we have no local user state, we do need to sync.
+            if (user) {
+              // Already have user state (e.g., from a previous render or
+              // cross-tab message). Just ensure we're in AUTHENTICATED.
+              updateAuthState(
+                "AUTHENTICATED" as AuthState,
+                "CROSS_TAB_CACHE_HIT",
+              );
+              return;
+            }
+            // No cached user — fall through to sync but after a small delay
+            // to let the other tab's cookie settle.
+            await new Promise((r) => setTimeout(r, 500));
+          }
+
           syncInProgressRef.current = true;
 
           updateAuthState(
@@ -520,25 +583,72 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           try {
             const idToken = await firebaseUserData.getIdToken();
             await syncUser(idToken);
-            // State updated to AUTHENTICATED inside syncUser on success
+
+            // Notify other tabs that sync completed successfully
+            lastSyncTimestampRef.current = Date.now();
+            try {
+              authChannelRef.current?.postMessage({
+                type: "SYNC_COMPLETE",
+                timestamp: lastSyncTimestampRef.current,
+              });
+            } catch {
+              // BroadcastChannel may be closed
+            }
           } catch (err: any) {
             console.error("[AUTH] Auto-sync failed:", err);
 
             // CRITICAL: Only clear session if it's NOT a product membership issue
             if (err.message !== "PRODUCT_NOT_ENABLED") {
-              console.warn("[AUTH] Sync failure detected — clearing session");
+              // RETRY ONCE before signing out globally — a transient failure
+              // (e.g., race with another tab's createSessionCookie) should not
+              // nuke the entire session across all tabs.
+              console.warn(
+                "[AUTH] Sync failure detected — retrying once before signout",
+              );
               try {
-                await clearSession();
-                updateAuthState(
-                  "UNAUTHENTICATED" as AuthState,
-                  "SYNC_FAILED_SESSION_CLEARED",
-                );
-              } catch (signOutErr) {
-                console.error(
-                  "[AUTH] Error during forced signout:",
-                  signOutErr,
-                );
-                updateAuthState("AUTH_ERROR" as AuthState, "SIGNOUT_FAILED");
+                // Small delay to let any racing tab finish
+                await new Promise((r) => setTimeout(r, 1000));
+                const retryToken = await firebaseUserData.getIdToken(true);
+                await syncUser(retryToken);
+                console.log("[AUTH] Retry sync succeeded");
+
+                lastSyncTimestampRef.current = Date.now();
+                try {
+                  authChannelRef.current?.postMessage({
+                    type: "SYNC_COMPLETE",
+                    timestamp: lastSyncTimestampRef.current,
+                  });
+                } catch {
+                  // BroadcastChannel may be closed
+                }
+              } catch (retryErr: any) {
+                console.error("[AUTH] Retry sync also failed:", retryErr);
+                if (retryErr.message !== "PRODUCT_NOT_ENABLED") {
+                  try {
+                    await clearSession();
+                    updateAuthState(
+                      "UNAUTHENTICATED" as AuthState,
+                      "SYNC_FAILED_SESSION_CLEARED",
+                    );
+                    // Notify other tabs
+                    try {
+                      authChannelRef.current?.postMessage({
+                        type: "SIGNED_OUT",
+                      });
+                    } catch {
+                      // BroadcastChannel may be closed
+                    }
+                  } catch (signOutErr) {
+                    console.error(
+                      "[AUTH] Error during forced signout:",
+                      signOutErr,
+                    );
+                    updateAuthState(
+                      "AUTH_ERROR" as AuthState,
+                      "SIGNOUT_FAILED",
+                    );
+                  }
+                }
               }
             }
             // If PRODUCT_NOT_ENABLED, state already set by syncUser, don't clear session
@@ -572,7 +682,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         clearTimeout(authTimeoutRef.current);
       }
     };
-  }, [syncUser, updateAuthState, clearSession, detectCurrentProduct]);
+  }, [syncUser, updateAuthState, clearSession, detectCurrentProduct, user]);
 
   // ========================================================================
   // AUTO TOKEN REFRESH

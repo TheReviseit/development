@@ -1198,6 +1198,7 @@ class FeatureGateEngine:
                             slug = plan_result.data[0]['plan_slug']
                             domain = plan_result.data[0].get('product_domain', 'shop')
 
+                            # Step A: Same-domain sibling (e.g., yearly ↔ monthly)
                             sibling_result = self.supabase.table('pricing_plans').select(
                                 'id'
                             ).eq('plan_slug', slug).eq(
@@ -1221,8 +1222,37 @@ class FeatureGateEngine:
                                         f"plan_features_sibling_fallback slug={slug} "
                                         f"from={sibling_id} for={pricing_plan_id}"
                                     )
+
+                            # Step B: Cross-domain fallback (e.g., marketing → shop)
+                            # If plan_features are only seeded for 'shop', domains
+                            # like 'marketing' or 'api' can inherit the same tier's
+                            # features. Same plan_slug = same tier = same limits.
+                            if not all_features and domain != 'shop':
+                                cross_result = self.supabase.table('pricing_plans').select(
+                                    'id'
+                                ).eq('plan_slug', slug).eq(
+                                    'product_domain', 'shop'
+                                ).eq('is_active', True).limit(1).execute()
+
+                                if cross_result.data:
+                                    cross_id = cross_result.data[0]['id']
+                                    cross_features = self.supabase.table('plan_features').select(
+                                        'feature_key, hard_limit, soft_limit, is_unlimited'
+                                    ).eq('plan_id', cross_id).execute()
+
+                                    if cross_features.data:
+                                        all_features = {
+                                            row['feature_key']: row
+                                            for row in cross_features.data
+                                        }
+                                        logger.info(
+                                            f"plan_features_cross_domain_fallback "
+                                            f"slug={slug} domain={domain}→shop "
+                                            f"from={cross_id} for={pricing_plan_id}"
+                                        )
+
                     except Exception as e:
-                        logger.warning(f"Sibling plan fallback failed: {e}")
+                        logger.warning(f"Sibling/cross-domain plan fallback failed: {e}")
 
                 # Cache ALL features for this plan (one Redis key)
                 if self.cache:

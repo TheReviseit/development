@@ -17,7 +17,7 @@ try:
 except ImportError:
     FIREBASE_AVAILABLE = False
     FieldFilter = None
-    print("⚠️ firebase-admin not installed. Run: pip install firebase-admin")
+    print("[WARN] firebase-admin not installed. Run: pip install firebase-admin")
 
 # Singleton for Firebase app
 _firebase_initialized = False
@@ -46,7 +46,7 @@ def initialize_firebase():
             service_account_json = base64.b64decode(service_account_base64).decode('utf-8')
             service_account = json.loads(service_account_json)
             cred = credentials.Certificate(service_account)
-            print("🔥 Firebase: Using service account from environment variable")
+            print("[FIREBASE] Using service account from environment variable")
         else:
             # Option 2: Look for credential file in common locations
             credential_paths = [
@@ -63,21 +63,21 @@ def initialize_firebase():
                     break
             
             if not cred_path:
-                print("⚠️ Firebase: No credentials found. Set FIREBASE_SERVICE_ACCOUNT_KEY env var.")
+                print("[WARN] Firebase: No credentials found. Set FIREBASE_SERVICE_ACCOUNT_KEY env var.")
                 return False
             
             cred = credentials.Certificate(cred_path)
-            print(f"🔥 Firebase: Using credential file: {os.path.basename(cred_path)}")
+            print(f"[FIREBASE] Using credential file: {os.path.basename(cred_path)}")
         
         # Initialize the app
         firebase_admin.initialize_app(cred)
         _firestore_client = firestore.client()
         _firebase_initialized = True
-        print("✅ Firebase Admin SDK initialized successfully")
+        print("[OK] Firebase Admin SDK initialized successfully")
         return True
         
     except Exception as e:
-        print(f"❌ Firebase initialization failed: {e}")
+        print(f"[ERROR] Firebase initialization failed: {e}")
         return False
 
 
@@ -104,10 +104,10 @@ def get_business_data_from_firestore(user_id: str) -> Optional[Dict[str, Any]]:
         Business data dict with products, timings, FAQs, etc.
         Returns None if not found or Firebase not available.
     """
-    print(f"🔍 Looking up Firestore: businesses/{user_id}")
+    print(f"[LOOKUP] Looking up Firestore: businesses/{user_id}")
     db = get_firestore_client()
     if not db:
-        print("❌ Firestore client not available")
+        print("[ERROR] Firestore client not available")
         return None
     
     try:
@@ -115,10 +115,10 @@ def get_business_data_from_firestore(user_id: str) -> Optional[Dict[str, Any]]:
         try:
             app = firebase_admin.get_app()
             project_id = app.project_id
-            print(f"🔧 Firebase Project ID: {project_id}")
-            print(f"🔧 Firebase App Name: {app.name}")
+            print(f"[DEBUG] Firebase Project ID: {project_id}")
+            print(f"[DEBUG] Firebase App Name: {app.name}")
         except Exception as e:
-            print(f"⚠️ Could not get project ID: {e}")
+            print(f"[WARN] Could not get project ID: {e}")
         
         # Try to find document by userId field first (in case document ID != userId)
         # Query by userId field - using filter keyword to avoid deprecation warning
@@ -129,21 +129,21 @@ def get_business_data_from_firestore(user_id: str) -> Optional[Dict[str, Any]]:
         if docs:
             # Found by userId field
             doc = docs[0]
-            print(f"✅ Found document by userId field")
-            print(f"📍 Document ID: {doc.id}, userId field: {user_id}")
+            print(f"[OK] Found document by userId field")
+            print(f"[LOC] Document ID: {doc.id}, userId field: {user_id}")
         else:
             # Fallback: Try document ID directly
-            print(f"⚠️ No document found with userId={user_id}, trying document ID...")
+            print(f"[WARN] No document found with userId={user_id}, trying document ID...")
             doc_ref = db.collection('businesses').document(user_id)
             doc = doc_ref.get()
-            print(f"📍 Document path: businesses/{user_id}")
-            print(f"📄 Document exists: {doc.exists}")
+            print(f"[LOC] Document path: businesses/{user_id}")
+            print(f"[DOC] Document exists: {doc.exists}")
         
         if doc and doc.exists:
             data = doc.to_dict()
             products = data.get('products', [])
             business_name = data.get('businessName', 'Unknown')
-            print(f"📊 Loaded business data from Firestore for user: {user_id}")
+            print(f"[DATA] Loaded business data from Firestore for user: {user_id}")
             print(f"   Business: {business_name}")
             print(f"   Products: {len(products)} items")
             print(f"   Fields present: {', '.join(data.keys())}")
@@ -153,26 +153,26 @@ def get_business_data_from_firestore(user_id: str) -> Optional[Dict[str, Any]]:
                 if isinstance(p, dict):
                     raw_img = p.get('imageUrl') or p.get('image_url') or p.get('image', '')
                     img_preview = raw_img[:60] + '...' if raw_img and len(raw_img) > 60 else raw_img or 'NONE'
-                    print(f"   📷 Product {i+1} ({p.get('name', 'Unknown')}): imageUrl = {img_preview}")
+                    print(f"   [IMG] Product {i+1} ({p.get('name', 'Unknown')}): imageUrl = {img_preview}")
             
             # Pass the Firebase UID explicitly to ensure correct business_id
             converted_data = convert_firestore_to_ai_format(data, firebase_uid=user_id)
-            print(f"✅ Successfully converted business data (business_name: {converted_data.get('business_name', 'N/A')})")
+            print(f"[OK] Successfully converted business data (business_name: {converted_data.get('business_name', 'N/A')})")
             return converted_data
         else:
-            print(f"⚠️ No business data found in Firestore for user: {user_id}")
+            print(f"[WARN] No business data found in Firestore for user: {user_id}")
             print(f"   Document path: businesses/{user_id} does NOT exist")
             print(f"   Possible reasons:")
             print(f"   1. User hasn't configured AI settings in dashboard yet")
             print(f"   2. Firebase UID mismatch - run the SQL migration script")
             print(f"   3. Firestore permissions issue")
             print(f"")
-            print(f"   💡 Solution: If you see this, run the migration SQL script:")
+            print(f"   [TIP] Solution: If you see this, run the migration SQL script:")
             print(f"   backend/migrations/fix_firebase_uid_mismatch.sql")
             return None
             
     except Exception as e:
-        print(f"❌ Error fetching business data from Firestore: {e}")
+        print(f"[ERROR] Error fetching business data from Firestore: {e}")
         import traceback
         traceback.print_exc()
         return None

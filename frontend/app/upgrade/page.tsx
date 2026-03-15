@@ -12,6 +12,7 @@
 
 import { Metadata } from "next";
 import { headers } from "next/headers";
+import { redirect } from "next/navigation";
 import Image from "next/image";
 import Link from "next/link";
 import UpgradeContainer from "./components/UpgradeContainer";
@@ -64,8 +65,21 @@ export default async function UpgradePage({
   // Await searchParams (Next.js 15 requirement)
   const params = await searchParams;
 
-  // Query params take precedence over header detection
-  const domain = params.domain || detectedDomain;
+  // ── Production-grade URL cleanup ──────────────────────────────────────
+  // When the middleware header already identifies the domain (e.g. marketing
+  // from port 3003), strip the stale ?domain= query param from the URL.
+  // This fires a server-side 307 redirect that cleans the browser address
+  // bar.  The redirect target has no ?domain= param → no infinite loop.
+  if (params.domain && detectedDomain !== "dashboard") {
+    const cleanUrl = params.recommended
+      ? `/upgrade?recommended=${encodeURIComponent(params.recommended)}`
+      : "/upgrade";
+    redirect(cleanUrl);
+  }
+
+  // Header detection takes precedence — it's set by middleware based on actual hostname/port.
+  // Query param is only a fallback for direct navigation without middleware (e.g., tests).
+  const domain = detectedDomain !== "dashboard" ? detectedDomain : (params.domain || detectedDomain);
   const recommendedPlan = params.recommended;
 
   return (

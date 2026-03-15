@@ -207,16 +207,23 @@ def require_auth(f):
     """Decorator to require authentication."""
     @wraps(f)
     def decorated_function(*args, **kwargs):
-        user_id = get_user_id_from_request()
-        if not user_id:
+        firebase_uid = get_user_id_from_request()
+        if not firebase_uid:
             return error_response(
                 'Authentication required',
                 'UNAUTHORIZED',
                 401
             )
-        g.firebase_uid = user_id
-        # Map to Supabase user ID
-        g.user_id = map_to_supabase_user_id(user_id)
+        g.firebase_uid = firebase_uid
+        # Map Firebase UID → Supabase UUID (required for FK-safe DB writes)
+        supabase_uuid = map_to_supabase_user_id(firebase_uid)
+        if not supabase_uuid:
+            return error_response(
+                'User account not found. Please complete account setup before subscribing.',
+                'USER_NOT_FOUND',
+                404
+            )
+        g.user_id = supabase_uuid
         return f(*args, **kwargs)
     return decorated_function
 
@@ -320,14 +327,28 @@ def get_user_id_from_request() -> Optional[str]:
     return request.headers.get('X-User-Id')
 
 
-def map_to_supabase_user_id(firebase_uid: str) -> str:
-    """Map Firebase UID to Supabase user ID."""
+def map_to_supabase_user_id(firebase_uid: str) -> Optional[str]:
+    """
+    Map Firebase UID to Supabase user UUID.
+
+    Returns the Supabase UUID string, or None if the user does not exist.
+    NEVER falls back to the Firebase UID — that would cause a FK violation
+    when inserting into subscriptions.user_id (which references users.id UUID).
+
+    Callers must check for None and return an appropriate error response.
+    """
     if SUPABASE_AVAILABLE and get_user_id_from_firebase_uid:
         supabase_id = get_user_id_from_firebase_uid(firebase_uid)
         if supabase_id:
             return supabase_id
-        logger.warning(f"[{getattr(g, 'request_id', 'unknown')}] Could not map Firebase UID {firebase_uid}")
-    return firebase_uid
+        logger.warning(
+            f"[{getattr(g, 'request_id', 'unknown')}] "
+            f"No Supabase user found for Firebase UID {firebase_uid[:10]}... "
+            f"User must complete account creation before subscribing."
+        )
+        return None
+    # Supabase unavailable — cannot safely continue
+    return None
 
 
 def verify_webhook_signature_raw(raw_body: bytes, signature: str) -> bool:
@@ -705,38 +726,23 @@ def get_existing_razorpay_customer(user_id: str, email: str) -> Optional[str]:
 def persist_razorpay_customer(user_id: str, customer_id: str) -> bool:
     """
     Persist Razorpay customer ID to database immediately.
-    
-    This is called BEFORE subscription creation to prevent
-    duplicate customer creation on frontend retries.
-    
+
+    Delegates to store_razorpay_customer_new (razorpay_customers table).
+    Does NOT touch the subscriptions table — a placeholder subscription row
+    with status='customer_created' would cause unique-constraint violations
+    when the real subscription INSERT runs later.
+
     Args:
-        user_id: Internal user ID
+        user_id: Internal user ID (Supabase UUID)
         customer_id: Razorpay customer ID to store
-        
+
     Returns:
-        True if persisted successfully, False otherwise
+        True always (non-fatal, customer ID will also be stored on subscription row)
     """
-    if not SUPABASE_AVAILABLE:
-        return True  # Allow to proceed if no DB
-    
-    try:
-        supabase = get_supabase_client()
-        # Insert a placeholder subscription record with customer_id
-        # This will be updated when subscription is created
-        # Using upsert to handle race conditions
-        supabase.table('subscriptions').upsert({
-            'user_id': user_id,
-            'razorpay_customer_id': customer_id,
-            'plan_name': 'pending',  # Will be updated
-            'plan_id': 'pending',
-            'status': 'customer_created',  # Transient state
-        }, on_conflict='user_id,plan_name').execute()
-        logger.info(f"Persisted customer {customer_id} for user {user_id}")
-        return True
-    except Exception as e:
-        # Log but don't fail - customer can still be used
-        logger.warning(f"Failed to persist customer {customer_id}: {e}")
-        return True  # Allow to proceed
+    # Customer is persisted via store_razorpay_customer_new() at the call site.
+    # This function is intentionally a no-op to prevent callers from inserting
+    # a dangling subscriptions row that breaks the real INSERT.
+    return True
 
 def create_razorpay_subscription(data, idempotency_key=None):
     """
@@ -1445,14 +1451,15 @@ def verify_subscription():
         if SUPABASE_AVAILABLE:
             supabase = get_supabase_client()
 
-            # Get subscription UUID and current status
+            # Get subscription UUID, status, and product domain
             sub_result = supabase.table('subscriptions').select(
-                'id, status'
+                'id, status, product_domain'
             ).eq(
                 'razorpay_subscription_id', subscription_id
             ).limit(1).execute()
             subscription_uuid = sub_result.data[0]['id'] if sub_result.data else None
             sub_current_status = sub_result.data[0]['status'] if sub_result.data else None
+            sub_product_domain = sub_result.data[0].get('product_domain') if sub_result.data else None
 
             if subscription_uuid:
                 # Use lifecycle engine for state transition + audit + cache
@@ -1521,6 +1528,28 @@ def verify_subscription():
                 'status': 'verification_completed',
                 'razorpay_payment_id': payment_id
             }).eq('razorpay_subscription_id', subscription_id).eq('user_id', user_id).execute()
+
+            # ── Ensure user_products membership row exists ───────────────
+            # Auth sync checks user_products to gate dashboard access.
+            # Without this UPSERT, paying users get PRODUCT_NOT_ENABLED.
+            if sub_product_domain and sub_product_domain != 'dashboard':
+                try:
+                    supabase.table('user_products').upsert({
+                        'user_id': user_id,
+                        'product': sub_product_domain,
+                        'status': 'active',
+                        'activated_by': 'system',
+                    }, on_conflict='user_id,product').execute()
+                    logger.info(
+                        f"[{request_id}] user_products upserted: "
+                        f"user={user_id}, product={sub_product_domain}, status=active"
+                    )
+                except Exception as membership_err:
+                    # Non-fatal: subscription is active regardless.
+                    # Auth sync has a fallback check on subscriptions table.
+                    logger.warning(
+                        f"[{request_id}] user_products upsert failed (non-fatal): {membership_err}"
+                    )
 
         # CRITICAL: Invalidate status cache so the polling page sees 'active' immediately
         # Without this, the 10-second TTL cache returns stale 'pending' status
@@ -1675,6 +1704,98 @@ def cancel_subscription():
     except Exception as e:
         logger.exception(f"[{request_id}] Error cancelling subscription: {e}")
         return error_response('Failed to cancel subscription', 'INTERNAL_ERROR', 500)
+
+
+# =============================================================================
+# Verify Proration Payment (Frontend-initiated, supplements webhook)
+# =============================================================================
+
+@payments_bp.route('/subscriptions/verify-proration', methods=['POST'])
+@require_auth
+@require_razorpay
+def verify_proration_payment():
+    """
+    Verify and apply a proration payment after Razorpay checkout completes.
+
+    POST /api/subscriptions/verify-proration
+    Body: { "razorpay_payment_id": "pay_xxx", "razorpay_order_id": "order_xxx" }
+
+    Called by the frontend immediately after the Razorpay proration order
+    checkout handler fires. This ensures the plan is applied right away
+    instead of waiting for the payment.captured webhook (which can be
+    delayed by seconds to minutes in Razorpay sandbox).
+
+    Idempotent: safe to call multiple times or overlap with the webhook.
+    """
+    request_id = g.request_id
+    user_id = g.user_id
+
+    try:
+        body = request.get_json() or {}
+        payment_id = body.get('razorpay_payment_id')
+        order_id = body.get('razorpay_order_id')
+
+        if not payment_id or not order_id:
+            return error_response(
+                'razorpay_payment_id and razorpay_order_id are required',
+                'VALIDATION_ERROR', 400
+            )
+
+        # Verify payment with Razorpay API
+        try:
+            payment = razorpay_client.payment.fetch(payment_id)
+        except Exception as e:
+            logger.error(f"[{request_id}] Razorpay payment fetch failed: {e}")
+            return error_response(
+                'Could not verify payment with Razorpay',
+                'RAZORPAY_ERROR', 502
+            )
+
+        if payment.get('status') != 'captured':
+            logger.info(
+                f"[{request_id}] Proration payment {payment_id} status={payment.get('status')}, "
+                f"not yet captured — webhook will handle it"
+            )
+            return success_response({
+                'applied': False,
+                'reason': 'payment_not_captured',
+                'payment_status': payment.get('status'),
+            })
+
+        # Verify this payment belongs to the correct order
+        if payment.get('order_id') != order_id:
+            return error_response(
+                'Payment order_id mismatch',
+                'ORDER_MISMATCH', 400
+            )
+
+        # Delegate to PlanChangeService (same logic as webhook path)
+        if not PLAN_CHANGE_AVAILABLE:
+            return error_response(
+                'Plan change service not available',
+                'PLAN_CHANGE_UNAVAILABLE', 503
+            )
+
+        plan_change_service = get_plan_change_service()
+        result = plan_change_service.handle_proration_payment_captured(
+            order_id=order_id,
+            payment_id=payment_id,
+            event_id=f"verify_{payment_id}",
+            request_id=request_id,
+        )
+
+        logger.info(
+            f"[{request_id}] verify-proration result: {result}"
+        )
+
+        return success_response({
+            'applied': result.get('reason') in ('upgrade_applied', 'already_captured', 'already_locked', 'already_processed'),
+            'detail': result,
+        })
+
+    except Exception as e:
+        logger.exception(f"[{request_id}] verify-proration error: {e}")
+        return error_response('Failed to verify proration payment', 'INTERNAL_ERROR', 500)
 
 
 # =============================================================================

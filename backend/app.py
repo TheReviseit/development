@@ -10,6 +10,17 @@ Performance Features:
 - Request profiling and metrics
 """
 
+# ── Fix Windows console encoding (must be first) ──────────────────────
+# Colorama wraps stdout with cp1252 on Windows, which chokes on emoji
+# characters (🔥, ✅, ❌, etc.).  Reconfigure to UTF-8 before any
+# library has a chance to print or wrap stdout.
+import sys
+if hasattr(sys.stdout, 'reconfigure'):
+    sys.stdout.reconfigure(encoding='utf-8', errors='replace')
+if hasattr(sys.stderr, 'reconfigure'):
+    sys.stderr.reconfigure(encoding='utf-8', errors='replace')
+
+
 import os
 import time
 import asyncio
@@ -401,6 +412,14 @@ try:
     logger.info("Billing admin routes registered (/api/admin/billing/*)")
 except ImportError as e:
     logger.warning(f"Billing admin routes not available: {e}")
+
+# Register Forms API routes (form builder + public submissions)
+try:
+    from routes.forms_api import forms_bp
+    app.register_blueprint(forms_bp)
+    logger.info("📋 Forms API routes registered (/api/forms/*)")
+except ImportError as e:
+    logger.warning(f"Forms API routes not available: {e}")
 
 
 # Initialize webhook security

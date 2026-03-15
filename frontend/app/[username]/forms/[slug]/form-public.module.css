@@ -1,0 +1,356 @@
+/* =============================================================================
+   PUBLIC FORM — Enterprise Styling
+   Clean, modern, standalone form page
+   ============================================================================= */
+
+.publicFormPage {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 32px 16px;
+  background: linear-gradient(135deg, #f0f0ff 0%, #f5f3ff 50%, #fce7f3 100%);
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+}
+
+.formWrapper {
+  width: 100%;
+  max-width: 620px;
+  animation: fadeUp 0.5s ease;
+}
+
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(20px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.formHeader {
+  text-align: center;
+  margin-bottom: 32px;
+}
+
+.formTitle {
+  font-size: 32px;
+  font-weight: 800;
+  color: #111;
+  letter-spacing: -0.5px;
+  margin-bottom: 8px;
+}
+
+.formDescription {
+  font-size: 16px;
+  color: #666;
+  line-height: 1.6;
+}
+
+.formBody {
+  background: #fff;
+  border-radius: 20px;
+  padding: 40px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.08), 0 0 0 1px rgba(0, 0, 0, 0.04);
+}
+
+/* ─── Field Styles ─────────────────────────────────────────────────────── */
+
+.fieldGroup {
+  margin-bottom: 24px;
+}
+
+.fieldLabel {
+  display: block;
+  font-size: 14px;
+  font-weight: 600;
+  color: #333;
+  margin-bottom: 6px;
+}
+
+.fieldRequired {
+  color: #ef4444;
+  margin-left: 2px;
+}
+
+.fieldHelpText {
+  font-size: 12px;
+  color: #999;
+  margin-top: 4px;
+}
+
+.fieldInput {
+  width: 100%;
+  padding: 12px 16px;
+  border: 1.5px solid #e5e7eb;
+  border-radius: 10px;
+  font-size: 15px;
+  color: #333;
+  background: #fafafa;
+  outline: none;
+  transition: all 0.2s ease;
+  box-sizing: border-box;
+}
+
+.fieldInput:focus {
+  border-color: #4f46e5;
+  background: #fff;
+  box-shadow: 0 0 0 4px rgba(79, 70, 229, 0.08);
+}
+
+.fieldInput::placeholder {
+  color: #bbb;
+}
+
+.fieldTextarea {
+  width: 100%;
+  padding: 12px 16px;
+  border: 1.5px solid #e5e7eb;
+  border-radius: 10px;
+  font-size: 15px;
+  color: #333;
+  background: #fafafa;
+  outline: none;
+  min-height: 100px;
+  resize: vertical;
+  transition: all 0.2s ease;
+  box-sizing: border-box;
+  font-family: inherit;
+}
+
+.fieldTextarea:focus {
+  border-color: #4f46e5;
+  background: #fff;
+  box-shadow: 0 0 0 4px rgba(79, 70, 229, 0.08);
+}
+
+.fieldSelect {
+  width: 100%;
+  padding: 12px 16px;
+  border: 1.5px solid #e5e7eb;
+  border-radius: 10px;
+  font-size: 15px;
+  color: #333;
+  background: #fafafa;
+  outline: none;
+  transition: all 0.2s ease;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg width='10' height='6' viewBox='0 0 10 6' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M1 1L5 5L9 1' stroke='%23999' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 16px center;
+  cursor: pointer;
+}
+
+.fieldSelect:focus {
+  border-color: #4f46e5;
+  background-color: #fff;
+  box-shadow: 0 0 0 4px rgba(79, 70, 229, 0.08);
+}
+
+.radioGroup,
+.checkboxGroup {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.radioOption,
+.checkboxOption {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 15px;
+  color: #444;
+  cursor: pointer;
+  padding: 8px 12px;
+  border-radius: 8px;
+  transition: background 0.15s ease;
+}
+
+.radioOption:hover,
+.checkboxOption:hover {
+  background: #f5f3ff;
+}
+
+.radioOption input[type='radio'],
+.checkboxOption input[type='checkbox'] {
+  width: 18px;
+  height: 18px;
+  accent-color: #4f46e5;
+  cursor: pointer;
+}
+
+.fieldHeading {
+  font-size: 22px;
+  font-weight: 700;
+  color: #111;
+  margin: 8px 0 4px;
+  padding: 0;
+}
+
+.fieldDivider {
+  border: none;
+  border-top: 1px solid #e5e7eb;
+  margin: 12px 0;
+}
+
+.fieldError {
+  font-size: 13px;
+  color: #dc2626;
+  margin-top: 4px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+/* ─── Submit ───────────────────────────────────────────────────────────── */
+
+.submitBtn {
+  width: 100%;
+  padding: 14px 28px;
+  background: linear-gradient(135deg, #4f46e5, #7c3aed);
+  color: #fff;
+  border: none;
+  border-radius: 12px;
+  font-size: 16px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  box-shadow: 0 4px 14px rgba(79, 70, 229, 0.3);
+  margin-top: 8px;
+}
+
+.submitBtn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 6px 20px rgba(79, 70, 229, 0.4);
+}
+
+.submitBtn:active {
+  transform: translateY(0);
+}
+
+.submitBtn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  transform: none;
+}
+
+/* ─── Success State ────────────────────────────────────────────────────── */
+
+.successContainer {
+  text-align: center;
+  padding: 60px 40px;
+}
+
+.successIcon {
+  width: 80px;
+  height: 80px;
+  background: linear-gradient(135deg, #d1fae5, #a7f3d0);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 auto 24px;
+  font-size: 36px;
+  animation: scaleIn 0.5s ease;
+}
+
+@keyframes scaleIn {
+  from { transform: scale(0); }
+  to { transform: scale(1); }
+}
+
+.successTitle {
+  font-size: 24px;
+  font-weight: 700;
+  color: #111;
+  margin-bottom: 8px;
+}
+
+.successMessage {
+  font-size: 16px;
+  color: #666;
+  line-height: 1.6;
+}
+
+/* ─── Error / Not Found ────────────────────────────────────────────────── */
+
+.notFound {
+  text-align: center;
+  padding: 80px 40px;
+}
+
+.notFoundIcon {
+  font-size: 48px;
+  margin-bottom: 16px;
+}
+
+.notFoundTitle {
+  font-size: 24px;
+  font-weight: 700;
+  color: #111;
+  margin-bottom: 8px;
+}
+
+.notFoundText {
+  font-size: 16px;
+  color: #666;
+}
+
+/* ─── Loading ──────────────────────────────────────────────────────────── */
+
+.loadingPage {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, #f0f0ff 0%, #f5f3ff 50%, #fce7f3 100%);
+}
+
+.loadingSpinner {
+  width: 40px;
+  height: 40px;
+  border: 3px solid #e5e7eb;
+  border-top-color: #4f46e5;
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.poweredBy {
+  text-align: center;
+  margin-top: 24px;
+  font-size: 12px;
+  color: #bbb;
+}
+
+.poweredBy a {
+  color: #999;
+  text-decoration: none;
+  font-weight: 500;
+}
+
+.poweredBy a:hover {
+  color: #4f46e5;
+}
+
+/* Responsive */
+@media (max-width: 640px) {
+  .publicFormPage {
+    padding: 16px 12px;
+  }
+
+  .formTitle {
+    font-size: 24px;
+  }
+
+  .formBody {
+    padding: 24px;
+    border-radius: 16px;
+  }
+
+  .fieldInput,
+  .fieldTextarea,
+  .fieldSelect {
+    font-size: 16px; /* Prevent iOS zoom */
+  }
+}

@@ -32,7 +32,7 @@ yarn-error.log*
 
 # env files (can opt-in for committing if needed)
 .env*
-
+nul*
 # Firebase Admin SDK - Service Account Keys (SENSITIVE)
 *firebase-adminsdk*.json
 serviceAccountKey.json

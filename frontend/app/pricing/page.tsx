@@ -52,9 +52,7 @@ export default async function PricingPage() {
   return (
     <>
       <Header />
-      <main className="pt-20">
-        {" "}
-        {/* Add padding for the fixed header */}
+      <main className="pt-32 pb-24">
         <PricingCards domain={product} />
       </main>
       <Footer />

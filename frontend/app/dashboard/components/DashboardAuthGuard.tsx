@@ -86,13 +86,20 @@ export function DashboardAuthGuard({
         );
         break;
 
-      case "PRODUCT_NOT_ENABLED":
-        // NEW (Option B): User exists but doesn't have product membership
+      case "PRODUCT_NOT_ENABLED": {
+        // Paid products (marketing, shop, showcase) must go through the
+        // onboarding/payment flow — NOT the free-trial activate page.
+        const product = currentProduct || "dashboard";
+        const PAID_DOMAINS = ["marketing", "shop", "showcase"];
+        const destination = PAID_DOMAINS.includes(product)
+          ? `/onboarding-embedded?domain=${product}`
+          : `/activate?product=${product}`;
         console.warn(
-          "[DASHBOARD] Product not enabled, redirecting to activation",
+          `[DASHBOARD] Product not enabled, redirecting to ${destination}`,
         );
-        hardRedirect(`/activate?product=${currentProduct || "dashboard"}`);
+        hardRedirect(destination);
         break;
+      }
 
       case "AUTH_ERROR":
         console.error("[DASHBOARD] Auth error detected, redirecting to login");

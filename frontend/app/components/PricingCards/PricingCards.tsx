@@ -27,6 +27,7 @@ interface PricingCardsProps {
   onSubscriptionSuccess?: (planName: string) => void;
   domain?: ProductDomain; // NEW: Domain for pricing
   theme?: "light" | "dark"; // NEW: Theme selection
+  hideHeader?: boolean; // NEW: Option to hide internal header
 }
 
 type PlanName = PlanTier;
@@ -39,6 +40,7 @@ export default function PricingCards({
   onSubscriptionSuccess,
   domain: propDomain,
   theme = "light",
+  hideHeader = false,
 }: PricingCardsProps) {
   const [isLoading, setIsLoading] = useState<PlanName | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -244,7 +246,11 @@ export default function PricingCards({
             <span className={styles.amount}>
               {(plan.price / 100).toLocaleString("en-IN")}
             </span>
-            <span className={styles.period}>/mo</span>
+            <div className={styles.period}>
+              per user
+              <br />
+              per month
+            </div>
           </div>
           {plan.tagline && <p className={styles.overageNote}>{plan.tagline}</p>}
         </div>
@@ -270,13 +276,15 @@ export default function PricingCards({
     <section id="pricing" className={styles.pricingSection} data-theme={theme}>
       <div className={styles.container}>
         {/* Section Header */}
-        <div className={styles.header}>
-          <h2 className={styles.title}>Choose Your Perfect Plan</h2>
-          <p className={styles.subtitle}>
-            {pricingConfig.product.name} - AI-powered automation for Indian
-            businesses
-          </p>
-        </div>
+        {!hideHeader && (
+          <div className={styles.header}>
+            <h1 className={styles.title}>
+              We've got a plan that's
+              <br />
+              perfect for you
+            </h1>
+          </div>
+        )}
 
         {/* Error Message */}
         {error && (
