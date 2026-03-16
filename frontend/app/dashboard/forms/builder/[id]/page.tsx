@@ -817,7 +817,7 @@ export default function FormBuilderPage() {
             />
           </div>
           <div className={styles.canvasToolbarRight}>
-            <button className={`${styles.toolbarBtn} ${styles.saveBtn}`} onClick={handleSave} disabled={saving}>
+            <button className={`${styles.toolbarBtn} ${styles.saveBtn}`} onClick={() => handleSave()} disabled={saving}>
               {saving ? "Saving..." : "Save"}
             </button>
             {form.status === "published" ? (
