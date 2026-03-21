@@ -209,7 +209,9 @@
   width: 300px;
   max-width: 100%;
   height: auto;
-  background: var(--card-bg);
+  background: var(--header-bg, #ffffff);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
   border-left: 1px solid var(--header-border);
   border-radius: 0 0 0 16px;
   box-shadow: -4px 0 6px rgba(0, 0, 0, 0.05);
