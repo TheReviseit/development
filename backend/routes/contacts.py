@@ -25,13 +25,30 @@ except ImportError:
 
 
 def require_auth(f):
-    """Decorator to require authentication."""
+    """Decorator to require authentication and map Firebase UID to Supabase UUID."""
     @wraps(f)
     def decorated(*args, **kwargs):
-        user_id = request.headers.get('X-User-ID')
-        if not user_id:
+        from flask import g
+        firebase_uid = request.headers.get('X-User-ID')
+        if not firebase_uid:
             return jsonify({'success': False, 'error': 'Authentication required'}), 401
-        request.user_id = user_id
+        
+        # Resolve Supabase UUID if available
+        if SUPABASE_AVAILABLE:
+            from supabase_client import resolve_user_id
+            supabase_uuid = resolve_user_id(firebase_uid)
+            if not supabase_uuid:
+                return jsonify({'success': False, 'error': 'User mapping not found'}), 404
+            request.user_id = supabase_uuid  # Override with Supabase UUID!
+            g.user_id = supabase_uuid        # Feature gates expect g.user_id
+        else:
+            request.user_id = firebase_uid
+            g.user_id = firebase_uid
+            
+        # Feature gates also expect g.product_domain. We default to 'marketing' since this is a marketing CRM
+        if not hasattr(g, 'product_domain'):
+            g.product_domain = "marketing"
+            
         return f(*args, **kwargs)
     return decorated
 
@@ -168,7 +185,7 @@ def create_contact():
         # Check if contact already exists
         existing = client.table('contacts').select('id').eq(
             'user_id', user_id
-        ).eq('phone_number', normalized_phone).limit(1).execute()
+        ).eq('phone_normalized', normalized_phone).limit(1).execute()
         
         if existing.data:
             return jsonify({

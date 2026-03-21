@@ -1,10 +1,14 @@
 """
-Gemini Client Wrapper for AI Brain v4.0.
+Gemini Client Wrapper for AI Brain v5.0 — FAANG-grade resilience.
 
 Centralised Gemini API client with:
-- Retry with exponential backoff (via tenacity)
+- Circuit breaker integration (CLOSED/OPEN/HALF_OPEN state machine)
+- Per-key cooldown tracking (skip exhausted keys, rotate to available ones)
+- Multi-key rotation with intelligent selection (GEMINI_API_KEY, GEMINI_API_KEY_2, ...)
+- Retry with exponential backoff + jitter (via tenacity)
 - 429 RESOURCE_EXHAUSTED aware retry with Retry-After parsing
-- Multi-key rotation (GEMINI_API_KEY, GEMINI_API_KEY_2, ...)
+- Adaptive load shedding (skip self-check when under pressure)
+- Observability metrics integration
 - Request spacing to prevent burst rate-limiting
 - Timeout protection
 - OpenAI tool-schema → Gemini function-declaration conversion
@@ -19,6 +23,8 @@ import time
 import random
 import logging
 import threading
+import uuid
+import concurrent.futures
 from typing import Dict, List, Any, Optional, Generator
 
 from tenacity import (
@@ -28,6 +34,14 @@ from tenacity import (
     retry_if_exception,
     retry_if_exception_type,
 )
+
+from .circuit_breaker import (
+    CircuitBreaker,
+    PerKeyCooldownTracker,
+    get_circuit_breaker,
+)
+from .observability import get_ai_metrics
+from .system_health import get_system_health
 
 logger = logging.getLogger('reviseit.gemini')
 
@@ -52,6 +66,11 @@ class RateLimitError(Exception):
         super().__init__(message)
         self.retry_after = retry_after
         self.original_error = original_error
+
+
+class CircuitOpenError(Exception):
+    """Raised when the circuit breaker is OPEN, blocking all LLM calls."""
+    pass
 
 
 # =========================================================================
@@ -277,19 +296,22 @@ def _collect_api_keys(primary_key: str = None) -> List[str]:
 
 
 # =========================================================================
-# GEMINI CLIENT
+# GEMINI CLIENT — v5.0 with Circuit Breaker + Per-Key Cooldown
 # =========================================================================
 
 class GeminiClient:
     """
-    Production-ready Gemini API client.
+    Production-ready Gemini API client — FAANG-grade resilience.
 
     Features:
+    - Circuit breaker (CLOSED/OPEN/HALF_OPEN) — proactive failure prevention
+    - Per-key cooldown tracking — skip exhausted keys intelligently
+    - Multi-key rotation — round-robin with cooldown awareness
     - Retry with exponential backoff (configurable attempts)
     - 429 RESOURCE_EXHAUSTED: retry with Retry-After delay + jitter
-    - Multi-key rotation: automatically rotates to next API key on 429
     - Request spacing: configurable minimum interval between requests
     - Timeout protection
+    - Observability metrics integration
     - JSON-mode support
     - Tool/function calling
     - Streaming
@@ -300,7 +322,7 @@ class GeminiClient:
         api_key: str,
         max_retries: int = 3,
         timeout_seconds: int = 30,
-        rate_limit_max_retries: int = 2,
+        rate_limit_max_retries: int = 5,
         min_request_interval_ms: int = 200,
     ):
         genai, types = _ensure_genai()
@@ -316,30 +338,76 @@ class GeminiClient:
         self._current_key_index = 0
         self._key_lock = threading.Lock()
 
+        # Per-key cooldown tracker (NEW in v5.0)
+        self._key_cooldowns = PerKeyCooldownTracker()
+
         # Create initial client
         self._client = genai.Client(api_key=self._api_keys[0] if self._api_keys else api_key)
+        self._clients: Dict[int, Any] = {}  # Cache clients per key index
+
+        # Circuit breaker (singleton, shared across all instances)
+        self._circuit_breaker = get_circuit_breaker()
+
+        # Observability metrics
+        self._metrics = get_ai_metrics()
 
         # Request spacing
         self._last_request_time = 0.0
         self._request_lock = threading.Lock()
 
+        # Thread-safe client cache lock
+        self._client_cache_lock = threading.Lock()
+
+        # System health monitor
+        self._system_health = get_system_health()
+
         if len(self._api_keys) > 1:
             logger.info(f"🔑 Multi-key rotation enabled: {len(self._api_keys)} API keys loaded")
+        else:
+            logger.info(f"🔑 Single API key loaded (add GEMINI_API_KEY_2, _3, etc. for rotation)")
 
     # -----------------------------------------------------------------
-    # KEY ROTATION
+    # KEY ROTATION — Intelligent, cooldown-aware
     # -----------------------------------------------------------------
+
+    def _get_client_for_key(self, key_index: int):
+        """Get or create a Gemini client for a specific key index (thread-safe)."""
+        with self._client_cache_lock:
+            if key_index not in self._clients:
+                self._clients[key_index] = self._genai.Client(
+                    api_key=self._api_keys[key_index]
+                )
+            return self._clients[key_index]
+
+    def _select_best_key(self) -> int:
+        """Select the best available API key (one not in cooldown)."""
+        available = self._key_cooldowns.get_next_available_key(
+            len(self._api_keys), self._current_key_index
+        )
+        if available is not None:
+            return available
+        # All keys in cooldown — return current and let retry handle it
+        return self._current_key_index
 
     def _rotate_key(self) -> bool:
-        """Rotate to the next API key. Returns True if a new key is available."""
+        """Rotate to the next available API key. Returns True if a new key found."""
         with self._key_lock:
             if len(self._api_keys) <= 1:
                 return False
 
+            # Find an available key (skip cooldown keys)
+            for offset in range(1, len(self._api_keys)):
+                candidate = (self._current_key_index + offset) % len(self._api_keys)
+                if self._key_cooldowns.is_available(candidate):
+                    self._current_key_index = candidate
+                    self._client = self._get_client_for_key(candidate)
+                    logger.info(f"🔑 Rotated to API key #{candidate + 1} (available)")
+                    return True
+
+            # All keys in cooldown — rotate anyway (will wait)
             self._current_key_index = (self._current_key_index + 1) % len(self._api_keys)
-            new_key = self._api_keys[self._current_key_index]
-            self._client = self._genai.Client(api_key=new_key)
-            logger.info(f"🔑 Rotated to API key #{self._current_key_index + 1}")
+            self._client = self._get_client_for_key(self._current_key_index)
+            logger.warning(f"🔑 All keys in cooldown, rotated to #{self._current_key_index + 1}")
             return True
 
     # -----------------------------------------------------------------
@@ -386,8 +454,20 @@ class GeminiClient:
             json_mode: If True, force JSON output
             tools: Gemini tool objects (already converted)
             tool_choice: Not used by Gemini (auto by default)
+
+        Raises:
+            CircuitOpenError: If circuit breaker is OPEN (use fallback)
+            RateLimitError: If all keys and retries exhausted
         """
         types = self._types
+
+        # CIRCUIT BREAKER CHECK — Fail fast if circuit is open
+        if not self._circuit_breaker.can_execute():
+            self._metrics.record_circuit_blocked()
+            raise CircuitOpenError(
+                "Circuit breaker is OPEN — LLM calls blocked. "
+                "Using fallback responses until API recovers."
+            )
 
         # Build content list from messages
         contents = self._build_contents(messages)
@@ -405,6 +485,27 @@ class GeminiClient:
 
         return self._call_with_retry(model, contents, gen_config)
 
+    def _call_api_with_timeout(self, client, model, contents, config):
+        """Call Gemini API with SLA timeout enforcement.
+
+        Uses ThreadPoolExecutor to enforce hard timeout — prevents
+        hanging requests that block threads indefinitely.
+        """
+        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
+            future = pool.submit(
+                client.models.generate_content,
+                model=model,
+                contents=contents,
+                config=config,
+            )
+            try:
+                return future.result(timeout=self.timeout_seconds)
+            except concurrent.futures.TimeoutError:
+                future.cancel()
+                raise TimeoutError(
+                    f"Gemini API call timed out after {self.timeout_seconds}s"
+                )
+
     # -----------------------------------------------------------------
     # STREAMING
     # -----------------------------------------------------------------
@@ -421,6 +522,11 @@ class GeminiClient:
         Stream a response token-by-token.
         Yields text chunks as they arrive.
         """
+        # Circuit breaker check
+        if not self._circuit_breaker.can_execute():
+            self._metrics.record_circuit_blocked()
+            raise CircuitOpenError("Circuit breaker is OPEN")
+
         types = self._types
         contents = self._build_contents(messages)
 
@@ -444,11 +550,11 @@ class GeminiClient:
                 yield text
 
     # -----------------------------------------------------------------
-    # INTERNAL: retry, 429 handling, content builder
+    # INTERNAL: retry, 429 handling, circuit breaker, content builder
     # -----------------------------------------------------------------
 
     def _call_with_retry(self, model, contents, config):
-        """Call Gemini API with tenacity retry + 429-aware backoff + key rotation."""
+        """Call Gemini API with retry + 429-aware backoff + key rotation + circuit breaker."""
 
         def _is_retryable(exc):
             """Return True if the error should be retried (non-429, non-auth)."""
@@ -470,40 +576,81 @@ class GeminiClient:
         )
         def _do_call():
             self._wait_for_spacing()
-            return self._client.models.generate_content(
-                model=model,
-                contents=contents,
-                config=config,
+
+            # Select best available key before each attempt
+            best_key = self._select_best_key()
+            if best_key != self._current_key_index:
+                with self._key_lock:
+                    self._current_key_index = best_key
+                    self._client = self._get_client_for_key(best_key)
+
+            return self._call_api_with_timeout(
+                self._client, model, contents, config
             )
 
-        # Outer loop: handle 429 with Retry-After + key rotation
+        # Outer loop: handle 429 with Retry-After + key rotation + circuit breaker
         last_429_error = None
+        total_retries = 0
+
         for attempt in range(self._rate_limit_max_retries + 1):
             try:
-                return _do_call()
+                result = _do_call()
+
+                # SUCCESS — record metrics, system health, and reset circuit breaker
+                self._circuit_breaker.record_success()
+                self._system_health.record_success()
+                self._metrics.record_success(
+                    key_index=self._current_key_index,
+                    retries=total_retries,
+                )
+                return result
+
             except Exception as e:
                 if not _is_rate_limit_error(e):
                     raise  # Non-429 errors propagate immediately
 
                 last_429_error = e
+                total_retries += 1
                 retry_after = _parse_retry_after(e)
 
-                # Try rotating to another key first (instant, no wait)
-                if self._rotate_key():
+                # Record failure in circuit breaker, system health, and metrics
+                self._circuit_breaker.record_failure()
+                self._system_health.record_failure(is_rate_limit=True)
+                self._metrics.record_rate_limit(
+                    key_index=self._current_key_index,
+                    retry_after=retry_after,
+                )
+
+                # Mark current key as exhausted with cooldown
+                self._key_cooldowns.mark_exhausted(
+                    self._current_key_index, retry_after
+                )
+
+                # Try rotating to another available key first (instant, no wait)
+                if self._rotate_key() and self._key_cooldowns.is_available(self._current_key_index):
                     logger.warning(
-                        f"⚠️ 429 rate limited on key #{self._current_key_index}. "
-                        f"Rotated to next key, retrying immediately (attempt {attempt + 1}/{self._rate_limit_max_retries + 1})"
+                        f"⚠️ 429 on key #{(self._current_key_index - 1) % len(self._api_keys) + 1}. "
+                        f"Rotated to key #{self._current_key_index + 1}, retrying "
+                        f"(attempt {attempt + 1}/{self._rate_limit_max_retries + 1})"
                     )
                     continue
 
-                # No more keys — wait and retry with same key
+                # No available keys — check circuit breaker before waiting
+                if not self._circuit_breaker.can_execute():
+                    logger.error(
+                        f"⛔ Circuit breaker OPEN after {attempt + 1} failures. "
+                        f"Switching to fallback responses."
+                    )
+                    break
+
+                # Wait with jitter and retry
                 if attempt < self._rate_limit_max_retries:
-                    # Add jitter: retry_after + random 1-5s
                     jitter = random.uniform(1.0, 5.0)
                     wait_time = min(retry_after + jitter, 60.0)  # Cap at 60s
                     logger.warning(
                         f"🔄 Rate limited (429). Waiting {wait_time:.1f}s before retry "
-                        f"(attempt {attempt + 1}/{self._rate_limit_max_retries + 1})"
+                        f"(attempt {attempt + 1}/{self._rate_limit_max_retries + 1}, "
+                        f"key #{self._current_key_index + 1})"
                     )
                     time.sleep(wait_time)
                 else:

@@ -130,6 +130,8 @@ export interface DomainVisibilityRules {
   campaigns: boolean;
   bulkMessages: boolean;
   templates: boolean;
+  forms: boolean;
+  contacts: boolean;
 }
 
 const DOMAIN_VISIBILITY: Record<ProductDomain, DomainVisibilityRules> = {
@@ -146,6 +148,8 @@ const DOMAIN_VISIBILITY: Record<ProductDomain, DomainVisibilityRules> = {
     campaigns: false,
     bulkMessages: false,
     templates: false,
+    forms: false,
+    contacts: false,
   },
 
   showcase: {
@@ -161,6 +165,8 @@ const DOMAIN_VISIBILITY: Record<ProductDomain, DomainVisibilityRules> = {
     campaigns: false,
     bulkMessages: false,
     templates: false,
+    forms: false,
+    contacts: false,
   },
 
   marketing: {
@@ -176,6 +182,8 @@ const DOMAIN_VISIBILITY: Record<ProductDomain, DomainVisibilityRules> = {
     campaigns: true,
     bulkMessages: true,
     templates: true,
+    forms: true,
+    contacts: true,
   },
 
   api: {
@@ -191,6 +199,8 @@ const DOMAIN_VISIBILITY: Record<ProductDomain, DomainVisibilityRules> = {
     campaigns: false,
     bulkMessages: false,
     templates: false,
+    forms: false,
+    contacts: false,
   },
 
   dashboard: {
@@ -206,6 +216,8 @@ const DOMAIN_VISIBILITY: Record<ProductDomain, DomainVisibilityRules> = {
     campaigns: false,
     bulkMessages: false,
     templates: false,
+    forms: false,
+    contacts: false,
   },
 };
 

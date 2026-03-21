@@ -729,20 +729,11 @@ def submit_form(
     fields = form_data.get("fields", [])
     field_map = {f["id"]: f for f in fields}
 
-    # Validate required fields
-    errors = {}
-    for f in fields:
-        if f.get("required", False) and f["field_type"] not in ("hidden", "utm", "heading", "paragraph_block", "divider", "description", "spacer"):
-            val = values.get(f["id"], "").strip() if values.get(f["id"]) else ""
-            if not val:
-                errors[f["id"]] = f"'{f.get('label', 'This field')}' is required"
-
-    # Validate email fields
-    for f in fields:
-        if f["field_type"] == "email" and values.get(f["id"]):
-            email_val = values[f["id"]].strip()
-            if email_val and not re.match(r'^[^@]+@[^@]+\.[^@]+$', email_val):
-                errors[f["id"]] = "Please enter a valid email address"
+    # ── Validate submission using the schema-driven engine ──────────────
+    # This replaces scattered hardcoded checks with a single pipeline
+    # that mirrors the frontend validator exactly.
+    from services.form_validator import validate_submission
+    errors = validate_submission(fields, values)
 
     if errors:
         raise ValueError({"validation_errors": errors})

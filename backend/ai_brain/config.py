@@ -73,9 +73,17 @@ class LLMConfig:
     timeout_seconds: int = 30
     retry_base_delay: float = 1.0               # Base delay for exponential backoff (seconds)
 
-    # 429 rate-limit resilience
-    rate_limit_max_retries: int = 2             # Max retries specifically for 429 RESOURCE_EXHAUSTED
+    # 429 rate-limit resilience (v5.0: increased from 2→5 retries)
+    rate_limit_max_retries: int = 5             # Max retries specifically for 429 RESOURCE_EXHAUSTED
     min_request_interval_ms: int = 200          # Min milliseconds between API calls (burst prevention)
+
+    # Circuit breaker settings (v5.0: FAANG-grade resilience)
+    circuit_breaker_threshold: int = 5          # Failures before circuit opens
+    circuit_breaker_recovery_s: float = 45.0    # Seconds before HALF_OPEN test
+
+    # Concurrency control (v6.0: prevents system collapse under load)
+    max_inflight_requests: int = 10             # Max simultaneous LLM API calls
+    sla_timeout_seconds: float = 15.0           # Max time before falling back to local
 
     # Confidence-based token escalation
     # When confidence < this threshold, use more tokens for better reasoning
@@ -158,6 +166,10 @@ class AIBrainConfig:
     enable_self_check: bool = True              # Post-generation quality check
     enable_smart_clarification: bool = True     # Ask instead of guess
     enable_response_validation: bool = True     # Validate prices/facts
+
+    # Load shedding (v6.0: explicit degradation control)
+    enable_load_shedding: bool = True           # Enable automatic load shedding
+    self_check_under_pressure: bool = False     # Force self-check OFF under load
 
     @classmethod
     def from_env(cls) -> "AIBrainConfig":

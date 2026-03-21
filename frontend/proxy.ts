@@ -95,6 +95,7 @@ const PUBLIC_API_ROUTES = [
   "/api/booking",
   "/api/showcase",
   "/api/forms/public",
+  "/api/forms/workspace",
 ];
 
 // =============================================================================

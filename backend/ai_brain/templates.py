@@ -113,7 +113,7 @@ INTENT_RESPONSE_TEMPLATES = {
         "schedule": "Our operating hours:\n\n{timing_details}",
     },
     "location": {
-        "with_map": "📍 Here's how to find us:\n\n{address}\n\n🗺️ Google Maps: {maps_link}\n\n{landmarks}",
+        "with_map": "📍 Here's how to find us:\n\n{address}\n\nGoogle Maps: {maps_link}\n\n{landmarks}",
         "without_map": "📍 Our address:\n\n{address}\n\nLandmarks: {landmarks}",
     },
     "complaint": {

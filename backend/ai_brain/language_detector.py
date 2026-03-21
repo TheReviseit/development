@@ -1,6 +1,9 @@
 """
 Language detection and routing for AI Brain.
 Supports multiple Indian languages and Hinglish.
+
+v2.0: Added Roman-script detection for Gujarati, Bengali, Marathi, Punjabi, Urdu.
+      Improved code-switching confidence for Hinglish.
 """
 
 import re
@@ -23,6 +26,7 @@ class Language(str, Enum):
     GUJARATI = "gu"
     PUNJABI = "pa"
     ODIA = "or"
+    URDU = "ur"
     UNKNOWN = "unknown"
 
 
@@ -76,17 +80,52 @@ TELUGU_INDICATORS = [
     r'\b(baagundi|chala|koncham|ledu|undi)\b',
 ]
 
+# Common Gujarati words in Roman script (NEW v2.0)
+GUJARATI_INDICATORS = [
+    r'\b(kem|cho|saru|barabar|nathi|aavjo|aavje)\b',
+    r'\b(aabhar|dhanyavaad|bhav|shu|chal|che)\b',
+    r'\b(tamari|dukan|kyaa|kyare|khule|bandh)\b',
+]
+
+# Common Bengali words in Roman script (NEW v2.0)
+BENGALI_INDICATORS = [
+    r'\b(kemon|acho|bhalo|dokan|kothay|din)\b',
+    r'\b(dhonnobad|nomoshkar|ki|khobor|thik|ache|besh)\b',
+    r'\b(kokhon|bondho|somoy|koto|dam)\b',
+]
+
+# Common Marathi words in Roman script (NEW v2.0)
+MARATHI_INDICATORS = [
+    r'\b(kasa|ahe|kay|challay|barobar|chhan)\b',
+    r'\b(dhanyawad|aabhari|yeto|punha|bhetuyaa)\b',
+    r'\b(mala|pahije|sangaa|namaskar)\b',
+]
+
+# Common Punjabi words in Roman script (NEW v2.0)
+PUNJABI_INDICATORS = [
+    r'\b(kiddan|ki|haal|sat|sri|akal|rabb|rakha)\b',
+    r'\b(dhanvaad|shukriya|phir|milange|theek)\b',
+    r'\b(kinne|paisa|kithe|kiven|changa)\b',
+]
+
+# Common Urdu words in Roman script (NEW v2.0)
+URDU_INDICATORS = [
+    r'\b(shukriya|khuda|hafiz|allah|adaab|salam)\b',
+    r'\b(meherbani|kya|haal|kaisa|batao|zaroor)\b',
+    r'\b(aap|janab|sahab|bibi|inshallah|mashallah)\b',
+]
+
 
 class LanguageDetector:
     """
     Detects language from text.
-    
-    Supports:
-    - Script-based detection (Devanagari, Tamil, etc.)
-    - Roman script Indian language detection
-    - Code-mixed language (Hinglish) detection
+
+    v2.0: Supports detection of all major Indian languages in Roman script:
+    - Hindi/Hinglish
+    - Tamil, Telugu
+    - Gujarati, Bengali, Marathi, Punjabi, Urdu
     """
-    
+
     def __init__(self):
         # Compile regex patterns
         self._hinglish_patterns = [
@@ -97,6 +136,21 @@ class LanguageDetector:
         ]
         self._telugu_patterns = [
             re.compile(p, re.IGNORECASE) for p in TELUGU_INDICATORS
+        ]
+        self._gujarati_patterns = [
+            re.compile(p, re.IGNORECASE) for p in GUJARATI_INDICATORS
+        ]
+        self._bengali_patterns = [
+            re.compile(p, re.IGNORECASE) for p in BENGALI_INDICATORS
+        ]
+        self._marathi_patterns = [
+            re.compile(p, re.IGNORECASE) for p in MARATHI_INDICATORS
+        ]
+        self._punjabi_patterns = [
+            re.compile(p, re.IGNORECASE) for p in PUNJABI_INDICATORS
+        ]
+        self._urdu_patterns = [
+            re.compile(p, re.IGNORECASE) for p in URDU_INDICATORS
         ]
     
     def detect(self, text: str) -> LanguageDetectionResult:
@@ -197,62 +251,103 @@ class LanguageDetector:
             1 for pattern in self._hinglish_patterns
             if pattern.search(text_lower)
         )
-        
+
         # Count Tamil indicators
         tamil_matches = sum(
             1 for pattern in self._tamil_patterns
             if pattern.search(text_lower)
         )
-        
+
         # Count Telugu indicators
         telugu_matches = sum(
             1 for pattern in self._telugu_patterns
             if pattern.search(text_lower)
         )
-        
-        # Determine language
-        max_matches = max(hinglish_matches, tamil_matches, telugu_matches)
-        
+
+        # Count new language indicators (v2.0)
+        gujarati_matches = sum(
+            1 for pattern in self._gujarati_patterns
+            if pattern.search(text_lower)
+        )
+        bengali_matches = sum(
+            1 for pattern in self._bengali_patterns
+            if pattern.search(text_lower)
+        )
+        marathi_matches = sum(
+            1 for pattern in self._marathi_patterns
+            if pattern.search(text_lower)
+        )
+        punjabi_matches = sum(
+            1 for pattern in self._punjabi_patterns
+            if pattern.search(text_lower)
+        )
+        urdu_matches = sum(
+            1 for pattern in self._urdu_patterns
+            if pattern.search(text_lower)
+        )
+
+        # Determine best language match
+        all_scores = {
+            'hinglish': hinglish_matches,
+            'tamil': tamil_matches,
+            'telugu': telugu_matches,
+            'gujarati': gujarati_matches,
+            'bengali': bengali_matches,
+            'marathi': marathi_matches,
+            'punjabi': punjabi_matches,
+            'urdu': urdu_matches,
+        }
+        max_lang = max(all_scores, key=all_scores.get)
+        max_matches = all_scores[max_lang]
+
         if max_matches == 0:
             return None
-        
-        if hinglish_matches == max_matches and hinglish_matches > 0:
-            # Check if it's pure Hindi transliteration or mixed
+
+        # Language mapping
+        lang_map = {
+            'hinglish': None,  # Special handling below
+            'tamil': Language.TAMIL,
+            'telugu': Language.TELUGU,
+            'gujarati': Language.GUJARATI,
+            'bengali': Language.BENGALI,
+            'marathi': Language.MARATHI,
+            'punjabi': Language.PUNJABI,
+            'urdu': Language.URDU,
+        }
+
+        # Hinglish/Hindi gets special treatment
+        if max_lang == 'hinglish':
             english_words = sum(1 for w in words if self._is_english_word(w))
-            
+
             if english_words > total_words * 0.3:
-                # Code-mixed Hinglish
+                # Code-mixed Hinglish — improved confidence scoring
+                # More matches = higher confidence (reward strong signals)
+                match_density = hinglish_matches / max(total_words, 1)
+                confidence = min(0.90, 0.45 + match_density * 0.5 + hinglish_matches * 0.08)
                 return LanguageDetectionResult(
                     language=Language.HINGLISH,
-                    confidence=min(0.85, 0.4 + hinglish_matches * 0.1),
+                    confidence=confidence,
                     script="latin",
                     is_mixed=True
                 )
             else:
-                # Primarily Hindi in Roman
                 return LanguageDetectionResult(
                     language=Language.HINDI,
                     confidence=min(0.75, 0.3 + hinglish_matches * 0.1),
                     script="latin",
                     is_mixed=False
                 )
-        
-        if tamil_matches == max_matches:
+
+        # All other languages
+        language = lang_map.get(max_lang)
+        if language:
             return LanguageDetectionResult(
-                language=Language.TAMIL,
-                confidence=min(0.75, 0.3 + tamil_matches * 0.15),
+                language=language,
+                confidence=min(0.80, 0.3 + max_matches * 0.15),
                 script="latin",
-                is_mixed=True
+                is_mixed=True  # Roman script Indian = always mixed context
             )
-        
-        if telugu_matches == max_matches:
-            return LanguageDetectionResult(
-                language=Language.TELUGU,
-                confidence=min(0.75, 0.3 + telugu_matches * 0.15),
-                script="latin",
-                is_mixed=True
-            )
-        
+
         return None
     
     def _is_english_word(self, word: str) -> bool:
@@ -281,13 +376,17 @@ class LanguageDetector:
 
 LANGUAGE_INSTRUCTIONS = {
     Language.ENGLISH: "Respond in clear, simple English suitable for Indian customers.",
-    Language.HINDI: "Respond in Hindi using Devanagari script (हिंदी में जवाब दें).",
-    Language.HINGLISH: "Respond in Hinglish - mix of Hindi and English in Roman script (like 'Aap ka order ready hai, delivery 30 mins mein').",
+    Language.HINDI: "Respond in Hindi using Devanagari script.",
+    Language.HINGLISH: "Respond in Hinglish - mix of Hindi and English in Roman script.",
     Language.TAMIL: "Respond in Tamil script or Roman Tamil as appropriate.",
     Language.TELUGU: "Respond in Telugu script or Roman Telugu as appropriate.",
     Language.KANNADA: "Respond in Kannada script or Roman Kannada as appropriate.",
     Language.MALAYALAM: "Respond in Malayalam script or Roman Malayalam as appropriate.",
     Language.BENGALI: "Respond in Bengali script or Roman Bengali as appropriate.",
+    Language.GUJARATI: "Respond in Gujarati script or Roman Gujarati as appropriate.",
+    Language.PUNJABI: "Respond in Punjabi script or Roman Punjabi as appropriate.",
+    Language.MARATHI: "Respond in Marathi script or Roman Marathi as appropriate.",
+    Language.URDU: "Respond in Urdu — Roman script preferred (WhatsApp style).",
     Language.MARATHI: "Respond in Marathi using Devanagari script.",
     Language.GUJARATI: "Respond in Gujarati script.",
     Language.PUNJABI: "Respond in Punjabi using Gurmukhi or Roman script.",

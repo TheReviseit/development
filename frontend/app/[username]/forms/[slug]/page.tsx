@@ -1,20 +1,14 @@
 "use client";
 
-import { useEffect, useState, FormEvent } from "react";
+import { useEffect, useState, useCallback, FormEvent } from "react";
 import { useParams, useSearchParams } from "next/navigation";
 import styles from "./form-public.module.css";
-
-/* ─── Types ─────────────────────────────────────────────────────────────── */
-interface FormField {
-  id: string;
-  field_type: string;
-  label: string;
-  placeholder?: string;
-  help_text?: string;
-  default_value?: string;
-  required: boolean;
-  options: { label: string; value: string }[];
-}
+import {
+  validateSubmission,
+  validateField,
+  isFieldVisible,
+  type FormField,
+} from "@/lib/form-validator";
 
 interface PublicForm {
   id: string;
@@ -95,26 +89,30 @@ export default function WorkspacePublicFormPage() {
     });
   };
 
+  // ── Validation Engine (uses shared form-validator.ts) ──────────────────
   const validate = (): boolean => {
     if (!form) return false;
-    const newErrors: Record<string, string> = {};
-    for (const field of form.fields) {
-      if (field.required && !["heading", "divider", "hidden"].includes(field.field_type)) {
-        const val = values[field.id]?.trim();
-        if (!val) {
-          newErrors[field.id] = `${field.label} is required`;
-        }
-      }
-      if (field.field_type === "email" && values[field.id]?.trim()) {
-        const emailRegex = /^[^@]+@[^@]+\.[^@]+$/;
-        if (!emailRegex.test(values[field.id])) {
-          newErrors[field.id] = "Please enter a valid email address";
-        }
-      }
-    }
+    const newErrors = validateSubmission(form.fields as FormField[], values);
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
+
+  // ── onBlur: real-time single-field validation ─────────────────────────
+  const handleBlur = useCallback(
+    (fieldId: string) => {
+      if (!form) return;
+      const field = form.fields.find((f) => f.id === fieldId);
+      if (!field) return;
+      const error = validateField(field as FormField, values[fieldId] || "", values, form.fields as FormField[]);
+      setErrors((prev) => {
+        if (error) return { ...prev, [fieldId]: error };
+        const next = { ...prev };
+        delete next[fieldId];
+        return next;
+      });
+    },
+    [form, values],
+  );
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
@@ -158,6 +156,9 @@ export default function WorkspacePublicFormPage() {
   const renderField = (field: FormField) => {
     if (field.field_type === "hidden") return null;
 
+    // Conditional visibility: skip fields hidden by logic
+    if (!isFieldVisible(field, values)) return null;
+
     if (field.field_type === "heading") {
       return <h2 className={styles.fieldHeading}>{field.label}</h2>;
     }
@@ -175,6 +176,7 @@ export default function WorkspacePublicFormPage() {
               className={styles.fieldTextarea}
               value={values[fieldId] || ""}
               onChange={(e) => handleChange(fieldId, e.target.value)}
+              onBlur={() => handleBlur(fieldId)}
               placeholder={field.placeholder || ""}
               required={field.required}
             />
@@ -186,6 +188,7 @@ export default function WorkspacePublicFormPage() {
               className={styles.fieldSelect}
               value={values[fieldId] || ""}
               onChange={(e) => handleChange(fieldId, e.target.value)}
+              onBlur={() => handleBlur(fieldId)}
               required={field.required}
             >
               <option value="">{field.placeholder || "Select an option..."}</option>
@@ -236,6 +239,7 @@ export default function WorkspacePublicFormPage() {
               className={styles.fieldInput}
               value={values[fieldId] || ""}
               onChange={(e) => handleChange(fieldId, e.target.value)}
+              onBlur={() => handleBlur(fieldId)}
               required={field.required}
             />
           );
@@ -264,6 +268,7 @@ export default function WorkspacePublicFormPage() {
               className={styles.fieldInput}
               value={values[fieldId] || ""}
               onChange={(e) => handleChange(fieldId, e.target.value)}
+              onBlur={() => handleBlur(fieldId)}
               placeholder={field.placeholder || ""}
               required={field.required}
             />
@@ -370,11 +375,6 @@ export default function WorkspacePublicFormPage() {
               type="submit"
               className={styles.submitBtn}
               disabled={submitting}
-              style={{
-                ...(form.theme?.primaryColor && {
-                  background: `linear-gradient(135deg, ${form.theme.primaryColor}, ${form.theme.primaryColor}cc)`,
-                }),
-              }}
             >
               {submitting ? "Submitting..." : (form.settings.submitButtonText || "Submit")}
             </button>

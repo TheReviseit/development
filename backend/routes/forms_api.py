@@ -405,34 +405,94 @@ def connect_google_sheet(form_id):
 
 # =============================================================================
 # PUBLIC ENDPOINTS (No Auth Required)
+#
+# SECURITY INVARIANTS:
+# 1. Only published, non-deleted forms are ever returned
+# 2. Sensitive fields (user_id, webhooks, google_sheet_url, utm_tracking,
+#    created_at, updated_at, published_at, deleted_at) are NEVER exposed
+# 3. Settings are reduced to the minimal set needed for form rendering
+# 4. Input is sanitized (slug length, character whitelist)
 # =============================================================================
+
+# Allowlisted keys returned to public callers — everything else is stripped
+_PUBLIC_FORM_FIELDS = frozenset([
+    "id", "title", "description", "slug", "short_id",
+    "theme", "cover_image_url", "settings", "fields",
+])
+
+# Allowlisted settings keys — prevents leaking internal config like
+# google_sheet_url, webhook URLs, or internal feature flags
+_PUBLIC_SAFE_SETTINGS = frozenset([
+    "submitButtonText", "successMessage", "successRedirectUrl", "captchaEnabled",
+])
+
+# Input validation constants
+_MAX_SLUG_LENGTH = 128
+_SLUG_PATTERN = __import__("re").compile(r"^[a-zA-Z0-9][a-zA-Z0-9._-]*$")
+
+
+def _sanitize_form_for_public(form: dict, *, include_username: bool = False) -> dict:
+    """
+    Strip a raw form dict down to the minimal public-safe representation.
+
+    This is the SINGLE PLACE where public data shaping happens.
+    If a new field is added to the forms table, it is blocked by default
+    unless explicitly added to _PUBLIC_FORM_FIELDS.
+
+    Security model: allowlist-only (deny by default).
+    """
+    public_form = {k: form[k] for k in _PUBLIC_FORM_FIELDS if k in form}
+
+    # Reduce settings to the rendering-safe subset
+    raw_settings = public_form.get("settings") or {}
+    public_form["settings"] = {
+        k: raw_settings.get(k)
+        for k in _PUBLIC_SAFE_SETTINGS
+        if raw_settings.get(k) is not None
+    }
+    # Ensure submitButtonText always has a default
+    public_form["settings"].setdefault("submitButtonText", "Submit")
+
+    if include_username and "_username" in form:
+        public_form["_username"] = form["_username"]
+
+    return public_form
+
+
+def _validate_slug(slug: str) -> bool:
+    """Validate a slug/username input to prevent injection or abuse."""
+    if not slug or len(slug) > _MAX_SLUG_LENGTH:
+        return False
+    return bool(_SLUG_PATTERN.match(slug))
+
 
 @forms_bp.route("/public/<slug>", methods=["GET"])
 def get_public_form(slug):
-    """Get a published form for public rendering."""
+    """
+    Get a published form for public rendering (by slug or short_id).
+
+    Security: No auth required. Only published, non-deleted forms are returned.
+    Response is stripped to the minimal public-safe field set.
+
+    Returns:
+        200 — form found and published
+        404 — form does not exist, is draft, or is deleted (intentionally
+              identical to prevent enumeration of unpublished forms)
+    """
+    # Input validation — reject malformed slugs early (before hitting DB)
+    if not _validate_slug(slug):
+        return jsonify({"success": False, "error": "Form not found"}), 404
+
     try:
         from services.form_service import get_public_form as svc_public
         form = svc_public(slug=slug)
         if not form:
             return jsonify({"success": False, "error": "Form not found"}), 404
 
-        # Strip sensitive fields for public view
-        safe_fields = ["id", "title", "description", "slug", "short_id", "theme",
-                        "cover_image_url", "settings", "fields"]
-        public_form = {k: form[k] for k in safe_fields if k in form}
-        # Only expose safe settings
-        if public_form.get("settings"):
-            safe_settings = {
-                "submitButtonText": public_form["settings"].get("submitButtonText", "Submit"),
-                "successMessage": public_form["settings"].get("successMessage"),
-                "successRedirectUrl": public_form["settings"].get("successRedirectUrl"),
-                "captchaEnabled": public_form["settings"].get("captchaEnabled", False),
-            }
-            public_form["settings"] = safe_settings
-
-        return jsonify({"success": True, "form": public_form}), 200
+        return jsonify({"success": True, "form": _sanitize_form_for_public(form)}), 200
     except Exception as e:
         logger.error(f"Error getting public form {slug}: {e}")
+        # Always return 404 to prevent information leakage on errors
         return jsonify({"success": False, "error": "Form not found"}), 404
 
 
@@ -440,28 +500,31 @@ def get_public_form(slug):
 def get_public_form_by_username(username, form_slug):
     """
     Get a published form via workspace-scoped URL.
+
     Resolves: /{username}/forms/{form_slug}
+    Example:  /tesla/forms/customer-feedback
+
+    Security: No auth required. Only published, non-deleted forms are returned.
+    Both username and form_slug are validated before any DB query.
+
+    Returns:
+        200 — form found and published
+        404 — workspace or form not found / unpublished / deleted
     """
+    # Input validation — reject malformed inputs early
+    if not _validate_slug(username) or not _validate_slug(form_slug):
+        return jsonify({"success": False, "error": "Form not found"}), 404
+
     try:
         from services.form_service import get_public_form_by_username as svc_public_by_user
         form = svc_public_by_user(username=username, form_slug=form_slug)
         if not form:
             return jsonify({"success": False, "error": "Form not found"}), 404
 
-        # Strip sensitive fields for public view
-        safe_fields = ["id", "title", "description", "slug", "short_id", "theme",
-                        "cover_image_url", "settings", "fields", "_username"]
-        public_form = {k: form[k] for k in safe_fields if k in form}
-        if public_form.get("settings"):
-            safe_settings = {
-                "submitButtonText": public_form["settings"].get("submitButtonText", "Submit"),
-                "successMessage": public_form["settings"].get("successMessage"),
-                "successRedirectUrl": public_form["settings"].get("successRedirectUrl"),
-                "captchaEnabled": public_form["settings"].get("captchaEnabled", False),
-            }
-            public_form["settings"] = safe_settings
-
-        return jsonify({"success": True, "form": public_form}), 200
+        return jsonify({
+            "success": True,
+            "form": _sanitize_form_for_public(form, include_username=True),
+        }), 200
     except Exception as e:
         logger.error(f"Error getting public form /{username}/{form_slug}: {e}")
         return jsonify({"success": False, "error": "Form not found"}), 404

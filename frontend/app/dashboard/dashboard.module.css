@@ -2680,7 +2680,7 @@
   border: 1px solid var(--dash-border);
   border-radius: 8px;
   padding: 0.5rem 1rem;
-  min-width: 250px;
+  min-width: 350px;
   color: var(--dash-text-muted);
 }
 /* Custom Dropdown - Hidden on desktop */
@@ -3283,6 +3283,17 @@
   overflow-y: auto;
 }
 
+.emptyState {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 3rem 2rem;
+  text-align: center;
+  color: var(--dash-text-secondary);
+  font-size: 0.9375rem;
+}
+
 .tableRow {
   display: flex;
   padding: 1rem 1.5rem;
@@ -3305,18 +3316,18 @@
 }
 
 .tableCell:first-child {
-  width: 40px;
+  width: 50px;
   flex-shrink: 0;
 }
 
 .cellName {
-  flex: 1.5;
+  flex: 2;
   gap: 0.75rem;
   min-width: 0;
 }
 
 .cellPhone {
-  flex: 1;
+  flex: 2;
 }
 
 .cellEmail {
@@ -3324,17 +3335,18 @@
 }
 
 .cellTags {
-  flex: 1;
-  gap: 0.25rem;
+  flex: 3;
+  gap: 4px;
   flex-wrap: wrap;
 }
 
 .cellStatus {
-  flex: 0.75;
+  flex: 1;
+  justify-content: flex-start;
 }
 
 .cellActions {
-  flex: 0.75;
+  flex: 1;
   gap: 0.25rem;
   justify-content: flex-end;
 }
@@ -4223,24 +4235,7 @@
     min-width: unset;
   }
 
-  .tableHeader {
-    display: none;
-  }
-
-  .tableRow {
-    flex-wrap: wrap;
-    padding: 1rem;
-    gap: 0.5rem;
-  }
-
-  .tableCell {
-    width: auto !important;
-    flex: unset !important;
-  }
-
-  .cellName {
-    width: 100% !important;
-  }
+  /* Removed mobile table card overrides per user request */
 
   /* Templates View Mobile Styles */
   .viewTitle,
@@ -4559,7 +4554,148 @@
   }
 }
 
+/* ============================================
+   Contacts View Styles
+   ============================================ */
+
+.contactsView {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.contactStats {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1.25rem;
+  margin-bottom: 0.5rem;
+}
+
+.contactStat {
+  background: var(--dash-bg-secondary);
+  border: 1px solid var(--dash-border);
+  border-radius: 12px;
+  padding: 1.25rem;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.25rem;
+  transition: all 0.2s ease;
+}
+
+.contactStat:hover {
+  border-color: var(--dash-accent-muted);
+  background: var(--dash-bg-tertiary);
+}
+
+.statNumber {
+  font-size: 1.75rem;
+  font-weight: 700;
+  color: var(--dash-text-primary);
+  line-height: 1.2;
+}
+
+.statLabel {
+  font-size: 0.8125rem;
+  color: var(--dash-text-muted);
+  font-weight: 500;
+}
+
+/* ============================================
+   Custom Form Elements (Checkboxes)
+   ============================================ */
+.checkbox {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 18px;
+  height: 18px;
+  border: 2px solid var(--dash-text-muted);
+  border-radius: 4px;
+  background-color: transparent;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+  position: relative;
+  flex-shrink: 0;
+  margin: 0;
+}
+
+.checkbox:hover {
+  border-color: var(--dash-text-primary);
+  background-color: rgba(255, 255, 255, 0.05);
+}
+
+.checkbox:checked {
+  background-color: var(--dash-accent);
+  border-color: var(--dash-accent);
+}
+
+.checkbox:checked::after {
+  content: '';
+  position: absolute;
+  width: 4px;
+  height: 9px;
+  border: solid #000;
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg);
+  top: 1px;
+}
+
+.contactsTable {
+  width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.contactsTable .tableHeader,
+.contactsTable .tableBody {
+  min-width: 800px;
+}
+
 @media (max-width: 768px) {
+  .bulkActions {
+    flex-wrap: wrap;
+    width: 100%;
+    gap: 0.5rem;
+    margin-top: 0.25rem;
+  }
+  
+  .selectedCount {
+    width: 100%;
+    font-weight: 500;
+  }
+
+  .bulkBtn {
+    flex: 1;
+    text-align: center;
+    white-space: nowrap;
+    justify-content: center;
+    display: flex;
+    align-items: center;
+  }
+
+  .contactStats {
+    grid-template-columns: repeat(3, 1fr);
+    gap: 0.5rem;
+  }
+  
+  .contactStat {
+    padding: 0.875rem 0.5rem;
+    align-items: center;
+    border-radius: 8px;
+  }
+
+  .statNumber {
+    font-size: 1.25rem;
+  }
+  
+  .statLabel {
+    font-size: 0.65rem;
+    text-align: center;
+  }
+
   .notificationBanner {
     flex-direction: column;
     align-items: flex-start;

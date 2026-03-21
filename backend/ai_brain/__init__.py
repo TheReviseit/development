@@ -61,8 +61,12 @@ from .business_retriever import (
     RetrievalResult
 )
 
+# v6.0: Resilience & Load Shedding
+from .concurrency_gate import ConcurrencyGate, get_concurrency_gate
+from .system_health import SystemHealthMonitor, SystemState, get_system_health
 
-__version__ = "3.0.0"
+
+__version__ = "6.0.0"
 __all__ = [
     # Core
     "AIBrain",

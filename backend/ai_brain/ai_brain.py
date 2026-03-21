@@ -33,6 +33,11 @@ from .cost_optimizer import CostOptimizer, get_cost_optimizer, CostDecision
 from .business_retriever import BusinessRetriever, get_retriever
 from .appointment_handler import AppointmentHandler
 from .memory_manager import get_memory_manager, AdvancedMemoryManager
+from .local_responder import (
+    get_local_responder, LocalResponder,
+    classify_priority, RequestPriority,
+)
+from .observability import get_ai_metrics
 
 # LLM Usage tracking for per-business budgets
 try:
@@ -217,6 +222,55 @@ class AIBrain:
     ) -> Dict[str, Any]:
         """
         Generate a reply to customer message.
+
+        GUARANTEED RESPONSE CONTRACT:
+        This method ALWAYS returns a valid response dict — never None,
+        never an empty string, never an unhandled exception.
+
+        The outer try/except is the last line of defense (safety net).
+        """
+        try:
+            return self._generate_reply_inner(
+                business_data=business_data,
+                user_message=user_message,
+                history=history,
+                business_id=business_id,
+                user_id=user_id,
+                use_cache=use_cache,
+                format_response=format_response,
+            )
+        except Exception as e:
+            # SAFETY NET — this should NEVER fire in normal operation.
+            # If it does, it means _generate_reply_inner has a bug.
+            logger.critical(
+                f"🚨 SAFETY NET TRIGGERED — unhandled exception in generate_reply: {e}",
+                exc_info=True,
+            )
+            return {
+                "reply": "Thanks for reaching out! How can I help you today? 😊",
+                "intent": "unknown",
+                "confidence": 0.0,
+                "needs_human": False,
+                "suggested_actions": ["Services", "Prices", "Contact us"],
+                "metadata": {
+                    "generation_method": "safety_net",
+                    "error": str(e),
+                    "safety_net_triggered": True,
+                },
+            }
+
+    def _generate_reply_inner(
+        self,
+        business_data: Union[Dict[str, Any], BusinessData] = None,
+        user_message: str = "",
+        history: List[Dict[str, str]] = None,
+        business_id: str = None,
+        user_id: str = None,
+        use_cache: bool = True,
+        format_response: bool = True
+    ) -> Dict[str, Any]:
+        """
+        Generate a reply to customer message.
         
         This is the main entry point for the AI brain.
         
@@ -272,10 +326,10 @@ class AIBrain:
         
         # =====================================================
         # OUT-OF-SCOPE CHECK - Reject irrelevant queries early
+        # BUG-08 FIX: Two-pass approach with product name override
         # =====================================================
         if not self._is_in_scope(user_message, business):
-            business_name = business.get('business_name', 'our business')
-            return self._out_of_scope_response(business_name)
+            return self._out_of_scope_response(business)
         
         # =====================================================
         # GLOBAL INTERRUPT HANDLER — runs BEFORE any state logic
@@ -506,7 +560,178 @@ class AIBrain:
             except Exception as e:
                 logger.warning(f"Memory manager error (non-blocking): {e}")
 
-        # Process message with ChatGPT engine
+        # =====================================================
+        # AI-FIRST ARCHITECTURE: DomainAnswerer is now FALLBACK only.
+        # The LLM (Gemini) is the PRIMARY handler for all real queries.
+        # It natively understands ALL languages — no keywords needed.
+        # DomainAnswerer is used ONLY when LLM is unavailable
+        # (rate-limited, circuit-broken, or system critical).
+        # =====================================================
+        from .domain_answerer import get_domain_answerer
+
+        domain_answerer = get_domain_answerer()
+
+        # =====================================================
+        # AI-FIRST: Only intercept TRIVIAL intents locally
+        # (greeting, casual, thanks, bye, ack)
+        # EVERYTHING else → LLM which understands ALL languages
+        # =====================================================
+        local_responder = get_local_responder()
+        local_result = local_responder.try_trivial_response(user_message, business)
+
+        if local_result:
+            # Track as local response (zero cost)
+            metrics = get_ai_metrics()
+            metrics.record_local_response(local_result["intent"])
+
+            if format_response:
+                local_result["reply"] = self.formatter.format(local_result["reply"])
+
+            local_result["metadata"]["language"] = detected_language
+            local_result["metadata"]["response_time_ms"] = int((time.time() - start_time) * 1000)
+
+            # Add to conversation history
+            if user_id:
+                self.conversation_manager.add_message(user_id, "assistant", local_result["reply"])
+
+            logger.info(
+                f"⚡ Trivial response | intent={local_result['intent']} | "
+                f"time={local_result['metadata']['response_time_ms']}ms | llm_call=false"
+            )
+
+            self._track_interaction(biz_id, user_id, local_result, start_time, is_cached=False)
+            return local_result
+
+        # =====================================================
+        # SYSTEM HEALTH STATE MACHINE — replaces ad-hoc checks
+        # =====================================================
+        from .system_health import get_system_health, SystemState
+        from .concurrency_gate import get_concurrency_gate
+        from .circuit_breaker import get_circuit_breaker
+
+        system_health = get_system_health()
+        health_state = system_health.current_state
+        priority = classify_priority(user_message)
+
+        # CRITICAL state → LLM unavailable, use DomainAnswerer as intelligent fallback
+        # AI-FIRST: Even in degraded mode, try to answer from business data
+        if health_state == SystemState.CRITICAL:
+            # Try DomainAnswerer first — it can answer pricing, hours,
+            # location, FAQs, product info, and business info queries
+            # from business_data with ZERO LLM calls
+            domain_result = domain_answerer.answer(
+                message=user_message,
+                business_data=business,
+                conversation_history=optimized_history if 'optimized_history' in dir() else history,
+            )
+            if domain_result:
+                if format_response:
+                    domain_result["reply"] = self.formatter.format(domain_result["reply"])
+                domain_result.setdefault("metadata", {})
+                domain_result["metadata"]["language"] = detected_language
+                domain_result["metadata"]["response_time_ms"] = int(
+                    (time.time() - start_time) * 1000
+                )
+                domain_result["metadata"]["system_state"] = "critical"
+                domain_result["metadata"]["generation_method"] = "domain_answerer_fallback"
+                if user_id:
+                    self.conversation_manager.add_message(
+                        user_id, "assistant", domain_result["reply"]
+                    )
+                logger.info(
+                    f"🔴 System CRITICAL — DomainAnswerer fallback | "
+                    f"intent={domain_result['intent']}"
+                )
+                self._track_interaction(biz_id, user_id, domain_result, start_time, is_cached=False)
+                return domain_result
+
+            # DomainAnswerer couldn't help → enriched degraded response
+            degraded = local_responder.get_degraded_response("general", business)
+            degraded["metadata"]["language"] = detected_language
+            degraded["metadata"]["response_time_ms"] = int((time.time() - start_time) * 1000)
+            degraded["metadata"]["system_state"] = "critical"
+
+            metrics = get_ai_metrics()
+            metrics.record_fallback_response("general", reason="system_critical")
+
+            if user_id:
+                self.conversation_manager.add_message(user_id, "assistant", degraded["reply"])
+
+            logger.warning(f"🔴 System CRITICAL — enriched degraded response")
+            self._track_interaction(biz_id, user_id, degraded, start_time, is_cached=False)
+            return degraded
+
+        # HIGH_LOAD + LOW priority → load shed
+        if health_state == SystemState.HIGH_LOAD and priority == RequestPriority.LOW:
+            degraded = local_responder.get_degraded_response("greeting", business)
+            degraded["metadata"]["language"] = detected_language
+            degraded["metadata"]["response_time_ms"] = int((time.time() - start_time) * 1000)
+            degraded["metadata"]["load_shedded"] = True
+            degraded["metadata"]["system_state"] = "high_load"
+
+            metrics = get_ai_metrics()
+            metrics.record_fallback_response("greeting", reason="high_load_low_priority")
+
+            if user_id:
+                self.conversation_manager.add_message(user_id, "assistant", degraded["reply"])
+
+            logger.info(f"🔻 Load shedded LOW priority message (system HIGH_LOAD)")
+            self._track_interaction(biz_id, user_id, degraded, start_time, is_cached=False)
+            return degraded
+
+        # =====================================================
+        # CONCURRENCY GATE — Prevent system collapse under load
+        # =====================================================
+        gate = get_concurrency_gate(
+            max_inflight=getattr(self.config, 'llm', None)
+            and getattr(self.config.llm, 'max_inflight_requests', 10)
+            or 10
+        )
+
+        if not gate.try_acquire():
+            # Gate full — try DomainAnswerer first, then degraded
+            domain_gated = domain_answerer.answer(
+                message=user_message,
+                business_data=business,
+                conversation_history=optimized_history if 'optimized_history' in dir() else history,
+            )
+            if domain_gated:
+                if format_response:
+                    domain_gated["reply"] = self.formatter.format(domain_gated["reply"])
+                domain_gated.setdefault("metadata", {})
+                domain_gated["metadata"]["language"] = detected_language
+                domain_gated["metadata"]["response_time_ms"] = int((time.time() - start_time) * 1000)
+                domain_gated["metadata"]["concurrency_gated"] = True
+                domain_gated["metadata"]["generation_method"] = "domain_answerer_fallback"
+                if user_id:
+                    self.conversation_manager.add_message(user_id, "assistant", domain_gated["reply"])
+                logger.warning(
+                    f"🚫 Concurrency gate FULL — DomainAnswerer fallback | "
+                    f"intent={domain_gated['intent']}"
+                )
+                self._track_interaction(biz_id, user_id, domain_gated, start_time, is_cached=False)
+                return domain_gated
+
+            degraded = local_responder.get_degraded_response("general", business)
+            degraded["metadata"]["language"] = detected_language
+            degraded["metadata"]["response_time_ms"] = int((time.time() - start_time) * 1000)
+            degraded["metadata"]["concurrency_gated"] = True
+            degraded["metadata"]["gate_stats"] = gate.get_stats()
+
+            metrics = get_ai_metrics()
+            metrics.record_fallback_response("general", reason="concurrency_gate_full")
+
+            if user_id:
+                self.conversation_manager.add_message(user_id, "assistant", degraded["reply"])
+
+            logger.warning(
+                f"🚫 Concurrency gate FULL — enriched degraded | "
+                f"(inflight={gate.get_stats()['current_inflight']})"
+            )
+            self._track_interaction(biz_id, user_id, degraded, start_time, is_cached=False)
+            return degraded
+
+        # Process message with ChatGPT engine (now single-pass architecture)
         try:
             result = self.engine.process_message(
                 message=user_message,
@@ -518,7 +743,72 @@ class AIBrain:
                 conversation_summary=conversation_summary,
                 is_mixed_language=is_mixed_language,
             )
-            
+            # =====================================================
+            # GRACEFUL DEGRADATION — Handle __RATE_LIMITED__ sentinel
+            # NEVER show "high demand" to users
+            # =====================================================
+            if result.reply == "__RATE_LIMITED__":
+                # AI-FIRST: Try DomainAnswerer as intelligent fallback
+                # Uses business_data to give real answers even without LLM
+                domain_fallback = domain_answerer.answer(
+                    message=user_message,
+                    business_data=business,
+                    conversation_history=optimized_history if 'optimized_history' in dir() else history,
+                )
+                if domain_fallback:
+                    if format_response:
+                        domain_fallback["reply"] = self.formatter.format(domain_fallback["reply"])
+                    domain_fallback.setdefault("metadata", {})
+                    domain_fallback["metadata"]["language"] = detected_language
+                    domain_fallback["metadata"]["response_time_ms"] = int(
+                        (time.time() - start_time) * 1000
+                    )
+                    domain_fallback["metadata"]["generation_method"] = "domain_answerer_fallback"
+                    domain_fallback["metadata"]["rate_limited"] = True
+
+                    metrics = get_ai_metrics()
+                    metrics.record_fallback_response(
+                        domain_fallback["intent"], reason="rate_limited_domain_fallback"
+                    )
+
+                    if user_id:
+                        self.conversation_manager.add_message(
+                            user_id, "assistant", domain_fallback["reply"]
+                        )
+
+                    logger.info(
+                        f"🔄 Rate-limited — DomainAnswerer fallback | "
+                        f"intent={domain_fallback['intent']} | "
+                        f"time={domain_fallback['metadata']['response_time_ms']}ms"
+                    )
+                    self._track_interaction(
+                        biz_id, user_id, domain_fallback, start_time, is_cached=False
+                    )
+                    return domain_fallback
+
+                # DomainAnswerer couldn't help → enriched degraded response
+                degraded = local_responder.get_degraded_response("general", business)
+
+                metrics = get_ai_metrics()
+                metrics.record_fallback_response("general", reason="rate_limited")
+
+                if format_response:
+                    degraded["reply"] = self.formatter.format(degraded["reply"])
+
+                degraded["metadata"]["language"] = detected_language
+                degraded["metadata"]["response_time_ms"] = int((time.time() - start_time) * 1000)
+
+                if user_id:
+                    self.conversation_manager.add_message(user_id, "assistant", degraded["reply"])
+
+                logger.info(
+                    f"🔄 Rate-limited — enriched degraded | "
+                    f"time={degraded['metadata']['response_time_ms']}ms"
+                )
+
+                self._track_interaction(biz_id, user_id, degraded, start_time, is_cached=False)
+                return degraded
+
             # TRACK LLM USAGE after successful call (non-blocking)
             try:
                 if self.usage_tracker:
@@ -576,15 +866,42 @@ class AIBrain:
                     "response_time_ms": int((time.time() - start_time) * 1000)
                 }
             }
+
+            # =====================================================
+            # QUALITY GATE — Catch generic LLM responses
+            # If LLM produced a generic reply but business_data has
+            # better info, rebuild from DomainAnswerer. (GAP 2)
+            # =====================================================
+            from .quality_gate import get_quality_gate
+
+            quality_gate = get_quality_gate()
+            response = quality_gate.check(
+                response=response,
+                message=user_message,
+                business_data=business,
+                conversation_history=optimized_history,
+            )
+
+            # =====================================================
+            # DRR TRACKER — Record domain response rate (GAP 7)
+            # =====================================================
+            from .drr_tracker import get_drr_tracker
+
+            drr = get_drr_tracker()
+            drr.record(
+                generation_method=response.get("metadata", {}).get("generation_method", "unknown"),
+                had_business_data=bool(business),
+                response_was_generic=response.get("metadata", {}).get("quality_gate_warning", False),
+            )
             
             # Add assistant message to conversation
             if user_id:
-                self.conversation_manager.add_message(user_id, "assistant", reply)
+                self.conversation_manager.add_message(user_id, "assistant", response["reply"])
                 self.conversation_manager.set_last_intent(user_id, result.intent.value)
 
                 # v3.0: Track assistant reply in memory manager for summarization
                 try:
-                    self.memory_manager.add_message(user_id, "assistant", reply)
+                    self.memory_manager.add_message(user_id, "assistant", response["reply"])
                 except Exception:
                     pass  # Non-blocking
             
@@ -602,6 +919,9 @@ class AIBrain:
             
         except Exception as e:
             return self._error_response(str(e))
+        finally:
+            # ALWAYS release the concurrency gate slot
+            gate.release()
     
     def detect_intent(self, message: str, history: List[Dict] = None) -> Dict[str, Any]:
         """
@@ -1007,7 +1327,19 @@ class AIBrain:
         
         # =====================================================
         # DEFAULT: Not a booking/order request
+        # BUG-09 FIX: Tiebreaker for ambiguous intents based on industry
         # =====================================================
+        # If user says something vague like "I want to start", use business industry
+        ambiguous_intents = ["start", "begin", "help", "need service"]
+        if any(w in msg_lower for w in ambiguous_intents):
+            industry = business.get("industry", "").lower()
+            if industry in ["salon", "spa", "clinic", "hospital", "consulting"]:
+                logger.info(f"⚖️ TIEBREAKER: Industry '{industry}' → routing to appointment")
+                return "appointment"
+            elif industry in ["retail", "restaurant", "ecommerce"]:
+                logger.info(f"⚖️ TIEBREAKER: Industry '{industry}' → routing to order")
+                return "order"
+
         return None
     
     def _handle_order_tracking(
@@ -5489,10 +5821,8 @@ class AIBrain:
                         local_reservation_ids = reservation_result.reservation_ids
                         logger.info(f"📦 🟡 RESERVED (new): {len(local_reservation_ids)} items reserved")
                     
-                except ImportError as e:
-                    logger.warning(f"📦 Inventory service not available: {e}")
-                    # Continue without reservation for backwards compatibility
-                    # TODO: Make this a hard gate once inventory service is always available
+                    # Removed ImportError fallthrough (BUG-13 FIX)
+                    # Inventory check is now a HARD GATE
                 except Exception as e:
                     logger.error(f"📦 RESERVATION_ERROR: {e}", exc_info=True)
                     return {
@@ -6754,10 +7084,21 @@ class AIBrain:
         except Exception:
             pass  # Don't fail on analytics errors
     
-    def _error_response(self, error: str) -> Dict[str, Any]:
-        """Generate error response."""
+    def _error_response(self, error: str, business_data: Dict[str, Any] = None) -> Dict[str, Any]:
+        """Generate domain-aware error response. (BUG-01 FIX)"""
+        biz_name = 'us'
+        contact_line = ''
+        if business_data:
+            biz_name = business_data.get('business_name', 'us')
+            contact = business_data.get('contact', {})
+            phone = contact.get('phone', '') or contact.get('whatsapp', '')
+            email = contact.get('email', '')
+            if phone:
+                contact_line = f' at {phone}'
+            elif email:
+                contact_line = f' at {email}'
         return {
-            "reply": "I'm having trouble right now. Please try again or contact us directly. 🙏",
+            "reply": f"I'm having trouble right now. Please try again or contact {biz_name}{contact_line}. 🙏",
             "intent": IntentType.UNKNOWN.value,
             "confidence": 0.0,
             "needs_human": True,
@@ -6765,15 +7106,24 @@ class AIBrain:
             "metadata": {"error": error, "generation_method": "error"}
         }
     
-    def _rate_limited_response(self, business_id: str, plan: str) -> Dict[str, Any]:
-        """Generate rate limited response."""
+    def _rate_limited_response(self, business_id: str, plan: str, business_data: Dict[str, Any] = None) -> Dict[str, Any]:
+        """Generate domain-aware rate limited response. (BUG-04 FIX)"""
         remaining = self.rate_limiter.get_remaining(business_id, plan)
+        biz_name = 'our business'
+        service_hint = ''
+        if business_data:
+            biz_name = business_data.get('business_name', 'our business')
+            products = business_data.get('products_services', [])
+            if products:
+                top_names = [p.get('name', '') for p in products[:3] if p.get('name')]
+                if top_names:
+                    service_hint = f" In the meantime, we offer: {', '.join(top_names)}."
         return {
-            "reply": "We're experiencing high volume. Please try again in a moment. 🙏",
+            "reply": f"Thanks for your patience! Our system at {biz_name} is a bit busy.{service_hint} Please try again in a moment. 😊",
             "intent": IntentType.UNKNOWN.value,
             "confidence": 0.0,
             "needs_human": False,
-            "suggested_actions": ["Try again"],
+            "suggested_actions": ["Try again", "Services", "Prices"],
             "metadata": {
                 "rate_limited": True,
                 "remaining": remaining,
@@ -6791,32 +7141,74 @@ class AIBrain:
         start_time: float
     ) -> Dict[str, Any]:
         """
-        Generate reply using templates only (no LLM) when budget exceeded.
-        Fast O(1) keyword-based intent detection + static templates.
+        Generate reply when LLM budget exceeded. (BUG-02 FIX)
+        
+        NEW: Try DomainAnswerer FIRST for real business data responses
+        (actual prices, hours, location) instead of generic templates.
+        Falls back to templates only if DomainAnswerer returns None.
         """
-        # Quick intent detection using keywords
+        # ── BUG-02 FIX: Try DomainAnswerer first ──
+        try:
+            from .domain_answerer import get_domain_answerer
+            da = get_domain_answerer()
+            if da.can_answer(user_message, business_data):
+                da_result = da.answer(user_message, business_data)
+                if da_result:
+                    da_result.setdefault("metadata", {})
+                    da_result["metadata"]["fallback_reason"] = reason
+                    da_result["metadata"]["llm_budget_exceeded"] = True
+                    da_result["metadata"]["language"] = detected_language
+                    da_result["metadata"]["response_time_ms"] = int(
+                        (time.time() - start_time) * 1000
+                    )
+                    da_result["metadata"]["generation_method"] = "domain_answerer_fallback"
+                    
+                    if user_id:
+                        self.conversation_manager.add_message(
+                            user_id, "assistant", da_result["reply"]
+                        )
+                    self._track_interaction(
+                        business_data.get('business_id', 'default'),
+                        user_id, da_result, start_time, is_cached=False
+                    )
+                    logger.info(
+                        f"🎯 Template fallback UPGRADED via DomainAnswerer | "
+                        f"intent={da_result['intent']}"
+                    )
+                    return da_result
+        except Exception as e:
+            logger.warning(f"DomainAnswerer fallback error: {e}")
+
+        # ── Original template path (only if DomainAnswerer can't help) ──
         intent, confidence = self.legacy_intent_detector.detect(user_message, [])
         
-        # Get template response based on intent
         business_name = business_data.get('business_name', 'our team')
         
-        # Fast template lookup (O(1) hash map)
+        # Build templates that include REAL data where available
+        products = business_data.get('products_services', [])
+        top_services = ""
+        if products:
+            names = [p.get('name', '') for p in products[:3] if p.get('name')]
+            if names:
+                top_services = f"\n\nWe offer: {', '.join(names)}"
+                if len(products) > 3:
+                    top_services += f" and {len(products) - 3} more"
+                top_services += "!"
+        
         TEMPLATES = {
-            IntentType.GREETING: f"Hey! 👋 Welcome to {business_name}. How can we help you today?",
-            IntentType.CASUAL_CONVERSATION: f"We're doing great, thanks for asking! 😊 How can we help you at {business_name}?",
-            IntentType.PRICING: f"For pricing details, feel free to ask us directly! Our team at {business_name} will get you the right info. 💰",
-            IntentType.HOURS: f"You can check our timings or reach out to us at {business_name} and we'll confirm! 🕐",
-            IntentType.LOCATION: f"We'd love to have you visit us at {business_name}! Drop us a message and we'll share our location. 📍",
-            IntentType.BOOKING: f"We'd love to book you in! Share your preferred date and time and we'll confirm your slot at {business_name}. 📅",
+            IntentType.GREETING: f"Hey! 👋 Welcome to {business_name}. How can we help you today?{top_services}",
+            IntentType.CASUAL_CONVERSATION: f"We're doing great, thanks for asking! 😊 How can we help you at {business_name}?{top_services}",
+            IntentType.PRICING: f"Here are some of our offerings at {business_name}:{top_services}" if top_services else f"For pricing details at {business_name}, please ask about a specific service! 💰",
+            IntentType.HOURS: f"Our team at {business_name} will confirm timings for you! 🕐",
+            IntentType.LOCATION: f"We'd love to have you visit us at {business_name}! 📍",
+            IntentType.BOOKING: f"We'd love to book you in! Share your preferred date and time at {business_name}. 📅",
             IntentType.THANK_YOU: "You're most welcome! Happy to help. 😊",
             IntentType.GOODBYE: "Thanks for reaching out! Have a great day! 👋",
-            IntentType.GENERAL_ENQUIRY: f"Thanks for reaching out to {business_name}! We'll get back to you shortly. 🙏",
+            IntentType.GENERAL_ENQUIRY: f"Thanks for reaching out to {business_name}!{top_services} What would you like to know more about? 🙏",
         }
         
-        # Get template or default
-        reply = TEMPLATES.get(intent, f"Thanks for your message! Someone from {business_name} will respond shortly. 🙏")
+        reply = TEMPLATES.get(intent, f"Thanks for your message!{top_services} How can {business_name} help? 🙏")
         
-        # For unknown/low confidence, offer human handoff
         if confidence < 0.5 or intent == IntentType.UNKNOWN:
             reply = f"I'll connect you with someone from {business_name}. They'll respond shortly! 🙏"
         
@@ -6835,11 +7227,9 @@ class AIBrain:
             }
         }
         
-        # Add to conversation
         if user_id:
             self.conversation_manager.add_message(user_id, "assistant", reply)
         
-        # Track analytics
         self._track_interaction(
             business_data.get('business_id', 'default'),
             user_id, response, start_time, is_cached=False
@@ -6849,8 +7239,12 @@ class AIBrain:
     
     def _is_in_scope(self, message: str, business: Dict[str, Any]) -> bool:
         """
-        Check if query is relevant to the business.
-        Returns False for weather, news, politics, sports, stocks, etc.
+        Two-pass scope check. (BUG-08 FIX)
+        
+        Pass 1: Keyword regex pre-filter (existing patterns)
+        Pass 2: If Pass 1 would BLOCK → check if any product/service
+                name from business data appears in the message →
+                if yes, override and ALLOW (e.g. 'joke cards' for card shop)
         """
         OUT_OF_SCOPE_PATTERNS = [
             r'\b(weather|forecast|temperature|rain|humidity|sunny|cloudy)\b',
@@ -6862,15 +7256,73 @@ class AIBrain:
         ]
         
         msg_lower = message.lower()
+        
+        # ── Pass 1: Regex pre-filter ──
+        would_block = False
         for pattern in OUT_OF_SCOPE_PATTERNS:
             if re.search(pattern, msg_lower):
-                return False
-        return True
+                would_block = True
+                break
+        
+        if not would_block:
+            return True  # Not blocked — in scope
+        
+        # ── Pass 2: Product/service name override ──
+        products = business.get('products_services', [])
+        for product in products:
+            name = product.get('name', '').lower()
+            if not name or len(name) < 3:
+                continue
+            # Full name match
+            if name in msg_lower:
+                logger.info(
+                    f"✅ _is_in_scope: Override — product '{name}' found in "
+                    f"blocked message '{message[:50]}'"
+                )
+                return True
+            # Partial word match (≥50% of significant words)
+            name_words = [w for w in name.split() if len(w) >= 3]
+            if name_words:
+                matches = sum(1 for w in name_words if w in msg_lower)
+                if matches / len(name_words) >= 0.5:
+                    logger.info(
+                        f"✅ _is_in_scope: Override — {matches}/{len(name_words)} "
+                        f"words from product '{name}' found in message"
+                    )
+                    return True
+        
+        # Also check categories
+        categories = set()
+        for product in products:
+            cat = product.get('category', '').lower()
+            if cat and len(cat) >= 3:
+                categories.add(cat)
+        for cat in categories:
+            if cat in msg_lower:
+                logger.info(f"✅ _is_in_scope: Override — category '{cat}' in message")
+                return True
+        
+        # No override — truly out of scope
+        return False
     
-    def _out_of_scope_response(self, business_name: str) -> Dict[str, Any]:
-        """Response for queries outside business scope."""
+    def _out_of_scope_response(self, business: Dict[str, Any]) -> Dict[str, Any]:
+        """Domain-aware response for queries outside business scope. (BUG-03 FIX)"""
+        business_name = business.get('business_name', 'our business') if isinstance(business, dict) else business
+        
+        # Include top services so user knows what they CAN ask about
+        service_hint = ''
+        if isinstance(business, dict):
+            products = business.get('products_services', [])
+            if products:
+                top_names = [p.get('name', '') for p in products[:3] if p.get('name')]
+                if top_names:
+                    service_hint = f"\n\nHere's what I can help with:\n"
+                    service_hint += '\n'.join(f"• {n}" for n in top_names)
+                    if len(products) > 3:
+                        service_hint += f"\n...and {len(products) - 3} more!"
+        
         return {
-            "reply": f"I can only help with queries about {business_name}. How can I assist you with our services today? 😊",
+            "reply": f"I specialize in helping with {business_name} queries! 😊{service_hint}\n\nWhat would you like to know?",
             "intent": "out_of_scope",
             "confidence": 1.0,
             "needs_human": False,

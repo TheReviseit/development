@@ -818,69 +818,124 @@ export default function DashboardLayout({
                             </button>
                           </div>
                         )}
-                      {/* Contacts - hideable */}
-                      {/* Commented out as requested
-                    {(mobileHideMode ||
-                      !mobileHiddenItems.includes("contacts")) && (
-                      <div className={styles.mobileNavItemWrapper}>
-                        {mobileHideMode && canHideItem("contacts") && (
-                          <button
-                            className={`${styles.mobileHideCheckbox} ${mobileHiddenItems.includes("contacts") ? styles.mobileHideCheckboxChecked : ""}`}
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              toggleMobileHideItem("contacts");
-                            }}
-                          >
-                            {mobileHiddenItems.includes("contacts") && (
+                      {/* Forms - Domain-based visibility */}
+                      {visibility.forms &&
+                        (mobileHideMode ||
+                          !mobileHiddenItems.includes("forms")) && (
+                          <div className={styles.mobileNavItemWrapper}>
+                            {mobileHideMode && canHideItem("forms") && (
+                              <button
+                                className={`${styles.mobileHideCheckbox} ${mobileHiddenItems.includes("forms") ? styles.mobileHideCheckboxChecked : ""}`}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  toggleMobileHideItem("forms");
+                                }}
+                              >
+                                {mobileHiddenItems.includes("forms") && (
+                                  <svg
+                                    width="14"
+                                    height="14"
+                                    viewBox="0 0 24 24"
+                                    fill="none"
+                                    stroke="currentColor"
+                                    strokeWidth="3"
+                                  >
+                                    <path
+                                      d="M5 13l4 4L19 7"
+                                      strokeLinecap="round"
+                                      strokeLinejoin="round"
+                                    />
+                                  </svg>
+                                )}
+                              </button>
+                            )}
+                            <button
+                              className={`${styles.mobileNavLink} ${activeSection === "forms" ? styles.mobileNavLinkActive : ""} ${mobileHiddenItems.includes("forms") ? styles.mobileNavLinkHidden : ""}`}
+                              onClick={() =>
+                                !mobileHideMode &&
+                                handleSectionChange("forms")
+                              }
+                            >
                               <svg
-                                width="14"
-                                height="14"
-                                viewBox="0 0 24 24"
+                                width="20"
+                                height="20"
                                 fill="none"
                                 stroke="currentColor"
-                                strokeWidth="3"
+                                viewBox="0 0 24 24"
                               >
                                 <path
-                                  d="M5 13l4 4L19 7"
+                                  d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                  strokeWidth={2}
+                                />
+                              </svg>
+                              <span>Forms</span>
+                            </button>
+                          </div>
+                        )}
+                      {/* Contacts - Domain-based visibility */}
+                      {visibility.contacts &&
+                        (mobileHideMode ||
+                          !mobileHiddenItems.includes("contacts")) && (
+                          <div className={styles.mobileNavItemWrapper}>
+                            {mobileHideMode && canHideItem("contacts") && (
+                              <button
+                                className={`${styles.mobileHideCheckbox} ${mobileHiddenItems.includes("contacts") ? styles.mobileHideCheckboxChecked : ""}`}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  toggleMobileHideItem("contacts");
+                                }}
+                              >
+                                {mobileHiddenItems.includes("contacts") && (
+                                  <svg
+                                    width="14"
+                                    height="14"
+                                    viewBox="0 0 24 24"
+                                    fill="none"
+                                    stroke="currentColor"
+                                    strokeWidth="3"
+                                  >
+                                    <path
+                                      d="M5 13l4 4L19 7"
+                                      strokeLinecap="round"
+                                      strokeLinejoin="round"
+                                    />
+                                  </svg>
+                                )}
+                              </button>
+                            )}
+                            <button
+                              className={`${styles.mobileNavLink} ${activeSection === "contacts" ? styles.mobileNavLinkActive : ""} ${mobileHiddenItems.includes("contacts") ? styles.mobileNavLinkHidden : ""}`}
+                              onClick={() =>
+                                !mobileHideMode && handleSectionChange("contacts")
+                              }
+                            >
+                              <svg
+                                width="20"
+                                height="20"
+                                fill="none"
+                                stroke="currentColor"
+                                viewBox="0 0 24 24"
+                              >
+                                <path
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                  strokeWidth={2}
+                                  d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"
+                                />
+                                <circle
+                                  cx="9"
+                                  cy="7"
+                                  r="4"
                                   strokeLinecap="round"
                                   strokeLinejoin="round"
                                 />
                               </svg>
-                            )}
-                          </button>
+                              <span>Contacts</span>
+                            </button>
+                          </div>
                         )}
-                        <button
-                          className={`${styles.mobileNavLink} ${activeSection === "contacts" ? styles.mobileNavLinkActive : ""} ${mobileHiddenItems.includes("contacts") ? styles.mobileNavLinkHidden : ""}`}
-                          onClick={() =>
-                            !mobileHideMode && handleSectionChange("contacts")
-                          }
-                        >
-                          <svg
-                            width="20"
-                            height="20"
-                            fill="none"
-                            stroke="currentColor"
-                            viewBox="0 0 24 24"
-                          >
-                            <path
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                              strokeWidth={2}
-                              d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"
-                            />
-                            <circle
-                              cx="9"
-                              cy="7"
-                              r="4"
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                            />
-                          </svg>
-                          <span>Contacts</span>
-                        </button>
-                      </div>
-                    )}
-                    */}
                       {/* Campaigns - Domain-based visibility */}
                       {visibility.campaigns &&
                         (mobileHideMode ||

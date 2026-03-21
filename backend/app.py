@@ -421,7 +421,35 @@ try:
 except ImportError as e:
     logger.warning(f"Forms API routes not available: {e}")
 
-
+# =============================================================================
+# Startup Schema Validation — Contacts Table (FAANG-Grade)
+# Fail-fast with clear error if CRM columns are missing
+# =============================================================================
+try:
+    from supabase_client import get_supabase_client as _get_sb
+    _sb = _get_sb()
+    if _sb:
+        _REQUIRED_CONTACT_COLUMNS = [
+            'lifecycle_stage', 'lead_score', 'source',
+            'status', 'interaction_count', 'last_interaction_at',
+        ]
+        _missing = []
+        for _col in _REQUIRED_CONTACT_COLUMNS:
+            try:
+                _sb.table('contacts').select(_col).limit(0).execute()
+            except Exception:
+                _missing.append(_col)
+        if _missing:
+            logger.critical(
+                f"🚨 SCHEMA VALIDATION FAILED: contacts table is missing columns: {_missing}\n"
+                f"Run this migration: migrations/060_add_crm_contact_columns.sql"
+            )
+        else:
+            logger.info("✅ Contact schema validation passed — all CRM columns present")
+    else:
+        logger.warning("⚠️ Could not validate contact schema — Supabase client not available")
+except Exception as _schema_err:
+    logger.warning(f"⚠️ Contact schema validation skipped: {_schema_err}")
 # Initialize webhook security
 webhook_security = None
 if RATE_LIMIT_AVAILABLE and get_webhook_security:
@@ -1173,6 +1201,30 @@ def webhook():
                 media_id=media_id,
                 conversation_origin='user_initiated'
             )
+            
+            # FAANG-Grade: Contact processing with fail-fast and full observability
+            try:
+                from tasks.messaging import process_incoming_contact_task
+                success = process_incoming_contact_task(
+                    user_id=user_id,
+                    phone_number=from_number,
+                    contact_name=contact_name,
+                    message_text=message_text,
+                    message_id=msg_id,
+                    source='whatsapp'
+                )
+                if success:
+                    logger.info(f"✅ Contact processed for {from_number}")
+                else:
+                    logger.error(f"❌ Contact processing returned False for {from_number} — check logs above for details")
+            except ImportError:
+                logger.warning("⚠️ Could not import process_incoming_contact_task — contact NOT saved")
+            except Exception as e:
+                import traceback
+                logger.error(
+                    f"❌ Unhandled error in contact processing for {from_number}: {e}\n"
+                    f"{traceback.format_exc()}"
+                )
 
         # Send push notification
         if FIREBASE_AVAILABLE and send_push_to_user and user_id:

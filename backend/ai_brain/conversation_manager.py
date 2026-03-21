@@ -1,7 +1,12 @@
 """
-Conversation Manager for AI Brain.
+Conversation Manager for AI Brain v2.0 — now with Structured User Memory.
 Handles session state, message history, and context management.
 Now includes structured conversation state for deterministic flow handling.
+
+v2.0 Additions:
+- UserProfile: Structured memory that persists across messages
+  (name, language, tone, last_product, last_issue, intent_history, sentiment)
+- State machine awareness: explicit stage tracking for conversation flow
 
 IMPORTANT: Conversation state is now persisted to Redis to survive server restarts.
 This is critical for order/appointment booking flows that span multiple messages.
@@ -38,6 +43,119 @@ class FlowStatus(str, Enum):
     AWAITING_PAYMENT = "awaiting_payment"
     COMPLETE = "complete"
     CANCELLED = "cancelled"
+
+
+# =============================================================================
+# STRUCTURED USER MEMORY — v2.0 (The missing "brain" layer)
+# =============================================================================
+
+@dataclass
+class UserProfile:
+    """
+    Structured memory for a user — persists across messages.
+
+    This is what separates "smart chatbot" from "reasoning agent with memory."
+    Instead of relying on LLM to remember facts from message history,
+    we explicitly track key user attributes.
+
+    Example:
+        {
+            "name": "Raja",
+            "language": "hinglish",
+            "tone_preference": "casual",
+            "last_product": "facial",
+            "last_issue": "delay",
+            "intent_history": ["greeting", "pricing", "booking"],
+            "sentiment": "neutral",
+            "conversation_stage": "pricing_discussion"
+        }
+    """
+    # User identity
+    name: Optional[str] = None
+
+    # Communication preferences (auto-detected)
+    language: str = "en"
+    tone_preference: str = "neutral"  # casual, formal, neutral
+
+    # Conversation context
+    last_product: Optional[str] = None
+    last_issue: Optional[str] = None
+    conversation_stage: str = "initial"  # initial, browsing, pricing_discussion, booking, post_purchase
+
+    # Intent tracking (last 10 intents for pattern recognition)
+    intent_history: List[str] = field(default_factory=list)
+
+    # Sentiment tracking
+    sentiment: str = "neutral"  # neutral, positive, negative, frustrated
+
+    # Preferences discovered during conversation
+    preferences: Dict[str, Any] = field(default_factory=dict)
+
+    def update_intent(self, intent: str):
+        """Track intent and auto-update conversation stage."""
+        self.intent_history.append(intent)
+        if len(self.intent_history) > 10:
+            self.intent_history = self.intent_history[-10:]
+
+        # Auto-detect conversation stage from intent pattern
+        stage_map = {
+            "pricing": "pricing_discussion",
+            "booking": "booking",
+            "order_booking": "ordering",
+            "complaint": "issue_resolution",
+            "order_status": "post_purchase",
+        }
+        if intent in stage_map:
+            self.conversation_stage = stage_map[intent]
+
+    def update_from_entities(self, entities: Dict[str, Any]):
+        """Extract and store relevant entities from classified message."""
+        if entities.get("product"):
+            self.last_product = entities["product"]
+        if entities.get("issue"):
+            self.last_issue = entities["issue"]
+
+    def to_dict(self) -> Dict[str, Any]:
+        """Serialize for Redis storage."""
+        return asdict(self)
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> 'UserProfile':
+        """Deserialize from Redis."""
+        data = data.copy()
+        # Handle lists and dicts that might come back as strings from Redis
+        if isinstance(data.get('intent_history'), str):
+            import json as _json
+            data['intent_history'] = _json.loads(data['intent_history'])
+        if isinstance(data.get('preferences'), str):
+            import json as _json
+            data['preferences'] = _json.loads(data['preferences'])
+        return cls(**{k: v for k, v in data.items() if k in cls.__dataclass_fields__})
+
+    def to_prompt_context(self) -> str:
+        """Generate a prompt-friendly summary of user profile."""
+        parts = []
+        if self.name:
+            parts.append(f"Customer name: {self.name}")
+        if self.language and self.language != "en":
+            parts.append(f"Preferred language: {self.language}")
+        if self.tone_preference != "neutral":
+            parts.append(f"Tone preference: {self.tone_preference}")
+        if self.last_product:
+            parts.append(f"Last product discussed: {self.last_product}")
+        if self.last_issue:
+            parts.append(f"Current issue: {self.last_issue}")
+        if self.conversation_stage != "initial":
+            parts.append(f"Conversation stage: {self.conversation_stage}")
+        if self.sentiment != "neutral":
+            parts.append(f"Customer sentiment: {self.sentiment}")
+        if self.intent_history:
+            recent = self.intent_history[-3:]
+            parts.append(f"Recent intents: {' → '.join(recent)}")
+
+        if not parts:
+            return ""
+        return "USER PROFILE (use this context in your response):\n" + "\n".join(f"- {p}" for p in parts)
 
 
 @dataclass

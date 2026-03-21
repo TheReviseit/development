@@ -149,10 +149,10 @@ class ResponseGenerator:
             lines.append(f"{data.location.city}, {data.location.state or ''} {data.location.pincode or ''}")
         
         if data.location.landmarks:
-            lines.append(f"\n🏢 Landmarks: {', '.join(data.location.landmarks)}")
+            lines.append(f"\nLandmarks: {', '.join(data.location.landmarks)}")
         
         if data.location.google_maps_link:
-            lines.append(f"\n🗺️ Google Maps: {data.location.google_maps_link}")
+            lines.append(f"\nGoogle Maps: {data.location.google_maps_link}")
         
         return "\n".join(lines)
     

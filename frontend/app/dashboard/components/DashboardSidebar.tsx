@@ -68,7 +68,7 @@ const MessagesIcon = () => (
     strokeWidth="2"
   >
     <path
-      d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"
+      d="M7 9H17M7 13H12M21 20L17.6757 18.3378C17.4237 18.2118 17.2977 18.1488 17.1656 18.1044C17.0484 18.065 16.9277 18.0365 16.8052 18.0193C16.6672 18 16.5263 18 16.2446 18H6.2C5.07989 18 4.51984 18 4.09202 17.782C3.71569 17.5903 3.40973 17.2843 3.21799 16.908C3 16.4802 3 15.9201 3 14.8V7.2C3 6.07989 3 5.51984 3.21799 5.09202C3.40973 4.71569 3.71569 4.40973 4.09202 4.21799C4.51984 4 5.0799 4 6.2 4H17.8C18.9201 4 19.4802 4 19.908 4.21799C20.2843 4.40973 20.5903 4.71569 20.782 5.09202C21 5.51984 21 6.0799 21 7.2V20Z"
       strokeLinecap="round"
       strokeLinejoin="round"
     />
@@ -912,10 +912,7 @@ export default function DashboardSidebar({
         ]
       : []),
 
-    // Contacts (future - when contacts_enabled capability is added)
-    // Note: Contacts is a shared feature across all domains
-    // Uncomment when backend capability is ready
-    /*
+    // Contacts (enabled specifically for marketing)
     ...(visibility.contacts
       ? [
           {
@@ -926,30 +923,33 @@ export default function DashboardSidebar({
           },
         ]
       : []),
-    */
 
-    // Forms — always visible (marketing + lead gen tool)
-    {
-      id: "forms",
-      label: "Forms",
-      icon: (
-        <svg
-          width="20"
-          height="20"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="2"
-        >
-          <path
-            d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          />
-        </svg>
-      ),
-      href: "/dashboard/forms",
-    },
+    // Forms — visible based on domain (marketing + lead gen tool)
+    ...(visibility.forms
+      ? [
+          {
+            id: "forms",
+            label: "Forms",
+            icon: (
+              <svg
+                width="20"
+                height="20"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+              >
+                <path
+                  d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+              </svg>
+            ),
+            href: "/dashboard/forms",
+          },
+        ]
+      : []),
 
     {
       id: "bot-settings",

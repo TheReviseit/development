@@ -10,7 +10,11 @@
   justify-content: center;
   padding: 32px 16px;
   background: linear-gradient(135deg, #f0f0ff 0%, #f5f3ff 50%, #fce7f3 100%);
-  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  font-family:
+    "Inter",
+    -apple-system,
+    BlinkMacSystemFont,
+    sans-serif;
 }
 
 .formWrapper {
@@ -20,8 +24,14 @@
 }
 
 @keyframes fadeUp {
-  from { opacity: 0; transform: translateY(20px); }
-  to { opacity: 1; transform: translateY(0); }
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 .formHeader {
@@ -47,7 +57,9 @@
   background: #fff;
   border-radius: 20px;
   padding: 40px;
-  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.08), 0 0 0 1px rgba(0, 0, 0, 0.04);
+  box-shadow:
+    0 20px 60px rgba(0, 0, 0, 0.08),
+    0 0 0 1px rgba(0, 0, 0, 0.04);
 }
 
 /* ─── Field Styles ─────────────────────────────────────────────────────── */
@@ -168,8 +180,8 @@
   background: #f5f3ff;
 }
 
-.radioOption input[type='radio'],
-.checkboxOption input[type='checkbox'] {
+.radioOption input[type="radio"],
+.checkboxOption input[type="checkbox"] {
   width: 18px;
   height: 18px;
   accent-color: #4f46e5;
@@ -204,7 +216,7 @@
 .submitBtn {
   width: 100%;
   padding: 14px 28px;
-  background: linear-gradient(135deg, #4f46e5, #7c3aed);
+  background: black;
   color: #fff;
   border: none;
   border-radius: 12px;
@@ -252,8 +264,12 @@
 }
 
 @keyframes scaleIn {
-  from { transform: scale(0); }
-  to { transform: scale(1); }
+  from {
+    transform: scale(0);
+  }
+  to {
+    transform: scale(1);
+  }
 }
 
 .successTitle {
@@ -313,7 +329,9 @@
 }
 
 @keyframes spin {
-  to { transform: rotate(360deg); }
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .poweredBy {

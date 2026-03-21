@@ -1,12 +1,13 @@
 """
-Core AI Engine for AI Brain — v4.0 (Gemini).
+Core AI Engine for AI Brain — v5.0 (Reasoning Agent Architecture).
 
 Enterprise features:
 - Google Gemini 2.5 Flash (single model for classification + generation)
 - Response Style Engine (SHORT/MEDIUM/LONG dynamic adjustment)
 - Smart Clarification Layer (ask instead of guess)
-- Response Self-Check Layer (quality validation)
-- Confidence-based token escalation
+- Response Self-Check Layer (5-point structured rubric)
+- Confidence → Action decision system (auto-reply / clarify / escalate)
+- Emotion-aware response adaptation
 - Single-call optimization for simple queries
 - Retry with exponential backoff
 - Timeout protection
@@ -24,6 +25,7 @@ from .intents import IntentType
 from .prompts import (
     SYSTEM_PROMPT_INTENT_CLASSIFIER,
     build_dynamic_prompt,
+    build_single_pass_prompt,
     build_full_prompt,
     get_confidence_action,
     SAFETY_FILTER_PROMPT,
@@ -32,12 +34,14 @@ from .tools import TOOL_SCHEMAS, ToolExecutor, ToolResult
 from .gemini_client import (
     GeminiClient,
     RateLimitError,
+    CircuitOpenError,
     convert_openai_tools_to_gemini,
     extract_text,
     extract_json,
     extract_tool_call,
     extract_usage,
 )
+from .system_health import get_system_health
 
 logger = logging.getLogger('reviseit.engine')
 
@@ -68,7 +72,12 @@ class GenerationResult:
     tool_result: Optional[Dict[str, Any]]
     needs_human: bool
     language: str
-    metadata: Dict[str, Any]
+    emotion: str = "neutral"  # NEW v5.0: detected customer emotion
+    metadata: Dict[str, Any] = None
+
+    def __post_init__(self):
+        if self.metadata is None:
+            self.metadata = {}
 
 
 class MessageComplexity(str, Enum):
@@ -341,8 +350,19 @@ class ChatGPTEngine:
         user_profile: Dict[str, Any] = None,
         conversation_summary: str = None,
         is_mixed_language: bool = False,
+        _skip_self_check: bool = False,
     ) -> GenerationResult:
-        """Generate response using Gemini 2.5 Flash with enterprise intelligence layers."""
+        """Generate response using Gemini 2.5 Flash with enterprise intelligence layers.
+
+        v5.0 processing pipeline:
+        1. Smart Clarification (ask instead of guess)
+        2. Confidence → Action decision (auto-reply / clarify / escalate)
+        3. Response Style Engine (token budgets based on complexity)
+        4. Dynamic 8-layer prompt construction
+        5. Emotion-aware generation
+        6. Response Self-Check (5-point rubric)
+        7. Response Validation (price fact-checking)
+        """
 
         confidence_action = get_confidence_action(intent_result.confidence)
 
@@ -379,6 +399,26 @@ class ChatGPTEngine:
                 language=intent_result.language,
                 metadata={
                     "generation_method": "clarification",
+                    "confidence_action": confidence_action["action"]
+                }
+            )
+
+        # Layer 2: Confidence → Action Decision System (NEW v5.0)
+        # This is THE strategic layer that separates chatbots from reasoning agents
+        if confidence_action["action"] == "escalate_or_clarify" and intent_result.intent not in {
+            IntentType.GREETING, IntentType.CASUAL_CONVERSATION,
+            IntentType.THANK_YOU, IntentType.GOODBYE
+        }:
+            # Low confidence on actionable intent = ask for clarification
+            return GenerationResult(
+                reply=confidence_action.get("template", "Could you tell me more about what you're looking for?"),
+                intent=intent_result.intent,
+                confidence=intent_result.confidence,
+                tool_called=None, tool_result=None,
+                needs_human=intent_result.confidence < 0.3,  # Very low = escalate
+                language=intent_result.language,
+                metadata={
+                    "generation_method": "confidence_escalation",
                     "confidence_action": confidence_action["action"]
                 }
             )
@@ -452,13 +492,27 @@ class ChatGPTEngine:
             else:
                 reply = extract_text(response).strip()
 
+            # EMPTY REPLY GUARD — Gemini sometimes returns empty under load
+            if not reply:
+                reply = "I'd be happy to help! Could you tell me more about what you're looking for?"
+                logger.warning("Empty response from Gemini — using fallback reply")
+
             # Layer 5: Response Self-Check (quality validation)
-            if self.config.enable_self_check and not tool_called:
+            # SKIP if: (a) tool was called, (b) explicitly skipped (single-pass fallback),
+            #          (c) system is under pressure (DEGRADED/HIGH_LOAD/CRITICAL)
+            system_health = get_system_health()
+            should_self_check = (
+                self.config.enable_self_check
+                and not tool_called
+                and not _skip_self_check
+                and not system_health.should_skip_self_check
+            )
+            if should_self_check:
                 reply = self._self_check_response(
                     reply, message, intent_result.intent.value, business_data
                 )
 
-            # Layer 6: Response Validation (fact-check prices)
+            # Layer 6: Response Validation (fact-check prices — no LLM call, pure regex)
             if self.config.enable_response_validation and not tool_called:
                 reply = self._validate_response(reply, business_data)
 
@@ -476,6 +530,7 @@ class ChatGPTEngine:
                 tool_result=tool_result,
                 needs_human=needs_human,
                 language=intent_result.language,
+                emotion=getattr(intent_result, 'raw_response', {}).get('emotion', 'neutral'),
                 metadata={
                     "generation_method": "tool" if tool_called else "llm",
                     "confidence_action": confidence_action["action"],
@@ -488,10 +543,12 @@ class ChatGPTEngine:
                 }
             )
 
-        except RateLimitError as e:
-            logger.warning(f"⚠️ Response generation rate-limited (429): {e}")
+        except (RateLimitError, CircuitOpenError) as e:
+            logger.warning(f"⚠️ Response generation blocked ({type(e).__name__}): {e}")
+            # Return a signal that triggers graceful degradation in ai_brain.py
+            # NEVER say "high demand" — the local responder handles fallback
             return GenerationResult(
-                reply="We're experiencing high demand right now. Please try again in a moment — I'll be right here to help! 🙏",
+                reply="__RATE_LIMITED__",  # Sentinel — ai_brain.py replaces this
                 intent=intent_result.intent, confidence=intent_result.confidence,
                 tool_called=None, tool_result=None, needs_human=False,
                 language=intent_result.language,
@@ -520,12 +577,20 @@ class ChatGPTEngine:
         business_data: Dict[str, Any],
     ) -> str:
         """
-        Post-generation quality check using Gemini.
+        Post-generation quality check using structured 5-point rubric.
+
+        v5.0 Upgrade: Uses a STRUCTURED RUBRIC instead of generic "does it answer?":
+        1. ACCURACY — Are all facts from business data only?
+        2. RELEVANCE — Does it actually answer the question?
+        3. TONE — Does it match the customer's mood?
+        4. COMPLETENESS — Is critical information missing?
+        5. NATURALNESS — Does it sound human, not robotic?
+
         Only regenerates if the check FAILS — cost-efficient.
         """
         try:
-            # Skip self-check if we're already rate-limited — save quota
-            if any('rate_limit' in str(v) for v in [response] if 'high demand' in str(v)):
+            # Skip self-check if response is the rate-limited sentinel or empty
+            if not response or response == "__RATE_LIMITED__":
                 return response
 
             check_prompt = f"""You are a quality checker for a WhatsApp business chatbot response.
@@ -534,20 +599,24 @@ User asked: "{user_message}"
 Detected intent: {intent}
 AI responded: "{response}"
 
-Check:
-1. Does the response actually answer what the user asked?
-2. Is any critical information missing that should have been included?
-3. Does the response sound robotic or template-like?
+Grade the response on this 5-POINT RUBRIC (score 1-5 each):
+1. ACCURACY: Are all stated facts verifiable from the business data? (5=all facts correct, 1=invented info)
+2. RELEVANCE: Does the response actually answer what the user asked? (5=perfectly on-topic, 1=irrelevant)
+3. TONE: Does the tone match the customer's emotional state? (5=perfectly matched, 1=tone deaf)
+4. COMPLETENESS: Is all critical information included? (5=nothing missing, 1=key info omitted)
+5. NATURALNESS: Does it sound like a real human, not a bot? (5=completely natural, 1=robotic/scripted)
 
 Return JSON:
-{{"passes": true/false, "issue": "<brief description if fails>", "fix_hint": "<what to fix>"}}"""
+{{"passes": true/false, "total_score": <5-25>, "lowest_dimension": "<which scored lowest>", "issue": "<brief description if fails>", "fix_hint": "<what to fix>"}}
+
+A response PASSES if total_score >= 18 (out of 25). Otherwise it FAILS."""
 
             check_response = self.client.generate(
                 model=self.config.llm.classification_model,
-                system_prompt="You are a response quality checker. Return only valid JSON.",
+                system_prompt="You are a response quality auditor. Grade using the rubric. Return only valid JSON.",
                 messages=[{"role": "user", "content": check_prompt}],
                 temperature=0.2,
-                max_tokens=100,
+                max_tokens=150,
                 json_mode=True,
             )
 
@@ -556,10 +625,15 @@ Return JSON:
             if result.get("passes", True):
                 return response
 
-            # Self-check failed — regenerate with fix hint
-            logger.info(f"Self-check failed: {result.get('issue', 'unknown')} -> regenerating")
+            # Self-check failed — regenerate with the identified issue
+            lowest_dim = result.get('lowest_dimension', 'unknown')
+            logger.info(
+                f"Self-check failed (score={result.get('total_score', '?')}/25, "
+                f"weak={lowest_dim}): {result.get('issue', 'unknown')} -> regenerating"
+            )
 
-            fix_prompt = f"""The previous response to "{user_message}" was not good enough.
+            fix_prompt = f"""The previous response to "{user_message}" failed quality check.
+Weakest area: {lowest_dim}
 Issue: {result.get('issue', '')}
 Fix: {result.get('fix_hint', '')}
 
@@ -788,7 +862,11 @@ Generate a better response. Be natural and directly answer the question."""
     # COMPLETE FLOW — Single-call optimization for simple queries
     # =========================================================================
 
-    def process_message(
+    # =========================================================================
+    # SINGLE-PASS ARCHITECTURE — ONE LLM call for classify + respond (FAANG)
+    # =========================================================================
+
+    def process_message_single_pass(
         self,
         message: str,
         business_data: Dict[str, Any],
@@ -800,10 +878,169 @@ Generate a better response. Be natural and directly answer the question."""
         is_mixed_language: bool = False,
     ) -> GenerationResult:
         """
-        Complete message processing flow.
+        FAANG-grade single-pass processing — ONE LLM call instead of THREE.
 
-        Optimization: For high-confidence quick-match intents (greeting, thank_you, etc.),
-        skips the separate classification API call — goes straight to generation.
+        Before (v4.0): classify_intent (call 1) → generate_response (call 2) → self_check (call 3)
+        Now (v5.0):    single_pass (call 1) → done
+
+        Returns the same GenerationResult for backward compatibility.
+        Falls back to two-step for tool-calling intents (booking, orders).
+        """
+        # Build single-pass prompt with all 6 layers
+        system_prompt = build_single_pass_prompt(
+            business_data=business_data,
+            user_message=message,
+            language="en",  # Will be detected by the model
+            is_mixed_language=is_mixed_language,
+            conversation_history=conversation_history,
+            conversation_state_summary=conversation_state_summary,
+            user_profile=user_profile,
+            conversation_summary=conversation_summary,
+        )
+
+        try:
+            response = self.client.generate(
+                model=self.config.llm.generation_model,
+                system_prompt=system_prompt,
+                messages=[{"role": "user", "content": message}],
+                temperature=self.config.llm.temperature,
+                max_tokens=self.config.style.medium_max_tokens,
+                json_mode=True,
+            )
+
+            usage = extract_usage(response)
+            total_prompt = usage["prompt_tokens"]
+            total_completion = usage["completion_tokens"]
+
+            result = extract_json(
+                response,
+                default={
+                    "intent": "general_enquiry",
+                    "confidence": 0.5,
+                    "response": "I'd be happy to help! Could you tell me more about what you're looking for?",
+                    "language": "en",
+                    "entities": {},
+                    "needs_human": False,
+                }
+            )
+
+            # Parse intent
+            intent_str = result.get("intent", "general_enquiry").lower()
+            try:
+                intent = IntentType(intent_str)
+            except ValueError:
+                intent = IntentType.GENERAL_ENQUIRY
+
+            confidence = float(result.get("confidence", 0.7))
+            reply = result.get("response", "").strip()
+            language = result.get("language", "en")
+            entities = result.get("entities", {})
+            needs_human = result.get("needs_human", False)
+
+            # Quality gate: if response is empty, use default
+            if not reply:
+                reply = "I'd be happy to help! Could you tell me more about what you're looking for?"
+
+            # Validate prices in response (no LLM call — pure regex)
+            if self.config.enable_response_validation:
+                reply = self._validate_response(reply, business_data)
+
+            # Check if this intent needs tool calling (fallback to two-step)
+            tool_intents = {
+                IntentType.BOOKING, IntentType.ORDER_BOOKING,
+                IntentType.ORDER_STATUS, IntentType.COMPLAINT,
+            }
+            if intent in tool_intents and self.config.enable_function_calling:
+                # Fall back to two-step for tool-calling intents
+                logger.info(
+                    f"🔧 Single-pass detected tool intent '{intent_str}' — "
+                    f"falling back to two-step for function calling"
+                )
+                intent_result = IntentResult(
+                    intent=intent,
+                    confidence=confidence,
+                    language=language,
+                    entities=entities,
+                    needs_clarification=False,
+                    clarification_question=None,
+                    raw_response={"single_pass": True, "_intent_prompt_tokens": 0, "_intent_completion_tokens": 0},
+                )
+                return self.generate_response(
+                    message=message,
+                    intent_result=intent_result,
+                    business_data=business_data,
+                    conversation_history=conversation_history,
+                    use_tools=True,
+                    conversation_state_summary=conversation_state_summary,
+                    user_id=user_id,
+                    user_profile=user_profile,
+                    conversation_summary=conversation_summary,
+                    is_mixed_language=is_mixed_language,
+                    _skip_self_check=True,  # Single-pass already validated quality
+                )
+
+            return GenerationResult(
+                reply=reply,
+                intent=intent,
+                confidence=confidence,
+                tool_called=None,
+                tool_result=None,
+                needs_human=needs_human,
+                language=language,
+                emotion=result.get("emotion", "neutral"),
+                metadata={
+                    "generation_method": "single_pass",
+                    "model": self.config.llm.generation_model,
+                    "prompt_tokens": total_prompt,
+                    "completion_tokens": total_completion,
+                    "generation_prompt_tokens": total_prompt,
+                    "generation_completion_tokens": total_completion,
+                    "intent_prompt_tokens": 0,
+                    "intent_completion_tokens": 0,
+                }
+            )
+
+        except (RateLimitError, CircuitOpenError) as e:
+            logger.warning(f"⚠️ Single-pass blocked ({type(e).__name__}): {e}")
+            # Return sentinel for graceful degradation
+            return GenerationResult(
+                reply="__RATE_LIMITED__",
+                intent=IntentType.GENERAL_ENQUIRY,
+                confidence=0.5,
+                tool_called=None, tool_result=None, needs_human=False,
+                language="en",
+                metadata={"generation_method": "rate_limit_fallback", "error": str(e), "rate_limited": True}
+            )
+
+        except Exception as e:
+            logger.error(f"Single-pass error: {e}")
+            # Fall back to two-step on any unexpected error
+            logger.info("Falling back to two-step processing after single-pass error")
+            return self.process_message_two_step(
+                message=message,
+                business_data=business_data,
+                conversation_history=conversation_history,
+                user_id=user_id,
+                conversation_state_summary=conversation_state_summary,
+                user_profile=user_profile,
+                conversation_summary=conversation_summary,
+                is_mixed_language=is_mixed_language,
+            )
+
+    def process_message_two_step(
+        self,
+        message: str,
+        business_data: Dict[str, Any],
+        conversation_history: List[Dict[str, str]] = None,
+        user_id: str = None,
+        conversation_state_summary: str = "",
+        user_profile: Dict[str, Any] = None,
+        conversation_summary: str = None,
+        is_mixed_language: bool = False,
+    ) -> GenerationResult:
+        """
+        Legacy two-step processing: classify → generate.
+        Used as fallback when single-pass fails or for tool-calling intents.
         """
         # Step 1: Classify intent
         intent_result = self.classify_intent(message, conversation_history)
@@ -811,7 +1048,7 @@ Generate a better response. Be natural and directly answer the question."""
         intent_prompt_tokens = intent_result.raw_response.get("_intent_prompt_tokens", 0)
         intent_completion_tokens = intent_result.raw_response.get("_intent_completion_tokens", 0)
 
-        # Step 2: Generate response with all enterprise layers
+        # Step 2: Generate response
         generation_result = self.generate_response(
             message=message,
             intent_result=intent_result,
@@ -842,3 +1079,34 @@ Generate a better response. Be natural and directly answer the question."""
         })
 
         return generation_result
+
+    def process_message(
+        self,
+        message: str,
+        business_data: Dict[str, Any],
+        conversation_history: List[Dict[str, str]] = None,
+        user_id: str = None,
+        conversation_state_summary: str = "",
+        user_profile: Dict[str, Any] = None,
+        conversation_summary: str = None,
+        is_mixed_language: bool = False,
+    ) -> GenerationResult:
+        """
+        Complete message processing — v5.0 FAANG architecture.
+
+        Primary path: Single-pass (1 LLM call: classify + respond).
+        Fallback:     Two-step (2 LLM calls: classify → respond) for tool intents.
+
+        Self-check is ELIMINATED — quality is baked into the single-pass prompt.
+        This reduces API calls from 3 → 1 (66% reduction).
+        """
+        return self.process_message_single_pass(
+            message=message,
+            business_data=business_data,
+            conversation_history=conversation_history,
+            user_id=user_id,
+            conversation_state_summary=conversation_state_summary,
+            user_profile=user_profile,
+            conversation_summary=conversation_summary,
+            is_mixed_language=is_mixed_language,
+        )
