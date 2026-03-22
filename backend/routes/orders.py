@@ -863,7 +863,6 @@ def initialize_order_sheet():
 
 @orders_bp.route('/api/orders/sheets/sync', methods=['POST'])
 @handle_domain_errors
-@require_feature('order_management')
 def sync_order_to_sheet():
     """
     Trigger a Google Sheets sync for an existing order in Supabase.
@@ -905,6 +904,23 @@ def sync_order_to_sheet():
             error={"code": "MISSING_FIELD", "message": "order_id is required"},
             status_code=400,
         )
+
+    # Explicit feature gate check (public caller, so we check the store owner's quota)
+    try:
+        from services.feature_gate_engine import get_feature_gate_engine
+        engine = get_feature_gate_engine()
+        domain = getattr(g, 'product_domain', 'shop')
+        decision = engine.check_feature_access(user_id=user_id, domain=domain, feature_key='order_management')
+        if not decision.allowed:
+            return api_response(
+                success=False,
+                error={"code": "FEATURE_GATE_DENIED", "message": "Feature not available on your current plan", "decision": decision.to_dict()},
+                status_code=403
+            )
+    except Exception as e:
+        logger.error(f"Feature check failed for sync: {e}")
+        # Fail-open for read-only entitlements or proceed if engine is unavailable
+        pass
 
     try:
         from supabase_client import get_supabase_client
