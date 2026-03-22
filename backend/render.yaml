@@ -60,7 +60,7 @@ services:
     region: singapore
     rootDir: backend
     buildCommand: pip install -r requirements.txt
-    startCommand: celery -A celery_app worker --beat --loglevel=info --concurrency=2 --pool=solo -Q high,default,low
+    startCommand: celery -A celery_app worker --beat --loglevel=info --concurrency=2 -Q high,default,low
     plan: free
     envVars:
       - key: FLASK_ENV
@@ -80,4 +80,16 @@ services:
       - key: RAZORPAY_KEY_SECRET
         sync: false
       - key: RAZORPAY_WEBHOOK_SECRET
+        sync: false
+      - key: RESEND_API_KEY
+        sync: false
+      - key: OTP_FROM_EMAIL
+        sync: false
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: WHATSAPP_PHONE_NUMBER_ID
+        sync: false
+      - key: WHATSAPP_ACCESS_TOKEN
+        sync: false
+      - key: WHATSAPP_VERIFY_TOKEN
         sync: false

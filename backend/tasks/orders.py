@@ -165,6 +165,29 @@ def process_order_event(
                     logger.warning(f"Invoice trigger failed for order {order_id}: {inv_err}")
                     results["tasks"]["invoice"] = {"triggered": False, "error": str(inv_err)}
 
+            # 2c. Send Email Invoice (for ALL orders if customer_email provided)
+            customer_email = data.get("customer_email")
+            if customer_email:
+                try:
+                    business_data = _get_business_data_for_invoice(user_id)
+                    if business_data:
+                        email_result = send_invoice_email.delay(
+                            order_id=order_id,
+                            user_id=user_id,
+                            customer_email=customer_email,
+                            order_data=data,
+                            business_data=business_data,
+                            correlation_id=correlation_id,
+                        )
+                        results["tasks"]["email_invoice"] = {"triggered": True, "task_id": str(email_result)}
+                        logger.info(f"📧 Email Invoice task triggered for order {order_id}")
+                    else:
+                        logger.warning(f"No business data for email invoice, skipping for order {order_id}")
+                        results["tasks"]["email_invoice"] = {"triggered": False, "reason": "no_business_data"}
+                except Exception as email_err:
+                    logger.warning(f"Email Invoice trigger failed for order {order_id}: {email_err}")
+                    results["tasks"]["email_invoice"] = {"triggered": False, "error": str(email_err)}
+
         # 2a. Send WhatsApp status update notification to customer
         STATUS_CHANGE_EVENTS = {
             "order_confirmed", "order_processing",
@@ -1088,6 +1111,183 @@ def send_invoice_whatsapp(
         if CELERY_AVAILABLE and self and hasattr(self, 'retry'):
             raise self.retry(exc=e)
     
+    return result
+
+
+@background_task(
+    name="orders.send_invoice_email",
+    bind=True,
+    max_retries=3,
+    default_retry_delay=60,
+)
+def send_invoice_email(
+    self=None,
+    order_id: str = None,
+    user_id: str = None,
+    customer_email: str = None,
+    order_data: Dict[str, Any] = None,
+    business_data: Dict[str, Any] = None,
+    correlation_id: Optional[str] = None,
+) -> Dict[str, Any]:
+    """
+    NON-BLOCKING EMAIL INVOICE PIPELINE
+    
+    Flow:
+    1. Check feature gates & limits (email_invoices)
+    2. Format precise payment info
+    3. Generate PDF in memory
+    4. Send via Resend
+    5. Update Supabase orders table with invoice status & payment state
+    """
+    result = {
+        "sent": False,
+        "order_id": order_id,
+        "correlation_id": correlation_id,
+    }
+    
+    if not order_data or not business_data or not customer_email:
+        logger.warning(f"Email Invoice task missing data for {order_id}")
+        result["error"] = "Missing required data"
+        return result
+        
+    try:
+        from supabase_client import get_supabase_client
+        import os
+        import resend
+        from utils.invoice_generator import generate_invoice_pdf, generate_invoice_number
+        
+        client = get_supabase_client()
+        if not client:
+            raise Exception("Supabase client not initialized")
+            
+        resend.api_key = os.getenv("RESEND_API_KEY")
+        if not resend.api_key:
+            raise Exception("RESEND_API_KEY not found in environment")
+            
+        # ── Feature gate: email_invoices (metered per plan) ──────────────
+        invoice_allowed = True
+        try:
+            user_row = client.table("users").select("id").eq("firebase_uid", user_id).limit(1).maybe_single().execute()
+            if user_row.data and user_row.data.get("id"):
+                internal_user_id = user_row.data["id"]
+                sub = client.table("subscriptions").select("pricing_plan_id").eq("user_id", internal_user_id).eq("product_domain", "shop").in_("status", ["active", "completed", "past_due", "trialing", "trial"]).order("created_at", desc=True).limit(1).maybe_single().execute()
+                
+                if sub.data and sub.data.get("pricing_plan_id"):
+                    plan_feature = client.table("plan_features").select("hard_limit, soft_limit, is_unlimited").eq("plan_id", sub.data["pricing_plan_id"]).eq("feature_key", "email_invoices").limit(1).maybe_single().execute()
+                    
+                    if plan_feature.data:
+                        feat = plan_feature.data
+                        if feat.get("is_unlimited"):
+                            invoice_allowed = True
+                        elif feat.get("hard_limit") is not None and feat.get("hard_limit") <= 0:
+                            invoice_allowed = False
+                        elif feat.get("hard_limit") is not None:
+                            # Metered check
+                            rpc_result = client.rpc(
+                                "check_and_increment_usage",
+                                {
+                                    "p_user_id": internal_user_id,
+                                    "p_domain": "shop",
+                                    "p_feature_key": "email_invoices",
+                                    "p_hard_limit": feat.get("hard_limit"),
+                                    "p_soft_limit": feat.get("soft_limit") or int(feat.get("hard_limit") * 0.8),
+                                    "p_is_unlimited": False,
+                                    "p_idempotency_key": f"invoice-{order_id}"
+                                }
+                            ).execute()
+                            if rpc_result.data and not rpc_result.data.get("allowed"):
+                                invoice_allowed = False
+        except Exception as gate_err:
+            logger.warning(f"⚠️ Feature gate check failed for email invoice, proceeding: {gate_err}")
+            
+        if not invoice_allowed:
+            logger.info(f"⏭️ Skipping email invoice for order {order_id} - limit reached")
+            result["reason"] = "limit_reached"
+            return result
+            
+        # Determine Payment Info
+        source = str(order_data.get("source", "manual")).lower()
+        notes = str(order_data.get("notes", ""))
+        
+        has_payment_id = "payment id" in notes.lower() or "razorpay_payment_id" in notes.lower()
+        is_online_payment = source == "api" and has_payment_id
+        
+        payment_method = "online" if is_online_payment else "cod"
+        payment_status = "paid" if is_online_payment else "cod"
+        
+        # Merge it into order_data for generate_invoice_pdf
+        order_data["paymentMethod"] = payment_method
+        order_data["paymentStatus"] = payment_status
+        
+        # Generate PDF Bytes
+        pdf_bytes = generate_invoice_pdf(order_data, business_data)
+        if not pdf_bytes:
+            raise Exception("PDF generation returned empty bytes")
+            
+        invoice_number = generate_invoice_number(order_data.get("order_id", order_id))
+        short_order_id = order_id[:8].upper()
+        
+        # Prepare Email
+        business_name = business_data.get("businessName", "Store")
+        customer_name = order_data.get("customer_name", "Customer")
+        amount = sum([(float(item.get("price", 0)) * item.get("quantity", 1)) for item in order_data.get("items", [])])
+        
+        from_email = os.getenv("OTP_FROM_EMAIL", "notifications@flowauxi.com")
+        
+        html_body = f"""
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+            <p>Hi {customer_name},</p>
+            <h2>Thank you for your order! 🎉</h2>
+            <p>Your order has been successfully placed with <strong>{business_name}</strong>.</p>
+            <p>Please find your invoice attached to this email as a PDF document.</p>
+            <div style="background: #f5f5f5; padding: 20px; border-radius: 8px; margin: 24px 0;">
+                <h3 style="margin: 0 0 12px 0;">Order Details</h3>
+                <div><strong>Order ID:</strong> {short_order_id}</div>
+                <div style="margin-top: 16px; padding-top: 16px; border-top: 2px solid #ddd;">
+                    <strong>Total Amount: ₹{amount}</strong>
+                </div>
+            </div>
+            <p>If you have any questions, feel free to reply to this email.</p>
+            <p>Powered by Flowauxi</p>
+        </div>
+        """
+
+        email_params = {
+            "from": f"{business_name} <{from_email}>",
+            "to": [customer_email],
+            "subject": f"Order Confirmed - {business_name}",
+            "html": html_body,
+            "attachments": [
+                {
+                    "filename": f"Invoice_{invoice_number}.pdf",
+                    "content": list(pdf_bytes)  # Resend SDK requirement
+                }
+            ]
+        }
+        
+        logger.info(f"📧 Sending invoice email via Resend for order {order_id}")
+        email_response = resend.Emails.send(email_params)
+        
+        if getattr(email_response, 'id', None) or (isinstance(email_response, dict) and email_response.get('id')):
+            logger.info(f"✅ Email invoice sent successfully to {customer_email}")
+            result["sent"] = True
+            
+            # Update Orders table in Supabase
+            client.table("orders").update({
+                "invoice_sent_at": datetime.utcnow().isoformat(),
+                "invoice_email": customer_email,
+                "payment_status": payment_status,
+                "payment_method": payment_method
+            }).eq("id", order_id).execute()
+        else:
+            raise Exception(f"Resend API error: {email_response}")
+            
+    except Exception as e:
+        logger.error(f"❌ Email invoice failed for order {order_id}: {e}")
+        result["error"] = str(e)
+        if CELERY_AVAILABLE and self and hasattr(self, 'retry'):
+            raise self.retry(exc=e)
+            
     return result
 
 
