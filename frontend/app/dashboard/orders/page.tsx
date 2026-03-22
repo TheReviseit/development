@@ -43,6 +43,10 @@ interface Order {
   notes?: string;
   created_at: string;
   updated_at?: string;
+  custom_fields?: any;
+  payment_status?: string;
+  payment_method?: string;
+  razorpay_payment_id?: string;
 }
 
 interface OrderFormData {
@@ -1462,6 +1466,55 @@ export default function OrdersPage() {
                     {formData.customer_address || "No address provided"}
                   </div>
                 </div>
+
+                {/* Payment Info */}
+                {(() => {
+                  const customFields = editingOrder?.custom_fields || {};
+                  const paymentInfo = customFields?.payment || {};
+                  
+                  const notesText = editingOrder?.notes || "";
+                  const hasPaymentIdFromNotes = notesText.includes("Payment ID: pay_");
+                  const hasPaymentId = !!(paymentInfo.razorpay_payment_id || customFields.razorpay_payment_id || editingOrder?.razorpay_payment_id || hasPaymentIdFromNotes);
+                  
+                  const rawMethod = paymentInfo.method || customFields.paymentMethod || customFields.payment_method || editingOrder?.payment_method;
+                  let method = 'Not specified';
+                  if (rawMethod) {
+                    method = rawMethod.toLowerCase() === 'cod' ? 'COD' : 'Online Payment';
+                  } else if (hasPaymentId) {
+                    method = 'Online Payment';
+                  }
+                  
+                  const rawStatus = paymentInfo.status || customFields.paymentStatus || customFields.payment_status || editingOrder?.payment_status;
+                  
+                  let status = 'Pending';
+                  if (hasPaymentId || (rawStatus && rawStatus.toLowerCase() === 'paid')) {
+                    status = 'Paid';
+                  } else if (rawStatus) {
+                    status = rawStatus.charAt(0).toUpperCase() + rawStatus.slice(1);
+                  } else if (rawMethod && rawMethod.toLowerCase() === 'cod') {
+                    status = 'Pending (COD)';
+                  }
+                  
+                  return (
+                    <div className={styles.formRow}>
+                      <div className={styles.formGroup}>
+                        <label>Payment Method</label>
+                        <div className={styles.viewField}>
+                          {method}
+                        </div>
+                      </div>
+                      <div className={styles.formGroup}>
+                        <label>Payment Status</label>
+                        <div className={styles.viewField} style={{ 
+                          color: status === 'Paid' ? '#22c55e' : (status.includes('Pending') ? '#f59e0b' : 'inherit'),
+                          fontWeight: '500' 
+                        }}>
+                          {status}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })()}
 
                 <div className={styles.itemsSection}>
                   <div className={styles.itemsSectionHeader}>
