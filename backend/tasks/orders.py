@@ -271,16 +271,19 @@ def _get_business_data_for_invoice(user_id: str) -> Optional[Dict[str, Any]]:
         
         # Format for invoice generator
         # Note: user_id IS the store slug (Firebase UID = store identifier)
+        # CRITICAL: Use `or` instead of .get() defaults.
+        # dict.get(key, default) returns `None` when key EXISTS with NULL value.
+        # `or` catches both missing keys AND None values from DB.
         return {
-            "businessName": profile.get("business_name", "Store"),
-            "brandColor": profile.get("brand_color", "#22c55e"),
-            "logoUrl": profile.get("logo_url"),
-            "phone": contact.get("phone") or contact.get("whatsapp"),
-            "address": location.get("address"),
+            "businessName": profile.get("business_name") or "Store",
+            "brandColor": profile.get("brand_color") or "#22c55e",
+            "logoUrl": profile.get("logo_url") or "",
+            "phone": contact.get("phone") or contact.get("whatsapp") or "",
+            "address": location.get("address") or "",
             "location": {
-                "city": location.get("city"),
-                "state": location.get("state"),
-                "pincode": location.get("pincode"),
+                "city": location.get("city") or "",
+                "state": location.get("state") or "",
+                "pincode": location.get("pincode") or "",
             },
             "storeSlug": user_id,  # user_id IS the store slug
         }
@@ -1050,6 +1053,11 @@ def send_invoice_whatsapp(
         
         logger.info(f"📄 Starting invoice generation for order {order_id}")
         
+        # Defensive: Ensure business_data has valid brand_color before PDF generation
+        if not business_data.get("brandColor"):
+            business_data["brandColor"] = "#22c55e"
+            logger.warning(f"⚠️ Missing brandColor for order {order_id}, using default #22c55e")
+        
         # Step 1: Generate PDF in memory
         pdf_bytes = generate_invoice_pdf(order_data, business_data)
         
@@ -1206,18 +1214,38 @@ def send_invoice_email(
             return result
             
         # Determine Payment Info
+        # CRITICAL: Detect payment method from order source and notes.
+        # - source='api' → Razorpay online checkout → PAID ONLINE
+        # - source='ai' with payment indicators in notes → PAID ONLINE
+        # - Otherwise → fallback to get_payment_label() logic in invoice generator
         source = str(order_data.get("source", "manual")).lower()
-        notes = str(order_data.get("notes", ""))
+        notes = str(order_data.get("notes") or "")
         
-        has_payment_id = "payment id" in notes.lower() or "razorpay_payment_id" in notes.lower()
-        is_online_payment = source == "api" and has_payment_id
+        has_payment_id = any(indicator in notes.lower() for indicator in [
+            "payment id", "razorpay_payment_id", "razorpay payment",
+            "paid via razorpay", "paid online", "payment successful",
+        ])
+        
+        # API source = Razorpay checkout flow → always online payment
+        is_online_payment = source == "api" or has_payment_id
         
         payment_method = "online" if is_online_payment else "cod"
-        payment_status = "paid" if is_online_payment else "cod"
+        payment_status = "paid" if is_online_payment else "pending"
         
-        # Merge it into order_data for generate_invoice_pdf
-        order_data["paymentMethod"] = payment_method
-        order_data["paymentStatus"] = payment_status
+        # Merge into order_data for generate_invoice_pdf
+        # CRITICAL: Use snake_case keys — get_payment_label() reads 'payment_method', NOT 'paymentMethod'
+        order_data["payment_method"] = payment_method
+        order_data["payment_status"] = payment_status
+        
+        logger.info(
+            f"💳 Payment detection for order {order_id}: source={source}, "
+            f"method={payment_method}, status={payment_status}, has_payment_id={has_payment_id}"
+        )
+        
+        # Defensive: Ensure business_data has valid brand_color before PDF generation
+        if not business_data.get("brandColor"):
+            business_data["brandColor"] = "#22c55e"
+            logger.warning(f"⚠️ Missing brandColor in email invoice for order {order_id}, using default #22c55e")
         
         # Generate PDF Bytes
         pdf_bytes = generate_invoice_pdf(order_data, business_data)
@@ -1271,14 +1299,9 @@ def send_invoice_email(
         if getattr(email_response, 'id', None) or (isinstance(email_response, dict) and email_response.get('id')):
             logger.info(f"✅ Email invoice sent successfully to {customer_email}")
             result["sent"] = True
-            
-            # Update Orders table in Supabase
-            client.table("orders").update({
-                "invoice_sent_at": datetime.utcnow().isoformat(),
-                "invoice_email": customer_email,
-                "payment_status": payment_status,
-                "payment_method": payment_method
-            }).eq("id", order_id).execute()
+            # NOTE: No post-send DB update — the orders table does not have
+            # payment_method/payment_status columns. Payment info is stored
+            # in the order notes field and derived at invoice generation time.
         else:
             raise Exception(f"Resend API error: {email_response}")
             

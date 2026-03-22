@@ -38,6 +38,7 @@ try:
             "tasks.otp_delivery",  # OTP delivery tasks
             "tasks.billing_monitor",  # Subscription lifecycle monitoring
             "tasks.forms_maintenance",  # Form soft-delete purge (enterprise two-phase delete)
+            "tasks.usage_events",  # Feature usage event processing
         ]
     )
     

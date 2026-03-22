@@ -196,6 +196,92 @@ class TestIdempotency:
 
 
 # =============================================================================
+# NULL / EDGE-CASE SAFETY TESTS (Production Crash Prevention)
+# =============================================================================
+
+class TestNullSafeBrandColor:
+    """
+    Tests for null-safe brand_color handling — the ROOT CAUSE of the production crash.
+    
+    Root Cause: brand_color = None from DB → HexColor(None) → TypeError
+    These tests validate that generate_invoice_pdf NEVER crashes on bad color input.
+    """
+
+    def test_pdf_with_none_brand_color(self):
+        """brandColor: None must NOT crash (exact production failure case)."""
+        business = {**SAMPLE_BUSINESS, "brandColor": None}
+        pdf_bytes = generate_invoice_pdf(SAMPLE_ORDER_COD, business)
+        assert isinstance(pdf_bytes, bytes)
+        assert pdf_bytes[:5] == b'%PDF-'
+    
+    def test_pdf_with_missing_brand_color(self):
+        """Missing brandColor key entirely must NOT crash."""
+        business = {k: v for k, v in SAMPLE_BUSINESS.items() if k != "brandColor"}
+        pdf_bytes = generate_invoice_pdf(SAMPLE_ORDER_COD, business)
+        assert isinstance(pdf_bytes, bytes)
+        assert pdf_bytes[:5] == b'%PDF-'
+    
+    def test_pdf_with_empty_brand_color(self):
+        """brandColor: '' (empty string) must NOT crash."""
+        business = {**SAMPLE_BUSINESS, "brandColor": ""}
+        pdf_bytes = generate_invoice_pdf(SAMPLE_ORDER_COD, business)
+        assert isinstance(pdf_bytes, bytes)
+        assert pdf_bytes[:5] == b'%PDF-'
+    
+    def test_pdf_with_invalid_hex_color(self):
+        """brandColor: 'notahex' must NOT crash."""
+        business = {**SAMPLE_BUSINESS, "brandColor": "notahex"}
+        pdf_bytes = generate_invoice_pdf(SAMPLE_ORDER_COD, business)
+        assert isinstance(pdf_bytes, bytes)
+        assert pdf_bytes[:5] == b'%PDF-'
+    
+    def test_pdf_with_hex_no_hash_prefix(self):
+        """brandColor: 'ff5733' (no #) must auto-correct and NOT crash."""
+        business = {**SAMPLE_BUSINESS, "brandColor": "ff5733"}
+        pdf_bytes = generate_invoice_pdf(SAMPLE_ORDER_COD, business)
+        assert isinstance(pdf_bytes, bytes)
+        assert pdf_bytes[:5] == b'%PDF-'
+
+
+class TestMinimalBusinessData:
+    """Tests that PDF generation works with minimal/empty business data."""
+
+    def test_pdf_with_none_business_name(self):
+        """businessName: None must fallback to 'Store'."""
+        business = {**SAMPLE_BUSINESS, "businessName": None}
+        pdf_bytes = generate_invoice_pdf(SAMPLE_ORDER_COD, business)
+        assert isinstance(pdf_bytes, bytes)
+        assert len(pdf_bytes) > 0
+
+    def test_pdf_with_none_logo_url(self):
+        """logoUrl: None must NOT crash."""
+        business = {**SAMPLE_BUSINESS, "logoUrl": None}
+        pdf_bytes = generate_invoice_pdf(SAMPLE_ORDER_COD, business)
+        assert isinstance(pdf_bytes, bytes)
+    
+    def test_pdf_with_empty_business_data(self):
+        """Completely empty business dict must NOT crash."""
+        business = {}
+        pdf_bytes = generate_invoice_pdf(SAMPLE_ORDER_COD, business)
+        assert isinstance(pdf_bytes, bytes)
+        assert pdf_bytes[:5] == b'%PDF-'
+
+    def test_pdf_with_all_none_values(self):
+        """Business dict with all None values must NOT crash."""
+        business = {
+            "businessName": None,
+            "brandColor": None,
+            "logoUrl": None,
+            "phone": None,
+            "address": None,
+            "storeSlug": None,
+        }
+        pdf_bytes = generate_invoice_pdf(SAMPLE_ORDER_COD, business)
+        assert isinstance(pdf_bytes, bytes)
+        assert pdf_bytes[:5] == b'%PDF-'
+
+
+# =============================================================================
 # WhatsApp Media Service Tests (Mocked)
 # =============================================================================
 

@@ -147,6 +147,61 @@ def get_payment_badge_color(order: Dict[str, Any], brand_color: str) -> str:
 # Utility Functions
 # =============================================================================
 
+DEFAULT_BRAND_COLOR = "#22c55e"
+
+
+def safe_hex_color(color_value: Optional[str], fallback: str = DEFAULT_BRAND_COLOR) -> HexColor:
+    """
+    ENTERPRISE-GRADE: Safely convert a color string to a ReportLab HexColor.
+    
+    Handles:
+    - None / empty string → fallback
+    - Missing '#' prefix → auto-prepend
+    - Invalid hex strings → fallback with WARNING log
+    
+    This function is the ONLY entry point for user-provided colors.
+    All drawing helpers MUST use this instead of raw HexColor().
+    
+    Args:
+        color_value: Raw color string from DB/API (may be None, empty, or invalid)
+        fallback: Safe fallback hex color (default: #22c55e green)
+    
+    Returns:
+        A valid HexColor object, guaranteed non-null
+    """
+    # Guard: None or empty
+    if not color_value or not isinstance(color_value, str):
+        logger.debug(f"Color value is None/empty, using fallback '{fallback}'")
+        return HexColor(fallback)
+    
+    # Normalize: strip whitespace
+    color_value = color_value.strip()
+    if not color_value:
+        return HexColor(fallback)
+    
+    # Auto-prepend '#' if missing
+    if not color_value.startswith("#"):
+        color_value = f"#{color_value}"
+    
+    # Validate hex format: must be #RRGGBB or #RGB
+    import re
+    if not re.match(r'^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$', color_value):
+        logger.warning(
+            f"Invalid hex color '{color_value}', using fallback '{fallback}'. "
+            f"Expected format: #RRGGBB or #RGB"
+        )
+        return HexColor(fallback)
+    
+    try:
+        return HexColor(color_value)
+    except Exception as e:
+        logger.warning(
+            f"HexColor conversion failed for '{color_value}': {e}. "
+            f"Using fallback '{fallback}'"
+        )
+        return HexColor(fallback)
+
+
 def format_price_inr(price: float) -> str:
     """Format price in Indian Rupees."""
     return f"Rs. {price:,.0f}"
@@ -205,13 +260,13 @@ def generate_invoice_pdf(order: Dict[str, Any], business: Dict[str, Any]) -> byt
     width, height = A4
     c = canvas.Canvas(buffer, pagesize=A4)
     
-    # Extract business info
-    brand_color = business.get("brandColor", "#22c55e")
-    business_name = business.get("businessName", "Store")
-    business_phone = business.get("contact", {}).get("phone", "") if isinstance(business.get("contact"), dict) else business.get("phone", "")
+    # Extract business info — use `or` for null-safe defaults (DB may return NULL)
+    brand_color = business.get("brandColor") or DEFAULT_BRAND_COLOR
+    business_name = business.get("businessName") or "Store"
+    business_phone = business.get("contact", {}).get("phone", "") if isinstance(business.get("contact"), dict) else business.get("phone") or ""
     business_address = _get_business_address(business)
-    logo_url = business.get("logoUrl", "")
-    store_slug = business.get("storeSlug") or business.get("businessId", "")
+    logo_url = business.get("logoUrl") or ""
+    store_slug = business.get("storeSlug") or business.get("businessId") or ""
     
     # Extract order info
     invoice_number = generate_invoice_number(order.get("order_id", order.get("id", "UNKNOWN")))
@@ -306,8 +361,8 @@ def _get_business_address(business: Dict[str, Any]) -> str:
 
 def _draw_header(c, width, height, brand_color, business_name, phone, address, logo_url, header_height):
     """Draw branded header section."""
-    # Background
-    c.setFillColor(HexColor(brand_color))
+    # Background — safe_hex_color handles None/invalid brand_color
+    c.setFillColor(safe_hex_color(brand_color))
     c.rect(0, height - header_height, width, header_height, fill=True, stroke=False)
     
     # Business name
@@ -362,7 +417,7 @@ def _draw_header(c, width, height, brand_color, business_name, phone, address, l
     if not logo_loaded:
         c.setFillColor(white)
         c.circle(logo_x, logo_y, logo_size / 2, fill=True, stroke=False)
-        c.setFillColor(HexColor(brand_color))
+        c.setFillColor(safe_hex_color(brand_color))
         c.setFont("Helvetica-Bold", 14)
         c.drawCentredString(logo_x, logo_y - 4, business_name[0].upper())
 
@@ -407,7 +462,7 @@ def _draw_invoice_meta(c, y, width, brand_color, invoice_number, order_date):
     badge_height = 5 * mm
     badge_x = 20 * mm
     
-    c.setFillColor(HexColor(brand_color))
+    c.setFillColor(safe_hex_color(brand_color))
     c.roundRect(badge_x, y - badge_height, badge_width, badge_height, 2, fill=True, stroke=False)
     
     c.setFillColor(white)
@@ -617,7 +672,7 @@ def _draw_footer(c, width, payment_label, payment_color, order_id):
     badge_width = 35 * mm if payment_label == "CASH ON DELIVERY" else 25 * mm
     badge_height = 5 * mm
     
-    c.setFillColor(HexColor(payment_color))
+    c.setFillColor(safe_hex_color(payment_color))
     c.roundRect(20 * mm, badge_y, badge_width, badge_height, 2, fill=True, stroke=False)
     
     c.setFillColor(white)
