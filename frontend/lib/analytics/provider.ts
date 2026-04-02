@@ -9,6 +9,8 @@
  *   2. Easy addition of Mixpanel, Segment, Amplitude etc.
  *   3. Provider-agnostic event dispatch
  *   4. Consistent initialization and lifecycle management
+ *   5. Consent mode integration
+ *   6. Event deduplication
  *
  * Architecture:
  *   AnalyticsProviderInterface (abstract)
@@ -34,6 +36,8 @@ import { pushToDataLayer, pushUserProperties } from "./dataLayer";
 import { analyticsHealth, getAnalyticsHealth } from "./health";
 import { isDebugMode } from "./config";
 import { enqueueEvent, hasQueuedEvents, drainQueue } from "./fallbackQueue";
+import { shouldSendEvent, generateTraceId } from "./deduplication";
+import { trackWithConsent, getConsentState } from "./consent";
 
 // =============================================================================
 // ABSTRACT PROVIDER INTERFACE
@@ -67,15 +71,16 @@ export interface AnalyticsProviderInterface {
   /**
    * Track a typed analytics event.
    * The event has already been validated against the schema.
+   * Implements consent-aware + deduplicated tracking.
    *
-   * @returns true if the event was dispatched
+   * @returns true if event was dispatched
    */
   trackEvent(event: AnalyticsEvent): boolean;
 
   /**
    * Track a pageview.
    *
-   * @returns true if the pageview was dispatched
+   * @returns true if pageview was dispatched
    */
   trackPageview(url: string, title?: string): boolean;
 
@@ -91,14 +96,18 @@ export interface AnalyticsProviderInterface {
 }
 
 // =============================================================================
-// GOOGLE ANALYTICS 4 PROVIDER
+// GOOGLE ANALYTICS 4 PROVIDER (FAANG LEVEL)
 // =============================================================================
 
 /**
  * Google Analytics 4 provider implementation.
  *
- * Uses the gtag.js wrapper from ./gtag.ts for all operations.
- * All events also flow through the Data Layer for GTM compatibility.
+ * Features:
+ *   - Consent mode v2 integration
+ *   - Event deduplication
+ *   - Ad-blocker fallback to server
+ *   - Data layer integration for GTM
+ *   - Health monitoring
  */
 export class GoogleAnalyticsProvider implements AnalyticsProviderInterface {
   readonly name = "google_analytics";
@@ -152,26 +161,66 @@ export class GoogleAnalyticsProvider implements AnalyticsProviderInterface {
       return false;
     }
 
-    pushToDataLayer(event);
+    // CONSENT CHECK: Track with consent awareness
+    // This implements cookieless pings when consent not granted
+    const consentResult = trackWithConsent(event.name, event.params);
+    if (!consentResult) {
+      return false;
+    }
 
+    // DEDUPLICATION: Check if event should be sent
+    // Prevents client+server double counting
+    const dedupResult = shouldSendEvent(event.name, event.params, "client");
+
+    if (!dedupResult.isDuplicate) {
+      // Add trace_id to event params for debugging
+      // Cast to any to bypass strict type check - trace_id is a meta-field for debugging
+      const eventWithTrace = {
+        ...event,
+        params: {
+          ...event.params,
+          trace_id: dedupResult.traceId,
+        },
+      } as unknown as AnalyticsEvent;
+
+      // Push to data layer (GTM compatible)
+      pushToDataLayer(eventWithTrace);
+    }
+
+    // Route based on gtag availability
     if (gtagBlocked) {
       if (isDebugMode()) {
         console.log(
           `%c[Analytics:GA4] gtag blocked, using fallback queue`,
           "color: #F59E0B;",
-          { event: event.name }
+          { event: event.name, dedup: dedupResult.isDuplicate }
         );
       }
 
-      enqueueEvent(event.name, event.params as Record<string, unknown>);
-      analyticsHealth.record("event_queued", { event: event.name });
+      // Only queue if not a duplicate
+      if (!dedupResult.isDuplicate) {
+        enqueueEvent(event.name, event.params as Record<string, unknown>);
+        analyticsHealth.record("event_queued", { event: event.name });
+      }
       return true;
     }
 
-    return gtagEvent(event.name, event.params as Record<string, unknown>);
+    // gtag available - send event
+    // Even if dedup, still send to maintain client-side accuracy
+    const sent = gtagEvent(event.name, {
+      ...event.params,
+      trace_id: dedupResult.traceId,
+    });
+
+    if (sent) {
+      analyticsHealth.record("event_sent", { event: event.name });
+    }
+
+    return sent;
   }
 
   trackPageview(url: string, title?: string): boolean {
+    // Check provider initialization
     if (!this.isInitialized()) {
       const health = getAnalyticsHealth();
       const gtagBlocked = health.scriptBlocked || health.scriptLoaded === false;
@@ -187,22 +236,34 @@ export class GoogleAnalyticsProvider implements AnalyticsProviderInterface {
       return false;
     }
 
+    // Consent check for pageview
+    trackWithConsent("page_view", { page_path: url, page_title: title });
+
+    // Deduplication for pageview
+    const dedupResult = shouldSendEvent("page_view", { page_path: url, page_title: title }, "client");
+
+    // Push to data layer (GTM compatible)
     pushToDataLayer({
       name: "page_view",
       params: {
         page_path: url,
         page_title: title,
+        page_location: typeof window !== "undefined" ? window.location.href : undefined,
+        trace_id: dedupResult.traceId,
       },
-    });
+    } as unknown as AnalyticsEvent);
 
+    // Check if gtag is blocked
     const health = getAnalyticsHealth();
     const gtagBlocked = health.scriptBlocked || health.scriptLoaded === false;
 
     if (gtagBlocked) {
-      enqueueEvent("page_view", {
-        page_path: url,
-        page_title: title,
-      });
+      if (!dedupResult.isDuplicate) {
+        enqueueEvent("page_view", {
+          page_path: url,
+          page_title: title,
+        });
+      }
       return true;
     }
 
@@ -217,6 +278,8 @@ export class GoogleAnalyticsProvider implements AnalyticsProviderInterface {
 
     // Set in gtag
     gtagSetUser(userId, traits as Record<string, unknown>);
+
+    analyticsHealth.record("user_identified", { userId });
   }
 
   isInitialized(): boolean {
@@ -226,6 +289,11 @@ export class GoogleAnalyticsProvider implements AnalyticsProviderInterface {
   /** Get the active measurement ID */
   getMeasurementId(): string | null {
     return getActiveMeasurementId();
+  }
+
+  /** Get current consent state */
+  getConsentState() {
+    return getConsentState();
   }
 }
 

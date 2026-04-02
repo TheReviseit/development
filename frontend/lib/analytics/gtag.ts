@@ -210,7 +210,9 @@ export async function initializeGtag(
       // Privacy / GDPR
       anonymize_ip: true,
       cookie_flags: "SameSite=None;Secure",
-      // Cookie domain — allows sharing across subdomains
+      // Cookie domain — ROOT DOMAIN for cross-subdomain cookie sharing
+      // CRITICAL: Must be "flowauxi.com" NOT "shop.flowauxi.com"
+      // This ensures _ga cookie is available on ALL subdomains
       cookie_domain: "flowauxi.com",
       // Send page_view on config (standard behavior)
       send_page_view: true,

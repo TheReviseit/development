@@ -345,9 +345,6 @@ export type {
 // Config utilities
 export { getAnalyticsConfig, resolveDomainConfig, isAnalyticsEnabled } from "./config";
 
-// Gtag utilities
-export { updateConsent } from "./gtag";
-
 // Server-side tracking
 export {
   trackServerEvent,
@@ -382,3 +379,102 @@ export {
   clearQueue,
   drainQueue,
 } from "./fallbackQueue";
+
+// Validation & Debugging
+export {
+  validateAnalytics,
+  checkCrossDomain,
+  getDebugReport,
+  printValidation,
+} from "./validation";
+export type { ValidationResult, ValidationCheck } from "./validation";
+
+// Consent Mode v2
+export {
+  initializeConsentMode,
+  grantFullConsent,
+  grantAnalyticsOnly,
+  revokeConsent,
+  updateConsent,
+  getConsentState,
+  isAnalyticsAllowed,
+  isMarketingAllowed,
+  trackWithConsent,
+  getConsentDataLayerEntry,
+} from "./consent";
+
+// Deduplication
+export {
+  generateTraceId,
+  hashEventContent,
+  shouldSendEvent,
+  markEventSent,
+  wasEventSent,
+  getDedupeStats,
+  clearDeduplication,
+} from "./deduplication";
+
+// Privacy Layer
+export {
+  detectPii,
+  isPiiFieldName,
+  hashValue,
+  redactValue,
+  sanitizeData,
+  shouldRetainData,
+  getDataCategory,
+  canProcessData,
+  getCompliantClientId,
+  getPrivacyAuditLog,
+  getPrivacyMetrics,
+  handleDataSubjectRequest,
+  isGdprCompliant,
+} from "./privacy";
+export type { PrivacyLevel, PrivacyConfig } from "./privacy";
+
+// Data Warehouse Schema (BigQuery Export)
+export {
+  WAREHOUSE_SCHEMA_VERSION,
+  WAREHOUSE_CONFIG,
+  transformToWarehouseFormat,
+  getBigQuerySchema,
+} from "./warehouse";
+export type {
+  WarehouseEvent,
+  WarehouseEventInput,
+  DeviceInfo,
+  GeoInfo,
+  AppInfo,
+  TrafficSource,
+  FlowauxiMetadata,
+  ParamStruct,
+} from "./warehouse";
+
+// Schema Governance
+export {
+  CURRENT_SCHEMA_VERSION,
+  SCHEMA_EPOCH,
+  getSchemaVersion,
+  getLatestEventVersion,
+  getEventVersions,
+  isEventVersionDeprecated,
+  migrateEvent,
+  validateEventSchema,
+  getSchemaManifest,
+  enrichWithSchema,
+  getSchemaMetadata,
+} from "./governance";
+export type { SchemaVersion, EventVersion, MigrationDirection, SchemaManifest } from "./governance";
+
+// Event Recovery System
+export {
+  queueForRecovery,
+  processRecoveryQueue,
+  replayEvent,
+  replayAllFailed,
+  getRecoveryStats,
+  getRecoveryEvents,
+  getRecoveryEvent,
+  runRecoveryCron,
+} from "./recovery";
+export type { EventStatus, RecoveryEvent } from "./recovery";

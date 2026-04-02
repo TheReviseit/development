@@ -28,6 +28,9 @@ export type HealthEventType =
   | "event_sent"
   | "event_dropped"
   | "event_queued"
+  | "event_attempted"
+  | "event_cookieless"
+  | "event_deduplicated"
   | "script_loaded"
   | "script_failed"
   | "provider_initialized"
@@ -37,7 +40,20 @@ export type HealthEventType =
   | "consent_revoked"
   | "ad_blocker_detected"
   | "server_event_sent"
-  | "server_event_failed";
+  | "server_event_failed"
+  | "server_event_deduplicated"
+  | "server_event_cookieless"
+  | "server_circuit_breaker_open"
+  | "server_circuit_breaker_triggered"
+  | "server_event_error"
+  | "recovery_event_queued"
+  | "recovery_critical_queued"
+  | "recovery_event_success"
+  | "recovery_event_quarantined"
+  | "recovery_event_retry"
+  | "recovery_manual_replay_success"
+  | "recovery_manual_replay_failed"
+  | "user_identified";
 
 export interface HealthMetrics {
   /** Total events attempted */
@@ -71,7 +87,7 @@ export interface HealthMetrics {
 }
 
 export interface HealthAlert {
-  type: "high_drop_rate" | "script_blocked" | "provider_failure" | "no_events";
+  type: "high_drop_rate" | "script_blocked" | "provider_failure" | "no_events" | "server_circuit_breaker";
   message: string;
   timestamp: number;
   severity: "warning" | "critical";
@@ -187,6 +203,58 @@ class AnalyticsHealthMonitor {
 
       case "server_event_failed":
         this.metrics.serverEventsFailed++;
+        break;
+
+      case "event_attempted":
+        this.metrics.totalEventsAttempted++;
+        break;
+
+      case "event_cookieless":
+        // Cookieless events still count as attempts
+        break;
+
+      case "event_deduplicated":
+        // Deduplicated events don't increment sent/dropped
+        break;
+
+      case "server_event_deduplicated":
+        break;
+
+      case "server_event_cookieless":
+        break;
+
+      case "server_circuit_breaker_open":
+        this.addAlert({
+          type: "server_circuit_breaker",
+          message: "Server-side analytics circuit breaker open",
+          severity: "warning",
+        });
+        break;
+
+      case "server_circuit_breaker_triggered":
+        this.addAlert({
+          type: "server_circuit_breaker",
+          message: "Server-side analytics circuit breaker triggered",
+          severity: "critical",
+        });
+        break;
+
+      case "server_event_error":
+        this.metrics.serverEventsFailed++;
+        break;
+
+      case "recovery_event_queued":
+      case "recovery_critical_queued":
+      case "recovery_event_success":
+      case "recovery_event_quarantined":
+      case "recovery_event_retry":
+      case "recovery_manual_replay_success":
+      case "recovery_manual_replay_failed":
+        // Recovery events tracked separately
+        break;
+
+      case "user_identified":
+        // User identification events
         break;
     }
 

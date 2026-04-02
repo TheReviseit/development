@@ -81,63 +81,67 @@ export interface AnalyticsResolvedConfig {
 // =============================================================================
 
 /**
- * Production domain → GA4 Measurement ID mapping.
- *
- * WHY hardcoded instead of env vars:
- *   1. Static mapping that rarely changes
- *   2. Must be available at build time AND on the client
- *   3. Multiple IDs per deployment make a single env var insufficient
- *   4. Config versioning requires explicit tracking
- *
- * To add a new domain:
- *   1. Create a GA4 property + web data stream
- *   2. Add the entry below
- *   3. Increment ANALYTICS_CONFIG_VERSION
+ * Unified Domain → GA4 Measurement ID Mapping
+ * 
+ * STRATEGY: Single GA4 Property (G-F02P5002S8) for ALL domains
+ * 
+ * Why single ID:
+ *   1. Unified user journey across subdomains
+ *   2. Automatic cross-domain session stitching
+ *   3. Single source of truth for attribution
+ *   4. Simplified debugging and maintenance
+ * 
+ * Hostname dimension used for segmentation in GA4:
+ *   - Hostname = "shop.flowauxi.com" → Shop funnel
+ *   - Hostname = "marketing.flowauxi.com" → Marketing funnel
+ *   - Hostname = "flowauxi.com" → Main platform
  */
 const DOMAIN_MEASUREMENT_MAP: Record<string, DomainAnalyticsConfig> = {
   // ── Main Platform ──────────────────────────────────────────────────
   "flowauxi.com": {
-    measurementId: "G-E06R01F4TF",
-    domain: "dashboard",
+    measurementId: "G-F02P5002S8",
+    domain: "main",
     hostname: "flowauxi.com",
     streamName: "Flowauxi Main",
   },
   "www.flowauxi.com": {
-    measurementId: "G-E06R01F4TF",
-    domain: "dashboard",
+    measurementId: "G-F02P5002S8",
+    domain: "main",
     hostname: "www.flowauxi.com",
     streamName: "Flowauxi Main (www)",
   },
 
-  // ── Shop ────────────────────────────────────────────────────────────
+  // ── Shop (uses SAME ID for unified tracking) ───────────────────────
   "shop.flowauxi.com": {
-    measurementId: "G-M4WTQHPHX4",
+    measurementId: "G-F02P5002S8",
     domain: "shop",
     hostname: "shop.flowauxi.com",
     streamName: "Flowauxi Shop",
   },
 
-  // ── Other Subdomains (using main ID until separate properties are created) ──
+  // ── Marketing (uses SAME ID for unified tracking) ───────────────────
   "marketing.flowauxi.com": {
-    measurementId: "G-E06R01F4TF",
+    measurementId: "G-F02P5002S8",
     domain: "marketing",
     hostname: "marketing.flowauxi.com",
     streamName: "Flowauxi Marketing",
   },
+  
+  // ── Other Subdomains (unified) ───────────────────────────────────────
   "pages.flowauxi.com": {
-    measurementId: "G-E06R01F4TF",
+    measurementId: "G-F02P5002S8",
     domain: "showcase",
     hostname: "pages.flowauxi.com",
     streamName: "Flowauxi Pages",
   },
   "api.flowauxi.com": {
-    measurementId: "G-E06R01F4TF",
+    measurementId: "G-F02P5002S8",
     domain: "api",
     hostname: "api.flowauxi.com",
     streamName: "Flowauxi API",
   },
   "booking.flowauxi.com": {
-    measurementId: "G-E06R01F4TF",
+    measurementId: "G-F02P5002S8",
     domain: "booking",
     hostname: "booking.flowauxi.com",
     streamName: "Flowauxi Booking",
@@ -159,8 +163,8 @@ const DEV_PORT_DOMAIN_MAP: Record<string, string> = {
 
 /** Default config when domain cannot be resolved */
 const DEFAULT_CONFIG: DomainAnalyticsConfig = {
-  measurementId: "G-E06R01F4TF",
-  domain: "dashboard",
+  measurementId: "G-F02P5002S8",
+  domain: "main",
   hostname: "flowauxi.com",
   streamName: "Flowauxi Main (fallback)",
 };
