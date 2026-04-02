@@ -74,7 +74,7 @@ export default function ShopPricingSection() {
             We've got a plan that's perfect for you
           </h1>
 
-          <div className={styles.toggleContainer}>
+          {/* <div className={styles.toggleContainer}>
             <button
               className={`${styles.toggleBtn} ${billingCycle === "monthly" ? styles.active : ""}`}
               onClick={() => setBillingCycle("monthly")}
@@ -87,7 +87,7 @@ export default function ShopPricingSection() {
             >
               Annual billing
             </button>
-          </div>
+          </div> */}
         </div>
 
         <div className={styles.grid}>

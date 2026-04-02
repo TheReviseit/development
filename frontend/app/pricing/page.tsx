@@ -1,45 +1,71 @@
-"use client";
+/**
+ * Universal Pricing Page (Domain-Aware)
+ * ======================================
+ * This page detects the current domain (shop, booking, marketing, etc.)
+ * from the server headers and renders the correct domain-specific
+ * pricing component with the correct navbar/footer.
+ *
+ * Previously this was hardcoded to show BookingPricing for ALL domains.
+ */
 
-import BookingNavbar from "@/app/booking/components/BookingNavbar";
-import BookingFooter from "@/app/booking/components/BookingFooter";
-import BookingPricing from "@/app/booking/components/BookingPricing";
+import { getCurrentProduct } from "@/lib/product/server";
+import type { ProductDomain } from "@/lib/product/types";
 
-import { motion } from "framer-motion";
+// Domain-specific pricing page wrappers
+import BookingPricingPage from "./BookingPricingPage";
+import ShopPricingPage from "./ShopPricingPage";
+import DashboardPricingPage from "./DashboardPricingPage";
+import MarketingPricingPage from "./MarketingPricingPage";
+import ShowcasePricingPage from "./ShowcasePricingPage";
+import ApiPricingPage from "./ApiPricingPage";
 
-export default function PricingPage() {
-  return (
-    <div className="min-h-screen bg-[#F1F3F4] font-sans text-gray-900 overflow-x-hidden flex flex-col relative w-full selection:bg-black selection:text-white">
-      {/* Navigation */}
-      <BookingNavbar />
+export async function generateMetadata() {
+  const product = await getCurrentProduct();
 
-      <main className="flex-1 pt-24">
-        {/* Simple Page Header */}
-        <div className="max-w-[1400px] mx-auto px-6 sm:px-10 lg:px-16 pt-12 pb-8 text-center">
-          <motion.h1 
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="text-[56px] md:text-[72px] font-serif font-black text-[#111111] leading-tight mb-4"
-          >
-            Pricing <span className="text-gray-400">Plans</span>
-          </motion.h1>
-          <motion.p 
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.1 }}
-            className="text-xl text-gray-600 font-medium max-w-2xl mx-auto"
-          >
-            Choose the perfect plan for your business. From solo freelancers to large enterprises, we've got you covered.
-          </motion.p>
-        </div>
+  const titles: Record<ProductDomain, string> = {
+    booking: "Pricing Plans | Flowauxi Booking",
+    shop: "Pricing | Flowauxi Shop",
+    dashboard: "Pricing Plans | Flowauxi",
+    marketing: "Pricing Plans | Flowauxi Marketing",
+    showcase: "Pricing Plans | Flowauxi Showcase",
+    api: "Pricing Plans | Flowauxi API",
+  };
 
-        {/* The Pricing Component */}
-        <BookingPricing />
+  const descriptions: Record<ProductDomain, string> = {
+    booking:
+      "Choose the perfect booking plan for your business. From solo freelancers to large enterprises.",
+    shop: "Flexible plans built for modern commerce operations. Choose the perfect plan for your business scale.",
+    dashboard:
+      "Choose the perfect WhatsApp AI automation plan for your business.",
+    marketing:
+      "Scale your WhatsApp marketing campaigns with the right plan.",
+    showcase:
+      "Showcase your portfolio with the perfect plan for your needs.",
+    api: "Developer-friendly API plans for every scale.",
+  };
 
+  return {
+    title: titles[product.id] || titles.dashboard,
+    description: descriptions[product.id] || descriptions.dashboard,
+  };
+}
 
-      </main>
+export default async function PricingPage() {
+  const product = await getCurrentProduct();
 
-      {/* Footer */}
-      <BookingFooter />
-    </div>
-  );
+  switch (product.id) {
+    case "booking":
+      return <BookingPricingPage />;
+    case "shop":
+      return <ShopPricingPage />;
+    case "marketing":
+      return <MarketingPricingPage />;
+    case "showcase":
+      return <ShowcasePricingPage />;
+    case "api":
+      return <ApiPricingPage />;
+    case "dashboard":
+    default:
+      return <DashboardPricingPage />;
+  }
 }
