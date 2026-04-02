@@ -2,6 +2,11 @@
  * Cookie Configuration System
  * Centralized configuration for all cookies and third-party scripts
  * Makes the system maintainable and easy to update
+ *
+ * NOTE: Google Analytics is now managed by lib/analytics/ module.
+ * GA script injection, initialization, and cross-domain tracking
+ * are handled centrally via the AnalyticsProvider component.
+ * Only Facebook Pixel and other third-party scripts are configured here.
  */
 
 import { CookieCategory, CookieScript, CookieMetadata } from "./cookieTypes";
@@ -28,26 +33,17 @@ export const CONSENT_EXPIRY_DAYS = 365;
  * Add/remove scripts here to manage what loads with consent
  */
 export const COOKIE_SCRIPTS: CookieScript[] = [
-  {
-    id: "google-analytics",
-    name: "Google Analytics",
-    category: CookieCategory.ANALYTICS,
-    src: `https://www.googletagmanager.com/gtag/js?id=${process.env.NEXT_PUBLIC_GA_MEASUREMENT_ID}`,
-    enabled: !!process.env.NEXT_PUBLIC_GA_MEASUREMENT_ID,
-    init: () => {
-      // Initialize Google Analytics
-      window.dataLayer = window.dataLayer || [];
-      window.gtag = function (...args: any[]) {
-        window.dataLayer.push(args);
-      };
-      window.gtag("js", new Date());
-      window.gtag("config", process.env.NEXT_PUBLIC_GA_MEASUREMENT_ID!, {
-        anonymize_ip: true, // GDPR compliance
-        cookie_flags: "SameSite=None;Secure",
-      });
-      console.log("✅ Google Analytics initialized");
-    },
-  },
+  // ──────────────────────────────────────────────────────────────────
+  // Google Analytics is NOW managed by lib/analytics/ module.
+  // It is initialized by the <AnalyticsProvider /> component in
+  // app/layout.tsx, which handles:
+  //   - Domain-specific Measurement IDs
+  //   - Cross-domain tracking
+  //   - Data Layer standardization
+  //   - Health monitoring
+  //   - Server-side tracking
+  // DO NOT add GA config here — use lib/analytics/config.ts instead.
+  // ──────────────────────────────────────────────────────────────────
   {
     id: "facebook-pixel",
     name: "Facebook Pixel",
@@ -152,10 +148,9 @@ export const COOKIE_PATTERNS_BY_CATEGORY: Record<CookieCategory, string[]> = {
 };
 
 // TypeScript declarations for third-party scripts
+// NOTE: dataLayer and gtag types are now declared in lib/analytics/
 declare global {
   interface Window {
-    dataLayer: any[];
-    gtag: (...args: any[]) => void;
     fbq: (...args: any[]) => void;
     _fbq: any;
   }

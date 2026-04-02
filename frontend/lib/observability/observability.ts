@@ -7,6 +7,7 @@
 import { v4 as uuidv4 } from "uuid";
 import type { ProductDomain } from "../domain/config";
 import type { PlanTier } from "../pricing/pricing-config";
+import { trackEvent, trackUntypedEvent } from "../analytics";
 
 // =============================================================================
 // CORRELATION ID FOR DISTRIBUTED TRACING
@@ -157,9 +158,10 @@ export function trackRevenue(data: RevenueData): void {
     userId: data.userId,
   });
 
-  // Google Analytics 4
-  if (typeof window !== "undefined" && (window as any).gtag) {
-    (window as any).gtag("event", "purchase", {
+  // Google Analytics 4 — via centralized analytics (consent-aware)
+  trackEvent({
+    name: "purchase",
+    params: {
       transaction_id: data.subscriptionId,
       value: data.amount,
       currency: data.currency,
@@ -172,8 +174,8 @@ export function trackRevenue(data: RevenueData): void {
           quantity: 1,
         },
       ],
-    });
-  }
+    },
+  });
 
   // Mixpanel (if available)
   if (typeof window !== "undefined" && (window as any).mixpanel) {
@@ -225,15 +227,13 @@ export function trackFunnelStep(
 
   logger.info(`funnel.${step}`, eventData);
 
-  // Google Analytics
-  if (typeof window !== "undefined" && (window as any).gtag) {
-    (window as any).gtag("event", step, {
-      event_category: "funnel",
-      event_label: metadata.domain,
-      value: metadata.plan,
-      ...metadata,
-    });
-  }
+  // Google Analytics — via centralized analytics (consent-aware)
+  trackUntypedEvent(step, {
+    event_category: "funnel",
+    event_label: metadata.domain,
+    value: metadata.plan,
+    ...metadata,
+  });
 
   // Mixpanel
   if (typeof window !== "undefined" && (window as any).mixpanel) {

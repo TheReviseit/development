@@ -13,6 +13,7 @@ import {
   generateDomainSchemas,
 } from "@/lib/seo/domain-seo";
 import QueryProvider from "./components/providers/QueryProvider";
+import { AnalyticsProvider } from "./components/analytics/AnalyticsProvider";
 
 const inter = Inter({
   variable: "--font-inter",
@@ -278,10 +279,12 @@ export default async function RootLayout({
       <head>
         {/* DNS Prefetch for Performance */}
         <link rel="dns-prefetch" href="https://www.google-analytics.com" />
+        <link rel="dns-prefetch" href="https://www.googletagmanager.com" />
         <link rel="dns-prefetch" href="https://fonts.googleapis.com" />
         <link rel="dns-prefetch" href="https://fonts.gstatic.com" />
 
         {/* Preconnect for faster loading */}
+        <link rel="preconnect" href="https://www.googletagmanager.com" />
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link
           rel="preconnect"
@@ -337,6 +340,7 @@ export default async function RootLayout({
         <QueryProvider>
           <ServiceWorkerRegistration />
           <PWAInstallPrompt />
+          <AnalyticsProvider />
           <CookieConsent />
           {children}
           <SpeedInsights />

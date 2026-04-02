@@ -9,6 +9,7 @@
 
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect } from "react";
+import { trackEvent } from "@/lib/analytics";
 
 /**
  * Preload a route when user hovers over a link
@@ -150,15 +151,16 @@ export function measureAuthPerformance(
     );
   }
 
-  // Send to analytics in production
-  if (typeof window !== "undefined" && window.gtag) {
-    window.gtag("event", "timing_complete", {
+  // Send to analytics via centralized module (consent-aware)
+  trackEvent({
+    name: "timing_complete",
+    params: {
       name: eventName,
       value: Math.round(duration),
       event_category: "Auth Flow",
       ...metadata,
-    });
-  }
+    },
+  });
 
   return duration;
 }

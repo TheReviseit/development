@@ -382,10 +382,10 @@ export function trackEvent(
     return;
   }
 
-  // Google Analytics
-  if (typeof window !== "undefined" && typeof window.gtag === "function") {
-    window.gtag("event", eventName, eventData);
-  }
+  // Note: Google Analytics is now handled via lib/analytics/ trackEvent
+  // This legacy trackEvent function now only handles Facebook Pixel and
+  // legacy external scripts. New code should use lib/analytics/trackEvent.
+
 
   // Facebook Pixel
   if (typeof window !== "undefined" && typeof window.fbq === "function") {
