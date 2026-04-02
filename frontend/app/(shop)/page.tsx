@@ -70,20 +70,21 @@ export default function ShopLandingPage() {
             <div className="max-w-2xl">
               <div className="inline-flex items-center gap-2 bg-indigo-100/80 backdrop-blur-sm text-indigo-700 px-4 py-2 rounded-full text-sm font-medium mb-6 border border-indigo-200/50">
                 <Sparkles className="h-4 w-4" />
-                <span>Trusted by 10,000+ businesses worldwide</span>
+                <span>#1 WhatsApp E-commerce Platform for Indian Businesses</span>
               </div>
               <h1 className="text-5xl md:text-6xl lg:text-7xl font-bold text-gray-900 leading-tight mb-6">
-                Online Store Builder
+                WhatsApp-Powered Online Store
                 <span className="block bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-600 bg-clip-text text-transparent animate-gradient">
-                  Create Your Ecommerce Website
+                  with Automated Order Booking
                 </span>
               </h1>
               <p className="text-xl md:text-2xl text-gray-600 mb-8 leading-relaxed">
-                Enterprise-grade commerce infrastructure with{" "}
+                Automate your e-commerce operations with{" "}
                 <span className="font-semibold text-indigo-600">
-                  AI-powered automation
+                  AI-powered WhatsApp chatbots
                 </span>
-                , real-time analytics, and seamless WhatsApp integration.
+                . Capture orders, share product catalogs, send invoices, and
+                manage customers—all through WhatsApp.
               </p>
               <div className="flex flex-col sm:flex-row gap-4 mb-10">
                 <Link
@@ -183,49 +184,49 @@ export default function ShopLandingPage() {
               <span>All-in-One Platform</span>
             </div>
             <h2 className="text-4xl md:text-5xl font-bold text-gray-900 mb-4">
-              Everything You Need to Run Commerce
+              WhatsApp Automation Features for Your Online Store
             </h2>
             <p className="text-xl text-gray-600 max-w-3xl mx-auto">
-              Enterprise-grade tools designed for efficiency, scalability, and
-              exponential growth
+              Everything you need to automate orders, manage customers, and
+              scale your e-commerce business through WhatsApp
             </p>
           </div>
 
           <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
             <FeatureCard
               icon={<BarChart3 className="h-8 w-8" />}
-              title="Smart Dashboard"
-              description="Real-time insights into orders, revenue, and customer behavior. Make data-driven decisions instantly."
+              title="WhatsApp Order Dashboard — Real-Time Analytics"
+              description="Track orders, revenue, and customer conversations from one dashboard. Monitor WhatsApp message delivery rates, response times, and conversion metrics."
               gradient="from-indigo-500 to-purple-600"
             />
             <FeatureCard
               icon={<Package className="h-8 w-8" />}
-              title="Product Management"
-              description="Intuitive catalog management with bulk operations, variants, and automated inventory tracking."
+              title="WhatsApp Product Catalog — Share & Sell Instantly"
+              description="Share your product catalog directly on WhatsApp. Customers can browse, select, and order products without leaving the chat."
               gradient="from-blue-500 to-cyan-600"
             />
             <FeatureCard
               icon={<ShoppingBag className="h-8 w-8" />}
-              title="Orders & Fulfillment"
-              description="Streamlined order processing with automated workflows, shipping integration, and status tracking."
+              title="Automated Order Booking via WhatsApp"
+              description="Customers place orders through WhatsApp chat. AI confirms orders, generates invoices, and sends payment links automatically."
               gradient="from-purple-500 to-pink-600"
             />
             <FeatureCard
               icon={<Zap className="h-8 w-8" />}
-              title="AI Automation"
-              description="Intelligent automation for pricing, inventory, and customer communication. Reduce manual work by 80%."
+              title="AI Chatbot for E-commerce — 24/7 Sales on WhatsApp"
+              description="AI chatbot handles customer queries, recommends products, processes returns, and upsells — all automatically, even at 3 AM."
               gradient="from-orange-500 to-red-600"
             />
             <FeatureCard
               icon={<MessageSquare className="h-8 w-8" />}
-              title="WhatsApp Commerce"
-              description="Native WhatsApp integration for orders, customer support, and automated notifications."
+              title="WhatsApp CRM — Customer Management & Retention"
+              description="Automatically capture customer data from conversations, track order history, segment audiences, and send targeted follow-ups."
               gradient="from-green-500 to-emerald-600"
             />
             <FeatureCard
               icon={<TrendingUp className="h-8 w-8" />}
-              title="Advanced Analytics"
-              description="Comprehensive reporting with cohort analysis, revenue forecasting, and customer lifetime value."
+              title="Sales Analytics — Track WhatsApp Conversion Rates"
+              description="Measure which products sell best on WhatsApp, track cart-to-order conversion, and optimize your messaging strategy with data."
               gradient="from-violet-500 to-purple-600"
             />
           </div>
@@ -239,20 +240,21 @@ export default function ShopLandingPage() {
           <div className="grid lg:grid-cols-2 gap-12 items-center">
             <div>
               <h2 className="text-4xl md:text-5xl font-bold text-gray-900 mb-6">
-                Built for Modern
+                Built for WhatsApp-First
                 <span className="block bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent">
-                  Commerce Operations
+                  E-commerce Operations
                 </span>
               </h2>
               <p className="text-lg text-gray-600 mb-8">
-                Our platform combines powerful automation with intuitive design,
-                giving you complete control while eliminating repetitive tasks.
+                Flowauxi Shop combines powerful WhatsApp automation with an
+                intuitive store builder, giving you a complete conversational
+                commerce platform.
               </p>
               <ul className="space-y-4">
-                <BenefitItem text="Process orders 10x faster with automated workflows" />
-                <BenefitItem text="Reduce manual data entry by 90% with AI-powered automation" />
-                <BenefitItem text="Scale to 100k+ SKUs without performance degradation" />
-                <BenefitItem text="Integrate with existing tools via REST API and webhooks" />
+                <BenefitItem text="Automate WhatsApp order booking with AI chatbot" />
+                <BenefitItem text="Share product catalogs and accept orders via WhatsApp" />
+                <BenefitItem text="Send automated invoices, payment reminders & delivery updates" />
+                <BenefitItem text="Built-in WhatsApp CRM for customer management" />
               </ul>
             </div>
             <div className="relative">
@@ -271,28 +273,28 @@ export default function ShopLandingPage() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="text-center mb-16">
             <h2 className="text-4xl md:text-5xl font-bold text-gray-900 mb-4">
-              Launch in Minutes, Not Months
+              Start Selling on WhatsApp in 3 Steps
             </h2>
             <p className="text-xl text-gray-600">
-              Three simple steps to start selling
+              Go from zero to automated WhatsApp store in minutes
             </p>
           </div>
 
           <div className="grid md:grid-cols-3 gap-8">
             <StepCard
               number="1"
-              title="Sign Up"
-              description="Create your account in seconds. No credit card required for the 14-day free trial."
+              title="Sign Up & Connect WhatsApp"
+              description="Create your account and connect your WhatsApp Business API. No technical setup required — we handle everything."
             />
             <StepCard
               number="2"
-              title="Add Products"
-              description="Import your catalog via CSV, API, or manual entry. Bulk operations supported."
+              title="Add Products to WhatsApp Catalog"
+              description="Import your product catalog via CSV or add manually. Products are automatically shared on WhatsApp with images, prices & descriptions."
             />
             <StepCard
               number="3"
-              title="Start Selling"
-              description="Go live immediately. Orders, payments, and fulfillment handled automatically."
+              title="Start Selling Automatically"
+              description="Go live instantly. Customers order via WhatsApp, AI chatbot confirms orders, and automated invoices & delivery updates are sent."
             />
           </div>
         </div>
@@ -330,11 +332,11 @@ export default function ShopLandingPage() {
         <div className="absolute inset-0 bg-grid-pattern-white opacity-10" />
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 text-center relative z-10">
           <h2 className="text-4xl md:text-5xl lg:text-6xl font-bold text-white mb-6">
-            Launch Your Store Today
+            Start Your WhatsApp-Powered Store Today
           </h2>
           <p className="text-xl md:text-2xl text-indigo-100 mb-10">
-            Join thousands of businesses running their commerce operations on
-            Flowauxi
+            Join thousands of businesses automating their e-commerce
+            operations with WhatsApp
           </p>
           <Link
             href="/signup"
@@ -348,6 +350,38 @@ export default function ShopLandingPage() {
           <p className="mt-6 text-indigo-200 text-sm">
             14-day free trial • No credit card required • Cancel anytime
           </p>
+        </div>
+      </section>
+
+      {/* Powered By Authority Section (Anti-Cannibalization) */}
+      <section className="py-16 bg-gradient-to-br from-gray-50 to-white">
+        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
+          <p className="text-sm font-semibold text-indigo-600 uppercase tracking-wider mb-3">
+            Powered by
+          </p>
+          <h3 className="text-2xl md:text-3xl font-bold text-gray-900 mb-4">
+            Flowauxi WhatsApp Automation Platform
+          </h3>
+          <p className="text-lg text-gray-600 mb-6 max-w-2xl mx-auto">
+            This e-commerce store platform is powered by Flowauxi — the
+            leading WhatsApp automation platform trusted by 500+ businesses
+            across India for customer engagement, CRM, and marketing.
+          </p>
+          <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
+            <a
+              href="https://www.flowauxi.com/whatsapp-automation-ecommerce"
+              className="inline-flex items-center gap-2 bg-gray-900 text-white px-6 py-3 rounded-xl font-medium hover:bg-black transition-colors shadow-lg"
+            >
+              Learn about WhatsApp Automation for E-commerce
+              <ArrowRight className="h-4 w-4" />
+            </a>
+            <a
+              href="https://www.flowauxi.com"
+              className="inline-flex items-center gap-2 text-gray-700 font-medium hover:text-gray-900 transition-colors"
+            >
+              Visit Flowauxi Platform →
+            </a>
+          </div>
         </div>
       </section>
 
@@ -374,7 +408,15 @@ export default function ShopLandingPage() {
                     href="https://www.flowauxi.com"
                     className="hover:text-white transition-colors"
                   >
-                    Flowauxi — WhatsApp Automation
+                    WhatsApp Automation Platform
+                  </a>
+                </li>
+                <li>
+                  <a
+                    href="https://www.flowauxi.com/whatsapp-automation-ecommerce"
+                    className="hover:text-white transition-colors"
+                  >
+                    WhatsApp Automation for E-commerce
                   </a>
                 </li>
                 <li>
@@ -382,7 +424,7 @@ export default function ShopLandingPage() {
                     href="https://marketing.flowauxi.com"
                     className="hover:text-white transition-colors"
                   >
-                    Marketing Automation
+                    WhatsApp Marketing Automation
                   </a>
                 </li>
                 <li>

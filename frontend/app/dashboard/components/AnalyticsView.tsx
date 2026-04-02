@@ -337,7 +337,7 @@ export default function AnalyticsView() {
       <div className={styles.analyticsView}>
         <div className={styles.viewHeader}>
           <div>
-            <h1 className={styles.viewTitle}>WhatsApp Analytics</h1>
+            <h1 className={styles.viewTitle}>Store & WhatsApp Analytics</h1>
             <p className={styles.viewSubtitle}>
               Monitor your messaging performance and engagement
             </p>
@@ -365,7 +365,7 @@ export default function AnalyticsView() {
         {/* Header */}
         <div className={styles.viewHeader}>
           <div>
-            <h1 className={styles.viewTitle}>WhatsApp Analytics</h1>
+            <h1 className={styles.viewTitle}>Store & WhatsApp Analytics</h1>
             <p className={styles.viewSubtitle}>
               Monitor your messaging performance and engagement
             </p>

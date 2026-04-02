@@ -316,8 +316,8 @@
 }
 
 .badgePopular {
-  background: rgba(251, 191, 36, 0.9);
-  color: #713f12;
+  background: rgba(0, 0, 0, 0.9);
+  color: white;
 }
 
 .badgeNew {

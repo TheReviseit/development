@@ -20,7 +20,6 @@ interface ServiceDetailModalProps {
 // Helper Functions
 // ============================================================
 function formatPrice(price: number, currency: string = "INR"): string {
-  if (price === 0) return "FREE";
   if (currency === "INR") {
     return new Intl.NumberFormat("en-IN", {
       style: "currency",

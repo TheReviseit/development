@@ -39,6 +39,7 @@ export function detectProductFromRequest(request: NextRequest): ProductDomain {
     if (hostname.startsWith("pages.")) return "showcase";
     if (hostname.startsWith("marketing.")) return "marketing";
     if (hostname.startsWith("api.")) return "api";
+    if (hostname.startsWith("booking.")) return "booking";
   }
 
   // Development: Port-based detection
@@ -48,6 +49,7 @@ export function detectProductFromRequest(request: NextRequest): ProductDomain {
     if (port === "3002") return "showcase";
     if (port === "3003") return "marketing";
     if (port === "3004") return "api";
+    if (port === "3005") return "booking";
 
     // Query param override
     const productParam = searchParams.get("product");
@@ -91,6 +93,7 @@ export function getProductDomainURL(product: ProductDomain): string {
       showcase: "pages.flowauxi.com",
       marketing: "marketing.flowauxi.com",
       api: "api.flowauxi.com",
+      booking: "booking.flowauxi.com",
       dashboard: "flowauxi.com",
     };
     return `https://${subdomains[product]}`;
@@ -101,6 +104,7 @@ export function getProductDomainURL(product: ProductDomain): string {
       showcase: 3002,
       marketing: 3003,
       api: 3004,
+      booking: 3005,
       dashboard: 3000,
     };
     return `http://localhost:${ports[product]}`;

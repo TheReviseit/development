@@ -8,6 +8,7 @@
     "dev:showcase": "next dev -p 3002",
     "dev:marketing": "next dev -p 3003",
     "dev:api": "next dev -p 3004",
+    "dev:booking": "next dev -p 3005",
     "build": "next build",
     "start": "next start",
     "lint": "eslint",

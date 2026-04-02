@@ -1,7 +1,8 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { useRouter } from "next/navigation";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import styles from "./appointments.module.css";
 import { useRealtimeAppointments } from "@/lib/hooks/useRealtimeAppointments";
 import Dropdown from "@/app/utils/ui/Dropdown";
@@ -48,8 +49,9 @@ const MONTHS = [
 
 export default function AppointmentsPage() {
   const router = useRouter();
-  const [appointments, setAppointments] = useState<Appointment[]>([]);
-  const [loading, setLoading] = useState(true);
+  const queryClient = useQueryClient();
+  
+  // View states
   const [currentDate, setCurrentDate] = useState(new Date());
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<"month" | "week" | "day">("month");
@@ -140,40 +142,52 @@ export default function AppointmentsPage() {
     fetchUserId();
   }, []);
 
-  // Real-time appointment handlers
-  const handleRealtimeInsert = useCallback((newAppointment: Appointment) => {
-    console.log("📥 Realtime: New appointment added");
-    setAppointments((prev) => {
-      // Check if appointment already exists (avoid duplicates)
-      if (prev.some((apt) => apt.id === newAppointment.id)) {
-        return prev;
-      }
-      // Add to list and sort by date/time
-      const updated = [...prev, newAppointment];
-      return updated.sort((a, b) => {
-        const dateCompare = a.date.localeCompare(b.date);
-        if (dateCompare !== 0) return dateCompare;
-        return a.time.localeCompare(b.time);
+  // Helper to format date as YYYY-MM-DD in LOCAL timezone
+  const formatDateLocal = useCallback((date: Date): string => {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, "0");
+    const day = String(date.getDate()).padStart(2, "0");
+    return `${year}-${month}-${day}`;
+  }, []);
+
+  // React Query: Fetch appointments
+  const { 
+    data: appointments = [], 
+    isLoading: fetchingAppointments,
+    refetch: manualRefetch
+  } = useQuery({
+    queryKey: ["appointments", currentDate.getMonth(), currentDate.getFullYear()],
+    queryFn: async () => {
+      const startDate = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1);
+      const endDate = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0);
+
+      const params = new URLSearchParams({
+        startDate: formatDateLocal(startDate),
+        endDate: formatDateLocal(endDate),
       });
-    });
-  }, []);
 
-  const handleRealtimeUpdate = useCallback(
-    (updatedAppointment: Appointment) => {
-      console.log("📝 Realtime: Appointment updated");
-      setAppointments((prev) =>
-        prev.map((apt) =>
-          apt.id === updatedAppointment.id ? updatedAppointment : apt,
-        ),
-      );
+      const response = await fetch(`/api/appointments?${params}`);
+      const data = await response.json();
+      if (!data.success) throw new Error(data.error || "Failed to fetch");
+      return data.data as Appointment[];
     },
-    [],
-  );
+  });
 
-  const handleRealtimeDelete = useCallback((deleted: { id: string }) => {
-    console.log("🗑️ Realtime: Appointment deleted");
-    setAppointments((prev) => prev.filter((apt) => apt.id !== deleted.id));
-  }, []);
+  // Real-time appointment handlers
+  const handleRealtimeInsert = useCallback(() => {
+    console.log("📥 Realtime: New appointment added (invalidating query)");
+    queryClient.invalidateQueries({ queryKey: ["appointments"] });
+  }, [queryClient]);
+
+  const handleRealtimeUpdate = useCallback(() => {
+    console.log("📝 Realtime: Appointment updated (invalidating query)");
+    queryClient.invalidateQueries({ queryKey: ["appointments"] });
+  }, [queryClient]);
+
+  const handleRealtimeDelete = useCallback(() => {
+    console.log("🗑️ Realtime: Appointment deleted (invalidating query)");
+    queryClient.invalidateQueries({ queryKey: ["appointments"] });
+  }, [queryClient]);
 
   // Subscribe to realtime updates
   const { isConnected: realtimeActive } = useRealtimeAppointments({
@@ -199,74 +213,6 @@ export default function AppointmentsPage() {
     };
     checkCapabilities();
   }, [router]);
-
-  // Helper to format date as YYYY-MM-DD in LOCAL timezone (not UTC)
-  // This prevents timezone issues where dates shift by a day
-  const formatDateLocal = (date: Date): string => {
-    const year = date.getFullYear();
-    const month = String(date.getMonth() + 1).padStart(2, "0");
-    const day = String(date.getDate()).padStart(2, "0");
-    return `${year}-${month}-${day}`;
-  };
-
-  // Fetch appointments
-  const fetchAppointments = useCallback(async () => {
-    try {
-      setLoading(true);
-      const startDate = new Date(
-        currentDate.getFullYear(),
-        currentDate.getMonth(),
-        1,
-      );
-      const endDate = new Date(
-        currentDate.getFullYear(),
-        currentDate.getMonth() + 1,
-        0,
-      );
-
-      const params = new URLSearchParams({
-        startDate: formatDateLocal(startDate),
-        endDate: formatDateLocal(endDate),
-      });
-
-      console.log(`📅 Fetching appointments: ${params.toString()}`);
-
-      const response = await fetch(`/api/appointments?${params}`);
-      const data = await response.json();
-
-      console.log(`📅 Appointments response:`, {
-        success: data.success,
-        count: data.data?.length || 0,
-        error: data.error,
-      });
-
-      if (data.success) {
-        setAppointments(data.data);
-
-        // Debug: Log if we got data but it might be for wrong dates
-        if (data.data.length === 0) {
-          console.log(
-            `📅 No appointments in range ${formatDateLocal(
-              startDate,
-            )} to ${formatDateLocal(endDate)}`,
-          );
-          console.log(`📅 Tip: Use /api/appointments/debug to diagnose issues`);
-        }
-      } else {
-        console.error("📅 Failed to fetch appointments:", data.error);
-      }
-    } catch (error) {
-      console.error("Error fetching appointments:", error);
-    } finally {
-      setLoading(false);
-    }
-  }, [currentDate]);
-
-  useEffect(() => {
-    fetchAppointments();
-    // Real-time updates are now handled by useRealtimeAppointments hook
-    // No need for polling anymore!
-  }, [fetchAppointments]);
 
   // Calendar helpers
   const getDaysInMonth = (date: Date) => {
@@ -462,10 +408,9 @@ export default function AppointmentsPage() {
     setEditingAppointment(null);
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-
-    try {
+  // Mutations
+  const createUpdateMutation = useMutation({
+    mutationFn: async (payload: any) => {
       const url = editingAppointment
         ? `/api/appointments/${editingAppointment.id}`
         : "/api/appointments";
@@ -474,59 +419,66 @@ export default function AppointmentsPage() {
       const response = await fetch(url, {
         method,
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          ...formData,
-          source: "manual",
-        }),
+        body: JSON.stringify(payload),
       });
-
       const data = await response.json();
-
-      if (data.success) {
-        handleCloseModal();
-        fetchAppointments();
-      } else {
-        alert(data.error || "Failed to save appointment");
-      }
-    } catch (error) {
-      console.error("Error saving appointment:", error);
-      alert("Failed to save appointment");
+      if (!data.success) throw new Error(data.error || "Operation failed");
+      return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["appointments"] });
+      handleCloseModal();
+    },
+    onError: (error: any) => {
+      alert(error.message);
     }
+  });
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    createUpdateMutation.mutate({
+      ...formData,
+      source: "manual",
+    });
   };
 
-  const handleStatusChange = async (
-    appointment: Appointment,
-    newStatus: string,
-  ) => {
-    try {
-      const response = await fetch(`/api/appointments/${appointment.id}`, {
+  const statusMutation = useMutation({
+    mutationFn: async ({ id, status }: { id: string, status: string }) => {
+      const response = await fetch(`/api/appointments/${id}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status: newStatus }),
+        body: JSON.stringify({ status }),
       });
-
-      if (response.ok) {
-        fetchAppointments();
-      }
-    } catch (error) {
-      console.error("Error updating status:", error);
+      const data = await response.json();
+      if (!data.success) throw new Error(data.error || "Update failed");
+      return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["appointments"] });
     }
+  });
+
+  const handleStatusChange = (appointment: Appointment, newStatus: string) => {
+    statusMutation.mutate({ id: appointment.id, status: newStatus });
   };
 
-  const handleCancel = async (appointment: Appointment) => {
-    if (!confirm("Are you sure you want to cancel this appointment?")) return;
-
-    try {
-      const response = await fetch(`/api/appointments/${appointment.id}`, {
+  const deleteMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const response = await fetch(`/api/appointments/${id}`, {
         method: "DELETE",
       });
-
-      if (response.ok) {
-        fetchAppointments();
-      }
-    } catch (error) {
-      console.error("Error cancelling appointment:", error);
+      const data = await response.json();
+      if (!data.success) throw new Error(data.error || "Delete failed");
+      return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["appointments"] });
     }
+  });
+
+  const handleCancel = (appointment: Appointment) => {
+    if (!confirm("Are you sure you want to cancel this appointment?")) return;
+    deleteMutation.mutate(appointment.id);
   };
 
   const formatTime = (time: string) => {
@@ -577,7 +529,7 @@ export default function AppointmentsPage() {
     setExpandedCardId(expandedCardId === appointmentId ? null : appointmentId);
   };
 
-  if (loading) {
+  if (fetchingAppointments) {
     return (
       <div className={styles.appointmentsView}>
         <div className={styles.loadingState}>
@@ -595,7 +547,7 @@ export default function AppointmentsPage() {
         <div className={styles.headerActions}>
           <button
             className={styles.secondaryBtn}
-            onClick={() => fetchAppointments()}
+            onClick={() => queryClient.invalidateQueries({ queryKey: ["appointments"] })}
             title="Refresh appointments"
           >
             <svg

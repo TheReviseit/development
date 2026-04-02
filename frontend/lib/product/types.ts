@@ -18,7 +18,8 @@ export type ProductDomain =
   | "dashboard"
   | "marketing"
   | "showcase"
-  | "api";
+  | "api"
+  | "booking";
 
 // =============================================================================
 // PRICING TYPES
@@ -202,7 +203,7 @@ export interface SubscriptionCreateRequest {
  * Type guard for ProductDomain
  */
 export function isProductDomain(value: string): value is ProductDomain {
-  return ["shop", "dashboard", "marketing", "showcase", "api"].includes(value);
+  return ["shop", "dashboard", "marketing", "showcase", "api", "booking"].includes(value);
 }
 
 /**

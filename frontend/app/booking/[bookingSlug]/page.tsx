@@ -10,6 +10,8 @@ import {
   ServiceDetailModal,
   Service,
 } from "./components";
+import BookingFooter from "@/app/booking/components/BookingFooter";
+import ContactSection from "@/app/components/ContactSection/ContactSection";
 import {
   subscribeToServiceUpdates,
   onConnectionStatusChange,
@@ -78,7 +80,6 @@ function formatSlugToName(slug: string): string {
 }
 
 function formatPrice(price: number, currency: string = "INR"): string {
-  if (price === 0) return "FREE";
   if (currency === "INR") return `₹${price}`;
   return `$${price}`;
 }
@@ -613,6 +614,14 @@ export default function BookingPage({ params }: BookingPageProps) {
           {serviceDisabledToast}
         </div>
       )}
+
+      {/* Support & Contact Section */}
+      <div id="contact" style={{ marginTop: "40px" }} className="booking-contact-theme">
+        <ContactSection />
+      </div>
+
+      {/* Global Footer */}
+      <BookingFooter />
     </div>
   );
 }

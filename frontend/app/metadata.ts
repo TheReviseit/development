@@ -7,15 +7,22 @@ const baseUrl = "https://www.flowauxi.com";
 
 // Homepage metadata
 export const homeMetadata: Metadata = {
-  title: "Flowauxi - AI WhatsApp Automation & OTP API Platform",
+  title: "WhatsApp Automation Platform — AI Chatbot, CRM & Business Messaging | Flowauxi",
   description:
-    "Transform your WhatsApp into a powerful business tool with AI automation. Plus OTP Verification API for secure authentication via WhatsApp & SMS. Trusted by 500+ businesses. Start your 14-day free trial today!",
+    "Automate WhatsApp for your business with AI chatbots, CRM integration, smart broadcasting & analytics. Trusted by 500+ businesses across India. Start your free trial today!",
   keywords: [
     "WhatsApp automation",
+    "WhatsApp automation platform",
     "WhatsApp business API",
     "AI WhatsApp chatbot",
-    "automated customer support",
+    "WhatsApp chatbot for business",
     "WhatsApp CRM integration",
+    "WhatsApp marketing automation",
+    "WhatsApp automation for e-commerce",
+    "WhatsApp order automation",
+    "automate customer support WhatsApp",
+    "best WhatsApp automation tool",
+    "WhatsApp automation India",
     // OTP API keywords
     "OTP API",
     "OTP verification API",
@@ -26,9 +33,9 @@ export const homeMetadata: Metadata = {
     "two-factor authentication API",
   ],
   openGraph: {
-    title: "Flowauxi - AI WhatsApp Automation & OTP API Platform | Free Trial",
+    title: "WhatsApp Automation Platform — AI Chatbot, CRM & Business Messaging | Flowauxi",
     description:
-      "Transform your WhatsApp into a powerful business tool with AI automation. Plus secure OTP Verification API. Trusted by 500+ businesses.",
+      "Automate WhatsApp for your business with AI chatbots, CRM integration, smart broadcasting & analytics. Trusted by 500+ businesses.",
     url: baseUrl,
     type: "website",
     images: [
@@ -36,7 +43,7 @@ export const homeMetadata: Metadata = {
         url: `${baseUrl}/og-image.png`,
         width: 1200,
         height: 630,
-        alt: "Flowauxi - WhatsApp Automation & OTP API Platform",
+        alt: "Flowauxi — WhatsApp Automation Platform with AI Chatbot & CRM",
       },
     ],
   },
@@ -148,12 +155,45 @@ export const contactMetadata: Metadata = {
 
 // Blog page metadata (when you create it)
 export const blogMetadata: Metadata = {
-  title: "Blog - WhatsApp Automation Tips, Guides & Best Practices",
+  title: "Blog — WhatsApp Automation Tips, Guides & Best Practices",
   description:
-    "Expert insights on WhatsApp automation, business messaging strategies, and customer engagement tips from Flowauxi.",
+    "Expert insights on WhatsApp automation for e-commerce, business messaging strategies, and customer engagement tips from Flowauxi.",
   keywords: [
     "WhatsApp automation blog",
+    "WhatsApp automation tips",
+    "WhatsApp e-commerce guide",
     "business messaging tips",
     "customer engagement guides",
   ],
+};
+
+// E-commerce SEO landing page metadata
+export const ecommerceMetadata: Metadata = {
+  title:
+    "WhatsApp Automation for E-commerce | AI Chatbot, CRM & Store Builder",
+  description:
+    "Automate your e-commerce business with Flowauxi's WhatsApp automation platform. Use AI chatbots to capture orders, manage customers, send invoices, and scale sales—all in one dashboard.",
+  keywords: [
+    "WhatsApp automation for e-commerce",
+    "WhatsApp chatbot for business",
+    "WhatsApp order automation",
+    "WhatsApp CRM",
+    "WhatsApp marketing automation",
+    "AI chatbot for e-commerce",
+    "automate customer support WhatsApp",
+    "how to automate WhatsApp orders for online store",
+    "best WhatsApp automation tool for small business",
+    "WhatsApp chatbot for Shopify alternative",
+    "WhatsApp automation India",
+    "conversational commerce",
+    "D2C WhatsApp automation",
+  ],
+  openGraph: {
+    title:
+      "WhatsApp Automation for E-commerce | AI Chatbot, CRM & Store Builder | Flowauxi",
+    description:
+      "Automate your e-commerce with WhatsApp. AI chatbots for orders, CRM for customers, invoicing & analytics. Start free.",
+    url: "https://www.flowauxi.com/whatsapp-automation-ecommerce",
+    type: "website",
+  },
 };

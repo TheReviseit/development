@@ -649,6 +649,104 @@ export const PRODUCT_REGISTRY: Record<ProductDomain, ProductConfig> = {
 
     seoBase: "https://api.flowauxi.com",
   },
+
+  // ===========================================================================
+  // BOOKING PRODUCT
+  // ===========================================================================
+  booking: {
+    id: "booking",
+    name: "Flowauxi Booking",
+    domain: "booking.flowauxi.com",
+    devPort: 3005,
+    description: "WhatsApp Appointment & Service Booking Platform",
+    tagline: "Automate your bookings and appointments via WhatsApp",
+
+    pricing: [
+      {
+        id: "starter",
+        planId: "booking_starter",
+        razorpayPlanId:
+          process.env.NEXT_PUBLIC_RAZORPAY_PLAN_BOOKING_STARTER ||
+          "plan_SX6OUEn5dDc6nR",
+        name: "Starter",
+        price: 150000, // ₹1,500 ($19 approx)
+        priceDisplay: `₹${(150000 / 100).toLocaleString("en-IN")}`,
+        currency: "INR" as const,
+        interval: "monthly" as const,
+        description: "For individuals ready to automate and grow consistently.",
+        tagline: "Best for 20-30 bookings/month",
+        popular: false,
+        features: [
+          "20 Bookings per month",
+          "20 Automated Reminders (Email + WhatsApp)",
+          "20 Feedback Forms",
+          "Google & Apple Calendar Sync",
+          "Basic Analytics Dashboard",
+          "Custom Booking Link",
+        ],
+        limits: {
+          aiResponses: 1000,
+          whatsappNumbers: 1,
+          faqs: 50,
+          services: 50,
+          appointments: 20,
+        },
+      },
+      {
+        id: "pro",
+        planId: "booking_pro",
+        razorpayPlanId:
+          process.env.NEXT_PUBLIC_RAZORPAY_PLAN_BOOKING_PRO ||
+          "plan_SX6RTanWZWxx7y",
+        name: "Professional",
+        price: 320000, // ₹3,200 ($39 approx)
+        priceDisplay: `₹${(320000 / 100).toLocaleString("en-IN")}`,
+        currency: "INR" as const,
+        interval: "monthly" as const,
+        description: "Built for serious businesses that want to scale revenue.",
+        tagline: "Unlimited revenue growth",
+        popular: true,
+        features: [
+          "Unlimited Bookings",
+          "Unlimited Reminders (Email + WhatsApp)",
+          "Unlimited Feedback Forms",
+          "Stripe Payment Integration",
+          "Advanced Revenue Analytics",
+          "Automated Feedback Collection",
+          "Remove Flowauxi Branding",
+          "Priority Support",
+          "Everything in Starter",
+        ],
+        limits: {
+          aiResponses: 10000,
+          whatsappNumbers: 3,
+          faqs: -1, // unlimited
+          services: -1, // unlimited
+          appointments: -1, // unlimited
+        },
+      },
+    ],
+
+    enabledFeatures: [
+      "ai",
+      "messages",
+      "appointments",
+      "services",
+      "analytics",
+      "aiSettings",
+    ],
+
+    routes: {
+      landing: "/booking",
+      onboarding: "/onboarding-embedded",
+      dashboard: "/dashboard",
+      pricing: "/pricing",
+      login: "/login",
+      signup: "/signup",
+    },
+
+    seoBase: "https://booking.flowauxi.com",
+  },
 };
 
 // =============================================================================

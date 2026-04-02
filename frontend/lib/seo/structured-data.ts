@@ -139,9 +139,9 @@ export const webPageSchema = {
   "@type": "WebPage",
   "@id": "https://www.flowauxi.com/#webpage",
   url: "https://www.flowauxi.com",
-  name: "Flowauxi - AI WhatsApp Automation & Business Messaging Platform",
+  name: "WhatsApp Automation Platform — AI Chatbot, CRM & Business Messaging | Flowauxi",
   description:
-    "Transform your WhatsApp into a powerful business tool with AI automation. Get instant customer responses, automated follow-ups, and CRM integration.",
+    "Automate WhatsApp for your business with AI chatbots, CRM integration, smart broadcasting & analytics. Trusted by 500+ businesses across India.",
   isPartOf: { "@id": "https://www.flowauxi.com/#website" },
   about: { "@id": "https://www.flowauxi.com/#organization" },
   primaryImageOfPage: {
@@ -149,7 +149,7 @@ export const webPageSchema = {
     url: "https://www.flowauxi.com/og-image.png",
   },
   datePublished: "2024-01-01",
-  dateModified: BUILD_DATE, // Fixed: was new Date().toISOString() causing hydration mismatch
+  dateModified: BUILD_DATE,
   inLanguage: "en-US",
 };
 
@@ -162,7 +162,7 @@ export const softwareAppSchema = {
   "@type": "SoftwareApplication",
   name: "Flowauxi",
   applicationCategory: "BusinessApplication",
-  applicationSubCategory: "Communication & Messaging",
+  applicationSubCategory: "E-commerce Automation & Business Messaging",
   operatingSystem: "Web Browser, iOS, Android",
   offers: {
     "@type": "Offer",
@@ -181,11 +181,15 @@ export const softwareAppSchema = {
   },
   creator: { "@id": "https://www.flowauxi.com/#organization" },
   description:
-    "AI-powered WhatsApp automation platform for businesses. Automate customer responses, manage conversations, and integrate with your CRM.",
+    "WhatsApp automation platform for businesses. Automate customer conversations, manage e-commerce orders, send broadcasts, and integrate with your CRM — all powered by AI.",
   featureList: [
-    "AI-Powered Auto-Responses",
-    "Smart Broadcasting",
-    "CRM Integration",
+    "AI-Powered WhatsApp Chatbot",
+    "WhatsApp Order Automation",
+    "E-commerce WhatsApp Store Builder",
+    "WhatsApp CRM & Customer Management",
+    "Smart Broadcasting & Campaigns",
+    "Automated Invoice Generation",
+    "WhatsApp Product Catalog Sharing",
     "Analytics Dashboard",
     "Multi-Agent Support",
     "Template Management",
@@ -220,34 +224,34 @@ export const faqSchema = {
   mainEntity: [
     {
       "@type": "Question",
-      name: "What is Flowauxi?",
+      name: "What is WhatsApp automation?",
       acceptedAnswer: {
         "@type": "Answer",
-        text: "Flowauxi is an AI-powered WhatsApp automation platform that helps businesses automate customer conversations, manage messaging at scale, and integrate with CRM systems.",
+        text: "WhatsApp automation uses the WhatsApp Business API to automatically handle customer conversations, send broadcasts, and trigger workflows without manual intervention. Platforms like Flowauxi provide AI-powered auto-responses, smart broadcasting, CRM integration, and analytics — enabling businesses to manage thousands of conversations at scale.",
       },
     },
     {
       "@type": "Question",
-      name: "How does WhatsApp automation work?",
+      name: "How does WhatsApp business automation work?",
       acceptedAnswer: {
         "@type": "Answer",
-        text: "Flowauxi connects to WhatsApp Business API and uses AI to automatically respond to customer messages, send broadcasts, and manage conversations based on your business rules and workflows.",
+        text: "Flowauxi connects to the WhatsApp Business API and uses AI to automatically respond to customer messages, send targeted broadcasts, manage conversations, and trigger workflows based on your business rules. Setup takes minutes with no coding required. It works for e-commerce order automation, customer support, and marketing campaigns.",
       },
     },
     {
       "@type": "Question",
-      name: "How do I get started with Flowauxi?",
+      name: "Is Flowauxi the best WhatsApp automation tool?",
       acceptedAnswer: {
         "@type": "Answer",
-        text: "Getting started with Flowauxi is quick and easy. Sign up, connect your WhatsApp Business account, and instantly access all features including AI auto-responses, broadcasting, and analytics.",
+        text: "Flowauxi is a leading WhatsApp automation platform trusted by 500+ businesses in India. It uniquely combines AI chatbots, CRM, e-commerce store building, marketing automation, and OTP verification — all from one platform. Unlike competitors focused on just messaging, Flowauxi provides a complete business automation stack.",
       },
     },
     {
       "@type": "Question",
-      name: "Can I integrate Flowauxi with my CRM?",
+      name: "How to automate WhatsApp for e-commerce?",
       acceptedAnswer: {
         "@type": "Answer",
-        text: "Yes, Flowauxi integrates with popular CRM systems and business tools through our API and native integrations.",
+        text: "To automate WhatsApp for e-commerce, sign up for Flowauxi, connect your WhatsApp Business API, and set up your AI chatbot. The chatbot handles product inquiries, processes orders, sends invoices, and manages delivery updates — all through WhatsApp. You can also use the built-in store builder at shop.flowauxi.com for a complete WhatsApp-powered e-commerce experience.",
       },
     },
   ],

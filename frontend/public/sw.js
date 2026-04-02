@@ -176,7 +176,7 @@ function setupBackgroundMessageHandler() {
 // PWA Caching Configuration
 // ============================================
 
-const CACHE_VERSION = "v5";
+const CACHE_VERSION = "v6";
 const STATIC_CACHE = `flowauxi-static-${CACHE_VERSION}`;
 const IMAGE_CACHE = `flowauxi-images-${CACHE_VERSION}`;
 const FONT_CACHE = `flowauxi-fonts-${CACHE_VERSION}`;
@@ -263,6 +263,12 @@ self.addEventListener("fetch", (event) => {
 
   // Skip authentication and API requests entirely
   if (shouldExcludeFromCache(url)) return;
+
+  // FAANG-level: Explicit bypass for booking domain APIs to prevent stale data
+  if (url.includes('/api/appointments') || url.includes('/api/ai-appointment-book')) {
+    console.log("🌐 SW: Bypassing cache for booking API:", url);
+    return; // Let browser handle via network
+  }
 
   // Skip chrome-extension and other non-http(s) requests
   if (!url.startsWith("http")) return;

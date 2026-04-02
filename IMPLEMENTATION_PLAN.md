@@ -1,81 +1,138 @@
-# IMPLEMENTATION_PLAN.md
+# Implementation Plan
+
+# Goal: Consolidate AI response handling for Instagram and WhatsApp channels into a single, production‑grade service, eliminate duplicated Celery task logic, and ensure FAANG‑level architecture, observability, and testing.
 
 ## 1. Problem Definition
-- **Exact Requirement Breakdown**: 
-  1. The bulk "Delete" button lacks functionality. 
-  2. Pressing "Delete" must ask for confirmation via a modal before executing.
-  3. "Other buttons" (Send Message, View Details, Add to Segment) are currently stubbed without interaction, frustrating the user's intent to navigate the CRM properly.
-- **Functional requirements**: 
-  - Wire the existing `ConfirmationModal` component to authorize deletion logic.
-  - Plumb `Promise.all` bulk DELETE requests mapping to the backend endpoint natively handling singular HTTP standard operations cleanly.
-  - Introduce a Trash-can action icon onto each row specifically for individual contact deletion.
-  - Wire functional generic routing or alert-stubs onto the other interface buttons matching Next.js navigation flow standards.
-- **Explicit Assumptions**: 
-  - Standard REST definitions (`DELETE /api/contacts/<id>`) are sufficient, and the frontend should govern bulk loops via `Promise.all` rather than defining a custom bulk-delete ad-hoc endpoint over a generic REST architecture pattern.
-  - The UI uses Next.js 14 App Router, so `useRouter` from `next/navigation` will be leveraged.
+- **Current State**: `messaging_tasks.py` defines `AIResponseService` protocol and a `GeminiAIResponseService` implementation used by Instagram processing. WhatsApp code (`backend/app.py` and `services/messaging/sdk.py`) invokes a separate AI pathway (via legacy `AIBrain` or direct calls) resulting in duplicated AI logic.
+- **Desired State**: A unified AI response service that both Instagram and WhatsApp channels consume, reducing code duplication, simplifying maintenance, and guaranteeing consistent AI behavior across channels.
+- **Functional Requirements**
+  - All inbound messages (Instagram, WhatsApp) must pass through the same AI generation pipeline.
+  - Preserve channel‑specific rate‑limits and token handling.
+  - Maintain existing fallback to rule‑engine when AI is disabled.
+- **Non‑Functional Requirements**
+  - **Scalability**: Service must handle high QPS for both channels (Instagram ~200 msgs/recipient/24h, WhatsApp ~1600 chars per message).
+  - **Observability**: Centralized metrics, tracing, and logging for AI calls.
+  - **Security**: Validate and sanitize inputs, enforce per‑tenant isolation.
+  - **Reliability**: Per‑tenant circuit breaker, idempotency, graceful degradation.
 
 ## 2. System Architecture
-- **Layer**: Contextual UI State Layer & Navigation Layer.
-- **Data Flow**: 
-  - Delete Intent $\rightarrow$ Updates `pendingDeleteIds` state $\rightarrow$ Flips `isDeleteModalOpen` boolean.
-  - Delete Authorization $\rightarrow$ Maps over `pendingDeleteIds` executing stateless `DELETE /api/contacts/<id>` fetches $\rightarrow$ Triggers React Query invalidation loop + cleans up `selectedContacts` subsets.
+- **High‑Level Components**
+  1. **UnifiedAIService** (new module `services/ai/unified_service.py`)
+     - Implements `AIResponseService` protocol.
+     - Wraps Gemini (or other LLM) calls.
+  2. **Channel Normalizers** (`instagram_normalizer.py`, `whatsapp_normalizer.py`)
+     - Convert raw webhook payloads to `NormalizedMessage`.
+  3. **Messaging Pipeline** (existing Celery tasks in `messaging_tasks.py`)
+     - Updated to invoke `UnifiedAIService` regardless of channel.
+  4. **CircuitBreaker & Metrics** (reuse existing `_TenantCircuitBreaker` and `_PipelineMetrics`).
+- **Data Flow**
+  1. Webhook → Normalizer → Celery `process_inbound_message`.
+  2. Tenant resolution → Idempotency guard.
+  3. AI generation via `UnifiedAIService`.
+  4. Dispatch via `MessageDispatcher` (unchanged).
 
 ## 3. API & Contract Design
-- **Action**: `DELETE /api/contacts/<contact_id>` (inherent to the existing Python Blueprint implementation).
-- Requires `X-User-ID: <firebase_usr_uid>` header. Returns JSON payload with `success: true`.
+- **`UnifiedAIService.generate(context: AIContext) -> AIResult`**
+  - Input: `AIContext` (message text, tenant, channel, tokens, trace_id).
+  - Output: `AIResult` (success, reply_text, intent, latency, error, was_cached).
+- **Existing `AIResponseService` protocol** remains unchanged; `UnifiedAIService` will be the concrete implementation.
+- **Configuration** via environment variables `UNIFIED_AI_PROVIDER=gemini|openai|claude`.
 
 ## 4. File & Module Structure
-- `frontend/app/dashboard/components/ContactsView.tsx` (Target Modification only)
+| Path | Responsibility |
+|------|-----------------|
+| `services/ai/unified_service.py` | New unified AI implementation (singleton). |
+| `services/messaging/normalizers/instagram_normalizer.py` | Existing – no change. |
+| `services/messaging/normalizers/whatsapp_normalizer.py` | Add (if missing) to produce `NormalizedMessage`. |
+| `backend/tasks/messaging_tasks.py` | Update imports to use `UnifiedAIService`. Refactor AI fallback logic to call the unified service. |
+| `backend/app.py` | Remove direct AI calls; route all inbound processing through Celery tasks. |
+| `backend/tasks/notifications.py` (if any) | Ensure any notification generation uses unified AI for templating. |
 
 ## 5. Execution Plan (Atomic Steps)
-
-### Step 1: Initialize New State Elements in `ContactsView.tsx`
-- Setup routing: `import { useRouter } from "next/navigation"; const router = useRouter();`
-- State hooks: 
-  - `const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);`
-  - `const [pendingDeleteIds, setPendingDeleteIds] = useState<string[]>([]);`
-  - `const [deleteLoading, setDeleteLoading] = useState(false);`
-
-### Step 2: Implement `executeDelete()` logic
-- Create an asynchronous function bound to `onConfirm` over the `ConfirmationModal`:
-  - Enforce `deleteLoading = true`.
-  - Gather `auth.currentUser`.
-  - Build `Promise.all(pendingDeleteIds.map(...))` array running `fetch` with `method: "DELETE"`.
-  - Catch failures alerting the user smoothly.
-  - Upon success: Execute `refetch()`, filter `pendingDeleteIds` out from `selectedContacts`, and forcefully toggle `setIsDeleteModalOpen(false)`.
-
-### Step 3: Wire Interface Buttons & Actions
-- **Bulk Delete**: `onClick={() => { setPendingDeleteIds(selectedContacts); setIsDeleteModalOpen(true); }}`
-- **Row Delete [NEW UI ELEMENT]**: Instantiate a Trash Icon SVG into `<div className={styles.cellActions}>`, replacing "View Details" (or resting next to it depending on real estate). Send `[contact.id]` directly to `setPendingDeleteIds`.
-- **Bulk "Send Message"**: `onClick={() => router.push('/dashboard/bulk-messages')}`
-- **Bulk "Add to Segment"**: `onClick={() => alert('Add to Segment coming soon')}`
-- **Row "Message"**: `onClick={() => router.push('/dashboard/messages?phone=' + contact.phone_number)}`
-- **Row "View Details"** (if preserved): `onClick={() => alert('View Details coming soon')}`
-
-### Step 4: Render `ConfirmationModal` Output
-- Append the `<ConfirmationModal>` block next to the `<AddContactModal>` at the base of the `ContactsView` return layout. Pass `isLoading={deleteLoading}`, inject Title strings, and bind confirmation handlers effectively.
+1. **Create Unified AI Module**
+   - Add `services/ai/unified_service.py` with class `UnifiedAIService` implementing `AIResponseService`.
+   - Include provider selection logic, caching layer, and error handling.
+2. **Expose Singleton Getter**
+   - Add `_get_unified_ai_service()` similar to existing `_get_ai_service` pattern.
+3. **Add WhatsApp Normalizer** (if not present)
+   - Implement `WhatsAppNormalizer` converting webhook JSON to `NormalizedMessage`.
+4. **Update `messaging_tasks.process_inbound_message`**
+   - Replace channel‑specific AI calls with `UnifiedAIService.generate`.
+   - Pass `channel` in `AIContext` for provider‑specific token handling.
+5. **Refactor `backend/app.py`**
+   - Ensure inbound routes only enqueue Celery tasks; remove any direct AI invocation.
+6. **Update Dependency Injection**
+   - In `celery_app.py`, register the unified AI service as a shared resource.
+7. **Metrics & Tracing Enhancements**
+   - Add new metric `ai_calls_total` and `ai_latency` in `_PipelineMetrics`.
+   - Ensure trace_id propagates to AI calls.
+8. **Security Checks**
+   - Validate `message_text` length (max 1600 for WhatsApp, 2000 for Instagram) before AI call.
+   - Sanitize any user‑provided data used in prompts.
+9. **Testing**
+   - Unit tests for `UnifiedAIService` covering provider selection, error paths.
+   - Integration test: simulate Instagram and WhatsApp webhook payloads, verify same AI response flow.
+   - Load test: mock high QPS to ensure circuit breaker triggers per tenant.
+10. **Observability**
+    - Add structured logs for AI request/response with tenant and channel tags.
+    - Export metrics to Prometheus endpoint (if existing).
+11. **Rollback Strategy**
+    - Feature flag `USE_UNIFIED_AI` (default false). Deploy with flag off; enable after validation.
+    - If failures detected, toggle flag off to revert to legacy paths.
+12. **Documentation**
+    - Update README and architecture diagram to reflect unified AI service.
+    - Add API docs for `UnifiedAIService`.
 
 ## 6. Edge Cases & Failure Modes
-- Single Deletions via Row Action unchecking selected contacts: Avoided deliberately by storing temporary execution state in `pendingDeleteIds` instead of overwriting the global array indiscriminately.
-- Mixed Request Outcomes (1 delete succeeds, 2 fail): Simple bulk Promise handling. The user sees an alert, but the subsequent `refetch()` immediately verifies valid server-side alterations.
+- **Provider Unavailable**: Fallback to cached response or rule‑engine only.
+- **Tenant Circuit Breaker Open**: Skip AI call, log and proceed with rule fallback.
+- **Message Exceeds Channel Limits**: Split long messages before AI call (reuse existing split logic).
+- **Missing Tokens**: Return explicit error and abort processing; metrics `ai_missing_token` incremented.
 
 ## 7. Performance & Scalability
-- Deleting $\le$ 100 rows per loop via frontend Promises creates minimal HTTP multiplexing overhead and respects typical REST guidelines effectively without blocking thread loops. Time complexity is purely network-bound parallel concurrency.
+- **Caching**: In‑process LRU cache for recent prompts per tenant (max 500 entries).
+- **Connection Pooling**: Reuse HTTP client sessions for LLM API.
+- **Rate‑Limit Awareness**: `UnifiedAIService` checks per‑tenant quota before call.
 
 ## 8. Security Model
-- Uses `auth.currentUser.uid` enforcing strong backend token validation per ID row ownership dynamically at the Database RLS level. Total data protection constraint adhered to.
+- Input sanitization using `bleach` for any HTML content.
+- Ensure AI prompts do not expose internal identifiers.
+- Use per‑tenant API keys; never log raw tokens.
 
 ## 9. Observability Plan
-- Unhandled `Promise.all` breaks yield `console.error` logs safely.
+- **Logging**: JSON‑structured logs with fields `tenant_id`, `channel`, `trace_id`, `ai_provider`.
+- **Metrics**: `ai_calls_total`, `ai_success_total`, `ai_failure_total`, `ai_latency_ms`.
+- **Tracing**: Propagate `trace_id` to external LLM request headers.
 
 ## 10. Testing Strategy
-- **Manual Verification**:
-  1. Open Dashboard Contacts. Verify Next.js cache.
-  2. Select two users. Click the bulk "Delete" action.
-  3. Ensure a custom branded Confirmation modal appears. Click Cancel. Modal closes via generic state closure.
-  4. Ensure checking "Delete" again and hitting "Confirm" processes loading behavior. Row disappears natively.
-  5. Locate a single user row. Click the trash icon. Verify confirmation logic targets uniquely.
-  6. Click "Send Message". Verify router properly navigates to `/dashboard/bulk-messages`.
+- **Unit Tests**: `tests/services/ai/test_unified_service.py` covering success, provider errors, circuit breaker.
+- **Integration Tests**: End‑to‑end test simulating both Instagram and WhatsApp inbound flows.
+- **Load Tests**: Use Locust script to generate 500 msgs/sec across multiple tenants.
+- **Security Tests**: Fuzz inputs to ensure sanitization.
 
 ## 11. Rollback Strategy
-- Discard modifications from `frontend/app/dashboard/components/ContactsView.tsx` tracking back to previous layout commit.
+- Deploy with `USE_UNIFIED_AI=False`.
+- Enable flag after smoke tests.
+- Monitor `ai_failure_total`; if >5% revert flag.
+- Database migrations (if any) are additive and reversible.
+
+---
+**User Review Required**
+> Please confirm that the above plan aligns with your expectations. Specifically:
+> - Do you want the unified AI service to replace all existing AI calls for both Instagram and WhatsApp?
+> - Should the feature flag `USE_UNIFIED_AI` be introduced for gradual rollout?
+> - Are there any additional channels or providers you anticipate supporting in the future?
+
+[!IMPORTANT] The implementation will not proceed until you approve this plan.
+
+---
+**Verification Plan**
+- Automated test suite execution (`pytest -q`).
+- Manual verification of a sample Instagram and WhatsApp conversation via the UI.
+- Prometheus metrics inspection for `ai_calls_total`.
+
+---
+**Artifact Metadata**
+- Artifact Type: implementation_plan
+- Request Feedback: true
+- Summary: Consolidate AI handling for Instagram and WhatsApp into a unified service.

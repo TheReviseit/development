@@ -43,7 +43,7 @@ const revenueCache = new Map<
   TimeRange,
   { data: RevenueData; timestamp: number }
 >();
-const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes cache
+const CACHE_TTL_MS = 60 * 1000; // 60 seconds — revenue data should be near-real-time
 const MAX_RETRIES = 2;
 const NON_RETRYABLE_STATUSES = new Set([401, 403, 503]);
 
@@ -89,6 +89,7 @@ export function useRevenueAnalytics(
 
       const response = await fetch(url, {
         headers: { "Cache-Control": "no-cache" },
+        cache: "no-store", // Bypass HTTP cache — analytics must be fresh
         signal: controller.signal,
       });
 

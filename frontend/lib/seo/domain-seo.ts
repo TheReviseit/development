@@ -151,28 +151,29 @@ const DOMAIN_SEO_CONFIGS: Record<ProductDomain, DomainSeoConfig> = {
   shop: {
     domain: "shop",
     title:
-      "Online Store Builder — Create Your Ecommerce Website in Minutes | Flowauxi Shop",
+      "WhatsApp-Powered Online Store with Automated Order Booking | Flowauxi Shop",
     titleTemplate: "%s | Flowauxi Shop",
     description:
-      "Create your professional online store with Flowauxi Shop. AI-powered ecommerce platform with built-in payments, WhatsApp integration, order tracking & beautiful themes. No coding required — start selling today.",
+      "Build your WhatsApp-powered e-commerce store with automated order booking, AI chatbot for customer support, real-time inventory management & payment integration. The best WhatsApp store builder for small businesses in India.",
     keywords: [
-      "flowauxi shop",
-      "online store builder",
-      "ecommerce platform",
-      "create online store",
-      "ecommerce website builder",
-      "sell online India",
-      "WhatsApp store",
-      "free online store",
-      "online selling platform",
-      "digital storefront",
-      "shop builder",
-      "start online business",
-      "online store builder free",
-      "best ecommerce platform India",
-      "AI ecommerce platform",
-      "WhatsApp ecommerce store",
+      "WhatsApp store builder",
+      "WhatsApp order automation",
+      "WhatsApp chatbot for online store",
+      "WhatsApp e-commerce platform",
+      "automated order booking WhatsApp",
+      "WhatsApp automation for e-commerce",
+      "AI chatbot for e-commerce",
+      "online store with WhatsApp integration",
+      "WhatsApp CRM for e-commerce",
       "conversational commerce platform",
+      "WhatsApp product catalog",
+      "automate WhatsApp sales",
+      "best WhatsApp store builder India",
+      "D2C WhatsApp automation",
+      "WhatsApp business store",
+      "ecommerce WhatsApp chatbot",
+      "sell online via WhatsApp",
+      "WhatsApp order management",
     ],
     canonicalBase: "https://shop.flowauxi.com",
     crossDomainLinks: ALL_SUBDOMAIN_URLS.filter(
@@ -183,7 +184,8 @@ const DOMAIN_SEO_CONFIGS: Record<ProductDomain, DomainSeoConfig> = {
       type: "website",
       locale: "en_IN",
       image: "https://shop.flowauxi.com/og-shop.png",
-      imageAlt: "Flowauxi Shop — Online Store Builder & Ecommerce Platform",
+      imageAlt:
+        "Flowauxi Shop — WhatsApp-Powered E-commerce Store Builder with Automated Order Booking",
     },
     twitter: {
       handle: "@flowauxi",
@@ -194,14 +196,15 @@ const DOMAIN_SEO_CONFIGS: Record<ProductDomain, DomainSeoConfig> = {
     organization: {
       name: "Flowauxi Shop",
       description:
-        "AI-powered ecommerce platform enabling businesses to create professional online stores with built-in payments, WhatsApp commerce, and order automation.",
+        "WhatsApp-powered e-commerce platform enabling businesses to create online stores with automated order booking, AI chatbot for customer support, and WhatsApp CRM integration.",
       url: "https://shop.flowauxi.com",
       logo: "https://shop.flowauxi.com/icon-512.png",
       sameAs: [...SOCIAL_URLS, ...ALL_SUBDOMAIN_URLS],
     },
     website: {
       name: "Flowauxi Shop",
-      description: "Online Store Builder & Ecommerce Platform",
+      description:
+        "WhatsApp-Powered E-commerce Store Builder with Automated Order Booking",
     },
     rating: {
       ratingValue: "4.8",
@@ -210,25 +213,32 @@ const DOMAIN_SEO_CONFIGS: Record<ProductDomain, DomainSeoConfig> = {
     },
     faqs: [
       {
-        question: "What is the best online store builder for small businesses?",
+        question:
+          "How do I automate WhatsApp orders for my online store?",
         answer:
-          "Flowauxi Shop is an AI-powered online store builder designed for small businesses. It includes built-in payments, WhatsApp integration for orders, automated inventory management, and beautiful storefront themes — all without coding. Get started today.",
-      },
-      {
-        question: "How do I create an online store without coding?",
-        answer:
-          "With Flowauxi Shop, you can create a professional online store in minutes. Simply sign up, add your products (manually or via CSV import), customize your storefront theme, and start selling. Our AI handles product descriptions, SEO optimization, and customer communications automatically.",
-      },
-      {
-        question: "Can I accept payments through WhatsApp with Flowauxi Shop?",
-        answer:
-          "Yes! Flowauxi Shop integrates natively with WhatsApp for order notifications, customer support, and payment confirmations. Customers can browse your store, place orders, and receive updates directly through WhatsApp.",
+          "With Flowauxi Shop, you can automate WhatsApp orders by connecting your store to the WhatsApp Business API. Once connected, our AI chatbot handles incoming order requests, shares your product catalog, confirms orders, and sends automatic payment and delivery notifications — all through WhatsApp.",
       },
       {
         question:
-          "What are the pricing plans for Flowauxi Shop ecommerce platform?",
+          "What is the best WhatsApp chatbot for e-commerce businesses?",
         answer:
-          "Flowauxi Shop offers flexible pricing plans starting from affordable tiers for small businesses, scaling up to enterprise plans for high-volume stores. Get started instantly with no setup fees.",
+          "Flowauxi Shop provides an AI-powered WhatsApp chatbot specifically designed for e-commerce. It handles customer queries 24/7, shares product catalogs, processes orders, sends invoices, and manages returns — all automatically. It's trusted by thousands of online sellers in India.",
+      },
+      {
+        question:
+          "Can I build an online store with WhatsApp order automation?",
+        answer:
+          "Yes! Flowauxi Shop lets you create a professional online store with built-in WhatsApp order automation. Customers can browse your products, place orders via WhatsApp, and receive real-time updates on order status, shipping, and delivery — no coding required.",
+      },
+      {
+        question: "How does WhatsApp CRM work for e-commerce?",
+        answer:
+          "Flowauxi Shop includes a built-in WhatsApp CRM that automatically captures customer data from conversations, tracks order history, segments your audience for targeted campaigns, and provides a unified dashboard to manage all customer interactions.",
+      },
+      {
+        question: "What is WhatsApp conversational commerce?",
+        answer:
+          "WhatsApp conversational commerce is the practice of selling products and services directly through WhatsApp chat. With Flowauxi Shop, businesses can share product catalogs, accept orders, process payments, and provide customer support — all within WhatsApp conversations, creating a seamless buying experience.",
       },
     ],
     breadcrumb: [
@@ -519,25 +529,29 @@ const DOMAIN_SEO_CONFIGS: Record<ProductDomain, DomainSeoConfig> = {
   dashboard: {
     domain: "dashboard",
     title:
-      "Flowauxi — AI-Powered WhatsApp Automation & Business Messaging Platform",
+      "WhatsApp Automation Platform — AI Chatbot, CRM & Business Messaging | Flowauxi",
     titleTemplate: "%s | Flowauxi",
     description:
-      "Transform your WhatsApp into a powerful business tool. AI-powered automation, smart broadcasting, CRM integration, and analytics dashboard. Trusted by 500+ businesses across India. Start free today.",
+      "Automate WhatsApp for your business with AI chatbots, CRM integration, smart broadcasting & analytics. Trusted by 500+ businesses across India. Start your free trial today — no credit card required.",
     keywords: [
-      "flowauxi",
       "WhatsApp automation",
+      "WhatsApp automation platform",
       "WhatsApp business API",
-      "WhatsApp chatbot",
-      "business messaging platform",
-      "AI WhatsApp automation",
+      "AI WhatsApp chatbot",
+      "WhatsApp chatbot for business",
       "WhatsApp CRM integration",
-      "WhatsApp marketing",
-      "business automation India",
-      "customer engagement platform",
-      "WhatsApp automation tool",
+      "WhatsApp marketing automation",
+      "WhatsApp automation India",
+      "automate customer support WhatsApp",
+      "best WhatsApp automation tool for small business",
+      "WhatsApp automation for e-commerce",
+      "WhatsApp order automation",
       "automated WhatsApp messages",
       "WhatsApp Cloud API solution",
       "conversational AI chatbot",
+      "business messaging platform",
+      "customer engagement platform",
+      "flowauxi",
     ],
     canonicalBase: "https://www.flowauxi.com",
     crossDomainLinks: ALL_SUBDOMAIN_URLS.filter(
@@ -548,7 +562,8 @@ const DOMAIN_SEO_CONFIGS: Record<ProductDomain, DomainSeoConfig> = {
       type: "website",
       locale: "en_IN",
       image: "https://www.flowauxi.com/og-image.png",
-      imageAlt: "Flowauxi — AI WhatsApp Automation Platform",
+      imageAlt:
+        "Flowauxi — WhatsApp Automation Platform with AI Chatbot & CRM",
     },
     twitter: {
       handle: "@flowauxi",
@@ -559,7 +574,7 @@ const DOMAIN_SEO_CONFIGS: Record<ProductDomain, DomainSeoConfig> = {
     organization: {
       name: "Flowauxi",
       description:
-        "AI-Powered WhatsApp Automation and Business Messaging Platform trusted by 500+ businesses across India.",
+        "WhatsApp Automation Platform with AI chatbots, CRM integration, and smart broadcasting. Trusted by 500+ businesses across India.",
       url: "https://www.flowauxi.com",
       logo: "https://www.flowauxi.com/icon-512.png",
       sameAs: [
@@ -573,7 +588,7 @@ const DOMAIN_SEO_CONFIGS: Record<ProductDomain, DomainSeoConfig> = {
     website: {
       name: "Flowauxi",
       description:
-        "AI-Powered WhatsApp Automation & Business Messaging Platform",
+        "WhatsApp Automation Platform — AI Chatbot, CRM & Business Messaging",
     },
     rating: {
       ratingValue: "4.8",
@@ -582,24 +597,26 @@ const DOMAIN_SEO_CONFIGS: Record<ProductDomain, DomainSeoConfig> = {
     },
     faqs: [
       {
-        question: "What is Flowauxi?",
+        question: "What is WhatsApp automation and how does it work?",
         answer:
-          "Flowauxi is an AI-powered WhatsApp automation platform that helps businesses automate customer conversations, manage messaging at scale, and integrate with CRM systems. It offers smart broadcasting, auto-responses, and analytics — all through the WhatsApp Business API.",
+          "WhatsApp automation uses the WhatsApp Business API to automatically handle customer conversations, send broadcasts, and trigger workflows without manual intervention. Flowauxi connects to the API and provides AI-powered auto-responses, smart broadcasting, CRM integration, and analytics — enabling businesses to manage thousands of conversations at scale.",
       },
       {
-        question: "How does WhatsApp automation work with Flowauxi?",
+        question:
+          "How much does WhatsApp automation cost for businesses?",
         answer:
-          "Flowauxi connects to the WhatsApp Business API and uses AI to automatically respond to customer messages, send broadcasts, manage conversations, and trigger workflows based on your business rules. Setup takes minutes with no coding required.",
+          "Flowauxi offers flexible pricing plans starting with a free trial. Costs depend on message volume and features needed. Plans range from affordable starter tiers for small businesses to enterprise plans with custom SLAs. WhatsApp Business API itself charges per-conversation fees set by Meta. Start with our 14-day free trial — no credit card required.",
       },
       {
-        question: "How do I get started with Flowauxi WhatsApp automation?",
+        question:
+          "Is WhatsApp automation legal for business messaging in India?",
         answer:
-          "Getting started with Flowauxi is quick and easy. Sign up, connect your WhatsApp Business account, and instantly access AI auto-responses, broadcasting, analytics, and CRM integration. No technical setup required.",
+          "Yes, WhatsApp automation is fully legal in India when using the official WhatsApp Business API. Flowauxi uses Meta's approved API channels, ensuring compliance with WhatsApp's Business Policy and Commerce Policy. All messages are sent to opted-in customers with template-approved content.",
       },
       {
-        question: "Can I integrate Flowauxi with my CRM?",
+        question: "What is the best WhatsApp automation platform?",
         answer:
-          "Yes. Flowauxi integrates with popular CRM systems and business tools through native integrations and a REST API. Sync contacts, conversations, and customer data automatically between platforms.",
+          "Flowauxi is a leading WhatsApp automation platform trusted by 500+ businesses in India. It offers AI-powered chatbots, CRM integration, smart broadcasting, analytics dashboard, and multi-agent support. Unlike competitors, Flowauxi also includes e-commerce store building, marketing automation, and OTP verification — all from one platform.",
       },
     ],
     breadcrumb: [{ name: "Flowauxi", url: "https://www.flowauxi.com" }],

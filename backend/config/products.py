@@ -15,7 +15,7 @@ from typing import List, Literal, Optional
 # TYPES
 # =============================================================================
 
-ProductDomain = Literal["shop", "dashboard", "marketing", "showcase", "api"]
+ProductDomain = Literal["shop", "dashboard", "marketing", "showcase", "api", "booking"]
 PlanTier = Literal["starter", "business", "pro"]
 
 
@@ -377,8 +377,81 @@ PRODUCT_REGISTRY: dict[ProductDomain, ProductConfig] = {
         enabled_features=["ai", "messages", "campaigns", "bulkMessages", "templates", "analytics"],
     ),
     
-    # Additional products (showcase, api) can be added following the same pattern
-    # For brevity, only showing main ones
+    # =========================================================================
+    # BOOKING PRODUCT
+    # =========================================================================
+    "booking": ProductConfig(
+        id="booking",
+        name="Flowauxi Booking",
+        domain="booking.flowauxi.com",
+        description="WhatsApp Appointment & Service Scheduling",
+        pricing=[
+            # STARTER
+            PricingTier(
+                id="starter",
+                plan_id="booking_starter",
+                razorpay_plan_id_sandbox=require_env("RAZORPAY_PLAN_BOOKING_STARTER", "booking/starter"),
+                razorpay_plan_id_production=optional_env("RAZORPAY_LIVE_PLAN_BOOKING_STARTER"),
+                name="Starter",
+                price=150000,  # ₹1,500
+                price_display="₹1,500",
+                currency="INR",
+                interval="monthly",
+                description="For individuals ready to automate and grow consistently.",
+                tagline="Best for 20-30 bookings/month",
+                popular=false,
+                features=[
+                    "20 Bookings per month",
+                    "20 Automated Reminders (Email + WhatsApp)",
+                    "20 Feedback Forms",
+                    "Google & Apple Calendar Sync",
+                    "Basic Analytics Dashboard",
+                    "Custom Booking Link",
+                ],
+                limits=PricingLimits(
+                    ai_responses=1000,
+                    whatsapp_numbers=1,
+                    faqs=50,
+                    products=50, # reusing products for services in limits mapping
+                    orders=20, # reusing orders for appointments in limits mapping
+                ),
+            ),
+            # PROFESSIONAL
+            PricingTier(
+                id="pro",
+                plan_id="booking_pro",
+                razorpay_plan_id_sandbox=require_env("RAZORPAY_PLAN_BOOKING_PRO", "booking/pro"),
+                razorpay_plan_id_production=optional_env("RAZORPAY_LIVE_PLAN_BOOKING_PRO"),
+                name="Professional",
+                price=320000,  # ₹3,200
+                price_display="₹3,200",
+                currency="INR",
+                interval="monthly",
+                description="Built for serious businesses that want to scale revenue.",
+                tagline="Unlimited revenue growth",
+                popular=True,
+                features=[
+                    "Unlimited Bookings",
+                    "Unlimited Reminders (Email + WhatsApp)",
+                    "Unlimited Feedback Forms",
+                    "Stripe Payment Integration",
+                    "Advanced Revenue Analytics",
+                    "Automated Feedback Collection",
+                    "Remove Flowauxi Branding",
+                    "Priority Support",
+                    "Everything in Starter",
+                ],
+                limits=PricingLimits(
+                    ai_responses=10000,
+                    whatsapp_numbers=3,
+                    faqs=-1,
+                    products=-1,
+                    orders=-1,
+                ),
+            ),
+        ],
+        enabled_features=["ai", "messages", "appointments", "services", "analytics", "aiSettings"],
+    ),
 }
 
 

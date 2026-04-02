@@ -216,7 +216,11 @@ def with_feature_gate(feature_key: str, increment: bool = True, fail_closed: boo
                 if mode == 'hard':
                     # HARD MODE: Block the request
                     logger.warning(
-                        "🚫 entitlement_violation_blocked",
+                        f"🚫 entitlement_violation_blocked | "
+                        f"feature={feature_key} domain={domain} "
+                        f"denial_reason={decision.denial_reason} "
+                        f"endpoint={request.path} "
+                        f"plan_slug={getattr(decision, 'plan_slug', '?')}",
                         extra=violation_data,
                     )
                     return jsonify({

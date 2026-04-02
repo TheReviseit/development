@@ -4,5 +4,8 @@
   "python.defaultInterpreterPath": "${workspaceFolder}/backend/firebase-env/Scripts/python.exe",
   "python.analysis.extraPaths": ["${workspaceFolder}/backend"],
   "pyre.searchRoots": ["${workspaceFolder}/backend"],
-  "pyre.sitePaths": ["${workspaceFolder}/backend/firebase-env/Lib/site-packages"]
+  "pyre.sitePaths": [
+    "${workspaceFolder}/backend/firebase-env/Lib/site-packages"
+  ],
+  "codium.codeCompletion.enable": false
 }

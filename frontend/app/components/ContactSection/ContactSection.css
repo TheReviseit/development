@@ -24,7 +24,7 @@
     var(--auth-gradient-end) 100%
   );
   -webkit-background-clip: text;
-  /* -webkit-text-fill-color: transparent; */
+  -webkit-text-fill-color: transparent;
   background-clip: text;
   font-family: var(--font-secondary);
   letter-spacing: -0.02em;
@@ -60,7 +60,7 @@
   position: relative;
   overflow: hidden;
   background: #ffffff;
-  border: 1px solid #000000;
+  border: 1px solid #e5e7eb;
   border-radius: 20px;
   box-shadow:
     0 4px 6px -1px rgba(0, 0, 0, 0.05),
@@ -240,7 +240,7 @@
   position: relative;
   overflow: hidden;
   background: #ffffff;
-  border: 1px solid #000000;
+  border: 1px solid #e5e7eb;
   border-radius: 20px;
   box-shadow:
     0 4px 6px -1px rgba(0, 0, 0, 0.05),
@@ -254,11 +254,11 @@
   left: 0;
   width: 4px;
   height: 100%;
-  /* background: linear-gradient(
+  background: linear-gradient(
     180deg,
     var(--auth-gradient-start) 0%,
     var(--auth-gradient-end) 100%
-  ); */
+  );
   transform: scaleY(0);
   transition: transform 0.3s ease;
 }
@@ -288,14 +288,14 @@
   transition: all 0.3s ease;
 }
 
-/* .contact-info-card:hover .contact-info-icon-wrapper {
+.contact-info-card:hover .contact-info-icon-wrapper {
   transform: scale(1.1) rotate(5deg);
   background: linear-gradient(
     135deg,
     rgba(34, 193, 90, 0.2) 0%,
     rgba(45, 212, 255, 0.2) 100%
   );
-} */
+}
 
 .contact-info-icon {
   width: 28px;
@@ -353,6 +353,8 @@
     rgba(45, 212, 255, 0.05) 100%
   );
   grid-area: social;
+  border-radius: 20px;
+  border: 1px solid #e5e7eb;
 }
 
 .contact-social-title {
@@ -376,7 +378,7 @@
   height: 48px;
   border-radius: 50%;
   background: white;
-  border: 2px solid var(--border-color);
+  border: 1px solid #e5e7eb;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -459,6 +461,10 @@
     width: 44px;
     height: 44px;
   }
+
+  .contact-card-image-container {
+    display: none !important;
+  }
 }
 
 @media (max-width: 480px) {
@@ -492,11 +498,28 @@
   right: 16px;
   bottom: 16px;
   width: 40%;
-  height: auto;
+  height: calc(100% - 32px);
   pointer-events: none;
-  z-index: 0;
+  z-index: 1; /* Changed from 0 to 1 to ensure it's above card background */
   overflow: hidden;
   border-radius: 16px;
+  display: block; /* Ensure it's not hidden on desktop */
+}
+
+.contact-card-image {
+  object-fit: cover;
+  object-position: center;
+  opacity: 0.9; /* Added subtle opacity */
+}
+
+/* Ensure content stays above the image */
+.contact-info-icon-wrapper,
+.contact-info-title,
+.contact-info-text,
+.contact-info-link,
+.contact-info-address {
+  position: relative;
+  z-index: 2; /* Increased to stay above image */
 }
 
 .contact-card-image {
@@ -558,4 +581,56 @@
     left: 16px;
     right: auto;
   }
+}
+/* ============================================
+   Booking Platform Monochromatic Theme
+   ============================================ */
+
+.booking-contact-theme .contact-main-title {
+  background: none !important;
+  -webkit-text-fill-color: #111111 !important;
+  color: #111111 !important;
+}
+
+.booking-contact-theme .contact-info-icon-wrapper {
+  background: rgba(0, 0, 0, 0.05) !important;
+  width: 42px !important;
+  height: 42px !important;
+  border-radius: 12px !important;
+}
+
+.booking-contact-theme .contact-info-card:hover .contact-info-icon-wrapper {
+  background: rgba(0, 0, 0, 0.05) !important;
+  transform: none !important;
+}
+
+.booking-contact-theme .contact-info-icon {
+  color: #111111 !important;
+  width: 20px !important;
+  height: 20px !important;
+}
+
+.booking-contact-theme .contact-info-link {
+  color: #111111 !important;
+}
+
+.booking-contact-theme .contact-info-link:hover {
+  color: #000000 !important;
+  text-decoration: underline;
+}
+
+.booking-contact-theme .contact-info-card::before {
+  background: #000000 !important;
+}
+
+.booking-contact-theme .contact-submit-btn {
+  background: #111 !important;
+}
+
+.booking-contact-theme .contact-submit-btn:hover {
+  background: #000 !important;
+}
+
+.booking-contact-theme .contact-social-link:hover {
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.2) !important;
 }

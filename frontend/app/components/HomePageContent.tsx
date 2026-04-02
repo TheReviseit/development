@@ -30,11 +30,11 @@ export default function HomePageContent() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="text-center mb-12">
             <h2 className="text-3xl md:text-4xl font-bold text-gray-900 mb-4">
-              Explore Our Product Suite
+              Complete WhatsApp Automation Suite
             </h2>
             <p className="text-lg text-gray-600 max-w-2xl mx-auto">
-              Everything you need to grow your business — from online selling to
-              marketing automation.
+              Everything you need to automate your business — from WhatsApp
+              e-commerce stores to marketing automation and OTP verification.
             </p>
           </div>
           <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
@@ -46,14 +46,15 @@ export default function HomePageContent() {
                 🛍️
               </div>
               <h3 className="text-lg font-bold text-gray-900 mb-2">
-                Online Store Builder
+                WhatsApp Store Builder
               </h3>
               <p className="text-sm text-gray-600 leading-relaxed">
-                Create your ecommerce website in minutes. AI-powered platform
-                with payments, WhatsApp integration & order tracking.
+                Build your online store with WhatsApp order automation, AI
+                chatbot for e-commerce, automated invoicing & customer
+                management.
               </p>
               <span className="inline-flex items-center text-indigo-600 text-sm font-medium mt-3 group-hover:gap-2 transition-all">
-                Start selling →
+                Start selling on WhatsApp →
               </span>
             </a>
 
@@ -65,14 +66,14 @@ export default function HomePageContent() {
                 📢
               </div>
               <h3 className="text-lg font-bold text-gray-900 mb-2">
-                Marketing Automation
+                WhatsApp Marketing Automation
               </h3>
               <p className="text-sm text-gray-600 leading-relaxed">
                 AI-powered WhatsApp marketing campaigns, multi-channel
-                broadcasting, audience segmentation & analytics.
+                broadcasting, audience segmentation & conversion analytics.
               </p>
               <span className="inline-flex items-center text-purple-600 text-sm font-medium mt-3 group-hover:gap-2 transition-all">
-                Scale marketing →
+                Scale WhatsApp marketing →
               </span>
             </a>
 

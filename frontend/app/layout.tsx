@@ -56,35 +56,35 @@ export const viewport: Viewport = {
 const baseMetadata: Metadata = {
   // Primary Meta Tags - Enhanced for better CTR
   title: {
-    default: "Flowauxi — AI WhatsApp Automation Platform",
+    default: "WhatsApp Automation Platform — AI Chatbot, CRM & Business Messaging | Flowauxi",
     template: "%s | Flowauxi",
   },
   description:
-    "Transform your WhatsApp into a powerful business tool with AI automation. Get instant customer responses, automated follow-ups, and CRM integration. Trusted by 500+ businesses. Get started today!",
+    "Automate WhatsApp for your business with AI chatbots, CRM integration, smart broadcasting & analytics. Trusted by 500+ businesses across India. Start your free trial today!",
   keywords: [
     // Primary keywords
     "WhatsApp automation",
+    "WhatsApp automation platform",
     "WhatsApp business API",
     "AI WhatsApp chatbot",
-    "WhatsApp automation tool",
+    "WhatsApp chatbot for business",
     "WhatsApp business automation",
     // Secondary keywords
-    "automated WhatsApp messages",
+    "WhatsApp automation for e-commerce",
+    "WhatsApp order automation",
     "WhatsApp marketing automation",
     "WhatsApp CRM integration",
-    "WhatsApp broadcast messages",
+    "automate customer support WhatsApp",
     "WhatsApp API integration",
     // Long-tail keywords
-    "automate WhatsApp customer support",
-    "WhatsApp automation for small business",
-    "AI-powered WhatsApp responses",
-    "WhatsApp messaging platform India",
+    "best WhatsApp automation tool for small business",
+    "WhatsApp automation India",
+    "AI chatbot for e-commerce",
     "WhatsApp Cloud API solution",
     // Related terms
     "conversational AI chatbot",
     "customer engagement platform",
-    "business messaging solution",
-    "multi-channel messaging",
+    "conversational commerce platform",
     "automated customer support",
     // OTP API keywords
     "OTP API",
@@ -131,16 +131,16 @@ const baseMetadata: Metadata = {
   openGraph: {
     type: "website",
     locale: "en_US",
-    siteName: "Flowauxi - WhatsApp Automation Platform",
-    title: "Flowauxi — AI WhatsApp Automation Platform",
+    siteName: "Flowauxi — WhatsApp Automation Platform",
+    title: "WhatsApp Automation Platform — AI Chatbot, CRM & Business Messaging | Flowauxi",
     description:
-      "Transform your WhatsApp into a powerful business tool with AI automation. Get instant customer responses, automated follow-ups, and CRM integration. Trusted by 500+ businesses. Start free!",
+      "Automate WhatsApp for your business with AI chatbots, CRM integration, smart broadcasting & analytics. Trusted by 500+ businesses across India. Start free!",
     images: [
       {
         url: "/og-image.png",
         width: 1200,
         height: 630,
-        alt: "Flowauxi - AI-Powered WhatsApp Automation Platform for Business",
+        alt: "Flowauxi — WhatsApp Automation Platform with AI Chatbot & CRM",
         type: "image/png",
       },
       {
@@ -158,12 +158,12 @@ const baseMetadata: Metadata = {
     card: "summary_large_image",
     site: "@flowauxi",
     creator: "@flowauxi",
-    title: "Flowauxi — AI WhatsApp Automation Platform",
+    title: "WhatsApp Automation Platform — AI Chatbot, CRM & Business Messaging | Flowauxi",
     description:
-      "Transform your WhatsApp into a powerful business tool with AI automation. Get instant customer responses, automated follow-ups, and CRM integration. Start free today!",
+      "Automate WhatsApp for your business with AI chatbots, CRM integration, smart broadcasting & analytics. Start free today!",
     images: {
       url: "https://www.flowauxi.com/twitter-image.png",
-      alt: "Flowauxi - WhatsApp Automation Platform",
+      alt: "Flowauxi — WhatsApp Automation Platform",
     },
   },
 

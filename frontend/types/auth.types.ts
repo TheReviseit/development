@@ -13,7 +13,8 @@ export type ProductDomain =
   | "marketing"
   | "showcase"
   | "dashboard"
-  | "api";
+  | "api"
+  | "booking";
 
 export type ProductStatus = "trial" | "active" | "suspended" | "cancelled";
 
@@ -414,7 +415,7 @@ export function getErrorMessage(code: AuthErrorCode): string {
  * Check if a product domain is valid
  */
 export function isValidProductDomain(domain: string): domain is ProductDomain {
-  return ["shop", "marketing", "showcase", "dashboard", "api"].includes(domain);
+  return ["shop", "marketing", "showcase", "dashboard", "api", "booking"].includes(domain);
 }
 
 /**
@@ -434,6 +435,7 @@ export function getProductDisplayName(product: ProductDomain): string {
     showcase: "Showcase",
     dashboard: "Dashboard",
     api: "API Console",
+    booking: "Booking",
   };
   return names[product];
 }

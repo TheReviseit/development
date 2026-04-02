@@ -5,11 +5,11 @@ import FeatureCarousel from "./FeatureCarousel";
 import "./HeroSection.css";
 
 const dynamicTexts = [
-  "Grow Your Business Faster",
-  "Automation Without Effort",
-  "Convert Leads Into Customers",
-  "Sell Even While You Sleep",
-  "Scale Without Limits",
+  "Automate Orders & Customer Support",
+  "AI Chatbot for E-commerce",
+  "WhatsApp CRM for Business",
+  "Scale Sales with Automation",
+  "Convert Chats into Revenue",
 ];
 
 export default function HeroSection() {
@@ -37,12 +37,12 @@ export default function HeroSection() {
           {/* Left Content */}
           <div className="hero-left-content">
             <h1 className="hero-title">
-              <span className="hero-title-regular">Let's</span>
+              <span className="hero-title-regular">The</span>
               <span className="hero-title-bold hero-title-mobile">
-                Automate WhatsApp and
+                WhatsApp Automation Platform
               </span>
               <span className="hero-title-bold hero-title-desktop">
-                Automate WhatsApp
+                WhatsApp Automation
               </span>
               <span
                 key={currentTextIndex}
@@ -53,8 +53,9 @@ export default function HeroSection() {
             </h1>
 
             <p className="hero-description">
-              AI-powered messaging, automated workflows, and smart broadcasts to
-              scale your customer conversations.
+              AI-powered WhatsApp automation for businesses. Automate customer
+              conversations, manage orders, send broadcasts, and integrate with
+              your CRM — all from one platform.
             </p>
 
             <div className="hero-cta-container">

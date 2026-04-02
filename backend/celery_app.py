@@ -13,6 +13,14 @@ from dotenv import load_dotenv
 # Load environment variables from .env file
 load_dotenv()
 
+# =============================================================================
+# Windows Compatibility Fix
+# =============================================================================
+# Reference: https://stackoverflow.com/questions/45744992
+# Celery 4+ doesn't officially support Windows, but works with this fix
+if os.name == 'nt':
+    os.environ.setdefault('FORKED_BY_MULTIPROCESSING', '1')
+
 logger = logging.getLogger('reviseit.celery')
 
 # =============================================================================
@@ -39,6 +47,7 @@ try:
             "tasks.billing_monitor",  # Subscription lifecycle monitoring
             "tasks.forms_maintenance",  # Form soft-delete purge (enterprise two-phase delete)
             "tasks.usage_events",  # Feature usage event processing
+            "tasks.messaging_tasks",  # Instagram/WhatsApp omni-channel messaging
         ]
     )
     
@@ -83,6 +92,29 @@ celery_app.conf.task_default_routing_key = "default"
 # Task Routing
 # =============================================================================
 
+# Reduce Redis connections for small server
+celery_app.conf.broker_pool_limit = 1  # Single connection pool
+celery_app.conf.broker_connection_retry_on_startup = True
+celery_app.conf.broker_connection_max_retries = 3
+
+# Result backend - minimal persistence (reduces Redis connections)
+celery_app.conf.result_extended = False
+celery_app.conf.result_backend_transport_options = {
+    'master_name': 'redislabs',
+    'visibility_timeout': 3600,
+}
+
+# =============================================================================
+# Production Mode - Direct Send (for small servers)
+# =============================================================================
+# When USE_OUTBOX=false, messages are sent directly (no async outbox)
+# This reduces Redis connections and latency for small deployments
+import os
+USE_OUTBOX = os.getenv('USE_OUTBOX', 'true').lower() == 'true'
+celery_app.conf.task_ignore_result = not USE_OUTBOX  # Skip result storage if not using outbox
+
+logger.info(f"📨 USE_OUTBOX={USE_OUTBOX} (set USE_OUTBOX=false for direct send)")
+
 celery_app.conf.task_routes = {
     # High priority tasks
     "tasks.messaging.send_message": {"queue": "high"},
@@ -107,6 +139,18 @@ celery_app.conf.task_routes = {
 
     # Forms maintenance (low priority — safe background cleanup)
     "tasks.forms_maintenance.purge_deleted_forms_task": {"queue": "low"},
+
+    # =========================================================================
+    # Omni-Channel Messaging Tasks (Instagram / WhatsApp)
+    # =========================================================================
+    "messaging.process_webhook_batch": {"queue": "high"},
+    "messaging.process_inbound_message": {"queue": "high"},
+    "messaging.resume_flow_after_delay": {"queue": "high"},
+    "messaging.process_outbox": {"queue": "default"},
+    "messaging.check_flow_timeouts": {"queue": "default"},
+    "messaging.refresh_tokens": {"queue": "low"},
+    "messaging.cleanup_idempotency": {"queue": "low"},
+    "messaging.cleanup_outbox": {"queue": "low"},
 }
 
 # =============================================================================
@@ -264,7 +308,59 @@ celery_app.conf.beat_schedule = {
         "schedule": crontab(hour=3, minute=0),  # 3:00 AM UTC every day
         "options": {"queue": "low"},
     },
+
+    # =========================================================================
+    # Omni-Channel Messaging — Beat Tasks
+    # =========================================================================
+
+    # Outbox processor: poll for pending messages every 5 seconds
+    "messaging-process-outbox": {
+        "task": "messaging.process_outbox",
+        "schedule": 5.0,
+        "options": {"queue": "default"},
+    },
+
+    # Token auto-refresh: daily at 4 AM UTC (7 days before expiry)
+    "messaging-refresh-tokens": {
+        "task": "messaging.refresh_tokens",
+        "schedule": crontab(hour=4, minute=0),
+        "options": {"queue": "low"},
+    },
+
+    # Idempotency cleanup: daily at 5 AM UTC (purge > 48h old)
+    "messaging-cleanup-idempotency": {
+        "task": "messaging.cleanup_idempotency",
+        "schedule": crontab(hour=5, minute=0),
+        "options": {"queue": "low"},
+    },
+
+    # Outbox cleanup: daily at 5:30 AM UTC (purge > 72h completed events)
+    "messaging-cleanup-outbox": {
+        "task": "messaging.cleanup_outbox",
+        "schedule": crontab(hour=5, minute=30),
+        "options": {"queue": "low"},
+    },
+
+    # Flow timeout check: every 60 seconds (detect stale WAITING flows)
+    "messaging-check-flow-timeouts": {
+        "task": "messaging.check_flow_timeouts",
+        "schedule": 60.0,
+        "options": {"queue": "default"},
+    },
 }
+
+
+# =============================================================================
+# Register Omni-Channel Messaging Tasks
+# =============================================================================
+
+try:
+    if celery_app:
+        from tasks.messaging_tasks import register_messaging_tasks
+        register_messaging_tasks(celery_app)
+        logger.info("⚡ Messaging Celery tasks registered successfully")
+except Exception as e:
+    logger.warning(f"Failed to register messaging tasks: {e}")
 
 
 # =============================================================================

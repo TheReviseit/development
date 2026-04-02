@@ -38,8 +38,7 @@ function formatPrice(
   price: number | undefined | null,
   currency: string = "INR",
 ): string {
-  if (price === undefined || price === null) return "FREE";
-  if (price === 0) return "FREE";
+  if (price === undefined || price === null) return currency === "INR" ? "₹0" : "$0";
   if (currency === "INR") {
     return `₹${price.toLocaleString("en-IN")}`;
   }

@@ -237,12 +237,13 @@ const WhatsAppFeatures = () => {
         {/* Section Header */}
         <div className="features-header">
           <h2 className="features-title" ref={titleRef}>
-            Everything you need for WhatsApp at scale
+            WhatsApp Automation Features for Every Business
           </h2>
           <p className="features-subtitle" ref={subtitleRef}>
-            Powerful automation features designed to help business owners save
-            time, increase conversions, and provide exceptional customer
-            experiences through WhatsApp.
+            From e-commerce order automation to CRM integration — powerful
+            tools designed to help business owners save time, increase
+            conversions, and deliver exceptional customer experiences through
+            WhatsApp.
           </p>
         </div>
 
@@ -287,7 +288,8 @@ const WhatsAppFeatures = () => {
             </h3>
             <p className="features-cta-text">
               Join thousands of businesses already scaling their customer
-              engagement with Flowauxi.
+              engagement with Flowauxi — the WhatsApp automation platform for
+              e-commerce, marketing, and customer support.
             </p>
           </div>
           <div className="features-cta-buttons">

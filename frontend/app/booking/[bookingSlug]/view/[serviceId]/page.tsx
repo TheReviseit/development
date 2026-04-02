@@ -30,7 +30,6 @@ interface BookingData {
 // Helper Functions
 // ============================================================
 function formatPrice(price: number, currency: string = "INR"): string {
-  if (price === 0) return "FREE";
   if (currency === "INR") return `₹${price.toLocaleString()}`;
   return `$${price.toLocaleString()}`;
 }

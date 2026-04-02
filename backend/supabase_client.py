@@ -823,25 +823,31 @@ def get_business_data_from_supabase(firebase_uid: str, credentials: Dict[str, An
                 if result.data:
                     business_info = result.data[0]
             
-            # Fetch Razorpay keys + url_slug from businesses table using firebase_uid
+            # Fetch full AI Settings / Company Profile from businesses table using firebase_uid
             # The businesses table uses firebase_uid directly as user_id column
             biz_result = client.table('businesses').select(
-                'razorpay_key_id, razorpay_key_secret, payments_enabled, url_slug'
+                '*'
             ).eq('user_id', firebase_uid).limit(1).execute()
 
             if biz_result.data and len(biz_result.data) > 0:
-                razorpay_settings = biz_result.data[0]
-                print(f"💰 Loaded Razorpay settings for user: {firebase_uid[:10]}...")
+                biz_row = biz_result.data[0]
+                razorpay_settings = biz_row
+                print(f"💰 Loaded business profile & settings for user: {firebase_uid[:10]}...")
                 
         except Exception as e:
             print(f"⚠️ Could not load business/payment info from Supabase: {e}")
     
+    biz_row = razorpay_settings or {}
+    
     # Determine business name with priority:
-    # 1. Business info from connected_business_managers
-    # 2. Credentials
-    # 3. Default
+    # 1. Company details from AI Settings (businesses table)
+    # 2. Business info from connected_business_managers (Meta Profile)
+    # 3. Credentials
+    # 4. Default
     business_name = 'Our Business'
-    if business_info and business_info.get('business_name'):
+    if biz_row.get('business_name'):
+        business_name = biz_row['business_name']
+    elif business_info and business_info.get('business_name'):
         business_name = business_info['business_name']
     elif credentials and credentials.get('business_name'):
         business_name = credentials['business_name']
@@ -850,24 +856,24 @@ def get_business_data_from_supabase(firebase_uid: str, credentials: Dict[str, An
     business_data = {
         'business_id': firebase_uid,
         'business_name': business_name,
-        'industry': 'other',
-        'description': '',
-        'url_slug': razorpay_settings.get('url_slug', '') if razorpay_settings else '',
+        'industry': biz_row.get('industry') or 'other',
+        'description': biz_row.get('description') or '',
+        'url_slug': biz_row.get('url_slug') or '',
         'contact': {
             'phone': credentials.get('display_phone_number', '') if credentials else '',
             'email': business_info.get('business_email', '') if business_info else '',
         },
-        'location': {},
-        'timings': {},
-        'products_services': [],
-        'policies': {},
-        'faqs': [],
-        'social_media': {},
-        'categories': [],
+        'location': biz_row.get('location') or {},
+        'timings': biz_row.get('timings') or {},
+        'products_services': biz_row.get('products') or [],
+        'policies': biz_row.get('policies') or {},
+        'faqs': biz_row.get('faqs') or [],
+        'social_media': biz_row.get('social_media') or {},
+        'categories': biz_row.get('product_categories') or [],
         'payment_settings': {
-            'enabled': razorpay_settings.get('payments_enabled', False) if razorpay_settings else False,
-            'key_id': razorpay_settings.get('razorpay_key_id') if razorpay_settings else None,
-            'key_secret': razorpay_settings.get('razorpay_key_secret') if razorpay_settings else None,
+            'enabled': biz_row.get('payments_enabled') or False,
+            'key_id': biz_row.get('razorpay_key_id'),
+            'key_secret': biz_row.get('razorpay_key_secret'),
         }
     }
     

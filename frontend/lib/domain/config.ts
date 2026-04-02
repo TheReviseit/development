@@ -27,7 +27,8 @@ export type ProductDomain =
   | "showcase"
   | "marketing"
   | "api"
-  | "dashboard";
+  | "dashboard"
+  | "booking";
 
 // =============================================================================
 // HOSTNAME → PRODUCT MAPPING
@@ -39,6 +40,7 @@ const PRODUCTION_HOSTNAME_MAP: Record<string, ProductDomain> = {
   "pages.flowauxi.com": "showcase",
   "marketing.flowauxi.com": "marketing",
   "api.flowauxi.com": "api",
+  "booking.flowauxi.com": "booking",
   "flowauxi.com": "dashboard",
   "www.flowauxi.com": "dashboard",
 };
@@ -50,6 +52,7 @@ const DEV_PORT_MAP: Record<string, ProductDomain> = {
   "3002": "showcase", // FIXED: was "marketing"
   "3003": "marketing", // FIXED: was "showcase"
   "3004": "api",
+  "3005": "booking",
 };
 
 /** Landing page routes per product (middleware rewrites "/" to these) */
@@ -58,6 +61,7 @@ const LANDING_PAGE_MAP: Record<ProductDomain, string> = {
   showcase: "/showcase",
   marketing: "/marketing",
   api: "/apis",
+  booking: "/booking",
   dashboard: "/", // default, no rewrite needed
 };
 
@@ -203,6 +207,23 @@ const DOMAIN_VISIBILITY: Record<ProductDomain, DomainVisibilityRules> = {
     contacts: false,
   },
 
+  booking: {
+    analytics: true,
+    messages: true,
+    aiSettings: true,
+    previewBot: true,
+    orders: false,
+    products: false,
+    appointments: true,
+    services: true,
+    showcase: false,
+    campaigns: false,
+    bulkMessages: false,
+    templates: false,
+    forms: false,
+    contacts: false,
+  },
+
   dashboard: {
     analytics: true,
     messages: true,
@@ -308,6 +329,7 @@ const VALID_DOMAINS: ProductDomain[] = [
   "marketing",
   "api",
   "dashboard",
+  "booking",
 ];
 
 export function isValidProductDomain(value: string): value is ProductDomain {

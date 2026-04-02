@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
 
+// Prevent Next.js from caching this route — analytics must always be fresh
+export const dynamic = "force-dynamic";
+
 /**
  * Revenue Analytics API Proxy
  *
@@ -114,11 +117,11 @@ export async function GET(request: NextRequest) {
 
     const data = await response.json();
 
-    // Return the response with cache headers
+    // Return fresh data — never cache revenue analytics
     return NextResponse.json(data, {
       headers: {
-        // Cache for 1 minute at the edge, but always revalidate
-        "Cache-Control": "public, max-age=60, stale-while-revalidate=300",
+        "Cache-Control": "private, no-cache, no-store, must-revalidate",
+        "Pragma": "no-cache",
       },
     });
   } catch (error) {

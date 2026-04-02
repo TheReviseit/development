@@ -3,6 +3,10 @@ import { createClient } from "@supabase/supabase-js";
 import { cookies } from "next/headers";
 import { adminAuth } from "@/lib/firebase-admin";
 
+// Force dynamic mode to prevent server-side caching in Next.js
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
 // Initialize Supabase client
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
@@ -116,10 +120,20 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    return NextResponse.json({
-      success: true,
-      data: data || [],
-    });
+    return NextResponse.json(
+      {
+        success: true,
+        data: data || [],
+      },
+      {
+        headers: {
+          "Cache-Control": "no-store, no-cache, must-revalidate, proxy-revalidate",
+          "Pragma": "no-cache",
+          "Expires": "0",
+          "X-Cache-Status": "BYPASS",
+        },
+      }
+    );
   } catch (error) {
     console.error("Error in GET /api/appointments:", error);
     return NextResponse.json(
@@ -216,7 +230,14 @@ export async function POST(request: NextRequest) {
         success: true,
         data,
       },
-      { status: 201 }
+      {
+        status: 201,
+        headers: {
+          "Cache-Control": "no-store, no-cache, must-revalidate",
+          "Pragma": "no-cache",
+          "Expires": "0",
+        },
+      }
     );
   } catch (error) {
     console.error("Error in POST /api/appointments:", error);

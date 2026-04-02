@@ -295,3 +295,171 @@ def debug_entitlement(firebase_uid):
     except Exception as e:
         logger.error(f"Error debugging entitlement: {e}", exc_info=True)
         return jsonify({"error": str(e)}), 500
+
+
+# =============================================================================
+# FAANG Fix #6: Outbox/DLQ Inspection APIs
+# =============================================================================
+
+@admin_bp.route('/outbox/dead-letter', methods=['GET'])
+def get_dead_letter_events():
+    """
+    Get all dead-lettered outbox events for debugging.
+    
+    GET /api/admin/outbox/dead-letter
+    
+    Returns:
+        {
+            "events": [...],
+            "count": N,
+            "stats": {...}
+        }
+    """
+    try:
+        import uuid
+        from datetime import datetime, timezone, timedelta
+        from services.messaging.outbox import OutboxEventStatus
+        
+        db = get_supabase_client()
+        
+        # Get dead-letter events
+        result = db.table('outbox_events').select(
+            'id, aggregate_type, event_type, channel, status, '
+            'retry_count, max_retries, error, created_at, processed_at'
+        ).eq(
+            'status', OutboxEventStatus.DEAD_LETTER.value
+        ).order(
+            'created_at', desc=True
+        ).limit(100).execute()
+        
+        events = result.data or []
+        
+        # Get stats
+        pending = db.table('outbox_events').select(
+            'id', count='exact'
+        ).eq('status', OutboxEventStatus.PENDING.value).execute()
+        
+        failed = db.table('outbox_events').select(
+            'id', count='exact'
+        ).eq('status', OutboxEventStatus.FAILED.value).execute()
+        
+        dead_letter_count = db.table('outbox_events').select(
+            'id', count='exact'
+        ).eq('status', OutboxEventStatus.DEAD_LETTER.value).execute()
+        
+        return jsonify({
+            'events': events,
+            'count': len(events),
+            'stats': {
+                'pending': pending.count or 0,
+                'failed': failed.count or 0,
+                'dead_letter': dead_letter_count.count or 0,
+            }
+        })
+        
+    except Exception as e:
+        logger.error(f"Error fetching dead letter events: {e}", exc_info=True)
+        return jsonify({"error": str(e)}), 500
+
+
+@admin_bp.route('/outbox/event/<event_id>', methods=['GET'])
+def get_outbox_event(event_id):
+    """
+    Get full details of a specific outbox event.
+    
+    GET /api/admin/outbox/event/<event_id>
+    
+    Returns:
+        {"event": {...}}
+    """
+    try:
+        db = get_supabase_client()
+        
+        result = db.table('outbox_events').select(
+            '*'
+        ).eq('id', event_id).limit(1).execute()
+        
+        if not result.data:
+            return jsonify({"error": "Event not found"}), 404
+        
+        return jsonify({'event': result.data[0]})
+        
+    except Exception as e:
+        logger.error(f"Error fetching outbox event: {e}", exc_info=True)
+        return jsonify({"error": str(e)}), 500
+
+
+@admin_bp.route('/outbox/replay/<event_id>', methods=['POST'])
+def replay_outbox_event(event_id):
+    """
+    Manually replay a dead-lettered event.
+    
+    POST /api/admin/outbox/replay/<event_id>
+    
+    Returns:
+        {"success": true, "message": "..."}
+    """
+    try:
+        from datetime import datetime, timezone
+        from services.messaging.outbox import OutboxEventStatus
+        
+        db = get_supabase_client()
+        
+        # Get the event
+        result = db.table('outbox_events').select(
+            '*'
+        ).eq('id', event_id).limit(1).execute()
+        
+        if not result.data:
+            return jsonify({"error": "Event not found"}), 404
+        
+        event = result.data[0]
+        
+        # Only allow replay of dead-letter events
+        if event['status'] != OutboxEventStatus.DEAD_LETTER.value:
+            return jsonify({
+                "error": f"Event status is {event['status']}, not dead_letter"
+            }), 400
+        
+        # Reset to pending for retry
+        db.table('outbox_events').update({
+            'status': OutboxEventStatus.PENDING.value,
+            'retry_count': 0,
+            'error': None,
+            'next_retry_at': None,
+        }).eq('id', event_id).execute()
+        
+        logger.info(f"outbox_event_replayed event_id={event_id}")
+        
+        return jsonify({
+            'success': True,
+            'message': f'Event {event_id} requeued for processing'
+        })
+        
+    except Exception as e:
+        logger.error(f"Error replaying outbox event: {e}", exc_info=True)
+        return jsonify({"error": str(e)}), 500
+
+
+@admin_bp.route('/outbox/stats', methods=['GET'])
+def get_outbox_stats():
+    """
+    Get outbox processing statistics.
+    
+    GET /api/admin/outbox/stats
+    
+    Returns:
+        {"stats": {...}}
+    """
+    try:
+        from services.messaging.outbox import OutboxEventStatus
+        from services.messaging.outbox import get_outbox_processor
+        
+        processor = get_outbox_processor()
+        stats = processor.get_stats()
+        
+        return jsonify({'stats': stats})
+        
+    except Exception as e:
+        logger.error(f"Error fetching outbox stats: {e}", exc_info=True)
+        return jsonify({"error": str(e)}), 500

@@ -421,6 +421,37 @@ try:
 except ImportError as e:
     logger.warning(f"Forms API routes not available: {e}")
 
+# Register Unified Meta Webhook routes (Instagram + WhatsApp DM automation)
+try:
+    from routes.webhooks.meta_webhook import meta_webhook_bp
+    app.register_blueprint(meta_webhook_bp)
+    logger.info("📩 Meta Webhook routes registered (/api/webhooks/meta)")
+except ImportError as e:
+    logger.warning(f"Meta Webhook routes not available: {e}")
+
+# Initialize Omni-Channel Messaging SDK
+try:
+    from services.messaging.sdk import init_messaging
+    messaging_sdk = init_messaging()
+    logger.info("📡 Omni-Channel Messaging SDK initialized (Instagram + WhatsApp)")
+except ImportError as e:
+    logger.warning(f"Messaging SDK not available: {e}")
+    messaging_sdk = None
+except Exception as e:
+    logger.warning(f"Messaging SDK init error (non-fatal): {e}")
+    messaging_sdk = None
+
+# Register messaging Celery tasks
+try:
+    from celery_app import celery_app as _celery
+    if _celery:
+        from tasks.messaging_tasks import register_messaging_tasks
+        register_messaging_tasks(_celery)
+        logger.info("⚡ Messaging Celery tasks registered (8 tasks)")
+except Exception as e:
+    logger.warning(f"Messaging Celery tasks not registered: {e}")
+
+
 # =============================================================================
 # Startup Schema Validation — Contacts Table (FAANG-Grade)
 # Fail-fast with clear error if CRM columns are missing

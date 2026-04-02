@@ -143,13 +143,36 @@ class WebhookProcessor:
         subscription_data = entity.get('subscription', {}).get('entity', {})
         payment_data = entity.get('payment', {}).get('entity', {})
 
-        # 4. Resolve subscription
+        # 4. Resolve subscription or store order
         razorpay_sub_id = (
             subscription_data.get('id') or
             payment_data.get('subscription_id')
         )
 
         if not razorpay_sub_id:
+            # Check if this is a store order payment (FAANG Revenue upgrade)
+            rzp_order_id = payment_data.get('order_id')
+            if event_type == 'payment.captured' and rzp_order_id:
+                try:
+                    # Look up the store order by razorpay_order_id
+                    # We store it in notes or payment_id (update mapping later if needed)
+                    # For now, update any order directly by its payment_id match
+                    res = self._supabase.table('orders').update({
+                        'payment_status': 'captured',
+                        'status': 'confirmed',
+                        'updated_at': datetime.now(timezone.utc).isoformat()
+                    }).eq('payment_id', payment_data.get('id')).execute()
+                    
+                    self.logger.info(f"webhook_store_order_paid event_id={event_id} rzp_order={rzp_order_id}")
+                    return {
+                        'processed': True,
+                        'event_type': event_type,
+                        'action': 'store_order_paid',
+                        'duplicate': False,
+                    }
+                except Exception as e:
+                    self.logger.error(f"Failed to process store order payment: {e}")
+
             self.logger.warning(f"webhook_no_subscription event={event_type} id={event_id}")
             return {
                 'processed': False,

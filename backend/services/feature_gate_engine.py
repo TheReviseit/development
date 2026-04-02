@@ -1014,7 +1014,49 @@ class FeatureGateEngine:
             ).order('created_at', desc=True).limit(1).execute()
 
             if not result.data:
-                return None
+                # =============================================================
+                # CROSS-DOMAIN SUBSCRIPTION RESOLUTION
+                # =============================================================
+                # A subscription's product_domain records WHERE billing was
+                # initiated (e.g. 'shop'), not WHICH interfaces may access
+                # features.  Management surfaces like 'dashboard', 'marketing',
+                # 'api', and 'showcase' do not carry their own subscriptions —
+                # they inherit entitlements from the user's billing subscription.
+                #
+                # Resolution strategy (Stripe-pattern):
+                #   1. Exact domain match  → already tried above, missed.
+                #   2. ANY active subscription for the user, most recent first.
+                #      This is domain-agnostic and future-proof: if the product
+                #      later supports multiple independent subscriptions, Step 1
+                #      will match them directly; Step 2 only fires for domains
+                #      that genuinely have no dedicated subscription.
+                #
+                # This mirrors the cross-domain fallback in _get_plan_features_map
+                # (Step B) without hard-coding any domain name.
+                # =============================================================
+                fallback_result = self.supabase.table('subscriptions').select(
+                    'id, user_id, plan_id, pricing_plan_id, plan_name, '
+                    'status, product_domain, created_at, current_period_end'
+                ).eq(
+                    'user_id', supabase_uuid,
+                ).in_(
+                    'status', ['active', 'completed', 'past_due', 'grace_period',
+                               'trialing', 'trial', 'processing', 'pending_upgrade',
+                               'upgrade_failed']
+                ).order('created_at', desc=True).limit(1).execute()
+
+                if fallback_result.data:
+                    result = fallback_result
+                    resolved_domain = result.data[0].get('product_domain', '?')
+                    logger.info(
+                        f"[FEATURE_GATE] Subscription cross-domain resolved: "
+                        f"request_domain={domain} → billing_domain={resolved_domain} "
+                        f"plan={result.data[0].get('plan_name')} "
+                        f"status={result.data[0].get('status')} "
+                        f"user={supabase_uuid[:8]}..."
+                    )
+                else:
+                    return None
 
             sub = result.data[0]
 

@@ -161,7 +161,7 @@ const SHOP_PRICING: DomainPricingConfig = {
   plans: [
     {
       id: "starter",
-      name: "Basic Plan",
+      name: "Starter",
       price: 1999,
       priceDisplay: "₹1,999",
       currency: "INR",
@@ -188,12 +188,12 @@ const SHOP_PRICING: DomainPricingConfig = {
     },
     {
       id: "business",
-      name: "Business Plan",
+      name: "Business",
       price: 3999,
       priceDisplay: "₹3,999",
       currency: "INR",
       description: "For growing businesses",
-      tagline: "Everything in Basic plus...",
+      tagline: "Everything in Starter plus...",
       popular: true,
       features: [
         "Custom store URL from your business name (e.g. store/your-brand)",
@@ -216,7 +216,7 @@ const SHOP_PRICING: DomainPricingConfig = {
     },
     {
       id: "pro",
-      name: "Enterprise Plan",
+      name: "Pro",
       price: 6999,
       priceDisplay: "₹6,999",
       currency: "INR",
@@ -507,6 +507,71 @@ const API_PRICING: DomainPricingConfig = {
   ],
 };
 
+/**
+ * Booking Domain - Appointment & Service Scheduling Focus
+ * Emphasizes appointment booking and service management
+ */
+const BOOKING_PRICING: DomainPricingConfig = {
+  domain: "booking",
+  displayName: "WhatsApp Booking",
+  enabledFeatures: ["ai", "messages", "appointments", "services", "analytics"],
+  highlightedFeatures: ["appointments", "services", "ai"],
+  plans: [
+    {
+      id: "starter",
+      name: "Starter",
+      price: 1500,
+      priceDisplay: "₹1,500",
+      currency: "INR",
+      description: "For individuals ready to automate and grow consistently.",
+      tagline: "Best for 20-30 bookings/month",
+      features: [
+        "20 Bookings per month",
+        "20 Automated Reminders (Email + WhatsApp)",
+        "20 Feedback Forms",
+        "Google & Apple Calendar Sync",
+        "Basic Analytics Dashboard",
+        "Custom Booking Link",
+      ],
+      limits: {
+        aiResponses: 1000,
+        whatsappNumbers: 1,
+        faqs: 50,
+        services: 50,
+        appointments: 20,
+      },
+    },
+    {
+      id: "pro",
+      name: "Professional",
+      price: 3200,
+      priceDisplay: "₹3,200",
+      currency: "INR",
+      description: "Built for serious businesses that want to scale revenue.",
+      tagline: "Unlimited revenue growth",
+      popular: true,
+      features: [
+        "Unlimited Bookings",
+        "Unlimited Reminders (Email + WhatsApp)",
+        "Unlimited Feedback Forms",
+        "Stripe Payment Integration",
+        "Advanced Revenue Analytics",
+        "Automated Feedback Collection",
+        "Remove Flowauxi Branding",
+        "Priority Support",
+        "Everything in Starter",
+      ],
+      limits: {
+        aiResponses: 10000,
+        whatsappNumbers: 3,
+        faqs: -1,
+        services: -1,
+        appointments: -1,
+      },
+    },
+  ],
+};
+
 // =============================================================================
 // PRICING REGISTRY
 // =============================================================================
@@ -517,6 +582,7 @@ export const DOMAIN_PRICING: Record<ProductDomain, DomainPricingConfig> = {
   marketing: MARKETING_PRICING,
   showcase: SHOWCASE_PRICING,
   api: API_PRICING,
+  booking: BOOKING_PRICING,
 };
 
 // =============================================================================
@@ -529,4 +595,5 @@ export {
   MARKETING_PRICING,
   SHOWCASE_PRICING,
   API_PRICING,
+  BOOKING_PRICING,
 };

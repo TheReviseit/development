@@ -15,7 +15,7 @@ import { ProductDomain, getProductDisplayName } from "@/types/auth.types";
  * and even that goes through the payment flow.
  */
 
-const PAID_DOMAINS: ProductDomain[] = ["marketing", "shop", "showcase"];
+const PAID_DOMAINS: ProductDomain[] = ["marketing", "shop", "showcase", "booking"];
 
 function ActivatePageContent() {
   const router = useRouter();
@@ -74,6 +74,7 @@ function ActivatePageContent() {
           marketing: "/dashboard/campaigns",
           dashboard: "/dashboard",
           api: "/dashboard/api",
+          booking: "/dashboard/appointments",
         };
 
         setTimeout(() => {

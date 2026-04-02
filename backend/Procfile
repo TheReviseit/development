@@ -24,14 +24,11 @@ web: gunicorn app:app --bind 0.0.0.0:$PORT --workers 4 --threads 4 --worker-clas
 
 # web: gunicorn app:app --bind 0.0.0.0:$PORT --workers 4 --worker-class gevent --timeout 120 --keep-alive 5 --max-requests 1000 --max-requests-jitter 50 --log-level info --access-logfile - --error-logfile -
 
-# Background worker for Celery tasks (optional - scale separately)
+# Background worker for Celery tasks (REQUIRED for message processing)
 
-# Uncomment when using Celery for background processing
+# Windows fix: Use --pool=solo to avoid ValueError on Windows
+worker: celery -A celery_app worker --pool=solo -l info -Q high,default,low
 
-worker: celery -A celery_app worker --loglevel=info --concurrency=2 -Q high,default,low
-
-# Beat scheduler for periodic tasks (REQUIRED for billing lifecycle)
-
-# Runs billing monitor every 10 min, analytics daily, cache warming, etc.
-
+# Beat scheduler for periodic tasks (REQUIRED for outbox processing!)
+# This polls the outbox every 5 seconds to send pending messages
 beat: celery -A celery_app beat --loglevel=info
