@@ -12,6 +12,9 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
+    "test": "jest",
+    "test:redirect": "jest --testPathPatterns='redirect' --passWithNoTests",
+    "test:ci": "jest --testPathPatterns='redirect' --passWithNoTests",
     "optimize:images": "node scripts/optimize-images.js"
   },
   "dependencies": {

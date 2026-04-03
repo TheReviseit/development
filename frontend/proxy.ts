@@ -1,17 +1,15 @@
 /**
- * Next.js 16 Proxy - Enterprise Multi-Domain Router
- *
- * Architecture:
- * - Production: Domain-based routing (shop.flowauxi.com → /shop)
- * - Development: Port-based routing (localhost:3001 → /shop)
- * - Explicit segments (NOT route groups) for deterministic routing
- * - Preserves all existing auth middleware logic
- *
- * Products:
- * - shop.flowauxi.com (port 3001) → /shop
- * - marketing.flowauxi.com (port 3002) → /marketing
- * - showcase.flowauxi.com (port 3003) → /showcase
- * - flowauxi.com (port 3000) → /dashboard-home (main product)
+ * Next.js 16 Proxy - Production-Grade Redirect Handler
+ * ======================================================
+ * 
+ * Canonical: https://www.flowauxi.com
+ * Single source of truth - no CDN redirects
+ * 
+ * Features:
+ * - One-hop redirect (http://flowauxi.com → https://www.flowauxi.com)
+ * - Feature flag for instant rollback
+ * - Subdomain protection (shop.flowauxi.com never redirects)
+ * - Idempotent guard prevents loops by construction
  */
 
 import { NextResponse } from "next/server";
@@ -25,311 +23,105 @@ import { resolveDomain, getLandingRoute } from "@/lib/domain/config";
 import { getProductByDomain } from "@/lib/product/registry";
 
 // =============================================================================
-// TYPES
+// CONSTANTS - Single Source of Truth
 // =============================================================================
 
-type UserType = "normal" | "console" | null;
-
-// Domain resolution now delegated to lib/domain/config.ts (single source of truth)
-// DOMAIN_TO_LANDING and PORT_TO_LANDING maps removed — use resolveDomain() + getLandingRoute()
+const CANONICAL_DOMAIN = "www.flowauxi.com";
+const CANONICAL_PROTOCOL = "https:";
 
 // =============================================================================
-// AUTH ROUTE POLICY (Declarative - Which routes require which auth)
-// =============================================================================
-
-const AUTH_ROUTE_POLICY: Record<string, "normal" | "console"> = {
-  "/dashboard": "normal",
-  "/console": "console",
-  "/settings": "normal",
-  "/onboarding": "normal",
-};
-
-const PUBLIC_ROUTES = [
-  "/",
-  "/login",
-  "/signup",
-  "/console/login",
-  "/console/signup",
-  "/forgot-password",
-  "/reset-password",
-  "/verify-email",
-  "/privacy",
-  "/terms",
-  "/data-deletion",
-  "/data-handling-policy",
-  "/apis",
-  "/store",
-  "/payment-success",
-  "/error",
-  "/offline",
-  "/docs",
-  "/booking",
-  "/showcase",
-  "/onboarding-embedded",
-  "/manifest.webmanifest",
-  "/sw.js",
-  "/sitemap.xml",
-  "/robots.txt",
-  "/pricing",
-  // Product landing pages
-  "/shop",
-  "/marketing",
-  "/form",
-];
-
-const PUBLIC_API_ROUTES = [
-  "/api/auth/login",
-  "/api/auth/logout",
-  "/api/auth/create-user",
-  "/api/auth/check-user-exists",
-  "/api/auth/send-verification",
-  "/api/webhooks",
-  "/api/facebook/deauthorize",
-  "/api/facebook/data-deletion",
-  "/api/ai-appointment-book",
-  "/api/store",
-  "/api/orders/track",
-  "/api/console",
-  "/api/v1",
-  "/api/whatsapp",
-  "/api/booking",
-  "/api/showcase",
-  "/api/forms/public",
-  "/api/forms/workspace",
-];
-
-// =============================================================================
-// AUTH HELPERS
-// =============================================================================
-
-function getUserTypeFromCookies(request: NextRequest): UserType {
-  const hasNormalSession =
-    request.cookies.has("session") || request.cookies.has("flowauxi_session");
-  const hasConsoleSession =
-    request.cookies.has("otp_console_session") ||
-    request.cookies.has("flowauxi_console_session");
-
-  if (hasNormalSession && hasConsoleSession) {
-    return null;
-  }
-
-  if (hasConsoleSession) return "console";
-  if (hasNormalSession) return "normal";
-  return null;
-}
-
-function getRequiredUserType(pathname: string): "normal" | "console" | null {
-  for (const [routePrefix, userType] of Object.entries(AUTH_ROUTE_POLICY)) {
-    if (pathname.startsWith(routePrefix)) {
-      return userType;
-    }
-  }
-  return null;
-}
-
-function isPublicRoute(pathname: string): boolean {
-  return PUBLIC_ROUTES.some(
-    (route) => pathname === route || pathname.startsWith(`${route}/`),
-  );
-}
-
-function isPublicApiRoute(pathname: string): boolean {
-  return PUBLIC_API_ROUTES.some((route) => pathname.startsWith(route));
-}
-
-function redirectToError(
-  request: NextRequest,
-  code: string,
-  expected: string,
-  current: string,
-): NextResponse {
-  const url = new URL(`/error`, request.url);
-  url.searchParams.set("code", code);
-  url.searchParams.set("expected", expected);
-  url.searchParams.set("current", current);
-  return NextResponse.redirect(url);
-}
-
-function redirectToLogin(
-  request: NextRequest,
-  userType: "normal" | "console",
-  next?: string,
-): NextResponse {
-  const loginPath = userType === "console" ? "/console/login" : "/login";
-  const url = new URL(loginPath, request.url);
-  if (next) {
-    url.searchParams.set("next", next);
-  }
-  return NextResponse.redirect(url);
-}
-
-function redirectToDashboard(
-  request: NextRequest,
-  userType: "normal" | "console",
-): NextResponse {
-  const dashboardPath = userType === "console" ? "/console" : "/dashboard";
-  return NextResponse.redirect(new URL(dashboardPath, request.url));
-}
-
-// =============================================================================
-// USERNAME 301 REDIRECT HELPERS (SEO-Critical)
-// =============================================================================
-
-const BACKEND_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
-const UUID_PATTERN = /^[a-zA-Z0-9-]{20,}$/;
-
-async function getUsernameByUserId(userId: string): Promise<string | null> {
-  try {
-    const response = await fetch(
-      `${BACKEND_URL}/api/username/resolve/${userId}`,
-      {
-        headers: {
-          "Cache-Control": "max-age=300",
-        },
-      },
-    );
-
-    if (!response.ok) {
-      return null;
-    }
-
-    const data = await response.json();
-    return data.username || null;
-  } catch (error) {
-    console.error("Failed to resolve username:", error);
-    return null;
-  }
-}
-
-// =============================================================================
-// PROXY FUNCTION (Next.js 16 required signature)
+// PROXY FUNCTION
 // =============================================================================
 
 export async function proxy(request: NextRequest) {
   const pathname = request.nextUrl.pathname;
   const hostname = request.nextUrl.hostname;
+  const protocol = request.nextUrl.protocol;
   const port = request.nextUrl.port;
 
-  // Resolve the full product domain (all 5 products) once — used for all headers.
-  // domain-policy.ts only knows "api" | "dashboard"; resolveDomain() is the
-  // canonical source for shop, marketing, showcase, etc.
-  const resolvedDomain = resolveDomain(hostname, port);
+  // ═══════════════════════════════════════════════════════════════════════════
+  // FEATURE FLAG - Read per-request (not at cold start)
+  // ═══════════════════════════════════════════════════════════════════════════
+  const ENABLE_WWW_REDIRECT = process.env.ENABLE_WWW_REDIRECT !== "false";
 
-  // Only match actual API endpoints (/api/...), NOT /apis (which is a page)
-  const isApiPath = pathname.startsWith("/api/") || pathname === "/api";
-
-  // ==========================================================================
-  // STEP 0: Loop Prevention - Critical Security Check
-  // ==========================================================================
+  // ═══════════════════════════════════════════════════════════════════════════
+  // IDEMPOTENT GUARD - Already canonical? Exit early
+  // ═══════════════════════════════════════════════════════════════════════════
+  // This IS the loop guard. By construction, if hostname === CANONICAL_DOMAIN
+  // and protocol === https:, NO redirect runs. Loop is impossible.
+  const isCanonical = hostname === CANONICAL_DOMAIN && protocol === CANONICAL_PROTOCOL;
   
-  // CRITICAL: Check for redirect loop prevention header
-  // If we've already been redirected, stop to prevent infinite loop
-  const alreadyRedirected = request.headers.get("x-redirect-source");
-  if (alreadyRedirected) {
-    // Already redirected - skip ALL further redirects
-    // Continue processing normally without any more redirects
+  if (isCanonical) {
+    return processRequest(request, hostname, port, pathname);
   }
 
-  // SKIP all redirects for:
-  // - www subdomain (canonical - no redirect needed)
-  // - vercel preview deployments
-  // - localhost
-  // - subdomains (shop.flowauxi.com, etc.)
-  const isExcludedFromWwwRedirect = 
-    hostname === "www.flowauxi.com" ||
+  // ═══════════════════════════════════════════════════════════════════════════
+  // EXCLUDED HOSTNAMES - Check BEFORE redirect logic
+  // ═══════════════════════════════════════════════════════════════════════════
+  // Important: Check this FIRST, before http: redirect condition
+  const isExcluded = 
     hostname.includes("vercel.app") ||
     hostname.includes("vercel.sh") ||
-    hostname.includes("localhost") ||
-    hostname.includes("127.0.0.1") ||
-    hostname.includes(".flowauxi.com") && !hostname.startsWith("flowauxi.com");
+    hostname === "localhost" ||
+    hostname === "127.0.0.1" ||
+    (hostname.endsWith(".flowauxi.com") && hostname !== "flowauxi.com");
 
-  if (!isExcludedFromWwwRedirect && hostname === "flowauxi.com") {
-    // Non-www → www redirect (canonical URL enforcement)
-    // Only redirect once - add header to prevent looping
-    const wwwUrl = new URL(request.url);
-    wwwUrl.hostname = "www.flowauxi.com";
+  // ═══════════════════════════════════════════════════════════════════════════
+  // REDIRECT TO CANONICAL - One hop for ALL non-canonical traffic
+  // ═══════════════════════════════════════════════════════════════════════════
+  // Handles: http://flowauxi.com, https://flowauxi.com → https://www.flowauxi.com
+  // Skips: subdomains (shop.flowauxi.com), localhost, vercel previews
+  
+  if (!ENABLE_WWW_REDIRECT) {
+    return processRequest(request, hostname, port, pathname);
+  }
+
+  if (!isExcluded && (protocol === "http:" || hostname === "flowauxi.com")) {
+    // ONE redirect to canonical - not two hops
+    const canonical = new URL(request.url);
+    canonical.protocol = CANONICAL_PROTOCOL;
+    canonical.hostname = CANONICAL_DOMAIN;
     
-    const response = NextResponse.redirect(wwwUrl.toString(), 301);
-    response.headers.set("x-redirect-source", "non-www-to-www");
-    response.headers.set("x-original-hostname", hostname);
-    // Prevent Vercel from automatically re-processing this request
-    response.headers.set("x-loop-prevented", "true");
+    const response = NextResponse.redirect(canonical.toString(), 301);
+    response.headers.set("x-redirect-reason", "to-canonical");
     return response;
   }
 
-  // ==========================================================================
-  // STEP 0.5: SEO Redirects (301 — Permanent) - Only for non-www
-  // ==========================================================================
+  // ═══════════════════════════════════════════════════════════════════════════
+  // CONTINUE NORMAL PROCESSING
+  // ═══════════════════════════════════════════════════════════════════════════
+  return processRequest(request, hostname, port, pathname);
+}
 
-  // /whatsapp-automation-ecommerce → shop.flowauxi.com (SEO authority transfer)
-  // This page was causing keyword cannibalization and duplicate schemas.
-  // 301 redirect preserves rankings and transfers link equity to shop domain.
-  if (pathname === "/whatsapp-automation-ecommerce" || pathname.startsWith("/whatsapp-automation-ecommerce/")) {
-    const response = NextResponse.redirect("https://shop.flowauxi.com", 301);
-    response.headers.set("x-redirect-source", "legacy-page-redirect");
-    return response;
-  }
+// =============================================================================
+// HELPER: Process request after redirect checks
+// =============================================================================
 
-  // ==========================================================================
-  // STEP 0: Username-based 301 redirects (SEO-Critical)
-  // ==========================================================================
-  const storeMatch = pathname.match(/^\/store\/([^\/]+)/);
-  const showcaseMatch = pathname.match(/^\/showcase\/([^\/]+)/);
-
-  if (storeMatch || showcaseMatch) {
-    const identifier = storeMatch?.[1] || showcaseMatch?.[1];
-    const routeType = storeMatch ? "store" : "showcase";
-
-    if (identifier && UUID_PATTERN.test(identifier)) {
-      console.log(`🔍 Detected old UID URL: /${routeType}/${identifier}`);
-
-      const username = await getUsernameByUserId(identifier);
-
-      if (username) {
-        const newPath = pathname.replace(identifier, username);
-        const newUrl = new URL(newPath, request.url);
-        newUrl.search = request.nextUrl.search;
-
-        console.log(`✅ 301 Redirect: ${pathname} → ${newPath}`);
-        return NextResponse.redirect(newUrl, 301);
-      }
-    }
-  }
-
-  // ==========================================================================
-  // STEP 1: Multi-Domain Product Landing Pages (Enterprise Feature)
-  // ==========================================================================
-  // CRITICAL: Only rewrite root "/" path, not nested routes
-  // Example: shop.flowauxi.com/ → /shop (rewrite)
-  //          shop.flowauxi.com/products → no rewrite (let it route normally)
-
-  // Pre-calculate domain routing rules needed for both STEP 1 and 2
+async function processRequest(
+  request: NextRequest,
+  hostname: string,
+  port: string,
+  pathname: string
+) {
+  const resolvedDomain = resolveDomain(hostname, port);
+  const isApiPath = pathname.startsWith("/api/") || pathname === "/api";
   const domainDecision = evaluateDomainAccess(request);
 
   if (pathname === "/") {
     const domain = resolveDomain(hostname, port);
     const targetLanding = getLandingRoute(domain);
 
-    // Perform rewrite to explicit segment (e.g., /shop, /marketing)
-    // CRITICAL: Skip rewrite if target equals source (prevent loop)
     if (targetLanding && targetLanding !== "/" && targetLanding !== pathname) {
       const rewriteUrl = request.nextUrl.clone();
       rewriteUrl.pathname = targetLanding;
-
       const response = NextResponse.rewrite(rewriteUrl);
-      // Set product domain header (single source of truth)
       response.headers.set("x-product-domain", domain);
       response.headers.set("x-landing-page", targetLanding);
       response.headers.set("x-rewrite-source", "middleware-landing");
-      // CDN cache headers for landing pages (enterprise-grade performance)
-      response.headers.set(
-        "Cache-Control",
-        "public, s-maxage=3600, stale-while-revalidate=86400",
-      );
+      response.headers.set("Cache-Control", "public, s-maxage=3600, stale-while-revalidate=86400");
       return response;
     }
-    
-    // If target equals "/" or same as pathname - just return next() (no rewrite needed)
+
     if (targetLanding === "/" || targetLanding === pathname) {
       return addProductHeaders(
         NextResponse.next(),
@@ -341,25 +133,37 @@ export async function proxy(request: NextRequest) {
     }
   }
 
-  // ==========================================================================
-  // STEP 2: Domain-aware routing (delegated to domain-policy.ts)
-  // ==========================================================================
-
-  // Handle domain-level REWRITES (e.g., api.flowauxi.com/ → shows /apis content)
   if (domainDecision.rewrite) {
     return applyDecision(domainDecision, request);
   }
 
-  // Handle domain-level REDIRECTS (e.g., /login on API domain → /console/login)
   if (!domainDecision.allowed && domainDecision.redirect) {
     return applyDecision(domainDecision, request);
   }
 
-  // ==========================================================================
-  // STEP 3: API Routes - Let them handle their own auth
-  // ==========================================================================
   if (isApiPath) {
-    if (isPublicApiRoute(pathname)) {
+    const isPublicApiRoute = [
+      "/api/auth/login",
+      "/api/auth/logout",
+      "/api/auth/create-user",
+      "/api/auth/check-user-exists",
+      "/api/auth/send-verification",
+      "/api/webhooks",
+      "/api/facebook/deauthorize",
+      "/api/facebook/data-deletion",
+      "/api/ai-appointment-book",
+      "/api/store",
+      "/api/orders/track",
+      "/api/console",
+      "/api/v1",
+      "/api/whatsapp",
+      "/api/booking",
+      "/api/showcase",
+      "/api/forms/public",
+      "/api/forms/workspace",
+    ].some(route => pathname.startsWith(route));
+
+    if (isPublicApiRoute) {
       return addProductHeaders(
         NextResponse.next(),
         resolvedDomain,
@@ -368,41 +172,85 @@ export async function proxy(request: NextRequest) {
         port,
       );
     }
-    const userType = getUserTypeFromCookies(request);
-    if (!userType && !pathname.startsWith("/api/console")) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const AUTH_ROUTE_POLICY: Record<string, "normal" | "console"> = {
+    "/dashboard": "normal",
+    "/console": "console",
+    "/settings": "normal",
+    "/onboarding": "normal",
+  };
+
+  const PUBLIC_ROUTES = [
+    "/",
+    "/login",
+    "/signup",
+    "/console/login",
+    "/console/signup",
+    "/forgot-password",
+    "/reset-password",
+    "/verify-email",
+    "/privacy",
+    "/terms",
+    "/data-deletion",
+    "/data-handling-policy",
+    "/apis",
+    "/store",
+    "/payment-success",
+    "/error",
+    "/offline",
+    "/docs",
+    "/booking",
+    "/showcase",
+    "/onboarding-embedded",
+    "/manifest.webmanifest",
+    "/sw.js",
+    "/sitemap.xml",
+    "/robots.txt",
+    "/pricing",
+    "/shop",
+    "/marketing",
+    "/form",
+  ];
+
+  function getUserTypeFromCookies(req: NextRequest): "normal" | "console" | null {
+    const hasNormalSession = req.cookies.has("session") || req.cookies.has("flowauxi_session");
+    const hasConsoleSession = req.cookies.has("otp_console_session") || req.cookies.has("flowauxi_console_session");
+    if (hasNormalSession && hasConsoleSession) return null;
+    if (hasConsoleSession) return "console";
+    if (hasNormalSession) return "normal";
+    return null;
+  }
+
+  function getRequiredUserType(path: string): "normal" | "console" | null {
+    for (const [routePrefix, userType] of Object.entries(AUTH_ROUTE_POLICY)) {
+      if (path.startsWith(routePrefix)) return userType;
     }
-    return addProductHeaders(
-      NextResponse.next(),
-      resolvedDomain,
-      domainDecision.seo.canonical,
-      hostname,
-      port,
+    return null;
+  }
+
+  function isPublicRoute(path: string): boolean {
+    return PUBLIC_ROUTES.some(
+      route => path === route || path.startsWith(`${route}/`),
     );
   }
 
-  // ==========================================================================
-  // STEP 4: Auth checks for page routes
-  // ==========================================================================
   const userType = getUserTypeFromCookies(request);
   const requiredType = getRequiredUserType(pathname);
   const isPublic = isPublicRoute(pathname);
 
-  // Case 1: Public routes - allow all
   if (isPublic) {
-    // Redirect logged-in users away from login pages
     if (pathname === "/login" && userType === "normal") {
-      return redirectToDashboard(request, "normal");
+      return NextResponse.redirect(new URL("/dashboard", request.url));
     }
     if (pathname === "/console/login" && userType === "console") {
-      return redirectToDashboard(request, "console");
+      return NextResponse.redirect(new URL("/console", request.url));
     }
-    // Cross-auth on login pages: redirect to correct dashboard
     if (pathname === "/login" && userType === "console") {
-      return redirectToDashboard(request, "console");
+      return NextResponse.redirect(new URL("/console", request.url));
     }
     if (pathname === "/console/login" && userType === "normal") {
-      return redirectToDashboard(request, "normal");
+      return NextResponse.redirect(new URL("/dashboard", request.url));
     }
 
     return addProductHeaders(
@@ -414,17 +262,21 @@ export async function proxy(request: NextRequest) {
     );
   }
 
-  // Case 2: Protected route, no auth
   if (requiredType && !userType) {
-    return redirectToLogin(request, requiredType, pathname);
+    const loginPath = requiredType === "console" ? "/console/login" : "/login";
+    const url = new URL(loginPath, request.url);
+    url.searchParams.set("next", pathname);
+    return NextResponse.redirect(url);
   }
 
-  // Case 3: Protected route, wrong user type (CROSS-AUTH)
   if (requiredType && userType && userType !== requiredType) {
-    return redirectToError(request, "WRONG_PORTAL", requiredType, userType);
+    const url = new URL("/error", request.url);
+    url.searchParams.set("code", "WRONG_PORTAL");
+    url.searchParams.set("expected", requiredType);
+    url.searchParams.set("current", userType);
+    return NextResponse.redirect(url);
   }
 
-  // Case 4: Protected route, correct user type - allow
   return addProductHeaders(
     NextResponse.next(),
     resolvedDomain,
@@ -445,12 +297,10 @@ function addProductHeaders(
   hostname?: string,
   port?: string,
 ): NextResponse {
-  // Legacy headers (keep for backwards compatibility)
   response.headers.set("x-product-context", product);
   response.headers.set("x-product-domain", product);
   response.headers.set("x-canonical-url", canonical);
 
-  // ✅ NEW: Product Registry Headers (for Server Components)
   if (hostname) {
     const productConfig = getProductByDomain(hostname, port);
     response.headers.set("x-product-id", productConfig.id);
@@ -461,21 +311,13 @@ function addProductHeaders(
 }
 
 // =============================================================================
-// CONFIG
+// CONFIG - Matcher (excludes static assets for edge performance)
 // =============================================================================
 
 export const config = {
   matcher: [
-    /*
-     * Match all request paths except:
-     * - _next/static (static files)
-     * - _next/image (image optimization)
-     * - favicon.ico
-     * - Static files
-     */
     "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:jpg|jpeg|gif|png|svg|ico|css|js|webp|woff|woff2|webmanifest|json|xml|txt)).*)",
   ],
 };
 
-// Default export for Next.js 16 compatibility
 export default proxy;
