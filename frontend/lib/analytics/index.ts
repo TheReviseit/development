@@ -386,6 +386,7 @@ export {
   checkCrossDomain,
   getDebugReport,
   printValidation,
+  validateEvent,
 } from "./validation";
 export type { ValidationResult, ValidationCheck } from "./validation";
 

@@ -108,6 +108,8 @@ const nextConfig: NextConfig = {
         destination: "https://shop.flowauxi.com",
         permanent: true, // 301 - tells Google this is a permanent move
       },
+      // FIXED: Removed duplicate redirect from middleware
+      // The non-www -> www redirect is now handled ONLY in proxy.ts
     ];
   },
 

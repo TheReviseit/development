@@ -219,23 +219,55 @@ export async function proxy(request: NextRequest) {
   const isApiPath = pathname.startsWith("/api/") || pathname === "/api";
 
   // ==========================================================================
-  // STEP 0.5: SEO Redirects (301 — Permanent)
+  // STEP 0: Loop Prevention - Critical Security Check
   // ==========================================================================
+  
+  // CRITICAL: Check for redirect loop prevention header
+  // If we've already been redirected, stop to prevent infinite loop
+  const alreadyRedirected = request.headers.get("x-redirect-source");
+  if (alreadyRedirected) {
+    // Already redirected - skip ALL further redirects
+    // Continue processing normally without any more redirects
+  }
 
-  // Non-www → www redirect (canonical URL enforcement)
-  // Google treats flowauxi.com and www.flowauxi.com as different URLs.
-  // This 301 redirect consolidates SEO authority to www.flowauxi.com.
-  if (hostname === "flowauxi.com") {
+  // SKIP all redirects for:
+  // - www subdomain (canonical - no redirect needed)
+  // - vercel preview deployments
+  // - localhost
+  // - subdomains (shop.flowauxi.com, etc.)
+  const isExcludedFromWwwRedirect = 
+    hostname === "www.flowauxi.com" ||
+    hostname.includes("vercel.app") ||
+    hostname.includes("vercel.sh") ||
+    hostname.includes("localhost") ||
+    hostname.includes("127.0.0.1") ||
+    hostname.includes(".flowauxi.com") && !hostname.startsWith("flowauxi.com");
+
+  if (!isExcludedFromWwwRedirect && hostname === "flowauxi.com") {
+    // Non-www → www redirect (canonical URL enforcement)
+    // Only redirect once - add header to prevent looping
     const wwwUrl = new URL(request.url);
     wwwUrl.hostname = "www.flowauxi.com";
-    return NextResponse.redirect(wwwUrl.toString(), 301);
+    
+    const response = NextResponse.redirect(wwwUrl.toString(), 301);
+    response.headers.set("x-redirect-source", "non-www-to-www");
+    response.headers.set("x-original-hostname", hostname);
+    // Prevent Vercel from automatically re-processing this request
+    response.headers.set("x-loop-prevented", "true");
+    return response;
   }
+
+  // ==========================================================================
+  // STEP 0.5: SEO Redirects (301 — Permanent) - Only for non-www
+  // ==========================================================================
 
   // /whatsapp-automation-ecommerce → shop.flowauxi.com (SEO authority transfer)
   // This page was causing keyword cannibalization and duplicate schemas.
   // 301 redirect preserves rankings and transfers link equity to shop domain.
   if (pathname === "/whatsapp-automation-ecommerce" || pathname.startsWith("/whatsapp-automation-ecommerce/")) {
-    return NextResponse.redirect("https://shop.flowauxi.com", 301);
+    const response = NextResponse.redirect("https://shop.flowauxi.com", 301);
+    response.headers.set("x-redirect-source", "legacy-page-redirect");
+    return response;
   }
 
   // ==========================================================================
@@ -271,12 +303,16 @@ export async function proxy(request: NextRequest) {
   // Example: shop.flowauxi.com/ → /shop (rewrite)
   //          shop.flowauxi.com/products → no rewrite (let it route normally)
 
+  // Pre-calculate domain routing rules needed for both STEP 1 and 2
+  const domainDecision = evaluateDomainAccess(request);
+
   if (pathname === "/") {
     const domain = resolveDomain(hostname, port);
     const targetLanding = getLandingRoute(domain);
 
     // Perform rewrite to explicit segment (e.g., /shop, /marketing)
-    if (targetLanding && targetLanding !== "/") {
+    // CRITICAL: Skip rewrite if target equals source (prevent loop)
+    if (targetLanding && targetLanding !== "/" && targetLanding !== pathname) {
       const rewriteUrl = request.nextUrl.clone();
       rewriteUrl.pathname = targetLanding;
 
@@ -284,6 +320,7 @@ export async function proxy(request: NextRequest) {
       // Set product domain header (single source of truth)
       response.headers.set("x-product-domain", domain);
       response.headers.set("x-landing-page", targetLanding);
+      response.headers.set("x-rewrite-source", "middleware-landing");
       // CDN cache headers for landing pages (enterprise-grade performance)
       response.headers.set(
         "Cache-Control",
@@ -291,12 +328,22 @@ export async function proxy(request: NextRequest) {
       );
       return response;
     }
+    
+    // If target equals "/" or same as pathname - just return next() (no rewrite needed)
+    if (targetLanding === "/" || targetLanding === pathname) {
+      return addProductHeaders(
+        NextResponse.next(),
+        resolvedDomain,
+        domainDecision.seo.canonical,
+        hostname,
+        port,
+      );
+    }
   }
 
   // ==========================================================================
   // STEP 2: Domain-aware routing (delegated to domain-policy.ts)
   // ==========================================================================
-  const domainDecision = evaluateDomainAccess(request);
 
   // Handle domain-level REWRITES (e.g., api.flowauxi.com/ → shows /apis content)
   if (domainDecision.rewrite) {

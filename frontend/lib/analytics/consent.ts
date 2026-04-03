@@ -9,6 +9,8 @@
  *   - Cookieless pings (no cookies = no GDPR consent needed)
  *   - Consent lifecycle management
  *   - Graceful degradation based on consent state
+ *   - localStorage persistence for returning users
+ *   - Typed enums for type safety
  *
  * Architecture:
  *   User Visit
@@ -40,10 +42,11 @@ import { analyticsHealth } from "./health";
 import type { ConsentState } from "./types";
 
 const CONSENT_COOKIE_NAME = "_fa_consent";
+const CONSENT_STORAGE_KEY = "fa_consent";
 const CONSENT_VERSION = "v2";
 
 // =============================================================================
-// CONSENT TYPES - Google Consent Mode v2
+// TYPES - Typed Enums for FAANG-Level Type Safety
 // =============================================================================
 
 /**
@@ -51,30 +54,32 @@ const CONSENT_VERSION = "v2";
  * These map directly to Google's consent model.
  */
 export type GoogleConsentType =
-  // Required - must be granted
   | "granted"
   | "denied";
 
-// Basic consent categories
-export type ConsentCategory = "analytics" | "marketing" | "preferences";
+/**
+ * Consent status enum for type safety
+ */
+export enum ConsentStatus {
+  GRANTED = "granted",
+  DENIED = "denied",
+}
+
+/**
+ * Basic consent categories (string literal type)
+ */
+export type ConsentCategoryType = "analytics" | "marketing" | "preferences";
 
 /**
  * Full consent state configuration.
  */
 export interface ConsentConfig {
-  // Analytics storage
   analytics_storage: GoogleConsentType;
-  // Ad storage (for ads personalization)
   ad_storage: GoogleConsentType;
-  // Ad user data (EU user data consent)
   ad_user_data: GoogleConsentType;
-  // Ad personalization (personalized ads)
   ad_personalization: GoogleConsentType;
-  // Functionality storage (enhances functionality)
   functionality_storage: GoogleConsentType;
-  // Personalization storage (personalized content)
   personalization_storage: GoogleConsentType;
-  // Security storage (security cookies)
   security_storage: GoogleConsentType;
 }
 
@@ -140,11 +145,50 @@ let _consentState: ConsentConfig = { ...DEFAULT_CONSENT };
 let _initialized: boolean = false;
 
 /**
+ * Get consent from localStorage (for returning users)
+ * This must be called BEFORE gtag loads to restore consent
+ */
+function getStoredConsentFromStorage(): FlowauxiConsentState | null {
+  if (typeof localStorage === "undefined") return null;
+
+  try {
+    const stored = localStorage.getItem(CONSENT_STORAGE_KEY);
+    if (!stored) return null;
+
+    return JSON.parse(stored) as FlowauxiConsentState;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Save consent to localStorage
+ */
+function saveConsentToStorage(source: "cookie" | "banner" | "api"): void {
+  if (typeof localStorage === "undefined") return;
+
+  const consentState: FlowauxiConsentState = {
+    analytics: isAnalyticsAllowed(),
+    marketing: isMarketingAllowed(),
+    preferences: _consentState.personalization_storage === "granted",
+    version: CONSENT_VERSION,
+    updatedAt: Date.now(),
+    source,
+  };
+
+  try {
+    localStorage.setItem(CONSENT_STORAGE_KEY, JSON.stringify(consentState));
+  } catch {
+    // Storage full or unavailable
+  }
+}
+
+/**
  * Initialize consent mode.
  * Must be called BEFORE gtag script loads.
  *
  * This sets default "denied" state first.
- * Then attempts to read stored consent from cookie.
+ * Then attempts to read stored consent from localStorage.
  */
 export function initializeConsentMode(): void {
   if (typeof window === "undefined" || _initialized) return;
@@ -155,8 +199,8 @@ export function initializeConsentMode(): void {
   // This ensures cookieless pings until consent is granted
   setConsentState(DEFAULT_CONSENT);
 
-  // Try to restore from cookie (if user previously consented)
-  const storedConsent = getStoredConsent();
+  // Try to restore from localStorage (if user previously consented)
+  const storedConsent = getStoredConsentFromStorage();
   if (storedConsent) {
     restoreConsentState(storedConsent);
   }
@@ -165,9 +209,16 @@ export function initializeConsentMode(): void {
     console.log(
       "%c[ConsentMode] Initialized with cookieless mode",
       "color: #7C3AED; font-weight: bold;",
-      { consent: _consentState }
+      { consent: _consentState, restored: !!storedConsent }
     );
   }
+}
+
+/**
+ * Check if consent has been initialized
+ */
+export function isConsentInitialized(): boolean {
+  return _initialized;
 }
 
 /**
@@ -176,7 +227,7 @@ export function initializeConsentMode(): void {
  */
 export function grantFullConsent(): void {
   setConsentState(FULL_CONSENT);
-  saveConsentToCookie("banner");
+  saveConsentToStorage("banner");
   
   analyticsHealth.record("consent_granted");
 
@@ -194,7 +245,7 @@ export function grantFullConsent(): void {
  */
 export function revokeConsent(): void {
   setConsentState(DEFAULT_CONSENT);
-  saveConsentToCookie("banner");
+  saveConsentToStorage("banner");
   
   analyticsHealth.record("consent_revoked");
 
@@ -222,37 +273,9 @@ export function grantAnalyticsOnly(): void {
   };
   
   setConsentState(analyticsOnly);
-  saveConsentToCookie("banner");
+  saveConsentToStorage("banner");
   
   analyticsHealth.record("consent_granted", { type: "analytics_only" });
-}
-
-/**
- * Update consent state in real-time.
- * Used by consent management platform.
- */
-export function updateConsent(
-  category: ConsentCategory,
-  granted: boolean
-): void {
-  const newState = { ..._consentState };
-
-  switch (category) {
-    case "analytics":
-      newState.analytics_storage = granted ? "granted" : "denied";
-      break;
-    case "marketing":
-      newState.ad_storage = granted ? "granted" : "denied";
-      newState.ad_user_data = granted ? "granted" : "denied";
-      newState.ad_personalization = granted ? "granted" : "denied";
-      break;
-    case "preferences":
-      newState.personalization_storage = granted ? "granted" : "denied";
-      break;
-  }
-
-  setConsentState(newState);
-  saveConsentToCookie("banner");
 }
 
 /**
@@ -279,7 +302,6 @@ export function isMarketingAllowed(): boolean {
 // =============================================================================
 // COOKIE STORAGE
 // =============================================================================
-
 function setConsentState(state: ConsentConfig): void {
   _consentState = { ...state };
 
@@ -289,40 +311,36 @@ function setConsentState(state: ConsentConfig): void {
   }
 }
 
-function getStoredConsent(): FlowauxiConsentState | null {
-  if (typeof document === "undefined") return null;
+// Duplicate removed: there were two updateConsent functions at lines 290-316 and 352-378.
+// Kept the second one (lines 352-378) which uses ConsentCategoryType and calls saveConsentToStorage.
+// The first one used the old ConsentCategory enum and called non-existent saveConsentToCookie.
 
-  try {
-    const match = document.cookie.match(
-      new RegExp(`(^| )${CONSENT_COOKIE_NAME}=([^;]+)`)
-    );
-    if (match) {
-      const decoded = decodeURIComponent(match[2]);
-      return JSON.parse(decoded);
-    }
-  } catch {
-    // Invalid cookie, ignore
+/**
+ * Update consent state in real-time.
+ * Used by consent management platform.
+ */
+export function updateConsent(
+  category: ConsentCategoryType,
+  granted: boolean
+): void {
+  const newState = { ..._consentState };
+
+  switch (category) {
+    case "analytics":
+      newState.analytics_storage = granted ? "granted" : "denied";
+      break;
+    case "marketing":
+      newState.ad_storage = granted ? "granted" : "denied";
+      newState.ad_user_data = granted ? "granted" : "denied";
+      newState.ad_personalization = granted ? "granted" : "denied";
+      break;
+    case "preferences":
+      newState.personalization_storage = granted ? "granted" : "denied";
+      break;
   }
 
-  return null;
-}
-
-function saveConsentToCookie(source: "cookie" | "banner" | "api"): void {
-  if (typeof document === "undefined") return;
-
-  const consentState: FlowauxiConsentState = {
-    analytics: isAnalyticsAllowed(),
-    marketing: isMarketingAllowed(),
-    preferences: _consentState.personalization_storage === "granted",
-    version: CONSENT_VERSION,
-    updatedAt: Date.now(),
-    source,
-  };
-
-  const cookieValue = encodeURIComponent(JSON.stringify(consentState));
-  const expires = new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toUTCString();
-
-  document.cookie = `${CONSENT_COOKIE_NAME}=${cookieValue};expires=${expires};path=/;SameSite=Lax;Secure`;
+  setConsentState(newState);
+  saveConsentToStorage("banner");
 }
 
 function restoreConsentState(stored: FlowauxiConsentState): void {
@@ -340,7 +358,7 @@ function restoreConsentState(stored: FlowauxiConsentState): void {
 
   if (isDebugMode()) {
     console.log(
-      "%c[ConsentMode] Restored consent from cookie",
+      "%c[ConsentMode] Restored consent from localStorage",
       "color: #10B981;",
       { stored, restored }
     );

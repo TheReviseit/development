@@ -6,7 +6,7 @@
  * Use these in browser console or automated tests.
  *
  * Usage:
- *   import { validateAnalytics, checkCrossDomain, getDebugReport } from './validation';
+ *   import { validateAnalytics, checkCrossDomain, getDebugReport, validateEvent } from './validation';
  *
  * Or in browser console:
  *   window.validateAnalytics()
@@ -17,6 +17,8 @@ import { getDataLayerContents, getDataLayerEventCount } from "./dataLayer";
 import { getClientId, isClientIdInitialized } from "./clientId";
 import { getQueueSize, hasQueuedEvents } from "./fallbackQueue";
 import { isDebugMode } from "./config";
+import type { AnalyticsEvent } from "./events";
+import { isValidEventName } from "./events";
 
 export interface ValidationResult {
   passed: boolean;
@@ -29,6 +31,89 @@ export interface ValidationCheck {
   status: "pass" | "fail" | "warning";
   message: string;
   details?: unknown;
+}
+
+// =============================================================================
+// EVENT VALIDATION - FAANG-Level Type Safety
+// =============================================================================
+
+/**
+ * Validate an analytics event against the schema.
+ * Throws in development if event is invalid.
+ * 
+ * This ensures no garbage data reaches GA4.
+ * 
+ * @param event - The event to validate
+ * @throws Error in development if event is invalid
+ */
+export function validateEvent(event: AnalyticsEvent): void {
+  // Always run validation in development
+  if (process.env.NODE_ENV === "development") {
+    // Validate event name
+    if (!isValidEventName(event.name)) {
+      const error = new Error(
+        `[Analytics:Validation] Invalid event name: "${event.name}". ` +
+        `Event must be defined in lib/analytics/events.ts. ` +
+        `Use a valid GA4 event or add to AnalyticsEvent union type.`
+      );
+      console.error(error);
+      throw error;
+    }
+
+    // Validate required params for specific events
+    const requiredParamsValidation = validateRequiredParams(event);
+    if (!requiredParamsValidation.valid) {
+      const error = new Error(
+        `[Analytics:Validation] Missing required params for "${event.name}": ` +
+        `${requiredParamsValidation.missing.join(", ")}`
+      );
+      console.error(error);
+      throw error;
+    }
+
+    if (isDebugMode()) {
+      console.log(
+        `%c[Analytics:Validation] Event valid: ${event.name}`,
+        "color: #10B981;"
+      );
+    }
+  }
+}
+
+/**
+ * Validate required parameters for specific events
+ */
+function validateRequiredParams(event: AnalyticsEvent): { valid: boolean; missing: string[] } {
+  const missing: string[] = [];
+  
+  // Purchase requires transaction_id, value, currency, items
+  if (event.name === "purchase") {
+    if (!event.params.transaction_id) missing.push("transaction_id");
+    if (!event.params.value) missing.push("value");
+    if (!event.params.currency) missing.push("currency");
+    if (!event.params.items) missing.push("items");
+  }
+  
+  // begin_checkout requires value, currency, items
+  if (event.name === "begin_checkout") {
+    if (!event.params.value) missing.push("value");
+    if (!event.params.currency) missing.push("currency");
+    if (!event.params.items) missing.push("items");
+  }
+  
+  // add_to_cart requires value, currency, items
+  if (event.name === "add_to_cart") {
+    if (!event.params.value) missing.push("value");
+    if (!event.params.currency) missing.push("currency");
+    if (!event.params.items) missing.push("items");
+  }
+  
+  // login/signup require method
+  if (event.name === "login" || event.name === "signup") {
+    if (!event.params.method) missing.push("method");
+  }
+  
+  return { valid: missing.length === 0, missing };
 }
 
 /**

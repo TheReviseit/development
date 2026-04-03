@@ -12,8 +12,13 @@
  *   3. Listens for consent changes and updates gtag consent state
  *   4. Manages client ID lifecycle (_fa_client_id)
  *   5. Handles fallback queue for ad-blocker bypass
- *   6. Automatically tracks pageviews on route changes
+ *   6. Automatically tracks pageviews on route changes (ALWAYS - cookieless works!)
  *   7. On consent REVOKE: clears queue, resets client ID, stops tracking
+ *
+ * CRITICAL: Pageview tracking works REGARDLESS of consent state.
+ * When consent is denied, GA4 sends "cookieless pings" - anonymous events
+ * without cookies or client_id persistence. This ensures we track users
+ * even before they accept/reject cookies.
  *
  * Mount this component ONCE in the root layout.
  *
@@ -75,21 +80,45 @@ export function AnalyticsProvider() {
       if (success) {
         initializedRef.current = true;
 
+        // Check if consent was already restored by GtagScript
+        const restoredConsent = (window as Window & { __fa_consent_restored?: { analytics: boolean; marketing: boolean; preferences: boolean } }).__fa_consent_restored;
+        
+        // Also check cookie consent preferences
         const preferences = getConsentPreferences();
-        if (preferences?.analytics) {
+        
+        // Use either restored consent from localStorage OR cookie preferences
+        const hasAnalyticsConsent = restoredConsent?.analytics || preferences?.analytics;
+        
+        if (hasAnalyticsConsent) {
           consentGrantedRef.current = true;
           initializeClientId();
           incrementConsentVersion();
 
-          gtagUpdateConsent(true, preferences.marketing);
+          const marketingConsent = restoredConsent?.marketing || preferences?.marketing;
+          gtagUpdateConsent(true, marketingConsent);
 
           handleConsentChange({
-            analytics: preferences.analytics,
-            marketing: preferences.marketing,
-            preferences: preferences.preferences,
+            analytics: true,
+            marketing: marketingConsent || false,
+            preferences: restoredConsent?.preferences || preferences?.preferences || false,
           });
 
           drainQueue();
+
+          if (isDebugMode()) {
+            console.log(
+              "%c[Analytics:Provider] Consent active, queue draining",
+              "color: #10B981;"
+            );
+          }
+        } else {
+          // Still initialize but without full consent - cookieless mode will work
+          if (isDebugMode()) {
+            console.log(
+              "%c[Analytics:Provider] Cookieless mode (no consent yet)",
+              "color: #F59E0B;"
+            );
+          }
         }
       }
     }
@@ -144,13 +173,18 @@ export function AnalyticsProvider() {
   }, []);
 
   useEffect(() => {
-    if (!initializedRef.current || !consentGrantedRef.current) return;
+    // Track pageviews REGARDLESS of consent state
+    // This ensures cookieless pings work from the start
+    // GA4 sends anonymous pings when consent is denied
+    if (!initializedRef.current) return;
 
     const search = searchParams?.toString();
     const url = search ? `${pathname}?${search}` : pathname;
 
     if (previousPathRef.current === null) {
+      // First pageview - track immediately on mount
       previousPathRef.current = url;
+      trackPageview(url, document.title);
       return;
     }
 

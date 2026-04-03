@@ -9,9 +9,14 @@
  *   - requestIdleCallback + setTimeout fallback (non-blocking)
  *   - Batch sending (max 25 events per request - GA4 MP limit)
  *   - Exponential backoff on failures
- *   - Circuit breaker (pause after 5 consecutive failures for 60s)
+ *   - Three-state circuit breaker (closed/open/half-open)
  *   - De-duplication via timestamp_micros + trace_id
  *   - localStorage persistence with size limit
+ *
+ * Circuit Breaker States:
+ *   - CLOSED: Normal operation, requests go through
+ *   - OPEN: Too many failures, reject requests, try again after timeout
+ *   - HALF_OPEN: Test if service recovered, allow limited requests
  *
  * Architecture:
  *   Event → Check gtag health → if blocked → Queue → Drain to /api/analytics/collect
@@ -49,8 +54,21 @@ export interface QueuedEvent {
   consent_version?: number;
 }
 
-interface CircuitBreakerState {
+/**
+ * Three-state circuit breaker enum
+ */
+export enum CircuitBreakerState {
+  CLOSED = "closed",    // Normal operation
+  OPEN = "open",        // Failing, reject requests
+  HALF_OPEN = "half-open"  // Testing if service recovered
+}
+
+/** Circuit breaker state with timestamps */
+interface CircuitBreaker {
+  state: CircuitBreakerState;
   failures: number;
+  successes: number;
+  lastFailureTime: number;
   openUntil: number;
 }
 
@@ -59,8 +77,11 @@ interface CircuitBreakerState {
 // =============================================================================
 
 let _queue: QueuedEvent[] = [];
-let _circuitBreaker: CircuitBreakerState = {
+let _circuitBreaker: CircuitBreaker = {
+  state: CircuitBreakerState.CLOSED,
   failures: 0,
+  successes: 0,
+  lastFailureTime: 0,
   openUntil: 0,
 };
 let _draining: boolean = false;
@@ -110,34 +131,121 @@ function saveQueueToStorage(): void {
   }
 }
 
-function isCircuitBreakerOpen(): boolean {
-  if (_circuitBreaker.failures >= CIRCUIT_BREAKER_THRESHOLD) {
-    if (Date.now() < _circuitBreaker.openUntil) {
+// =============================================================================
+// THREE-STATE CIRCUIT BREAKER
+// =============================================================================
+
+/**
+ * Check if circuit breaker allows requests
+ * Returns true if requests should be allowed
+ */
+function isCircuitBreakerAllowingRequests(): boolean {
+  const now = Date.now();
+  
+  switch (_circuitBreaker.state) {
+    case CircuitBreakerState.CLOSED:
+      // Normal operation - allow requests
       return true;
-    }
-    resetCircuitBreaker();
+      
+    case CircuitBreakerState.OPEN:
+      // Check if timeout has passed to transition to half-open
+      if (now >= _circuitBreaker.openUntil) {
+        _circuitBreaker.state = CircuitBreakerState.HALF_OPEN;
+        _circuitBreaker.successes = 0;
+        
+        if (isDebugMode()) {
+          console.log(
+            "%c[Analytics:FallbackQueue] Circuit breaker: OPEN → HALF_OPEN",
+            "color: #F59E0B; font-weight: bold;"
+          );
+        }
+        return true; // Allow one request to test
+      }
+      // Still open - reject requests
+      return false;
+      
+    case CircuitBreakerState.HALF_OPEN:
+      // Allow limited requests in half-open state
+      return true;
   }
-  return false;
 }
 
+/**
+ * Record a successful request - transitions circuit breaker toward closed
+ */
+function recordCircuitBreakerSuccess(): void {
+  if (_circuitBreaker.state === CircuitBreakerState.HALF_OPEN) {
+    _circuitBreaker.successes += 1;
+    
+    // 1 successful request in half-open transitions to closed
+    if (_circuitBreaker.successes >= 1) {
+      _circuitBreaker.state = CircuitBreakerState.CLOSED;
+      _circuitBreaker.failures = 0;
+      _circuitBreaker.openUntil = 0;
+      
+      if (isDebugMode()) {
+        console.log(
+          "%c[Analytics:FallbackQueue] Circuit breaker: HALF_OPEN → CLOSED",
+          "color: #10B981; font-weight: bold;"
+        );
+      }
+    }
+  }
+}
+
+/**
+ * Record a failed request - transitions circuit breaker toward open
+ */
 function recordCircuitBreakerFailure(): void {
   _circuitBreaker.failures += 1;
-  if (_circuitBreaker.failures >= CIRCUIT_BREAKER_THRESHOLD) {
+  _circuitBreaker.lastFailureTime = Date.now();
+  
+  if (_circuitBreaker.state === CircuitBreakerState.HALF_OPEN) {
+    // Any failure in half-open immediately opens
+    _circuitBreaker.state = CircuitBreakerState.OPEN;
     _circuitBreaker.openUntil = Date.now() + CIRCUIT_BREAKER_DURATION;
-
+    
     if (isDebugMode()) {
-      console.warn(
-        "%c[Analytics:FallbackQueue] Circuit breaker OPEN",
-        "color: #EF4444; font-weight: bold;",
-        { openUntil: new Date(_circuitBreaker.openUntil).toISOString() }
+      console.log(
+        "%c[Analytics:FallbackQueue] Circuit breaker: HALF_OPEN → OPEN",
+        "color: #EF4444; font-weight: bold;"
       );
+    }
+  } else if (_circuitBreaker.state === CircuitBreakerState.CLOSED) {
+    // Track failures in closed state
+    if (_circuitBreaker.failures >= CIRCUIT_BREAKER_THRESHOLD) {
+      _circuitBreaker.state = CircuitBreakerState.OPEN;
+      _circuitBreaker.openUntil = Date.now() + CIRCUIT_BREAKER_DURATION;
+      
+      if (isDebugMode()) {
+        console.warn(
+          "%c[Analytics:FallbackQueue] Circuit breaker: CLOSED → OPEN",
+          "color: #EF4444; font-weight: bold;",
+          { openUntil: new Date(_circuitBreaker.openUntil).toISOString() }
+        );
+      }
     }
   }
 }
 
+/**
+ * Get current circuit breaker state for debugging
+ */
+export function getCircuitBreakerState(): CircuitBreaker {
+  return { ..._circuitBreaker };
+}
+
+/**
+ * Reset circuit breaker to closed state
+ */
 function resetCircuitBreaker(): void {
-  _circuitBreaker.failures = 0;
-  _circuitBreaker.openUntil = 0;
+  _circuitBreaker = {
+    state: CircuitBreakerState.CLOSED,
+    failures: 0,
+    successes: 0,
+    lastFailureTime: 0,
+    openUntil: 0,
+  };
 }
 
 // =============================================================================
@@ -252,14 +360,16 @@ export function clearQueue(): void {
  * Uses requestIdleCallback for non-blocking behavior.
  */
 export function drainQueue(): void {
-  if (_draining || isCircuitBreakerOpen() || _queue.length === 0) {
+  // Check three-state circuit breaker before draining
+  if (_draining || !isCircuitBreakerAllowingRequests() || _queue.length === 0) {
     return;
   }
 
   _draining = true;
 
   const drainFn = () => {
-    if (_queue.length === 0 || isCircuitBreakerOpen()) {
+    // Re-check circuit breaker and queue
+    if (_queue.length === 0 || !isCircuitBreakerAllowingRequests()) {
       _draining = false;
       return;
     }
@@ -271,7 +381,7 @@ export function drainQueue(): void {
         if (success) {
           _queue.splice(0, batch.length);
           saveQueueToStorage();
-          resetCircuitBreaker();
+          recordCircuitBreakerSuccess();
 
           if (isDebugMode()) {
             console.log(

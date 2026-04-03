@@ -119,13 +119,54 @@ function gtag(...args: unknown[]): void {
  * Set default consent state BEFORE gtag loads.
  * This puts GA4 into "cookieless ping" mode - anonymous pings without cookies.
  * Called before script injection.
+ * 
+ * CRITICAL: wait_for_update: 2000 gives CMP 2 seconds to update consent
+ * before GA4 commits to denied state.
  */
 function setDefaultConsent(): void {
   gtag("consent", "default", {
     analytics_storage: "denied",
     ad_storage: "denied",
-    wait_for_update: 500,
+    ad_user_data: "denied",
+    ad_personalization: "denied",
+    wait_for_update: 2000,
   });
+}
+
+/**
+ * Restore persisted consent from localStorage BEFORE gtag loads.
+ * This must run as inline JS in <head> before gtag script injects.
+ * 
+ * @returns The restored consent state or null
+ */
+export function restorePersistedConsent(): { analytics: boolean; marketing: boolean; preferences: boolean } | null {
+  if (typeof window === "undefined") return null;
+  
+  try {
+    const stored = localStorage.getItem("fa_consent");
+    if (!stored) return null;
+    
+    const consent = JSON.parse(stored);
+    
+    // Apply restored consent via gtag BEFORE any config fires
+    gtag("consent", "default", {
+      analytics_storage: consent.analytics ? "granted" : "denied",
+      ad_storage: consent.marketing ? "granted" : "denied",
+      ad_user_data: consent.marketing ? "granted" : "denied",
+      ad_personalization: consent.marketing ? "granted" : "denied",
+      functionality_storage: "granted",
+      personalization_storage: consent.preferences ? "granted" : "denied",
+      security_storage: "granted",
+    });
+    
+    return {
+      analytics: consent.analytics,
+      marketing: consent.marketing,
+      preferences: consent.preferences,
+    };
+  } catch {
+    return null;
+  }
 }
 
 /**
@@ -188,9 +229,29 @@ export async function initializeGtag(
     // Initialize dataLayer and gtag function first
     ensureDataLayer();
 
+    // First: Try to restore persisted consent from localStorage
+    // This must happen BEFORE gtag loads to prevent race condition
+    const restoredConsent = restorePersistedConsent();
+
     // Set default consent BEFORE script loads
     // This puts GA4 into "cookieless ping" mode
     setDefaultConsent();
+
+    // If consent was restored, update it immediately
+    if (restoredConsent) {
+      gtag("consent", "update", {
+        analytics_storage: restoredConsent.analytics ? "granted" : "denied",
+        ad_storage: restoredConsent.marketing ? "granted" : "denied",
+      });
+      
+      if (isDebugMode()) {
+        console.log(
+          "%c[Analytics:gtag] Consent restored from localStorage",
+          "color: #10B981; font-weight: bold;",
+          restoredConsent
+        );
+      }
+    }
 
     // Inject the script
     await injectGtagScript(measurementId);
@@ -214,8 +275,11 @@ export async function initializeGtag(
       // CRITICAL: Must be "flowauxi.com" NOT "shop.flowauxi.com"
       // This ensures _ga cookie is available on ALL subdomains
       cookie_domain: "flowauxi.com",
-      // Send page_view on config (standard behavior)
-      send_page_view: true,
+      // DO NOT send page_view on config - Next.js handles SPA pageviews
+      // send_page_view: false prevents duplicate pageview events
+      send_page_view: false,
+      // Consent Mode v2: redact ads data in cookieless mode
+      ads_data_redaction: true,
       // Debug mode
       debug_mode: isDebugMode(),
     });

@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import type { Metadata } from "next";
 import { headers } from "next/headers";
 import { Outfit, Plus_Jakarta_Sans, Inter } from "next/font/google";
@@ -14,6 +15,7 @@ import {
 } from "@/lib/seo/domain-seo";
 import QueryProvider from "./components/providers/QueryProvider";
 import { AnalyticsProvider } from "./components/analytics/AnalyticsProvider";
+import { GtagScript } from "./components/analytics/GtagScript";
 
 const inter = Inter({
   variable: "--font-inter",
@@ -340,7 +342,10 @@ export default async function RootLayout({
         <QueryProvider>
           <ServiceWorkerRegistration />
           <PWAInstallPrompt />
-          <AnalyticsProvider />
+          <GtagScript />
+          <Suspense fallback={null}>
+            <AnalyticsProvider />
+          </Suspense>
           <CookieConsent />
           {children}
           <SpeedInsights />
