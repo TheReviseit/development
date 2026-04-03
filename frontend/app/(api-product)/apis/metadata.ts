@@ -27,7 +27,7 @@ export const apisPageMetadata: Metadata = {
     "login verification",
     "signup verification",
   ],
-  authors: [{ name: "Flowauxi", url: "https://flowauxi.com" }],
+  authors: [{ name: "Flowauxi", url: "https://www.flowauxi.com" }],
   creator: "Flowauxi",
   publisher: "Flowauxi",
   formatDetection: {
@@ -94,12 +94,12 @@ export const apisPageJsonLd = {
   "@graph": [
     {
       "@type": "Organization",
-      "@id": "https://flowauxi.com/#organization",
+      "@id": "https://www.flowauxi.com/#organization",
       name: "Flowauxi",
-      url: "https://flowauxi.com",
+      url: "https://www.flowauxi.com",
       logo: {
         "@type": "ImageObject",
-        url: "https://flowauxi.com/logo.png",
+        url: "https://www.flowauxi.com/logo.png",
         width: 512,
         height: 512,
       },
@@ -151,7 +151,7 @@ export const apisPageJsonLd = {
       ],
       provider: {
         "@type": "Organization",
-        "@id": "https://flowauxi.com/#organization",
+        "@id": "https://www.flowauxi.com/#organization",
       },
     },
     {

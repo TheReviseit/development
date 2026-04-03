@@ -11,8 +11,7 @@ import {
  * Blog Index Page — Long-tail keyword traffic capture
  *
  * These articles target informational queries that funnel into:
- * → /whatsapp-automation-ecommerce (SEO weapon page)
- * → shop.flowauxi.com (store builder)
+ * → shop.flowauxi.com (WhatsApp e-commerce platform)
  * → /signup (conversion)
  */
 

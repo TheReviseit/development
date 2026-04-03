@@ -74,7 +74,7 @@ export const DOMAIN_CONFIG: Record<string, DomainConfig> = {
     blockedRoutes: ["/console", "/docs"],
     defaultHome: "/",
     loginPath: "/login",
-    seoBase: "https://flowauxi.com",
+    seoBase: "https://www.flowauxi.com",
   },
 };
 

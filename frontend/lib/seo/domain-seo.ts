@@ -953,21 +953,9 @@ export function generateDomainSchemas(host: string): Record<string, unknown>[] {
     inLanguage: config.og.locale === "en_IN" ? "en-IN" : "en-US",
   });
 
-  // ── 5. FAQ Schema (based on real PAA queries) ────────────────────────
-  if (config.faqs.length > 0) {
-    schemas.push({
-      "@context": "https://schema.org",
-      "@type": "FAQPage",
-      mainEntity: config.faqs.map((faq) => ({
-        "@type": "Question",
-        name: faq.question,
-        acceptedAnswer: {
-          "@type": "Answer",
-          text: faq.answer,
-        },
-      })),
-    });
-  }
+  // ── 5. FAQ Schema — REMOVED from layout-level injection ──────────────
+  // FAQ schemas are now injected at the PAGE level via generateDomainFaqSchema()
+  // to guarantee exactly ONE FAQPage per URL (Google requirement).
 
   // ── 6. Breadcrumb Schema ─────────────────────────────────────────────
   if (config.breadcrumb.length > 0) {
@@ -984,4 +972,41 @@ export function generateDomainSchemas(host: string): Record<string, unknown>[] {
   }
 
   return schemas;
+}
+
+/**
+ * Generate ONLY the FAQPage schema for a product domain.
+ *
+ * Call this from individual page components to inject exactly ONE FAQPage
+ * per URL. This prevents duplicate FAQPage schemas that occur when both
+ * layout.tsx and page.tsx inject FAQ schemas.
+ *
+ * Usage in page.tsx:
+ *   const faqSchema = generateDomainFaqSchema(host);
+ *   {faqSchema && (
+ *     <script type="application/ld+json"
+ *       dangerouslySetInnerHTML={{ __html: JSON.stringify(faqSchema) }}
+ *     />
+ *   )}
+ */
+export function generateDomainFaqSchema(
+  host: string,
+): Record<string, unknown> | null {
+  const domain = resolveProductDomain(host);
+  const config = DOMAIN_SEO_CONFIGS[domain];
+
+  if (!config.faqs || config.faqs.length === 0) return null;
+
+  return {
+    "@context": "https://schema.org",
+    "@type": "FAQPage",
+    mainEntity: config.faqs.map((faq) => ({
+      "@type": "Question",
+      name: faq.question,
+      acceptedAnswer: {
+        "@type": "Answer",
+        text: faq.answer,
+      },
+    })),
+  };
 }

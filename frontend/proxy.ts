@@ -219,6 +219,26 @@ export async function proxy(request: NextRequest) {
   const isApiPath = pathname.startsWith("/api/") || pathname === "/api";
 
   // ==========================================================================
+  // STEP 0.5: SEO Redirects (301 — Permanent)
+  // ==========================================================================
+
+  // Non-www → www redirect (canonical URL enforcement)
+  // Google treats flowauxi.com and www.flowauxi.com as different URLs.
+  // This 301 redirect consolidates SEO authority to www.flowauxi.com.
+  if (hostname === "flowauxi.com") {
+    const wwwUrl = new URL(request.url);
+    wwwUrl.hostname = "www.flowauxi.com";
+    return NextResponse.redirect(wwwUrl.toString(), 301);
+  }
+
+  // /whatsapp-automation-ecommerce → shop.flowauxi.com (SEO authority transfer)
+  // This page was causing keyword cannibalization and duplicate schemas.
+  // 301 redirect preserves rankings and transfers link equity to shop domain.
+  if (pathname === "/whatsapp-automation-ecommerce" || pathname.startsWith("/whatsapp-automation-ecommerce/")) {
+    return NextResponse.redirect("https://shop.flowauxi.com", 301);
+  }
+
+  // ==========================================================================
   // STEP 0: Username-based 301 redirects (SEO-Critical)
   // ==========================================================================
   const storeMatch = pathname.match(/^\/store\/([^\/]+)/);

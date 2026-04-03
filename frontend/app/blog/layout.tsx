@@ -5,7 +5,7 @@ import type { Metadata } from "next";
  *
  * The blog system targets informational search queries that
  * feed into the main conversion funnel:
- * - "how to automate WhatsApp orders" → /whatsapp-automation-ecommerce → /signup
+ * - "how to automate WhatsApp orders" → shop.flowauxi.com → /signup
  * - "best WhatsApp chatbot for e-commerce" → shop.flowauxi.com → /signup
  */
 

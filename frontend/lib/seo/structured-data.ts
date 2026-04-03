@@ -294,6 +294,7 @@ export const ALL_SCHEMAS = [
   webPageSchema,
   softwareAppSchema,
   breadcrumbSchema,
-  faqSchema,
+  // faqSchema — REMOVED: FAQ is now injected at the PAGE level, not layout level
+  // This prevents duplicate FAQPage schemas per URL (Google requirement)
   brandSchema,
 ];

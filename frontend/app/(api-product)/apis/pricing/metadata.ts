@@ -22,7 +22,7 @@ export const pricingPageMetadata: Metadata = {
     "transactional SMS pricing",
     "verification API pricing",
   ],
-  authors: [{ name: "Flowauxi", url: "https://flowauxi.com" }],
+  authors: [{ name: "Flowauxi", url: "https://www.flowauxi.com" }],
   creator: "Flowauxi",
   publisher: "Flowauxi",
   metadataBase: new URL("https://api.flowauxi.com"),

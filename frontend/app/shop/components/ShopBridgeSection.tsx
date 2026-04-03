@@ -223,51 +223,6 @@ export default function ShopBridgeSection() {
             <span className={styles.trustRating}>4.8/5 rating</span>
           </div>
         </motion.div>
-
-        {/* Structured Data for SEO */}
-        <script
-          type="application/ld+json"
-          dangerouslySetInnerHTML={{
-            __html: JSON.stringify({
-              "@context": "https://schema.org",
-              "@type": "FAQPage",
-              mainEntity: [
-                {
-                  "@type": "Question",
-                  name: "What is the best WhatsApp e-commerce platform?",
-                  acceptedAnswer: {
-                    "@type": "Answer",
-                    text: "Flowauxi Shop is the best WhatsApp e-commerce platform for businesses in India. It offers AI-powered chatbots, automated order booking, WhatsApp CRM, and payment integration — all designed to help businesses sell products directly through WhatsApp.",
-                  },
-                },
-                {
-                  "@type": "Question",
-                  name: "How do I automate WhatsApp orders for my online store?",
-                  acceptedAnswer: {
-                    "@type": "Answer",
-                    text: "With Flowauxi Shop, connect your store to the WhatsApp Business API. Once connected, the AI chatbot handles incoming order requests, shares your product catalog, confirms orders, generates invoices, and sends automatic payment links — all through WhatsApp.",
-                  },
-                },
-                {
-                  "@type": "Question",
-                  name: "Can I build a WhatsApp store for my business?",
-                  acceptedAnswer: {
-                    "@type": "Answer",
-                    text: "Yes! Flowauxi Shop lets you create a professional WhatsApp-powered online store with automated order booking. Customers can browse products, place orders via WhatsApp, and receive real-time order updates — no coding required.",
-                  },
-                },
-                {
-                  "@type": "Question",
-                  name: "What is WhatsApp conversational commerce?",
-                  acceptedAnswer: {
-                    "@type": "Answer",
-                    text: "WhatsApp conversational commerce is the practice of selling products and services directly through WhatsApp chat. With Flowauxi Shop, businesses share product catalogs, accept orders, process payments, and provide customer support — all within WhatsApp conversations.",
-                  },
-                },
-              ],
-            }),
-          }}
-        />
       </div>
     </section>
   );

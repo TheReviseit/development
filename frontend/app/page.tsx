@@ -5,7 +5,7 @@ import ShopLandingPage from "./(shop)/page";
 import {
   resolveProductDomain,
   generateDomainMetadata,
-  generateDomainSchemas,
+  generateDomainFaqSchema,
 } from "@/lib/seo/domain-seo";
 
 /**
@@ -19,6 +19,10 @@ import {
  *
  * generateMetadata() produces UNIQUE title/description/OG/canonical
  * per domain — this is what makes each subdomain rank independently.
+ *
+ * SCHEMA ARCHITECTURE:
+ *   layout.tsx → structural schemas (Organization, WebSite, WebPage, BreadcrumbList, etc.)
+ *   page.tsx   → FAQPage schema (one per URL, prevents Google duplication errors)
  */
 
 // =============================================================================
@@ -41,19 +45,19 @@ export default async function Home() {
   const host = headersList.get("host") || "";
   const domain = resolveProductDomain(host);
 
-  // Generate domain-specific JSON-LD structured data
-  const schemas = generateDomainSchemas(host);
+  // Generate domain-specific FAQ schema (ONE per URL — Google requirement)
+  const faqSchema = generateDomainFaqSchema(host);
 
   return (
     <>
-      {/* Domain-specific structured data */}
-      {schemas.map((schema, i) => (
+      {/* Domain-specific FAQ structured data — exactly ONE FAQPage per URL */}
+      {faqSchema && (
         <script
-          key={`domain-schema-${i}`}
+          key="page-faq-schema"
           type="application/ld+json"
-          dangerouslySetInnerHTML={{ __html: JSON.stringify(schema) }}
+          dangerouslySetInnerHTML={{ __html: JSON.stringify(faqSchema) }}
         />
-      ))}
+      )}
 
       {/* Domain-specific landing page */}
       {domain === "shop" && <ShopLandingPage />}

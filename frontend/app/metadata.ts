@@ -167,33 +167,4 @@ export const blogMetadata: Metadata = {
   ],
 };
 
-// E-commerce SEO landing page metadata
-export const ecommerceMetadata: Metadata = {
-  title:
-    "WhatsApp Automation for E-commerce | AI Chatbot, CRM & Store Builder",
-  description:
-    "Automate your e-commerce business with Flowauxi's WhatsApp automation platform. Use AI chatbots to capture orders, manage customers, send invoices, and scale sales—all in one dashboard.",
-  keywords: [
-    "WhatsApp automation for e-commerce",
-    "WhatsApp chatbot for business",
-    "WhatsApp order automation",
-    "WhatsApp CRM",
-    "WhatsApp marketing automation",
-    "AI chatbot for e-commerce",
-    "automate customer support WhatsApp",
-    "how to automate WhatsApp orders for online store",
-    "best WhatsApp automation tool for small business",
-    "WhatsApp chatbot for Shopify alternative",
-    "WhatsApp automation India",
-    "conversational commerce",
-    "D2C WhatsApp automation",
-  ],
-  openGraph: {
-    title:
-      "WhatsApp Automation for E-commerce | AI Chatbot, CRM & Store Builder | Flowauxi",
-    description:
-      "Automate your e-commerce with WhatsApp. AI chatbots for orders, CRM for customers, invoicing & analytics. Start free.",
-    url: "https://www.flowauxi.com/whatsapp-automation-ecommerce",
-    type: "website",
-  },
-};
+
