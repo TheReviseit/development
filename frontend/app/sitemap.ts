@@ -322,13 +322,6 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       changeFrequency: "weekly",
       priority: 0.95,
     },
-    // SEO Landing Pages (HIGH PRIORITY — Primary ranking pages)
-    {
-      url: `${baseUrl}/whatsapp-automation-ecommerce`,
-      lastModified: now,
-      changeFrequency: "weekly",
-      priority: 0.95,
-    },
     // Blog (long-tail keyword targeting)
     {
       url: `${baseUrl}/blog`,

@@ -16,7 +16,7 @@ export const metadata = {
 export default function ShopPricingPage() {
   return (
     <>
-      <ShopNavbar />
+      <ShopNavbar isPricingPage={true} />
       <main>
         <ShopPricingSection />
       </main>

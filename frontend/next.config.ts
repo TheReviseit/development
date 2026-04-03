@@ -100,6 +100,17 @@ const nextConfig: NextConfig = {
     ];
   },
 
+  // SEO Redirects - Permanent 301 for authority transfer
+  async redirects() {
+    return [
+      {
+        source: "/whatsapp-automation-ecommerce",
+        destination: "https://shop.flowauxi.com",
+        permanent: true, // 301 - tells Google this is a permanent move
+      },
+    ];
+  },
+
   // Image optimization
   images: {
     formats: ["image/avif", "image/webp"],

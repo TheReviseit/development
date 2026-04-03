@@ -18,7 +18,7 @@ const NAV_LINKS = [
  * ShopNavbar — reel.ai-inspired clean navigation
  * Company logo | Links center | See Demo + Get Started right
  */
-export default function ShopNavbar() {
+export default function ShopNavbar({ isPricingPage = false }: { isPricingPage?: boolean }) {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [demoOpen, setDemoOpen] = useState(false);
 
@@ -39,22 +39,30 @@ export default function ShopNavbar() {
           </Link>
 
           {/* Center nav links */}
-          <div className={styles.navLinks}>
-            {NAV_LINKS.map((link) => (
-              <Link key={link.href} href={link.href} className={styles.navLink}>
-                {link.label}
-              </Link>
-            ))}
-          </div>
+          {!isPricingPage && (
+            <div className={styles.navLinks}>
+              {NAV_LINKS.map((link) => (
+                <Link key={link.href} href={link.href} className={styles.navLink}>
+                  {link.label}
+                </Link>
+              ))}
+            </div>
+          )}
 
           {/* Right actions */}
           <div className={styles.navActions}>
-            <button
-              className={styles.seeDemoBtn}
-              onClick={() => setDemoOpen(true)}
-            >
-              See Demo
-            </button>
+            {isPricingPage ? (
+              <Link href="/" className={styles.seeDemoBtn}>
+                Back to Main
+              </Link>
+            ) : (
+              <button
+                className={styles.seeDemoBtn}
+                onClick={() => setDemoOpen(true)}
+              >
+                See Demo
+              </button>
+            )}
             <Link href="/signup" className={styles.getStartedBtn}>
               Get Started
             </Link>
@@ -72,7 +80,7 @@ export default function ShopNavbar() {
 
         {/* Mobile dropdown */}
         <div className={`${styles.mobileNav} ${mobileOpen ? styles.open : ""}`}>
-          {NAV_LINKS.map((link) => (
+          {!isPricingPage && NAV_LINKS.map((link) => (
             <Link
               key={link.href}
               href={link.href}
@@ -83,15 +91,25 @@ export default function ShopNavbar() {
             </Link>
           ))}
           <div className={styles.mobileActions}>
-            <button
-              className={styles.mobileDemoBtn}
-              onClick={() => {
-                setMobileOpen(false);
-                setDemoOpen(true);
-              }}
-            >
-              See Demo
-            </button>
+            {isPricingPage ? (
+              <Link
+                href="/"
+                className={styles.mobileDemoBtn}
+                onClick={() => setMobileOpen(false)}
+              >
+                Back to Main
+              </Link>
+            ) : (
+              <button
+                className={styles.mobileDemoBtn}
+                onClick={() => {
+                  setMobileOpen(false);
+                  setDemoOpen(true);
+                }}
+              >
+                See Demo
+              </button>
+            )}
             <Link
               href="/signup"
               className={styles.mobileStartBtn}
@@ -104,7 +122,7 @@ export default function ShopNavbar() {
       </nav>
 
       {/* Demo Video Modal */}
-      <DemoModal open={demoOpen} onClose={() => setDemoOpen(false)} />
+      {!isPricingPage && <DemoModal open={demoOpen} onClose={() => setDemoOpen(false)} />}
     </>
   );
 }

@@ -181,10 +181,10 @@ export default function BlogIndexPage() {
               <ArrowRight className="h-5 w-5" />
             </Link>
             <Link
-              href="/whatsapp-automation-ecommerce"
+              href="https://shop.flowauxi.com"
               className="inline-flex items-center gap-2 text-gray-700 font-medium hover:text-gray-900 transition-colors text-lg"
             >
-              Learn about WhatsApp for E-commerce →
+              Build Your WhatsApp Store →
             </Link>
           </div>
         </div>

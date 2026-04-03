@@ -368,19 +368,19 @@ export default function ShopLandingPage() {
             across India for customer engagement, CRM, and marketing.
           </p>
           <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
-            <a
-              href="https://www.flowauxi.com/whatsapp-automation-ecommerce"
+            <Link
+              href="/"
               className="inline-flex items-center gap-2 bg-gray-900 text-white px-6 py-3 rounded-xl font-medium hover:bg-black transition-colors shadow-lg"
             >
-              Learn about WhatsApp Automation for E-commerce
+              Build Your WhatsApp Store Today
               <ArrowRight className="h-4 w-4" />
-            </a>
-            <a
+            </Link>
+            <Link
               href="https://www.flowauxi.com"
               className="inline-flex items-center gap-2 text-gray-700 font-medium hover:text-gray-900 transition-colors"
             >
               Visit Flowauxi Platform →
-            </a>
+            </Link>
           </div>
         </div>
       </section>
@@ -412,12 +412,12 @@ export default function ShopLandingPage() {
                   </a>
                 </li>
                 <li>
-                  <a
-                    href="https://www.flowauxi.com/whatsapp-automation-ecommerce"
+                  <Link
+                    href="/"
                     className="hover:text-white transition-colors"
                   >
-                    WhatsApp Automation for E-commerce
-                  </a>
+                    WhatsApp E-commerce Platform
+                  </Link>
                 </li>
                 <li>
                   <a
