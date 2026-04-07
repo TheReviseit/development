@@ -1,0 +1,443 @@
+/* =============================================================================
+ * TrialExpiredModal — Production-Grade Design
+ * =============================================================================
+ * 
+ * Design principles:
+ * - FAANG-level polish and attention to detail
+ * - Stripe-grade clarity in messaging
+ * - Accessible color contrast
+ * - Clear visual hierarchy
+ * - Professional, trustworthy appearance
+ * =========================================================================== */
+
+.modalOverlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  background: rgba(0, 0, 0, 0.85);
+  backdrop-filter: blur(8px);
+  animation: modalFadeIn 0.3s ease-out forwards;
+}
+
+@keyframes modalFadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* Click blocker prevents dismissing modal by clicking background */
+.overlayClickBlocker {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+}
+
+/* ─── Card ─── */
+.modalCard {
+  position: relative;
+  width: 100%;
+  max-width: 480px;
+  border-radius: 20px;
+  overflow: hidden;
+  background: #ffffff;
+  box-shadow: 
+    0 0 0 1px rgba(0, 0, 0, 0.05),
+    0 10px 40px -10px rgba(0, 0, 0, 0.5),
+    0 20px 60px -20px rgba(0, 0, 0, 0.4);
+  animation: modalCardEnter 0.4s cubic-bezier(0.16, 1, 0.3, 1) 0.1s both;
+}
+
+@keyframes modalCardEnter {
+  from {
+    opacity: 0;
+    transform: scale(0.96) translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+/* ─── Warning Banner ─── */
+.warningBanner {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 16px 24px;
+  background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
+  border-bottom: 1px solid #f59e0b;
+}
+
+.warningIcon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  color: #d97706;
+}
+
+.warningIcon svg {
+  width: 20px;
+  height: 20px;
+}
+
+.warningText {
+  font-size: 14px;
+  font-weight: 700;
+  color: #92400e;
+  letter-spacing: -0.01em;
+}
+
+/* ─── Content ─── */
+.modalContent {
+  padding: 32px 32px 24px;
+  text-align: center;
+}
+
+/* Plan Badge */
+.planBadge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: 20px;
+  background: #f3f4f6;
+  margin-bottom: 20px;
+}
+
+.planIcon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  color: #f59e0b;
+}
+
+.planIcon svg {
+  width: 14px;
+  height: 14px;
+}
+
+.planName {
+  font-size: 12px;
+  font-weight: 600;
+  color: #374151;
+  text-transform: capitalize;
+}
+
+/* Title */
+.title {
+  margin: 0 0 12px;
+  font-size: 26px;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  color: #111827;
+  line-height: 1.2;
+}
+
+/* Subtitle */
+.subtitle {
+  margin: 0 0 28px;
+  font-size: 15px;
+  line-height: 1.6;
+  color: #6b7280;
+}
+
+/* ─── Timeline ─── */
+.timeline {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0;
+  padding: 16px 20px;
+  background: #f9fafb;
+  border-radius: 12px;
+  margin-bottom: 24px;
+}
+
+.timelineItem {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 1;
+}
+
+.timelineIcon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
+  color: #6b7280;
+  flex-shrink: 0;
+}
+
+.timelineIcon svg {
+  width: 16px;
+  height: 16px;
+}
+
+.timelineContent {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  text-align: left;
+}
+
+.timelineLabel {
+  font-size: 11px;
+  font-weight: 500;
+  color: #9ca3af;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.timelineValue {
+  font-size: 13px;
+  font-weight: 600;
+  color: #374151;
+}
+
+.timelineRelative {
+  font-weight: 400;
+  color: #9ca3af;
+  margin-left: 4px;
+}
+
+.timelineDivider {
+  width: 1px;
+  height: 40px;
+  background: #e5e7eb;
+  margin: 0 16px;
+}
+
+/* ─── What You Lose Section ─── */
+.whatYouLose {
+  text-align: left;
+  padding: 20px;
+  background: #fef2f2;
+  border-radius: 12px;
+  border: 1px solid #fecaca;
+}
+
+.whatYouLoseTitle {
+  margin: 0 0 12px;
+  font-size: 13px;
+  font-weight: 700;
+  color: #991b1b;
+  letter-spacing: -0.01em;
+}
+
+.whatYouLoseList {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.whatYouLoseList li {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  font-size: 13px;
+  color: #7f1d1d;
+  line-height: 1.5;
+}
+
+.whatYouLoseList li svg {
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+.whatYouLoseList li strong {
+  font-weight: 600;
+}
+
+.whatYouLoseList li.negative svg {
+  color: #dc2626;
+}
+
+.whatYouLoseList li.negative {
+  color: #991b1b;
+}
+
+.whatYouLoseList li.negative strong {
+  color: #7f1d1d;
+}
+
+/* ─── CTA Section ─── */
+.ctaSection {
+  padding: 0 32px 24px;
+  text-align: center;
+}
+
+.ctaButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  padding: 16px 28px;
+  border: none;
+  border-radius: 12px;
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  
+  background: linear-gradient(135deg, #22c55e 0%, #16a34a 100%);
+  color: #ffffff;
+  box-shadow: 0 4px 12px rgba(34, 197, 94, 0.3);
+}
+
+.ctaButton:hover {
+  background: linear-gradient(135deg, #16a34a 0%, #15803d 100%);
+  transform: translateY(-1px);
+  box-shadow: 0 6px 16px rgba(34, 197, 94, 0.35);
+}
+
+.ctaButton:active {
+  transform: translateY(0);
+  box-shadow: 0 2px 8px rgba(34, 197, 94, 0.3);
+}
+
+.ctaButton svg {
+  width: 18px;
+  height: 18px;
+  transition: transform 0.15s ease;
+}
+
+.ctaButton:hover svg {
+  transform: translateX(2px);
+}
+
+.ctaSubtext {
+  margin: 12px 0 0;
+  font-size: 12px;
+  color: #9ca3af;
+}
+
+/* ─── Footer ─── */
+.modalFooter {
+  padding: 16px 32px;
+  border-top: 1px solid #f3f4f6;
+  background: #fafafa;
+}
+
+.footerContent {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+}
+
+.footerEmail {
+  font-size: 12px;
+  color: #6b7280;
+}
+
+.footerDivider {
+  color: #d1d5db;
+}
+
+.logoutButton {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0;
+  border: none;
+  background: none;
+  font-size: 12px;
+  color: #6b7280;
+  cursor: pointer;
+  transition: color 0.15s ease;
+}
+
+.logoutButton:hover {
+  color: #374151;
+}
+
+.logoutButton svg {
+  width: 14px;
+  height: 14px;
+}
+
+/* ─── Responsive ─── */
+@media (max-width: 520px) {
+  .modalOverlay {
+    padding: 16px;
+    align-items: flex-end;
+  }
+
+  .modalCard {
+    max-width: 100%;
+    border-radius: 20px 20px 0 0;
+    animation: modalCardEnterMobile 0.4s cubic-bezier(0.16, 1, 0.3, 1) 0.1s both;
+  }
+
+  @keyframes modalCardEnterMobile {
+    from {
+      opacity: 0;
+      transform: translateY(100%);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  .modalContent {
+    padding: 24px 20px 20px;
+  }
+
+  .title {
+    font-size: 22px;
+  }
+
+  .subtitle {
+    font-size: 14px;
+  }
+
+  .timeline {
+    flex-direction: column;
+    gap: 12px;
+    padding: 16px;
+  }
+
+  .timelineItem {
+    width: 100%;
+  }
+
+  .timelineDivider {
+    width: 40px;
+    height: 1px;
+    margin: 0;
+  }
+
+  .ctaSection {
+    padding: 0 20px 20px;
+  }
+
+  .modalFooter {
+    padding: 14px 20px;
+  }
+}

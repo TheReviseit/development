@@ -368,16 +368,32 @@ export default function TermsOfService() {
                 <h2 className="terms-section-title">12. Contact</h2>
                 <div className="terms-contact-box">
                   <p className="terms-text">
+                    <strong>Business Name:</strong> Flowauxi
+                  </p>
+                  <p className="terms-text">
+                    <strong>Registered Address:</strong> Tirunelveli, Tamil Nadu 627428, India
+                  </p>
+                  <p className="terms-text">
+                    <strong>Phone:</strong>{" "}
+                    <a 
+                      href="tel:+916383634873" 
+                      className="terms-link"
+                      aria-label="Call +91 6383634873"
+                      data-contact-type="phone"
+                    >
+                      +91 6383634873
+                    </a>
+                  </p>
+                  <p className="terms-text">
                     <strong>Email:</strong>{" "}
                     <a
                       href="mailto:contact@flowauxi.com"
                       className="terms-link"
+                      aria-label="Send email to contact@flowauxi.com"
+                      data-contact-type="email"
                     >
                       contact@flowauxi.com
                     </a>
-                  </p>
-                  <p className="terms-text">
-                    <strong>Business Name:</strong> Flowauxi
                   </p>
                 </div>
               </section>

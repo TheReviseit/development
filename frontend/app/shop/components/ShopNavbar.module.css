@@ -27,16 +27,18 @@
 .logoLink {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 12px;
   text-decoration: none;
 }
 
 .logoImg {
   border-radius: 6px;
+  width: 40px;
+  height: 40px;
 }
 
 .logoText {
-  font-size: 1.0625rem;
+  font-size: 1.375rem;
   font-weight: 700;
   color: #000;
   letter-spacing: -0.02em;
@@ -51,7 +53,7 @@
 
 .navLink {
   font-size: 0.9375rem;
-  font-weight: 500;
+  font-weight: 600;
   color: #374151;
   text-decoration: none;
   transition: color 0.2s;
@@ -147,7 +149,7 @@
 
 .mobileNavLink {
   font-size: 1rem;
-  font-weight: 500;
+  font-weight: 600;
   color: #374151;
   text-decoration: none;
   padding: 14px 0;

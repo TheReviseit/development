@@ -1,5 +1,14 @@
+"use client";
+
 import Image from "next/image";
 import styles from "./Footer.module.css";
+
+// Contact constants for this component
+const CONTACT = {
+  email: "contact@flowauxi.com",
+  phone: "+916383634873",
+  phoneFormatted: "+91 6383634873",
+} as const;
 
 export default function Footer() {
   return (
@@ -22,7 +31,7 @@ export default function Footer() {
 
           <div className={styles.legal}>
             <p className={styles.copyright}>
-              © 2025 Flowauxi. All rights reserved.
+              © 2026 Flowauxi. All rights reserved.
               <br />
               <strong>Flowauxi</strong> – AI WhatsApp Automation Platform
               <br />
@@ -51,23 +60,13 @@ export default function Footer() {
             <h4 className={styles.columnTitle}>Product</h4>
             <ul className={styles.linkList}>
               <li>
-                <a href="#features" className={styles.link}>
-                  Features
-                </a>
-              </li>
-              <li>
                 <a href="/pricing" className={styles.link}>
                   Pricing
                 </a>
               </li>
               <li>
-                <a href="#integrations" className={styles.link}>
-                  Integrations
-                </a>
-              </li>
-              <li>
-                <a href="#api" className={styles.link}>
-                  API Docs
+                <a href="/signup" className={styles.link}>
+                  Get Started
                 </a>
               </li>
             </ul>
@@ -78,23 +77,13 @@ export default function Footer() {
             <h4 className={styles.columnTitle}>Company</h4>
             <ul className={styles.linkList}>
               <li>
-                <a href="#about" className={styles.link}>
-                  About
+                <a href="/" className={styles.link}>
+                  Home
                 </a>
               </li>
               <li>
-                <a href="#careers" className={styles.link}>
-                  Careers
-                </a>
-              </li>
-              <li>
-                <a href="#blog" className={styles.link}>
-                  Blog
-                </a>
-              </li>
-              <li>
-                <a href="#press" className={styles.link}>
-                  Press
+                <a href="/booking" className={styles.link}>
+                  Book a Demo
                 </a>
               </li>
             </ul>
@@ -105,18 +94,21 @@ export default function Footer() {
             <h4 className={styles.columnTitle}>Support</h4>
             <ul className={styles.linkList}>
               <li>
-                <a href="#help" className={styles.link}>
-                  Help Center
+                <a
+                  href={`tel:${CONTACT.phone}`}
+                  className={styles.link}
+                  aria-label={`Call ${CONTACT.phoneFormatted}`}
+                >
+                  {CONTACT.phoneFormatted}
                 </a>
               </li>
               <li>
-                <a href="#contact" className={styles.link}>
-                  Contact Us
-                </a>
-              </li>
-              <li>
-                <a href="#status" className={styles.link}>
-                  Status
+                <a
+                  href={`mailto:${CONTACT.email}`}
+                  className={styles.link}
+                  aria-label={`Send email to ${CONTACT.email}`}
+                >
+                  {CONTACT.email}
                 </a>
               </li>
             </ul>
@@ -127,7 +119,7 @@ export default function Footer() {
             <h4 className={styles.columnTitle}>Get in touch</h4>
             <ul className={styles.linkList}>
               <li>
-                <a href="#feedback" className={styles.link}>
+                <a href="/booking" className={styles.link}>
                   Questions or feedback?
                 </a>
               </li>

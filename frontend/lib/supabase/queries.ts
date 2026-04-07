@@ -9,9 +9,17 @@ export interface User {
   email: string;
   phone?: string;
   role: string;
-  onboarding_completed: boolean;
+  // v2: Event-sourced onboarding state (replaces boolean)
+  onboarding_completed_at?: string;  // TIMESTAMPTZ - null means not completed
+  onboarding_completed_reason?: 'trial_start' | 'subscription' | 'manual' | 'whatsapp_connect' | 'migrated';
+  onboarding_completed_via?: 'trigger' | 'api' | 'manual' | 'migration';
   created_at: string;
   updated_at: string;
+}
+
+// Computed helper - use this instead of accessing user.onboarding_completed directly
+export function isOnboardingCompleted(user: User | null): boolean {
+  return user?.onboarding_completed_at != null;
 }
 
 export interface Business {
@@ -247,9 +255,25 @@ export async function createOrUpdateWhatsAppConnection(
   }
 }
 
-// Mark onboarding as complete
+// Mark onboarding as complete (v2 - uses timestamp)
+// Note: Prefer DB triggers for atomicity - this is for manual override only
 export async function markOnboardingComplete(firebaseUID: string) {
-  return updateUser(firebaseUID, { onboarding_completed: true });
+  const { data, error } = await supabaseAdmin
+    .from("users")
+    .update({ 
+      onboarding_completed_at: new Date().toISOString(),
+      onboarding_completed_reason: 'manual',
+      onboarding_completed_via: 'api',
+    })
+    .eq("firebase_uid", firebaseUID)
+    .select()
+    .single();
+
+  if (error) {
+    console.error("Error marking onboarding complete:", error);
+    throw error;
+  }
+  return data;
 }
 
 // =============================================================================
@@ -312,14 +336,21 @@ export async function getUsersByFilter(filters: {
 }) {
   let query = supabaseAdmin
     .from("users")
-    .select("id, firebase_uid, full_name, email, role, created_at");
+    .select("id, firebase_uid, full_name, email, role, created_at, onboarding_completed_at");
 
   if (filters.role) {
     query = query.eq("role", filters.role);
   }
 
+  // v2: Use timestamp-based filtering instead of boolean
   if (filters.onboardingCompleted !== undefined) {
-    query = query.eq("onboarding_completed", filters.onboardingCompleted);
+    if (filters.onboardingCompleted) {
+      // Onboarded users: have a timestamp
+      query = query.not("onboarding_completed_at", "is", null);
+    } else {
+      // Not onboarded users: no timestamp
+      query = query.is("onboarding_completed_at", null);
+    }
   }
 
   const { data, error } = await query.order("created_at", { ascending: false });
@@ -331,7 +362,7 @@ export async function getUsersByFilter(filters: {
   return data as Array<
     Pick<
       User,
-      "id" | "firebase_uid" | "full_name" | "email" | "role" | "created_at"
+      "id" | "firebase_uid" | "full_name" | "email" | "role" | "created_at" | "onboarding_completed_at"
     >
   >;
 }

@@ -47,7 +47,7 @@ export default function MarketingLandingPage() {
             {/* Desktop Links */}
             <div className="hidden md:flex items-center gap-8 text-[15px] font-medium text-gray-600">
               <Link
-                href="#"
+                href="/"
                 className="relative group text-[#1A1A1A] font-semibold pb-0.5"
               >
                 Home
@@ -130,7 +130,7 @@ export default function MarketingLandingPage() {
               className="absolute top-full left-0 w-full bg-white shadow-xl z-50 md:hidden flex flex-col items-center py-6 gap-6 border-t border-gray-100"
             >
               <Link
-                href="#"
+                href="/"
                 onClick={() => setIsMobileMenuOpen(false)}
                 className="text-[16px] font-semibold text-[#1A1A1A]"
               >
@@ -271,17 +271,17 @@ export default function MarketingLandingPage() {
           {/* Buttons */}
           <div className="flex flex-col sm:flex-row items-center gap-4">
             <Link
-              href="#"
+              href="/signup"
               className="w-full sm:w-auto flex items-center justify-center gap-2 bg-[#1A1A1A] text-white px-8 py-4 rounded-full text-[16px] font-medium hover:bg-black transition-colors"
             >
               Start Growing Now
               <ArrowRight className="w-4 h-4" />
             </Link>
             <Link
-              href="#"
+              href="/booking"
               className="w-full sm:w-auto flex items-center justify-center gap-2 bg-white text-[#1A1A1A] border border-gray-200 px-8 py-4 rounded-full text-[16px] font-medium hover:bg-gray-50 hover:border-gray-300 transition-colors"
             >
-              See how it works
+              Book a Demo
               <ArrowRight className="w-4 h-4 text-gray-500" />
             </Link>
           </div>

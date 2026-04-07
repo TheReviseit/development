@@ -11,6 +11,7 @@ import { getProductDomainFromBrowser } from "@/lib/domain/client";
 import SoftLimitBanner from "./components/SoftLimitBanner";
 import SubscriptionGateOverlay from "./components/SubscriptionGateOverlay";
 import BillingLockScreen, { type BillingLockReason } from "./components/BillingLockScreen";
+import { SubscriptionProvider, useSubscriptionContext } from "./components/SubscriptionProvider";
 import styles from "./dashboard.module.css";
 
 type Section =
@@ -111,10 +112,8 @@ export default function DashboardLayout({
   ]);
   const [domainAccessLoaded, setDomainAccessLoaded] = useState(false);
   // ── Billing Status Gate ───────────────────────────────────────────
-  // Blocks the entire dashboard when subscription is suspended/expired/missing.
-  const [billingLocked, setBillingLocked] = useState(false);
-  const [billingLockReason, setBillingLockReason] = useState<BillingLockReason>("unknown");
-  const [billingStatusLoaded, setBillingStatusLoaded] = useState(false);
+  // NOW HANDLED BY SubscriptionProvider + useSubscription() hook
+  // Uses React Query with 30s staleTime, retry, timeout, bounded fail-open
   const router = useRouter();
   const pathname = usePathname();
 
@@ -205,51 +204,13 @@ export default function DashboardLayout({
   }, []);
 
   // ── Billing Status Gate ─────────────────────────────────────────────────────
-  // Fetches /api/subscription/billing-status after auth is complete.
-  // If the subscription is suspended/expired/missing, the entire dashboard
-  // is replaced with BillingLockScreen (early-return below).
-  useEffect(() => {
-    if (loading) return; // Wait for auth to resolve first
-
-    const checkBillingStatus = async () => {
-      try {
-        const res = await fetch("/api/subscription/billing-status", {
-          credentials: "include",
-          // Short cache: always fresh, but avoid hammering on every render
-          cache: "no-store",
-        });
-
-        if (!res.ok) {
-          // Fail open — don't block dashboard on API error
-          setBillingStatusLoaded(true);
-          return;
-        }
-
-        const data = await res.json();
-
-        if (data.locked) {
-          setBillingLocked(true);
-          setBillingLockReason((data.reason as BillingLockReason) || "unknown");
-        }
-      } catch (err) {
-        console.warn("[BillingGate] Failed to check billing status:", err);
-        // Fail open — network error should not lock the user out
-      } finally {
-        setBillingStatusLoaded(true);
-      }
-    };
-
-    checkBillingStatus();
-
-    // Re-check when subscription is updated (e.g. after payment)
-    const handleSubUpdated = () => {
-      setBillingStatusLoaded(false);
-      setBillingLocked(false);
-      checkBillingStatus();
-    };
-    window.addEventListener("subscription-updated", handleSubUpdated);
-    return () => window.removeEventListener("subscription-updated", handleSubUpdated);
-  }, [loading]);
+  // NOW HANDLED BY SubscriptionProvider (React Query cached)
+  // - 30s staleTime (prevents hammering /billing-status)
+  // - Refetch on window focus (catch real-time trial expiry)
+  // - 2 retries with exponential backoff
+  // - 3s timeout per request
+  // - Bounded fail-open (30s grace, then lock)
+  // - Listens for 'subscription-updated' event → invalidate cache
 
   useEffect(() => {
     setDomainAccessLoaded(false);
@@ -453,29 +414,10 @@ export default function DashboardLayout({
   // ════════════════════════════════════════════════════════════════════
   // BILLING SUSPENSION GATE — Full dashboard lock
   // ════════════════════════════════════════════════════════════════════
-  // Fires BEFORE the domain gate. If the subscription is suspended,
-  // expired, or missing, the ENTIRE dashboard is replaced with
-  // BillingLockScreen. Nothing is mounted behind it — zero bypass.
-  //
-  // Fails OPEN (doesn't lock) on:
-  //   - Auth still loading (wait for auth first)
-  //   - Billing status not yet loaded (show spinner)
-  //   - API error (network/server failure = don't punish user)
-  if (!loading && billingStatusLoaded && billingLocked) {
-    return (
-      <AuthProvider>
-        <DashboardAuthGuard
-          setUser={setUser}
-          setLoading={setLoading}
-          user={user}
-        />
-        <BillingLockScreen
-          reason={billingLockReason}
-          userEmail={user?.email}
-        />
-      </AuthProvider>
-    );
-  }
+  // NOW USES SubscriptionProvider (React Query cached) for billing state.
+  // This gate wraps everything in SubscriptionProvider first, then uses
+  // BillingGateInner to read state and conditionally early-return.
+  // ════════════════════════════════════════════════════════════════════
 
   // ════════════════════════════════════════════════════════════════════
   // DOMAIN ACCESS GATE — Production-grade: NO dashboard content renders
@@ -512,6 +454,13 @@ export default function DashboardLayout({
         setLoading={setLoading}
         user={user}
       />
+      <SubscriptionProvider>
+      <BillingGateInner
+        loading={loading}
+        user={user}
+        setUser={setUser}
+        setLoading={setLoading}
+      >
       {loading ? (
         <SpaceshipLoader text="Loading dashboard..." />
       ) : (
@@ -1699,6 +1648,50 @@ export default function DashboardLayout({
           </main>
         </div>
       )}
+      </BillingGateInner>
+      </SubscriptionProvider>
     </AuthProvider>
   );
+}
+
+// =============================================================================
+// BillingGateInner — Uses SubscriptionProvider context for billing lock
+// =============================================================================
+// This is a separate component because useSubscriptionContext() must be called
+// inside SubscriptionProvider. The layout function itself can't call the hook
+// because SubscriptionProvider is rendered inside it.
+//
+// Architecture: If billing is locked, this replaces ALL children with
+// BillingLockScreen (early-return = zero dashboard DOM = zero bypass).
+function BillingGateInner({
+  loading,
+  user,
+  children,
+}: {
+  loading: boolean;
+  user: any;
+  setUser: (user: any) => void;
+  setLoading: (loading: boolean) => void;
+  children: React.ReactNode;
+}) {
+  const { isLocked, lockReason, trial, isLoading: subLoading } = useSubscriptionContext();
+
+  // Wait for auth to resolve first
+  if (loading) return <>{children}</>;
+
+  // Wait for subscription status to load (avoid flash)
+  if (subLoading) return <>{children}</>;
+
+  // BILLING LOCK: Replace entire dashboard with BillingLockScreen
+  if (isLocked && lockReason) {
+    return (
+      <BillingLockScreen
+        reason={lockReason}
+        userEmail={user?.email}
+        trial={trial}
+      />
+    );
+  }
+
+  return <>{children}</>;
 }

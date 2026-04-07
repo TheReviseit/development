@@ -116,7 +116,7 @@ export function getWhatsAppFallbackMessage(data: ContactFormData): string {
   const message = encodeURIComponent(
     `*Name:* ${data.name}\n*Email:* ${data.email}\n*Phone:* ${data.phone}\n*Subject:* ${data.subject}\n\n*Message:* ${data.message}`
   );
-  return `https://wa.me/918438147100?text=${message}`;
+  return `https://wa.me/916383634873?text=${message}`;
 }
 
 export interface HoneypotCheckResult {

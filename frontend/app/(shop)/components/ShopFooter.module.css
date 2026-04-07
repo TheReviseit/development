@@ -1,0 +1,272 @@
+/* =============================================================================
+   SHOP FOOTER — Clean Minimal Footer (Mobile-First)
+   ============================================================================= */
+
+.footer {
+  padding: 48px var(--shop-px-mobile, 16px) 24px;
+  background: #fafafa;
+  border-top: 1px solid #f0f0f0;
+  overflow-x: clip;
+}
+
+.footerInner {
+  max-width: var(--shop-container, 1200px);
+  margin: 0 auto;
+}
+
+.footerGrid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 24px;
+  margin-bottom: 32px;
+}
+
+/* ---- Brand Column ---- */
+
+.footerBrand {
+  max-width: 100%;
+}
+
+.footerLogo {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 16px;
+  text-decoration: none;
+}
+
+.footerLogoImgWrap {
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #fff;
+  border-radius: 10px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+}
+
+.logoImg {
+  object-fit: contain;
+}
+
+.footerLogoText {
+  font-size: 1.125rem;
+  font-weight: 800;
+  color: #000;
+  letter-spacing: -0.02em;
+}
+
+.footerTagline {
+  font-size: 0.9375rem;
+  color: #6b7280;
+  line-height: 1.6;
+  margin: 0 0 24px;
+}
+
+.socialLinks {
+  display: flex;
+  gap: 16px;
+}
+
+.socialIcon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  background: #fff;
+  border: 1px solid #f0f0f0;
+  border-radius: 50%;
+  color: #6b7280;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  text-decoration: none;
+  min-height: 44px;
+  min-width: 44px;
+}
+
+.socialIcon:hover {
+  background: #000;
+  color: #fff;
+  transform: translateY(-2px);
+  border-color: #000;
+}
+
+/* ---- Link Columns ---- */
+
+.footerColTitle {
+  font-size: 0.8125rem;
+  font-weight: 700;
+  color: #000;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  margin: 0 0 12px;
+}
+
+.footerLinks {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.footerLink {
+  font-size: 0.875rem;
+  color: #6b7280;
+  text-decoration: none;
+  transition: color 0.2s;
+  padding: 2px 0;
+}
+
+.footerLink:hover {
+  color: #000;
+}
+
+/* ---- Bottom Bar ---- */
+
+.footerBottom {
+  border-top: 1px solid #f0f0f0;
+  padding-top: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  text-align: center;
+}
+
+.footerCopy {
+  font-size: 0.8125rem;
+  color: #9ca3af;
+  margin: 0;
+}
+
+.footerBottomLinks {
+  display: flex;
+  gap: 20px;
+  justify-content: center;
+}
+
+.footerBottomLink {
+  font-size: 0.8125rem;
+  color: #9ca3af;
+  text-decoration: none;
+  transition: color 0.2s;
+}
+
+.footerBottomLink:hover {
+  color: #000;
+}
+
+/* ---- Responsive ---- */
+
+/* Tablet (768px+) */
+@media (min-width: 768px) {
+  .footer {
+    padding: 48px var(--shop-px-tablet, 24px) 24px;
+  }
+
+  .footerGrid {
+    grid-template-columns: 1fr 1fr;
+    gap: 32px;
+    margin-bottom: 40px;
+  }
+
+  .footerBrand {
+    grid-column: 1 / -1;
+    max-width: 320px;
+  }
+
+  .footerBottom {
+    flex-direction: row;
+    justify-content: space-between;
+    align-items: center;
+    text-align: left;
+  }
+}
+
+/* Desktop (1024px+) */
+@media (min-width: 1024px) {
+  .footer {
+    padding: 64px var(--shop-px-desktop, 40px) 32px;
+  }
+
+  .footerGrid {
+    grid-template-columns: 2fr 1fr 1fr 1fr;
+    gap: 48px;
+    margin-bottom: 48px;
+  }
+
+  .footerBrand {
+    grid-column: auto;
+    max-width: 280px;
+  }
+
+  .footerColTitle {
+    margin-bottom: 16px;
+  }
+
+  .footerBottom {
+    padding-top: 24px;
+  }
+}
+
+/* ---- Dark Variant ---- */
+
+.darkFooter {
+  background: #0a0a0a !important;
+  border-top-color: #1f1f1f !important;
+}
+
+.darkFooter .footerLogoImgWrap {
+  background: #1a1a1a;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+.darkFooter .footerLogoText {
+  color: #fff;
+}
+
+.darkFooter .footerTagline {
+  color: #9ca3af;
+}
+
+.darkFooter .socialIcon {
+  background: #1a1a1a;
+  border-color: #2a2a2a;
+  color: #9ca3af;
+}
+
+.darkFooter .socialIcon:hover {
+  background: #fff;
+  color: #000;
+  border-color: #fff;
+}
+
+.darkFooter .footerColTitle {
+  color: #fff;
+}
+
+.darkFooter .footerLink {
+  color: #9ca3af;
+}
+
+.darkFooter .footerLink:hover {
+  color: #fff;
+}
+
+.darkFooter .footerBottom {
+  border-top-color: #1f1f1f;
+}
+
+.darkFooter .footerCopy {
+  color: #6b7280;
+}
+
+.darkFooter .footerBottomLink {
+  color: #6b7280;
+}
+
+.darkFooter .footerBottomLink:hover {
+  color: #fff;
+}

@@ -133,8 +133,8 @@ export default function PrivacyPolicy() {
                     <strong>Data Fiduciary:</strong> Flowauxi
                   </p>
                   <p className="privacy-highlight-text">
-                    <strong>Registered Address:</strong> Ambasamudram,
-                    Tirunelveli, Tamil Nadu 627428
+                    <strong>Registered Address:</strong> Tirunelveli,
+                    Tamil Nadu 627428, India
                   </p>
                   <p className="privacy-highlight-text">
                     <strong>Business Type:</strong> Sole Proprietorship
@@ -428,16 +428,32 @@ export default function PrivacyPolicy() {
                 <h2 className="privacy-section-title">14. Contact</h2>
                 <div className="privacy-contact-box">
                   <p className="privacy-text">
+                    <strong>Business Name:</strong> Flowauxi
+                  </p>
+                  <p className="privacy-text">
+                    <strong>Registered Address:</strong> Tirunelveli, Tamil Nadu 627428, India
+                  </p>
+                  <p className="privacy-text">
+                    <strong>Phone:</strong>{" "}
+                    <a 
+                      href="tel:+916383634873" 
+                      className="privacy-link"
+                      aria-label="Call +91 6383634873"
+                      data-contact-type="phone"
+                    >
+                      +91 6383634873
+                    </a>
+                  </p>
+                  <p className="privacy-text">
                     <strong>Email:</strong>{" "}
                     <a
                       href="mailto:contact@flowauxi.com"
                       className="privacy-link"
+                      aria-label="Send email to contact@flowauxi.com"
+                      data-contact-type="email"
                     >
                       contact@flowauxi.com
                     </a>
-                  </p>
-                  <p className="privacy-text">
-                    <strong>Business Name:</strong> Flowauxi
                   </p>
                 </div>
               </section>

@@ -108,10 +108,10 @@ export default function BookingHero() {
               Get Started
             </Link>
             <Link
-              href="#"
+              href="#contact"
               className="w-full sm:w-auto flex items-center justify-center gap-2 text-[#1A1A1A] px-4 py-4 text-[16px] font-bold hover:opacity-80 transition-opacity underline decoration-2 underline-offset-4"
             >
-              Watch Demo <ArrowRight className="w-5 h-5 -rotate-45" />
+              Contact Us <ArrowRight className="w-5 h-5 -rotate-45" />
             </Link>
           </div>
 

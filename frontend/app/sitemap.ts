@@ -280,93 +280,247 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     return entries;
   }
 
-  // =====================================================
-  // 🏠 MAIN DOMAIN SITEMAP (www.flowauxi.com)
-  // =====================================================
-  const mainEntries: MetadataRoute.Sitemap = [
-    {
-      url: baseUrl,
-      lastModified: now,
-      changeFrequency: "daily",
-      priority: 1.0,
-    },
-    // Cross-domain references
-    {
-      url: "https://shop.flowauxi.com",
-      lastModified: now,
-      changeFrequency: "weekly",
-      priority: 0.9,
-    },
-    {
-      url: "https://marketing.flowauxi.com",
-      lastModified: now,
-      changeFrequency: "weekly",
-      priority: 0.9,
-    },
-    {
-      url: "https://pages.flowauxi.com",
-      lastModified: now,
-      changeFrequency: "weekly",
-      priority: 0.9,
-    },
-    {
-      url: "https://api.flowauxi.com",
-      lastModified: now,
-      changeFrequency: "weekly",
-      priority: 0.9,
-    },
-    // Conversion pages
-    {
-      url: `${baseUrl}/pricing`,
-      lastModified: now,
-      changeFrequency: "weekly",
-      priority: 0.95,
-    },
-    // Blog (long-tail keyword targeting)
-    {
-      url: `${baseUrl}/blog`,
-      lastModified: now,
-      changeFrequency: "weekly",
-      priority: 0.85,
-    },
-    {
-      url: `${baseUrl}/signup`,
-      lastModified: now,
-      changeFrequency: "monthly",
-      priority: 0.9,
-    },
-    {
-      url: `${baseUrl}/login`,
-      lastModified: now,
-      changeFrequency: "monthly",
-      priority: 0.85,
-    },
-    // Legal
-    {
-      url: `${baseUrl}/terms`,
-      lastModified: now,
-      changeFrequency: "yearly",
-      priority: 0.5,
-    },
-    {
-      url: `${baseUrl}/privacy`,
-      lastModified: now,
-      changeFrequency: "yearly",
-      priority: 0.5,
-    },
-    {
-      url: `${baseUrl}/data-deletion`,
-      lastModified: now,
-      changeFrequency: "yearly",
-      priority: 0.4,
-    },
-    {
-      url: `${baseUrl}/data-handling-policy`,
-      lastModified: now,
-      changeFrequency: "yearly",
-      priority: 0.4,
-    },
-  ];
+// =====================================================
+// 🏠 MAIN DOMAIN SITEMAP (www.flowauxi.com)
+// =====================================================
+const mainEntries: MetadataRoute.Sitemap = [
+  {
+    url: baseUrl,
+    lastModified: now,
+    changeFrequency: "daily",
+    priority: 1.0,
+  },
+  // Cross-domain references
+  {
+    url: "https://shop.flowauxi.com",
+    lastModified: now,
+    changeFrequency: "weekly",
+    priority: 0.9,
+  },
+  {
+    url: "https://marketing.flowauxi.com",
+    lastModified: now,
+    changeFrequency: "weekly",
+    priority: 0.9,
+  },
+  {
+    url: "https://pages.flowauxi.com",
+    lastModified: now,
+    changeFrequency: "weekly",
+    priority: 0.9,
+  },
+  {
+    url: "https://api.flowauxi.com",
+    lastModified: now,
+    changeFrequency: "weekly",
+    priority: 0.9,
+  },
+  // Conversion pages
+  {
+    url: `${baseUrl}/pricing`,
+    lastModified: now,
+    changeFrequency: "weekly",
+    priority: 0.95,
+  },
+  // Feature pages (high priority)
+  {
+    url: `${baseUrl}/features`,
+    lastModified: now,
+    changeFrequency: "weekly",
+    priority: 0.9,
+  },
+  {
+    url: `${baseUrl}/features/whatsapp-store`,
+    lastModified: now,
+    changeFrequency: "weekly",
+    priority: 0.95,
+  },
+  {
+    url: `${baseUrl}/features/ai-chatbot`,
+    lastModified: now,
+    changeFrequency: "weekly",
+    priority: 0.95,
+  },
+  {
+    url: `${baseUrl}/features/order-tracking`,
+    lastModified: now,
+    changeFrequency: "weekly",
+    priority: 0.9,
+  },
+  {
+    url: `${baseUrl}/features/invoice-automation`,
+    lastModified: now,
+    changeFrequency: "weekly",
+    priority: 0.9,
+  },
+  {
+    url: `${baseUrl}/features/order-automation`,
+    lastModified: now,
+    changeFrequency: "weekly",
+    priority: 0.9,
+  },
+  {
+    url: `${baseUrl}/features/google-sheets-sync`,
+    lastModified: now,
+    changeFrequency: "weekly",
+    priority: 0.85,
+  },
+  // Comparison pages
+  {
+    url: `${baseUrl}/compare`,
+    lastModified: now,
+    changeFrequency: "weekly",
+    priority: 0.9,
+  },
+  {
+    url: `${baseUrl}/compare/shopify`,
+    lastModified: now,
+    changeFrequency: "weekly",
+    priority: 0.95,
+  },
+  {
+    url: `${baseUrl}/compare/dukaan`,
+    lastModified: now,
+    changeFrequency: "weekly",
+    priority: 0.9,
+  },
+  {
+    url: `${baseUrl}/compare/wati`,
+    lastModified: now,
+    changeFrequency: "weekly",
+    priority: 0.9,
+  },
+  {
+    url: `${baseUrl}/compare/woocommerce`,
+    lastModified: now,
+    changeFrequency: "weekly",
+    priority: 0.9,
+  },
+  // Blog (long-tail keyword targeting)
+  {
+    url: `${baseUrl}/blog`,
+    lastModified: now,
+    changeFrequency: "weekly",
+    priority: 0.85,
+  },
+  {
+    url: `${baseUrl}/blog/what-is-whatsapp-ecommerce`,
+    lastModified: now,
+    changeFrequency: "monthly",
+    priority: 0.9,
+  },
+  {
+    url: `${baseUrl}/blog/how-to-sell-on-whatsapp`,
+    lastModified: now,
+    changeFrequency: "monthly",
+    priority: 0.9,
+  },
+  {
+    url: `${baseUrl}/blog/whatsapp-order-automation`,
+    lastModified: now,
+    changeFrequency: "monthly",
+    priority: 0.85,
+  },
+  {
+    url: `${baseUrl}/blog/best-whatsapp-chatbot-ecommerce`,
+    lastModified: now,
+    changeFrequency: "monthly",
+    priority: 0.85,
+  },
+  // Programmatic city pages
+  {
+    url: `${baseUrl}/whatsapp-store`,
+    lastModified: now,
+    changeFrequency: "weekly",
+    priority: 0.85,
+  },
+  {
+    url: `${baseUrl}/whatsapp-store/mumbai`,
+    lastModified: now,
+    changeFrequency: "weekly",
+    priority: 0.8,
+  },
+  {
+    url: `${baseUrl}/whatsapp-store/delhi`,
+    lastModified: now,
+    changeFrequency: "weekly",
+    priority: 0.8,
+  },
+  {
+    url: `${baseUrl}/whatsapp-store/bangalore`,
+    lastModified: now,
+    changeFrequency: "weekly",
+    priority: 0.8,
+  },
+  {
+    url: `${baseUrl}/whatsapp-store/chennai`,
+    lastModified: now,
+    changeFrequency: "weekly",
+    priority: 0.75,
+  },
+  {
+    url: `${baseUrl}/whatsapp-store/hyderabad`,
+    lastModified: now,
+    changeFrequency: "weekly",
+    priority: 0.75,
+  },
+  {
+    url: `${baseUrl}/whatsapp-store/pune`,
+    lastModified: now,
+    changeFrequency: "weekly",
+    priority: 0.75,
+  },
+  {
+    url: `${baseUrl}/whatsapp-store/ahmedabad`,
+    lastModified: now,
+    changeFrequency: "weekly",
+    priority: 0.75,
+  },
+  {
+    url: `${baseUrl}/whatsapp-store/kolkata`,
+    lastModified: now,
+    changeFrequency: "weekly",
+    priority: 0.75,
+  },
+  // Auth
+  {
+    url: `${baseUrl}/signup`,
+    lastModified: now,
+    changeFrequency: "monthly",
+    priority: 0.9,
+  },
+  {
+    url: `${baseUrl}/login`,
+    lastModified: now,
+    changeFrequency: "monthly",
+    priority: 0.85,
+  },
+  // Legal
+  {
+    url: `${baseUrl}/terms`,
+    lastModified: now,
+    changeFrequency: "yearly",
+    priority: 0.5,
+  },
+  {
+    url: `${baseUrl}/privacy`,
+    lastModified: now,
+    changeFrequency: "yearly",
+    priority: 0.5,
+  },
+  {
+    url: `${baseUrl}/data-deletion`,
+    lastModified: now,
+    changeFrequency: "yearly",
+    priority: 0.4,
+  },
+  {
+    url: `${baseUrl}/data-handling-policy`,
+    lastModified: now,
+    changeFrequency: "yearly",
+    priority: 0.4,
+  },
+];
 
   // Dynamic store pages on main domain
   try {

@@ -75,8 +75,8 @@ export default function HeroSection() {
                   />
                 </svg>
               </a>
-              <a href="#demo" className="btn-header-ghost hero-cta-button">
-                Watch Demo
+              <a href="/booking" className="btn-header-ghost hero-cta-button">
+                Book a Demo
                 <svg
                   className="hero-cta-icon"
                   fill="none"

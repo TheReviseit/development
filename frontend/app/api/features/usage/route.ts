@@ -53,7 +53,7 @@ export async function GET() {
     const supabaseUserId = userRow.id;
 
     // Get active subscription
-    const { data: sub } = await supabase
+    let { data: sub } = await supabase
       .from("subscriptions")
       .select("pricing_plan_id, plan_id, status, pending_plan_slug")
       .eq("user_id", supabaseUserId)
@@ -70,13 +70,47 @@ export async function GET() {
       .limit(1)
       .maybeSingle();
 
+    // ===================================================================
+    // CRITICAL FIX: Check for active trial if no subscription found
+    // ===================================================================
+    let trialPlanId: string | null = null;
     if (!sub) {
+      const { data: trial } = await supabase
+        .from("free_trials")
+        .select("id, status, plan_slug, domain")
+        .eq("user_id", supabaseUserId)
+        .eq("domain", "shop")
+        .in("status", ["active", "expiring_soon"])
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (trial) {
+        console.log(`[FeatureUsage] User ${supabaseUserId} has active trial (${trial.plan_slug})`);
+        
+        // Get pricing plan ID for trial plan
+        const { data: trialPlan } = await supabase
+          .from("pricing_plans")
+          .select("id")
+          .eq("plan_slug", trial.plan_slug)
+          .eq("product_domain", "shop")
+          .eq("is_active", true)
+          .limit(1)
+          .maybeSingle();
+
+        if (trialPlan) {
+          trialPlanId = trialPlan.id;
+        }
+      }
+    }
+
+    if (!sub && !trialPlanId) {
       return NextResponse.json({ usage: [], domain: "shop" });
     }
 
     // Resolve pricing_plan_id
-    let planId = sub.pricing_plan_id;
-    if (!planId && sub.plan_id) {
+    let planId = sub?.pricing_plan_id ?? trialPlanId;
+    if (!planId && sub?.plan_id) {
       const { data: pp } = await supabase
         .from("pricing_plans")
         .select("id")
@@ -88,7 +122,7 @@ export async function GET() {
     }
 
     // For pending_upgrade, use target plan's limits
-    if (sub.status === "pending_upgrade" && sub.pending_plan_slug) {
+    if (sub?.status === "pending_upgrade" && sub?.pending_plan_slug) {
       const { data: targetPlan } = await supabase
         .from("pricing_plans")
         .select("id")

@@ -1,0 +1,30 @@
+{
+  "include": ["backend"],
+  "exclude": [
+    "**/__pycache__",
+    "**/node_modules",
+    "**/firebase-env/**",
+    "**/.*"
+  ],
+  "pythonVersion": "3.11",
+  "extraPaths": [
+    "./backend",
+    "./backend/firebase-env/Lib/site-packages"
+  ],
+  "executionEnvironments": [
+    {
+      "root": "backend"
+    }
+  ],
+  "reportMissingTypeStubs": false,
+  "pythonAnalysis": {
+    "typeCheckingMode": "off",
+    "autoImportCompletions": true,
+    "diagnosticSeverityOverrides": {
+      "reportMissingImports": "none",
+      "reportMissingTypeStubs": "none",
+      "reportGeneralTypeIssues": "none",
+      "reportTypeddictNotRequiredAccess": "none"
+    }
+  }
+}

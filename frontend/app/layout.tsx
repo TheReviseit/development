@@ -240,11 +240,15 @@ export async function generateMetadata(): Promise<Metadata> {
       languages: {
         "en-US": baseUrl,
         "en-IN": baseUrl,
+        "en": baseUrl,
+        "hi-IN": baseUrl,
       },
     },
     openGraph: {
       ...baseMetadata.openGraph,
       url: baseUrl,
+      locale: "en_US",
+      alternateLocale: ["en_IN", "hi_IN"],
     },
   };
 }

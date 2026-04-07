@@ -13,6 +13,13 @@ export interface ContactSectionProps {
   showSocialLinks?: boolean;
 }
 
+// Contact constants for this component
+const CONTACT = {
+  email: "contact@flowauxi.com",
+  phone: "+916383634873",
+  phoneFormatted: "+91 6383634873",
+} as const;
+
 export default function ContactSection({
   id = "contact",
   className = "",
@@ -76,10 +83,11 @@ export default function ContactSection({
                 <h3 className="contact-info-title">Email Us</h3>
                 <p className="contact-info-text">Our team is here to help you</p>
                 <a
-                  href="mailto:contact@flowauxi.com"
+                  href={`mailto:${CONTACT.email}`}
                   className="contact-info-link"
+                  aria-label={`Send email to ${CONTACT.email}`}
                 >
-                  contact@flowauxi.com
+                  {CONTACT.email}
                 </a>
               </div>
 
@@ -112,8 +120,12 @@ export default function ContactSection({
                   Catch us Monday to Friday, between 9 AM and 6 PM IST — we&apos;ll be
                   there!
                 </p>
-                <a href="tel:+918123456789" className="contact-info-link">
-                  +91 8438147100
+                <a
+                  href={`tel:${CONTACT.phone}`}
+                  className="contact-info-link"
+                  aria-label={`Call ${CONTACT.phoneFormatted}`}
+                >
+                  {CONTACT.phoneFormatted}
                 </a>
               </div>
 
@@ -150,9 +162,9 @@ export default function ContactSection({
                 <h3 className="contact-info-title">Visit Us</h3>
                 <p className="contact-info-text">Come say hello at our office</p>
                 <p className="contact-info-address">
-                  Bangalore, Karnataka
+                  Tirunelveli, Tamil Nadu 627428
                   <br />
-                  India 560001
+                  India
                 </p>
               </div>
             </div>

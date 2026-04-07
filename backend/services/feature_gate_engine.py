@@ -1056,6 +1056,106 @@ class FeatureGateEngine:
                         f"user={supabase_uuid[:8]}..."
                     )
                 else:
+                    # =============================================================
+                    # TRIAL FALLBACK: Check free_trials table for active trial
+                    # =============================================================
+                    # If no subscription found, check if user has an active trial.
+                    # Trials are stored in free_trials table, not subscriptions.
+                    # This mirrors the frontend /api/features/check trial handling.
+                    # 
+                    # Check for status IN ('active', 'expiring_soon') OR status='expired'
+                    # The 'expired' check handles cases where status was manually set to expired
+                    trial_result = self.supabase.table('free_trials').select(
+                        'id, user_id, plan_slug, domain, status, expires_at, created_at'
+                    ).eq(
+                        'user_id', supabase_uuid
+                    ).eq(
+                        'domain', domain
+                    ).or_(
+                        'status.in.(active,expiring_soon),status.eq.expired'
+                    ).order('created_at', desc=True).limit(1).execute()
+
+                    if trial_result.data:
+                        trial = trial_result.data[0]
+                        trial_status = trial.get('status')
+                        
+                        # If trial is already marked as expired, log and return None
+                        if trial_status == 'expired':
+                            logger.warning(
+                                f"[FEATURE_GATE] Trial found but status='expired' for "
+                                f"user={supabase_uuid[:8]}... trial_id={trial.get('id')}"
+                            )
+                            return None
+                        
+                        logger.info(
+                            f"[FEATURE_GATE] Trial found for user={supabase_uuid[:8]}... "
+                            f"domain={domain} plan={trial.get('plan_slug')} "
+                            f"trial_id={trial.get('id')} status={trial.get('status')}"
+                        )
+
+                        # Resolve pricing_plan_id from trial's plan_slug
+                        plan_slug = trial.get('plan_slug')
+                        plan_result = self.supabase.table('pricing_plans').select(
+                            'id, plan_slug, product_domain, pricing_version, is_active'
+                        ).eq('plan_slug', plan_slug).eq(
+                            'product_domain', domain
+                        ).eq('is_active', True).limit(1).execute()
+
+                        if plan_result.data:
+                            plan = plan_result.data[0]
+                            logger.debug(
+                                f"[FEATURE_GATE] Resolved trial plan via plan_slug={plan_slug} → pricing_plan_id={plan.get('id')}"
+                            )
+
+                            # Return synthetic subscription-like dict for trial
+                            combined = {
+                                'id': trial.get('id'),
+                                'user_id': trial.get('user_id'),
+                                'status': 'trialing',  # Map to allowed status
+                                'plan_name': plan_slug,
+                                'pricing_plan_id': plan.get('id'),
+                                'plan_version': plan.get('pricing_version', 1),
+                                'product_domain': domain,
+                                'razorpay_plan_id': None,
+                                'current_period_end': trial.get('expires_at'),
+                                '_is_trial': True,  # Marker for debugging/logging
+                            }
+
+                            # Real-time trial expiry detection
+                            # Defense-in-depth: catch expired trials even if Celery Beat is dead
+                            if combined.get('current_period_end'):
+                                try:
+                                    from datetime import datetime as _dt, timezone as _tz
+                                    period_end_str = combined.get('current_period_end')
+                                    if isinstance(period_end_str, str):
+                                        period_end_dt = _dt.fromisoformat(
+                                            period_end_str.replace('Z', '+00:00')
+                                        )
+                                    else:
+                                        period_end_dt = period_end_str
+
+                                    if period_end_dt < _dt.now(_tz.utc):
+                                        # Trial has expired — treat as expired
+                                        combined['status'] = 'expired'
+                                        logger.warning(
+                                            f"[FEATURE_GATE] 🚨 Trial real-time expiry detected: "
+                                            f"trial_id={combined['id']} user={supabase_uuid[:8]}... "
+                                            f"period_end={period_end_str} — blocking access"
+                                        )
+                                        # Do NOT cache the overridden status
+                                        return combined
+                                except (ValueError, TypeError, AttributeError) as e:
+                                    logger.debug(f"[FEATURE_GATE] Trial period end parse error: {e}")
+
+                            # Cache trial subscription (shorter TTL since trials expire)
+                            if self.cache:
+                                try:
+                                    self.cache.set(cache_key, combined, ttl=SUBSCRIPTION_CACHE_TTL)
+                                except Exception:
+                                    pass
+
+                            return combined
+
                     return None
 
             sub = result.data[0]

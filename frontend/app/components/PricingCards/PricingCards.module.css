@@ -175,7 +175,7 @@
   color: #6b7280;
   font-weight: 500;
   line-height: 1.4;
-  max-width: 80px;
+  white-space: nowrap;
 }
 
 .overageNote {
@@ -261,16 +261,22 @@
   color: #ffffff;
 }
 
+/* Light Transparent Theme Context Overrides */
+.pricingSection[data-theme="light-transparent"] {
+  background: transparent;
+  padding: 0;
+}
+
 /* Responsive Adjustments */
 @media (max-width: 767px) {
   .container {
     padding: 0 24px;
   }
-  
+
   .card {
     padding: 32px 24px;
   }
-  
+
   .title {
     font-size: 2.25rem;
   }

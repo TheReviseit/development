@@ -44,7 +44,8 @@ const nextConfig: NextConfig = {
           },
         ],
       },
-      // General security headers
+      // General security headers for all pages EXCEPT auth pages
+      // Auth pages need special COOP handling for Firebase Auth popup compatibility
       {
         source: "/:path*",
         headers: [
@@ -76,10 +77,46 @@ const nextConfig: NextConfig = {
             key: "Permissions-Policy",
             value: "camera=(), microphone=(), geolocation=()",
           },
+          // 
+          // CRITICAL: COOP Header for OAuth Compatibility
+          // =============================================
+          // 
+          // "same-origin-allow-popups" is REQUIRED for Firebase Auth popups to work.
+          // 
+          // Why not "same-origin"?
+          //   - "same-origin" completely isolates the document from cross-origin popups,
+          //     breaking Firebase Auth's ability to communicate with the Google OAuth popup.
+          //   - This causes the "auth/popup-closed-by-user" error even when the user 
+          //     didn't close the popup.
+          //
+          // Why not "unsafe-none" globally?
+          //   - "unsafe-none" disables all cross-origin opener protection, which is a 
+          //     security risk for non-auth pages.
+          //   - We keep "unsafe-none" ONLY on auth pages (/login, /signup, etc.) for 
+          //     maximum compatibility with OAuth providers.
+          //
+          // "same-origin-allow-popups" strikes the perfect balance:
+          //   - Allows same-origin documents to access the opener
+          //   - Allows popups to access their opener (needed for OAuth)
+          //   - Blocks cross-origin documents from accessing the opener
+          //
+          // References:
+          //   - https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Cross-Origin-Opener-Policy
+          //   - https://firebase.google.com/docs/auth/web/google-signin
+          //
           {
             key: "Cross-Origin-Opener-Policy",
             value: "same-origin-allow-popups",
           },
+          // 
+          // CRITICAL: COEP Header - DO NOT SET TO "require-corp"
+          // =====================================================
+          // 
+          // "require-corp" breaks Firebase Auth and other third-party integrations.
+          // If you need COEP for other reasons, use "credentialless" instead.
+          // 
+          // We intentionally do NOT set COEP here to avoid breaking OAuth flows.
+          //
           {
             key: "Content-Security-Policy",
             value: [
@@ -88,12 +125,79 @@ const nextConfig: NextConfig = {
               "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://accounts.google.com",
               "img-src 'self' data: https: blob:",
               "font-src 'self' https://fonts.gstatic.com",
-              "connect-src 'self' http://localhost:5000 http://127.0.0.1:5000 https://revsieit.onrender.com https://*.onrender.com https://*.supabase.co https://*.firebase.googleapis.com https://identitytoolkit.googleapis.com https://securetoken.googleapis.com https://api.cloudinary.com https://res.cloudinary.com https://firebaseinstallations.googleapis.com https://fcmregistrations.googleapis.com https://fcm.googleapis.com https://accounts.google.com https://*.firebaseapp.com wss://*.supabase.co https://connect.facebook.net https://graph.facebook.com https://*.facebook.com https://fonts.googleapis.com https://fonts.gstatic.com https://va.vercel-scripts.com https://api.web3forms.com https://api.razorpay.com https://*.razorpay.com https://lumberjack.razorpay.com https://*.r2.dev https://www.google-analytics.com https://analytics.google.com https://www.googletagmanager.com",
+              "connect-src 'self' http://localhost:5000 http://127.0.0.1:5000 https://revsieit.onrender.com https://*.onrender.com https://*.supabase.co https://*.firebase.googleapis.com https://identitytoolkit.googleapis.com https://securetoken.googleapis.com https://api.cloudinary.com https://res.cloudinary.com https://firebaseinstallations.googleapis.com https://fcmregistrations.googleapis.com https://fcm.googleapis.com https://accounts.google.com https://*.firebaseapp.com wss://*.supabase.co https://connect.facebook.net https://graph.facebook.com https://*.facebook.com https://fonts.googleapis.com https://fonts.gstatic.com https://va.vercel-scripts.com https://api.web3forms.com https://api.razorpay.com https://*.razorpay.com https://lumberjack.razorpay.com https://*.r2.dev https://www.google-analytics.com https://analytics.google.com https://www.googletagmanager.com https://apis.google.com https://*.googleapis.com",
               "frame-src 'self' https://vercel.live https://accounts.google.com https://*.firebaseapp.com https://www.facebook.com https://web.facebook.com https://api.razorpay.com https://*.razorpay.com https://www.youtube.com https://www.youtube-nocookie.com",
               "frame-ancestors 'self'",
               "base-uri 'self'",
               "form-action 'self'",
             ].join("; "),
+          },
+        ],
+      },
+      // Auth pages: Relaxed COOP for maximum Firebase Auth popup compatibility
+      // Firebase Auth signInWithPopup requires "unsafe-none" to access window.closed
+      // These pages have the highest priority and will override the global headers
+      {
+        source: "/login",
+        headers: [
+          {
+            key: "Cross-Origin-Opener-Policy",
+            value: "unsafe-none",
+          },
+        ],
+      },
+      {
+        source: "/signup",
+        headers: [
+          {
+            key: "Cross-Origin-Opener-Policy",
+            value: "unsafe-none",
+          },
+        ],
+      },
+      {
+        source: "/verify-email",
+        headers: [
+          {
+            key: "Cross-Origin-Opener-Policy",
+            value: "unsafe-none",
+          },
+        ],
+      },
+      {
+        source: "/reset-password",
+        headers: [
+          {
+            key: "Cross-Origin-Opener-Policy",
+            value: "unsafe-none",
+          },
+        ],
+      },
+      {
+        source: "/forgot-password",
+        headers: [
+          {
+            key: "Cross-Origin-Opener-Policy",
+            value: "unsafe-none",
+          },
+        ],
+      },
+      // Console auth pages
+      {
+        source: "/console/login",
+        headers: [
+          {
+            key: "Cross-Origin-Opener-Policy",
+            value: "unsafe-none",
+          },
+        ],
+      },
+      {
+        source: "/console/signup",
+        headers: [
+          {
+            key: "Cross-Origin-Opener-Policy",
+            value: "unsafe-none",
           },
         ],
       },

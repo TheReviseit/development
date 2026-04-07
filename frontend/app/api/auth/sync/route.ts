@@ -318,22 +318,28 @@ export async function POST(request: NextRequest) {
         );
       }
 
-      // Send welcome email (async, don't wait)
-      sendEmail({
-        to: email,
-        subject: "Welcome to Flowauxi! 🎉",
-        html:
-          generateEmailHtml("custom", {
-            message: `
+      // Send welcome email (async, don't wait) - only if enabled
+      const isWelcomeEmailEnabled = process.env.ENABLE_WELCOME_EMAIL !== "false";
+
+      if (isWelcomeEmailEnabled) {
+        sendEmail({
+          to: email,
+          subject: "Welcome to Flowauxi! 🎉",
+          html:
+            generateEmailHtml("custom", {
+              message: `
             <h3>Welcome to Flowauxi, ${fullName}!</h3>
             <p>Thank you for signing up. We're excited to have you on board.</p>
             <p>Your ${currentProduct} product is now active${membershipStatus === "trial" ? " with a 14-day free trial" : ""}.</p>
             <p>Get started by completing your profile setup.</p>
           `,
-          }) ?? "",
-      }).catch((err) =>
-        console.error("[AUTH_SYNC] Failed to send welcome email:", err),
-      );
+            }) ?? "",
+        }).catch((err) =>
+          console.error("[AUTH_SYNC] Failed to send welcome email:", err),
+        );
+      } else {
+        console.log("[AUTH_SYNC] Welcome email skipped (disabled via ENABLE_WELCOME_EMAIL)");
+      }
 
       const elapsedMs = Date.now() - startTime;
       console.log(
@@ -468,6 +474,106 @@ export async function POST(request: NextRequest) {
           },
           { onConflict: "user_id,product" },
         );
+      }
+    }
+
+    // =========================================================================
+    // Fallback 2: Check free_trials table (defense-in-depth)
+    // =========================================================================
+    // Covers the gap where the Trial Engine created a trial but user_products
+    // row wasn't created. With Fix 1 (atomic RPC), this should NEVER fire.
+    // If it does, Fix 1 has a regression — the auto-heal metrics below will
+    // detect it.
+    //
+    // This is a SAFETY NET, not load-bearing infrastructure.
+    // =========================================================================
+    if (!hasAccess) {
+      const { data: activeTrial } = await supabase
+        .from("free_trials")
+        .select("id, status, domain, expires_at, plan_slug")
+        .eq("user_id", existingUser.id)
+        .eq("domain", currentProduct)
+        .in("status", ["active", "expiring_soon"])
+        .limit(1)
+        .maybeSingle();
+
+      if (activeTrial) {
+        hasAccess = true;
+
+        // ⚠️ OBSERVABILITY: This auto-heal firing means the atomic RPC
+        // (Fix 1) failed silently. Track frequency to detect regressions.
+        console.warn(
+          `[AUTH_SYNC] ⚠️ AUTO-HEAL TRIGGERED: free_trials→user_products gap detected`,
+          JSON.stringify({
+            user_id: existingUser.id,
+            product: currentProduct,
+            trial_id: activeTrial.id,
+            trial_status: activeTrial.status,
+            heal_reason: "trial_access_gap",
+          }),
+        );
+
+        // Auto-heal: create the missing user_products row
+        const { error: healError } = await supabase
+          .from("user_products")
+          .upsert(
+            {
+              user_id: existingUser.id,
+              product: currentProduct,
+              status: "trial",
+              activated_by: "system",
+              trial_ends_at: activeTrial.expires_at,
+              trial_days: 7,
+            },
+            { onConflict: "user_id,product" },
+          );
+
+        if (healError) {
+          console.error(
+            `[AUTH_SYNC] ❌ AUTO-HEAL FAILED: Could not create user_products row`,
+            JSON.stringify({
+              user_id: existingUser.id,
+              product: currentProduct,
+              error: healError.message,
+            }),
+          );
+          // Don't revoke access — trial exists, grant it even if heal write failed
+        } else {
+          console.info(
+            `[AUTH_SYNC] ✅ AUTO-HEAL SUCCESS: user_products row created from free_trials`,
+            JSON.stringify({
+              user_id: existingUser.id,
+              product: currentProduct,
+              trial_id: activeTrial.id,
+            }),
+          );
+
+          // Write to product_activation_logs for persistent observability
+          // This is the table that monitoring queries check to track auto-heal
+          // frequency. Without this, the monitoring SQL returns 0 forever.
+          try {
+            await supabase.from("product_activation_logs").insert({
+              user_id: existingUser.id,
+              product: currentProduct,
+              action: "trial_started",
+              previous_status: null,
+              new_status: "trial",
+              initiated_by: "system",
+              metadata: {
+                heal_reason: "trial_access_gap",
+                trial_id: activeTrial.id,
+                trial_status: activeTrial.status,
+                source: "auth_sync_auto_heal",
+              },
+            });
+          } catch (logErr) {
+            // Logging failure is never fatal
+            console.warn(
+              `[AUTH_SYNC] product_activation_logs write failed (non-fatal):`,
+              logErr,
+            );
+          }
+        }
       }
     }
 

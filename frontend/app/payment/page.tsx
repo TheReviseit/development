@@ -1,398 +1,338 @@
 /**
- * /payment — Billing Recovery Page
- * =================================
- * Shown when subscription is suspended, expired, past_due, or missing.
- *
- * Architecture (fixed):
- *   - "use client" — reads domain from browser (port/subdomain) directly
- *   - Uses PricingCards (same as public /pricing page) — proven working
- *   - Passes user email/name/phone/userId for Razorpay prefill
- *   - Domain detected from browser window.location (port-based in dev)
+ * Payment Page - Server Component
+ * ================================
+ * FAANG-grade server-side rendered payment page with strict auth.
+ * 
+ * Security Features:
+ * - Server-side auth validation (no client-side auth flash)
+ * - Tenant resolution from Host header
+ * - Server-side pricing fetch (no client-side pricing leakage)
+ * - Subscription state validation
+ * - No payment UI rendered for unauthenticated users
+ * 
+ * @version 2.0.0
+ * @securityLevel FAANG-Production
+ * @serverComponent
  */
 
-"use client";
+import { cookies, headers } from 'next/headers';
+import { redirect } from 'next/navigation';
+import PaymentPageClient from './PaymentPageClient';
 
-import { useEffect, useState, useMemo } from "react";
-import { useSearchParams, useRouter } from "next/navigation";
-import Image from "next/image";
-import Link from "next/link";
-import { onAuthStateChanged, User } from "firebase/auth";
-import { auth } from "@/src/firebase/firebase";
-import PricingCards from "../components/PricingCards/PricingCards";
-import SpaceshipLoader from "../components/loading/SpaceshipLoader";
-import logo from "@/public/logo.png";
+// =============================================================================
+// TYPES
+// =============================================================================
 
-// ─── Detect product domain from browser (port-based in dev) ──────────────────
-function detectDomainFromBrowser(): string {
-  if (typeof window === "undefined") return "shop";
-  const port = window.location.port;
-  const host = window.location.hostname;
-
-  // Development: port-based
-  if (port === "3001") return "shop";
-  if (port === "3002") return "showcase";
-  if (port === "3003") return "marketing";
-  if (port === "3004") return "api";
-
-  // Production: subdomain-based
-  if (host.startsWith("shop.")) return "shop";
-  if (host.startsWith("marketing.")) return "marketing";
-  if (host.startsWith("showcase.")) return "showcase";
-  if (host.startsWith("api.")) return "api";
-
-  // Default: shop (the primary paying product)
-  return "shop";
+interface UserSession {
+  userId: string;
+  email: string;
+  name?: string;
+  phone?: string;
 }
 
-// ─── Reason → Copy Map ───────────────────────────────────────────────────────
-const headlineMap: Record<string, string> = {
-  suspended:       "Restore your account access",
-  past_due:        "Update your payment to continue",
-  halted:          "Restart your subscription",
-  cancelled:       "Choose a plan to get back on track",
-  expired:         "Renew your subscription",
-  no_subscription: "Start your Flowauxi journey",
-  unknown:         "Restore your account access",
-};
+interface TenantInfo {
+  domain: string;
+  productDomain: string;
+}
 
-const subtextMap: Record<string, string> = {
-  suspended:
-    "Your account has been suspended due to a missed payment. Select a plan below to restore full access instantly.",
-  past_due:
-    "Your subscription period has ended. Pick your plan and complete payment to continue without interruption.",
-  halted:
-    "Your subscription was halted by Razorpay. Start a fresh subscription below to resume all features.",
-  cancelled:
-    "Your subscription has been cancelled. Choose a plan below to get full access back.",
-  expired:
-    "Your subscription has expired. Pick a plan below and complete payment to unlock all dashboard features.",
-  no_subscription:
-    "You don't have an active subscription. Choose the plan that best fits your business needs.",
-  unknown:
-    "Please choose a plan below to restore or start your subscription.",
-};
+interface PricingPlan {
+  id: string;
+  name: string;
+  slug: string;
+  price: number;
+  priceDisplay: string;
+  currency: string;
+  description: string;
+  features: string[];
+  popular?: boolean;
+}
 
-const badgeMap: Record<string, string> = {
-  suspended:       "Account Suspended",
-  past_due:        "Payment Overdue",
-  halted:          "Subscription Halted",
-  cancelled:       "Subscription Cancelled",
-  expired:         "Subscription Expired",
-  no_subscription: "No Active Plan",
-  unknown:         "Action Required",
-};
+interface PricingData {
+  domain: string;
+  displayName: string;
+  plans: PricingPlan[];
+}
 
-// ─── Component ────────────────────────────────────────────────────────────────
-export default function PaymentPage() {
-  const searchParams = useSearchParams();
-  const router = useRouter();
+interface SubscriptionState {
+  hasSubscription: boolean;
+  hasActiveTrial: boolean;
+  trialExpired: boolean;
+  canSubscribe: boolean;
+  reason?: string;
+}
 
-  const reason = searchParams.get("reason") || "expired";
-  const isRecovery = reason !== "no_subscription";
+// =============================================================================
+// SERVER-SIDE AUTH VALIDATION
+// =============================================================================
 
-  const headline = headlineMap[reason] ?? headlineMap.unknown;
-  const subtext   = subtextMap[reason]  ?? subtextMap.unknown;
-  const badge     = badgeMap[reason]    ?? badgeMap.unknown;
+async function validateSession(): Promise<UserSession | null> {
+  const cookieStore = await cookies();
+  const sessionCookie = cookieStore.get('flowauxi_session');
 
-  // ─── Auth State ─────────────────────────────────────────────────────────────
-  const [user, setUser] = useState<User | null>(null);
-  const [authLoading, setAuthLoading] = useState(true);
+  if (!sessionCookie?.value) {
+    return null;
+  }
 
-  // ─── Domain — detected from browser ─────────────────────────────────────────
-  const [domain, setDomain] = useState<string>("shop");
-
-  useEffect(() => {
-    // Detect from browser (runs after hydration)
-    setDomain(detectDomainFromBrowser());
-
-    // Firebase auth listener
-    const unsub = onAuthStateChanged(auth, (currentUser) => {
-      setUser(currentUser);
-      setAuthLoading(false);
+  try {
+    // Validate session with backend
+    const backendUrl = process.env.BACKEND_URL || 'http://localhost:5000';
+    const response = await fetch(`${backendUrl}/api/auth/validate-session`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        sessionToken: sessionCookie.value,
+      }),
+      // Short timeout to fail fast
+      signal: AbortSignal.timeout(5000),
     });
-    return () => unsub();
-  }, []);
 
-  // ─── Handle successful subscription ─────────────────────────────────────────
-  const handleSubscriptionSuccess = (planName: string) => {
-    // Dispatch event so BillingLockScreen re-checks billing status
-    window.dispatchEvent(new Event("subscription-updated"));
-    // Navigate back to dashboard
-    router.push("/dashboard");
+    if (!response.ok) {
+      return null;
+    }
+
+    const data = await response.json();
+    
+    if (!data.valid) {
+      return null;
+    }
+
+    return {
+      userId: data.userId,
+      email: data.email,
+      name: data.name,
+      phone: data.phone,
+    };
+  } catch (error) {
+    console.error('Session validation error:', error);
+    return null;
+  }
+}
+
+// =============================================================================
+// TENANT RESOLUTION
+// =============================================================================
+
+async function resolveTenant(): Promise<TenantInfo | null> {
+  const headersList = await headers();
+  const host = headersList.get('host') || '';
+  
+  // Domain mapping (must match backend domain_middleware.py)
+  const domainMap: Record<string, string> = {
+    'shop.flowauxi.com': 'shop',
+    'marketing.flowauxi.com': 'marketing',
+    'pages.flowauxi.com': 'showcase',
+    'flowauxi.com': 'dashboard',
+    'www.flowauxi.com': 'dashboard',
+    'api.flowauxi.com': 'api',
+    'localhost:3000': 'dashboard',
+    'localhost:3001': 'shop',
+    'localhost:3002': 'showcase',
+    'localhost:3003': 'marketing',
+    'localhost:3004': 'api',
   };
 
-  if (authLoading) {
+  const productDomain = domainMap[host];
+
+  if (!productDomain) {
+    return null;
+  }
+
+  return {
+    domain: host,
+    productDomain,
+  };
+}
+
+// =============================================================================
+// SERVER-SIDE PRICING FETCH
+// =============================================================================
+
+async function fetchPricing(
+  tenant: TenantInfo,
+  userSession: UserSession
+): Promise<PricingData | null> {
+  try {
+    const backendUrl = process.env.BACKEND_URL || 'http://localhost:5000';
+    
+    // Server-side request includes user context and tenant
+    const response = await fetch(
+      `${backendUrl}/api/billing/pricing?domain=${tenant.productDomain}`,
+      {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-User-Id': userSession.userId,
+          'X-Product-Domain': tenant.productDomain,
+          'X-Request-Source': 'nextjs-server-component',
+        },
+        // Cache pricing for 5 minutes at server level
+        next: { revalidate: 300 },
+      }
+    );
+
+    if (!response.ok) {
+      console.error('Pricing fetch failed:', response.status);
+      return null;
+    }
+
+    return await response.json();
+  } catch (error) {
+    console.error('Pricing fetch error:', error);
+    return null;
+  }
+}
+
+// =============================================================================
+// SUBSCRIPTION STATE CHECK
+// =============================================================================
+
+async function checkSubscriptionState(
+  userSession: UserSession,
+  tenant: TenantInfo
+): Promise<SubscriptionState> {
+  try {
+    const backendUrl = process.env.BACKEND_URL || 'http://localhost:5000';
+    
+    const response = await fetch(
+      `${backendUrl}/api/billing/subscription-state?domain=${tenant.productDomain}`,
+      {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-User-Id': userSession.userId,
+          'X-Product-Domain': tenant.productDomain,
+        },
+        // Short cache for subscription state
+        next: { revalidate: 60 },
+      }
+    );
+
+    if (!response.ok) {
+      // Fail closed - assume they can't subscribe
+      return {
+        hasSubscription: false,
+        hasActiveTrial: false,
+        trialExpired: false,
+        canSubscribe: false,
+        reason: 'state_check_failed',
+      };
+    }
+
+    return await response.json();
+  } catch (error) {
+    console.error('Subscription state check error:', error);
+    return {
+      hasSubscription: false,
+      hasActiveTrial: false,
+      trialExpired: false,
+      canSubscribe: false,
+      reason: 'state_check_error',
+    };
+  }
+}
+
+// =============================================================================
+// MAIN PAGE COMPONENT
+// =============================================================================
+
+interface PaymentPageProps {
+  searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
+}
+
+export default async function PaymentPage({ searchParams }: PaymentPageProps) {
+  // Get search params
+  const params = await searchParams;
+  const reason = typeof params.reason === 'string' ? params.reason : 'expired';
+
+  // =============================================================================
+  // SERVER-SIDE AUTH GUARD
+  // =============================================================================
+  
+  const userSession = await validateSession();
+
+  if (!userSession) {
+    // Not authenticated - redirect to login with return URL
+    const returnUrl = encodeURIComponent(`/payment?reason=${reason}`);
+    redirect(`/login?returnUrl=${returnUrl}`);
+  }
+
+  // =============================================================================
+  // TENANT RESOLUTION
+  // =============================================================================
+  
+  const tenant = await resolveTenant();
+
+  if (!tenant) {
+    // Invalid tenant - this should not happen if middleware is working
     return (
-      <div style={{
-        minHeight: "100vh",
-        background: "#030303",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-      }}>
-        <SpaceshipLoader text="Loading..." />
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <div className="text-center">
+          <h1 className="text-2xl font-bold text-red-600 mb-4">Access Denied</h1>
+          <p className="text-gray-600">Unknown domain. Please contact support.</p>
+        </div>
       </div>
     );
   }
 
+  // =============================================================================
+  // SERVER-SIDE PRICING FETCH
+  // =============================================================================
+  
+  const pricingData = await fetchPricing(tenant, userSession);
+
+  if (!pricingData) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <div className="text-center">
+          <h1 className="text-2xl font-bold text-red-600 mb-4">Error</h1>
+          <p className="text-gray-600">Failed to load pricing. Please try again.</p>
+        </div>
+      </div>
+    );
+  }
+
+  // =============================================================================
+  // SUBSCRIPTION STATE VALIDATION
+  // =============================================================================
+  
+  const subscriptionState = await checkSubscriptionState(userSession, tenant);
+
+  // If they already have an active subscription, redirect to dashboard
+  if (subscriptionState.hasSubscription) {
+    redirect('/dashboard');
+  }
+
+  // If they have an active trial and aren't expired, redirect to dashboard
+  if (subscriptionState.hasActiveTrial && !subscriptionState.trialExpired) {
+    redirect('/dashboard');
+  }
+
+  // =============================================================================
+  // RENDER PAYMENT PAGE
+  // =============================================================================
+  
   return (
-    <div style={{
-      minHeight: "100vh",
-      background: "#030303",
-      display: "flex",
-      flexDirection: "column",
-      fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Inter', sans-serif",
-    }}>
-
-      {/* ─── Navigation Bar ─────────────────────────────────────────────── */}
-      <nav style={{
-        position: "sticky",
-        top: 0,
-        zIndex: 40,
-        width: "100%",
-        background: "rgba(3, 3, 3, 0.92)",
-        backdropFilter: "blur(12px)",
-        WebkitBackdropFilter: "blur(12px)",
-        borderBottom: "1px solid rgba(255,255,255,0.06)",
-      }}>
-        <div style={{
-          maxWidth: "1100px",
-          margin: "0 auto",
-          padding: "0 24px",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
-          height: "60px",
-        }}>
-          <Link href="/" style={{ display: "flex", alignItems: "center", gap: "10px", textDecoration: "none" }}>
-            <Image src={logo} alt="Flowauxi" width={26} height={26} />
-            <span style={{ fontSize: "15px", fontWeight: 700, color: "#ffffff", letterSpacing: "-0.02em" }}>
-              Flowauxi
-            </span>
-          </Link>
-
-          <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-            <a href="mailto:support@flowauxi.com" style={{
-              fontSize: "13px",
-              color: "rgba(255,255,255,0.4)",
-              textDecoration: "none",
-              padding: "8px 14px",
-            }}>
-              Support
-            </a>
-            {user && (
-              <Link href="/dashboard" style={{
-                display: "inline-flex",
-                alignItems: "center",
-                gap: "6px",
-                padding: "8px 16px",
-                borderRadius: "8px",
-                background: "rgba(255,255,255,0.08)",
-                border: "1px solid rgba(255,255,255,0.1)",
-                color: "rgba(255,255,255,0.7)",
-                fontSize: "13px",
-                fontWeight: 500,
-                textDecoration: "none",
-              }}>
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M10 19l-7-7m0 0l7-7m-7 7h18" />
-                </svg>
-                Dashboard
-              </Link>
-            )}
-          </div>
-        </div>
-      </nav>
-
-      {/* ─── Hero / Context Header ──────────────────────────────────────── */}
-      <div style={{
-        width: "100%",
-        padding: "64px 24px 48px",
-        textAlign: "center",
-        position: "relative",
-        overflow: "hidden",
-      }}>
-        {/* Ambient glow */}
-        <div style={{
-          position: "absolute",
-          top: "-80px",
-          left: "50%",
-          transform: "translateX(-50%)",
-          width: "500px",
-          height: "300px",
-          background: "radial-gradient(ellipse at center, rgba(220,38,38,0.07) 0%, transparent 70%)",
-          pointerEvents: "none",
-        }} />
-
-        <div style={{ position: "relative", maxWidth: "620px", margin: "0 auto" }}>
-          {/* Status pill */}
-          {isRecovery && (
-            <div style={{
-              display: "inline-flex",
-              alignItems: "center",
-              gap: "7px",
-              padding: "5px 14px",
-              borderRadius: "100px",
-              background: "rgba(220,38,38,0.1)",
-              border: "1px solid rgba(220,38,38,0.2)",
-              marginBottom: "20px",
-            }}>
-              <span style={{
-                width: "6px",
-                height: "6px",
-                borderRadius: "50%",
-                background: "#ef4444",
-                display: "inline-block",
-                animation: "pulseAnim 2s ease-in-out infinite",
-              }} />
-              <span style={{
-                fontSize: "11.5px",
-                fontWeight: 600,
-                color: "#f87171",
-                letterSpacing: "0.05em",
-                textTransform: "uppercase",
-              }}>
-                {badge}
-              </span>
-            </div>
-          )}
-
-          {/* Headline */}
-          <h1 style={{
-            margin: "0 0 16px",
-            fontSize: "clamp(28px, 5vw, 40px)",
-            fontWeight: 800,
-            letterSpacing: "-0.04em",
-            color: "#ffffff",
-            lineHeight: 1.2,
-          }}>
-            {headline}
-          </h1>
-
-          {/* Subtext */}
-          <p style={{
-            margin: 0,
-            fontSize: "16px",
-            lineHeight: 1.7,
-            color: "rgba(255,255,255,0.45)",
-            maxWidth: "480px",
-            marginLeft: "auto",
-            marginRight: "auto",
-          }}>
-            {subtext}
-          </p>
-
-          {/* Locked feature pills */}
-          {isRecovery && (
-            <div style={{
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              flexWrap: "wrap",
-              gap: "8px",
-              marginTop: "28px",
-            }}>
-              {["Messages", "Campaigns", "Analytics", "AI Bot", "Templates", "Store"].map((f) => (
-                <span key={f} style={{
-                  display: "inline-flex",
-                  alignItems: "center",
-                  gap: "5px",
-                  padding: "4px 12px",
-                  borderRadius: "100px",
-                  background: "rgba(255,255,255,0.04)",
-                  border: "1px solid rgba(255,255,255,0.08)",
-                  fontSize: "12px",
-                  color: "rgba(255,255,255,0.35)",
-                }}>
-                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                    <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
-                    <path d="M7 11V7a5 5 0 0110 0v4" />
-                  </svg>
-                  {f}
-                </span>
-              ))}
-              <span style={{ fontSize: "12px", color: "rgba(255,255,255,0.2)", padding: "4px 12px" }}>
-                → All unlocked instantly after payment
-              </span>
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* ─── Divider ──────────────────────────────────────────────────── */}
-      <div style={{ width: "100%", maxWidth: "1100px", margin: "0 auto 0", padding: "0 24px" }}>
-        <div style={{
-          height: "1px",
-          background: "linear-gradient(90deg, transparent, rgba(255,255,255,0.07), transparent)",
-        }} />
-      </div>
-
-      {/* ─── Plan Selection (PricingCards) ────────────────────────────── */}
-      <div style={{ flex: 1, width: "100%", maxWidth: "1100px", margin: "0 auto", padding: "32px 24px 80px" }}>
-        <p style={{
-          fontSize: "11px",
-          fontWeight: 600,
-          letterSpacing: "0.1em",
-          textTransform: "uppercase",
-          color: "rgba(255,255,255,0.2)",
-          marginBottom: "32px",
-          textAlign: "center",
-        }}>
-          Select your plan to continue
-        </p>
-
-        {/*
-          PricingCards — the same component used on the public /pricing page.
-          It uses createSubscription() → openRazorpayCheckout() → verifyPayment()
-          and redirects to /payment/status on success.
-
-          Key: we pass domain explicitly so it doesn't fall back to auto-detection,
-          and pass user info for Razorpay prefill.
-        */}
-        <PricingCards
-          domain={domain as any}
-          userEmail={user?.email ?? undefined}
-          userName={user?.displayName ?? undefined}
-          userId={user?.uid ?? undefined}
-          onSubscriptionSuccess={handleSubscriptionSuccess}
-          theme="dark"
-        />
-      </div>
-
-      {/* ─── Footer ────────────────────────────────────────────────────── */}
-      <footer style={{
-        borderTop: "1px solid rgba(255,255,255,0.05)",
-        padding: "24px",
-        textAlign: "center",
-      }}>
-        <p style={{
-          margin: 0,
-          fontSize: "12px",
-          color: "rgba(255,255,255,0.2)",
-          lineHeight: 1.6,
-        }}>
-          Payments are processed securely via{" "}
-          <span style={{ color: "rgba(255,255,255,0.4)" }}>Razorpay</span>.
-          {" "}Your subscription activates within seconds of payment.
-          <br />
-          Need help?{" "}
-          <a href="mailto:support@flowauxi.com" style={{ color: "rgba(255,255,255,0.35)", textDecoration: "none" }}>
-            support@flowauxi.com
-          </a>
-          {" "}or{" "}
-          <a href="https://wa.me/916383634873" target="_blank" rel="noopener noreferrer"
-            style={{ color: "rgba(255,255,255,0.35)", textDecoration: "none" }}>
-            WhatsApp us
-          </a>.
-        </p>
-      </footer>
-
-      <style>{`
-        @keyframes pulseAnim {
-          0%, 100% { opacity: 1; }
-          50% { opacity: 0.4; }
-        }
-      `}</style>
-    </div>
+    <PaymentPageClient
+      user={userSession}
+      tenant={tenant}
+      pricing={pricingData}
+      reason={reason}
+      subscriptionState={subscriptionState}
+    />
   );
 }
+
+// =============================================================================
+// METADATA
+// =============================================================================
+
+export const metadata = {
+  title: 'Upgrade Your Plan - Flowauxi',
+  description: 'Choose the perfect plan for your business.',
+  robots: {
+    index: false,
+    follow: false,
+  },
+};

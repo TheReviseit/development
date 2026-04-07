@@ -52,10 +52,10 @@ export default function BookingCTA() {
               <ArrowRight className="w-6 h-6" />
             </Link>
             <Link
-              href="#"
+              href="/signup"
               className="bg-white/40 backdrop-blur-md text-[#111111] border-2 border-black px-10 py-6 rounded-[24px] text-lg font-black hover:bg-white/60 transition-all shadow-lg"
             >
-              Talk to an Expert
+              Get Started Now
             </Link>
           </div>
 

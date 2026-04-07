@@ -1,0 +1,656 @@
+/* =============================================================================
+   SHOP FEATURES — Bento Grid (Mobile-First)
+   ============================================================================= */
+
+.features {
+  padding: var(--shop-section-py-mobile, 64px) var(--shop-px-mobile, 16px);
+  background: #fdfdfd;
+  overflow-x: clip;
+}
+
+.featuresInner {
+  max-width: var(--shop-container, 1200px);
+  margin: 0 auto;
+}
+
+.premiumTag {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  font-size: clamp(0.75rem, 1.5vw + 0.25rem, 1.5rem);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.3em;
+  color: #000;
+  margin: 0 auto 40px;
+  position: relative;
+  z-index: 10;
+}
+
+.tagLine {
+  width: clamp(30px, 8vw, 80px);
+  height: 1px;
+  background: #000;
+  opacity: 0.15;
+}
+
+/* --- Enterprise Hero Bento — Mobile-First (stacked) --- */
+
+.heroSplitContainer {
+  display: flex;
+  flex-direction: column;
+  gap: 40px;
+  align-items: center;
+  margin-bottom: 60px;
+  position: relative;
+  z-index: 5;
+}
+
+.heroVisualBento {
+  flex: none;
+  width: 100%;
+  display: grid;
+  grid-template-columns: 1fr;
+  grid-template-rows: auto;
+  gap: 16px;
+  order: 1;
+}
+
+.heroMainImageCard {
+  grid-column: span 1;
+  grid-row: span 1;
+  border-radius: 24px;
+  position: relative;
+  overflow: hidden;
+  box-shadow: 0 40px 80px rgba(0, 0, 0, 0.1);
+  background: #f0f0f0;
+  min-height: 250px;
+}
+
+.heroImage {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.heroImageOverlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(
+    to bottom right,
+    rgba(255, 255, 255, 0.1),
+    rgba(255, 255, 255, 0)
+  );
+}
+
+.heroAccentCard {
+  background: white;
+  border-radius: 24px;
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  border: 1px solid rgba(0, 0, 0, 0.04);
+  box-shadow: 0 15px 35px rgba(0, 0, 0, 0.03);
+  transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.heroAccentCard:hover {
+  transform: translateY(-8px);
+  box-shadow: 0 25px 50px rgba(0, 0, 0, 0.05);
+  border-color: rgba(16, 185, 129, 0.1);
+}
+
+.accentActive:hover {
+  background: #044d3c !important;
+  box-shadow: 0 25px 50px rgba(2, 44, 34, 0.2);
+}
+
+.accentHeader {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.accentIcon {
+  color: #10b981;
+  background: rgba(16, 185, 129, 0.08);
+  padding: 8px;
+  border-radius: 12px;
+}
+
+.accentLabel {
+  font-size: 0.875rem;
+  color: #71717a;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.accentData {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.accentValue {
+  font-size: 2rem;
+  font-weight: 700;
+  color: #1a1a1a;
+  letter-spacing: -0.04em;
+  line-height: 1;
+}
+
+.accentPara {
+  font-size: 0.875rem;
+  color: #a1a1aa;
+  margin: 4px 0 0;
+}
+
+.accentActive {
+  background: #022c22;
+  border: none;
+}
+
+.accentActive .accentIcon {
+  background: rgba(255, 255, 255, 0.1);
+  color: #10b981;
+}
+
+.accentActive .accentValue {
+  color: white;
+}
+
+.accentActive .accentLabel {
+  color: rgba(255, 255, 255, 0.5);
+}
+
+.accentActive .accentPara {
+  color: rgba(255, 255, 255, 0.4);
+}
+
+.heroTextColumn {
+  flex: none;
+  width: 100%;
+  order: -1;
+}
+
+.headerText {
+  text-align: center;
+  align-items: center;
+  display: flex;
+  flex-direction: column;
+}
+
+.sectionTitle {
+  font-size: clamp(2rem, 4vw + 0.5rem, 4rem);
+  font-weight: 700;
+  color: #1a1a1a;
+  letter-spacing: -0.05em;
+  line-height: 1.1;
+  margin: 0 0 20px;
+}
+
+.greyText {
+  color: #71717a;
+}
+
+.heroSubDescription {
+  font-size: clamp(1rem, 1.5vw + 0.25rem, 1.25rem);
+  color: #71717a;
+  line-height: 1.6;
+  max-width: 480px;
+  margin: 0 auto;
+}
+
+/* --- Bento Grid --- */
+
+.bentoGrid {
+  display: grid;
+  grid-template-columns: 1fr;
+  grid-auto-rows: auto;
+  gap: 16px;
+  margin-top: 40px;
+  position: relative;
+  z-index: 10;
+  padding: 0;
+}
+
+/* Card Variations */
+.tall {
+  grid-row: span 1;
+}
+
+.wide {
+  grid-column: span 1;
+}
+
+.card {
+  background: rgba(255, 255, 255, 0.85);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border-radius: 24px;
+  padding: clamp(24px, 3vw, 40px);
+  position: relative;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.5);
+  display: flex;
+  flex-direction: column;
+  min-height: 280px;
+  transition:
+    transform 0.4s cubic-bezier(0.2, 0, 0, 1),
+    box-shadow 0.4s ease;
+  box-shadow:
+    0 4px 6px rgba(0, 0, 0, 0.02),
+    0 10px 30px rgba(0, 0, 0, 0.08);
+}
+
+.card:hover {
+  transform: translateY(-8px);
+  background: rgba(255, 255, 255, 0.95);
+  box-shadow: 0 30px 60px rgba(0, 0, 0, 0.12);
+}
+
+.darkGreen:hover {
+  background: #044d3c !important;
+  transform: translateY(-8px);
+  box-shadow: 0 30px 60px rgba(2, 44, 34, 0.3);
+}
+
+.cardInfo {
+  position: relative;
+  z-index: 2;
+}
+
+.cardTitle {
+  font-size: clamp(1.25rem, 1.5vw + 0.25rem, 1.5rem);
+  font-weight: 600;
+  color: #111;
+  margin: 0 0 12px;
+  letter-spacing: -0.02em;
+}
+
+.cardDesc {
+  font-size: 1rem;
+  color: #666;
+  line-height: 1.5;
+  margin: 0;
+  max-width: 100%;
+}
+
+/* --- Visual Elements --- */
+
+.cardVisual {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  min-height: 0;
+}
+
+/* Smart Research Visual */
+.researchCircle {
+  width: clamp(150px, 30vw, 200px);
+  height: clamp(150px, 30vw, 200px);
+  border: 1px dashed #eee;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+}
+
+.mainIcon {
+  width: clamp(60px, 10vw, 80px);
+  height: clamp(60px, 10vw, 80px);
+  background: #022c22;
+  color: #fff;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 10px 30px rgba(2, 44, 34, 0.3);
+}
+
+.orbitalIcon {
+  position: absolute;
+  width: 36px;
+  height: 36px;
+  background: #fff;
+  border: 1px solid #f0f0f0;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+}
+
+/* Drafting Preview Visual */
+.draftingPreview {
+  width: 100%;
+  max-width: 400px;
+  background: #fafafa;
+  border-radius: 12px;
+  padding: clamp(16px, 2vw, 24px);
+  border: 1px solid #eee;
+  font-family: inherit;
+}
+
+.docHeader {
+  font-weight: 600;
+  font-size: 0.875rem;
+  margin-bottom: 12px;
+  color: #888;
+}
+
+.docBody {
+  font-size: clamp(0.9375rem, 1.2vw, 1.125rem);
+  line-height: 1.6;
+  color: #333;
+}
+
+.highlight {
+  background: #e5e7eb;
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+.docCursor {
+  width: 2px;
+  height: 20px;
+  background: #000;
+  display: inline-block;
+  vertical-align: middle;
+  margin-left: 4px;
+  animation: blink 1s infinite;
+}
+
+@keyframes blink {
+  50% {
+    opacity: 0;
+  }
+}
+
+/* Insights Visual */
+.insightsVisual {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.insightBox {
+  padding: 12px;
+  background: #fbfbfb;
+  border: 1px solid #eee;
+  border-radius: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font-size: 0.75rem;
+  color: #888;
+}
+
+.fileIcon {
+  font-weight: 700;
+  color: #000;
+  font-size: 1rem;
+}
+
+.insightDivider {
+  flex: 1;
+  height: 1px;
+  background: #eee;
+  position: relative;
+  min-width: 40px;
+}
+
+.insightNode {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 32px;
+  height: 32px;
+  background: #022c22;
+  color: #fff;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.summaryLines {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.line {
+  height: 4px;
+  background: #eee;
+  border-radius: 2px;
+  width: 40px;
+}
+.line:nth-child(2) {
+  width: 30px;
+}
+
+/* Dark Green Card */
+.darkGreen {
+  background: #022c22;
+  color: #fff;
+  border: none;
+}
+
+.darkGreen .cardTitle {
+  color: #fff;
+}
+
+.darkGreen .cardDesc {
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.managementVisual {
+  width: clamp(100px, 20vw, 140px);
+  height: clamp(100px, 20vw, 140px);
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.managementPulse {
+  position: absolute;
+  width: 100%;
+  height: 100%;
+  background: rgba(16, 185, 129, 0.15);
+  border-radius: 50%;
+  filter: blur(20px);
+}
+
+.managementContent {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+}
+
+.managementIcon {
+  color: #10b981;
+}
+
+.managementLines {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  align-items: center;
+}
+
+.managementLines .line {
+  height: 2px;
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 1px;
+  width: 32px;
+}
+
+.managementLines .line:nth-child(2) {
+  width: 20px;
+}
+
+/* Lavender Card */
+.lavender {
+  background: #dbeafe;
+  border: none;
+}
+
+.starCircle {
+  width: clamp(80px, 15vw, 120px);
+  height: clamp(80px, 15vw, 120px);
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.star {
+  position: absolute;
+  top: 0;
+  left: 50%;
+  transform-origin: 0 60px;
+  font-size: 14px;
+  color: #022c22;
+}
+
+/* --- Responsive — Progressive Enhancement --- */
+
+/* Tablet (768px+) */
+@media (min-width: 768px) {
+  .features {
+    padding: var(--shop-section-py-tablet, 80px) var(--shop-px-tablet, 24px);
+  }
+
+  .premiumTag {
+    margin-bottom: 60px;
+    gap: 24px;
+    letter-spacing: 0.4em;
+  }
+
+  .heroVisualBento {
+    grid-template-columns: repeat(2, 1fr);
+    grid-template-rows: repeat(2, 200px);
+    gap: 20px;
+    max-width: 600px;
+    margin: 0 auto;
+  }
+
+  .heroMainImageCard {
+    grid-row: span 2;
+    min-height: auto;
+  }
+
+  .heroSplitContainer {
+    margin-bottom: 80px;
+  }
+
+  .bentoGrid {
+    grid-template-columns: repeat(2, 1fr);
+    grid-auto-rows: 280px;
+    gap: 24px;
+  }
+
+  .wide {
+    grid-column: span 2;
+  }
+
+  .accentValue {
+    font-size: 2.25rem;
+  }
+}
+
+/* Desktop (1024px+) */
+@media (min-width: 1024px) {
+  .features {
+    padding: 120px var(--shop-px-desktop, 40px);
+  }
+
+  .premiumTag {
+    margin-bottom: 80px;
+  }
+
+  .heroSplitContainer {
+    flex-direction: row;
+    gap: 80px;
+    margin-bottom: 120px;
+  }
+
+  .heroVisualBento {
+    flex: 1.2;
+    max-width: none;
+    grid-template-rows: repeat(2, 220px);
+  }
+
+  .heroTextColumn {
+    flex: 1;
+    order: 0;
+    padding-left: 20px;
+  }
+
+  .headerText {
+    text-align: left;
+    align-items: flex-start;
+  }
+
+  .heroSubDescription {
+    margin: 0;
+  }
+
+  .heroAccentCard {
+    border-radius: 32px;
+    padding: 30px;
+  }
+
+  .heroMainImageCard {
+    border-radius: 40px;
+  }
+
+  .bentoGrid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+
+  .tall {
+    grid-row: span 2;
+  }
+
+  .card {
+    border-radius: 32px;
+  }
+
+  .cardDesc {
+    max-width: 280px;
+  }
+
+  .insightsVisual {
+    gap: 20px;
+    flex-wrap: nowrap;
+  }
+
+  .insightDivider {
+    min-width: 60px;
+  }
+
+  .insightBox {
+    padding: 16px;
+  }
+}

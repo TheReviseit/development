@@ -11,9 +11,11 @@ Endpoints:
 """
 
 import logging
+from typing import Optional
 from flask import Blueprint, request, jsonify, make_response, g
 
 from services.console_auth_service import get_console_auth_service
+from services.trial_auth_service import get_trial_auth_service
 from middleware.console_auth_middleware import require_console_auth, get_client_ip
 
 logger = logging.getLogger('console.auth.routes')
@@ -32,7 +34,7 @@ import os
 IS_PRODUCTION = os.getenv('FLASK_ENV') == 'production' or os.getenv('ENVIRONMENT') == 'production'
 
 
-def _set_auth_cookies(response, access_token: str, refresh_token: str = None):
+def _set_auth_cookies(response, access_token: str, refresh_token: Optional[str] = None):
     """Set authentication cookies (httpOnly, secure in production)."""
     response.set_cookie(
         COOKIE_NAME,
@@ -119,12 +121,12 @@ def signup():
     # Call auth service
     try:
         import asyncio
-        service = get_console_auth_service()
+        service = get_trial_auth_service()
         
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
         try:
-            result = loop.run_until_complete(service.signup(
+            result = loop.run_until_complete(service.signup_with_trial(
                 email=email,
                 password=password,
                 name=name,
@@ -141,7 +143,10 @@ def signup():
                 'user': result['user'],
                 'org': result['org']
             }
-            
+
+            if result.get('trial'):
+                response_data['trial'] = result['trial']
+
             response = make_response(jsonify(response_data), 201)
             response = _set_auth_cookies(
                 response,

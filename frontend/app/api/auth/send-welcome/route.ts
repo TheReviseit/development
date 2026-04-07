@@ -3,6 +3,18 @@ import { cookies } from "next/headers";
 
 export async function POST(request: NextRequest) {
   try {
+    // Check if welcome emails are enabled (default: true for production safety)
+    const isWelcomeEmailEnabled = process.env.ENABLE_WELCOME_EMAIL !== "false";
+
+    if (!isWelcomeEmailEnabled) {
+      console.log("[send-welcome] Welcome emails disabled via ENABLE_WELCOME_EMAIL");
+      return NextResponse.json({
+        success: true,
+        message: "Welcome email skipped (disabled)",
+        skipped: true,
+      });
+    }
+
     const cookieStore = await cookies();
     const session = cookieStore.get("session");
 

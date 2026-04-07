@@ -429,6 +429,14 @@ try:
 except ImportError as e:
     logger.warning(f"Meta Webhook routes not available: {e}")
 
+# Register Trial API routes
+try:
+    from routes.trial_routes import trial_bp
+    app.register_blueprint(trial_bp)
+    logger.info("🎯 Trial API routes registered (/api/trials/*)")
+except ImportError as e:
+    logger.warning(f"Trial routes not available: {e}")
+
 # Initialize Omni-Channel Messaging SDK
 try:
     from services.messaging.sdk import init_messaging

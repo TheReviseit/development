@@ -101,7 +101,33 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    return NextResponse.json({ user, created: true });
+    // Auto-start free trial for shop domain
+    let trial = null;
+    if (signup_domain === "shop") {
+      try {
+        const { auto_start_trial_on_signup } = await import("@/lib/trial");
+        trial = await auto_start_trial_on_signup(
+          user.id,
+          user.id, // org_id same as user_id for now
+          email,
+          signup_domain
+        );
+      } catch (trialErr) {
+        // Non-fatal: user is created, trial start is best-effort
+        console.error("[create-user] Trial start error:", trialErr);
+      }
+    }
+
+    const response: { user: any; created: boolean; trial?: any } = {
+      user,
+      created: true,
+    };
+
+    if (trial) {
+      response.trial = trial;
+    }
+
+    return NextResponse.json(response);
   } catch (error: any) {
     console.error("Error creating user:", error);
     // Log more detailed error information

@@ -1,7 +1,7 @@
 import { headers } from "next/headers";
 import type { Metadata } from "next";
 import HomePageContent from "./components/HomePageContent";
-import ShopLandingPage from "./(shop)/page";
+import ShopLandingPage from "./shop/page";
 import {
   resolveProductDomain,
   generateDomainMetadata,

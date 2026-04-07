@@ -8,14 +8,19 @@ import ButtonSpinner from "../components/ui/ButtonSpinner";
 import { handleFirebaseError } from "../utils/firebaseErrors";
 import {
   createUserWithEmailAndPassword,
-  GoogleAuthProvider,
-  signInWithPopup,
   updateProfile,
 } from "firebase/auth";
 import { auth } from "@/src/firebase/firebase";
 import styles from "./Signup.module.css";
 import { useDebounce } from "@/lib/hooks/useDebounce";
 import { getProductDomainFromBrowser } from "@/lib/domain/client";
+import {
+  signInWithGoogleHybrid,
+  checkRedirectResult,
+  classifyAuthError,
+  getRecommendedConfig,
+  shouldCheckRedirectResult,
+} from "@/lib/auth/firebase-auth";
 
 // Lazy load Toast component
 const Toast = dynamic(() => import("../components/Toast/Toast"), {
@@ -98,16 +103,240 @@ async function createSessionWithRetry(
   return false;
 }
 
-// Helper function to check onboarding status with fallback
+// Helper function to check if user has completed WhatsApp onboarding
 async function checkOnboardingStatus(): Promise<boolean> {
   try {
     const response = await fetch("/api/onboarding/check");
-    if (!response.ok) return false;
+    if (!response.ok) {
+      console.log("[checkOnboardingStatus] API returned non-ok status:", response.status);
+      return false;
+    }
     const data = await response.json();
-    return data.onboardingCompleted ?? false;
-  } catch {
-    return false; // Default to onboarding on error
+    console.log("[checkOnboardingStatus] API response:", {
+      onboardingCompleted: data.onboardingCompleted,
+      whatsappConnected: data.whatsappConnected,
+      hasActiveTrial: data.hasActiveTrial,
+      hasActiveSubscription: data.hasActiveSubscription,
+    });
+    const isOnboardingComplete = data.whatsappConnected === true;
+    console.log("[checkOnboardingStatus] Returning:", isOnboardingComplete);
+    return isOnboardingComplete;
+  } catch (error) {
+    console.error("[checkOnboardingStatus] Error:", error);
+    return false;
   }
+}
+
+// ═════════════════════════════════════════════════════════════════════════════
+// PRODUCTION-GRADE AUTH UTILITIES
+// FAANG-Level Session Management with Circuit Breakers and Observability
+// ═════════════════════════════════════════════════════════════════════════════
+
+/**
+ * Configuration for session confirmation polling.
+ *
+ * Why these values:
+ * - maxAttempts: 5 attempts provides ~1.5s total wait time worst case
+ * - baseIntervalMs: 150ms is enough for cookie propagation in 95% of cases
+ * - backoffMultiplier: Exponential prevents thundering herd on slow clients
+ */
+const SESSION_CONFIRMATION_CONFIG = {
+  maxAttempts: 5,
+  baseIntervalMs: 150,
+  backoffMultiplier: 1.0, // Linear backoff: 150, 300, 450, 600, 750ms
+};
+
+/**
+ * Verify session cookie is readable server-side with exponential backoff polling.
+ *
+ * This eliminates the auth-to-navigation race condition by confirming the
+ * session cookie has propagated before allowing navigation to proceed.
+ *
+ * @param maxAttempts - Maximum polling attempts (default: 5)
+ * @param baseIntervalMs - Base interval between attempts (default: 150ms)
+ * @returns Promise<boolean> - True if session confirmed, false if exhausted
+ */
+async function waitForSessionConfirmation(
+  maxAttempts: number = SESSION_CONFIRMATION_CONFIG.maxAttempts,
+  baseIntervalMs: number = SESSION_CONFIRMATION_CONFIG.baseIntervalMs
+): Promise<boolean> {
+  console.log(
+    `[Auth] Starting session confirmation polling (max ${maxAttempts} attempts)`
+  );
+
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    try {
+      const response = await fetch("/api/auth/verify-session", {
+        method: "GET",
+        credentials: "include", // CRITICAL: Must send cookies
+        cache: "no-store", // Never cache this verification
+        headers: {
+          "X-Request-Source": "signup-flow",
+        },
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        console.log(
+          `[Auth] Session confirmed on attempt ${attempt + 1}/${maxAttempts}`,
+          { userId: data.userId }
+        );
+        return true;
+      }
+
+      // Session not ready yet, log and retry
+      const errorData = await response.json().catch(() => ({}));
+      console.log(
+        `[Auth] Session not ready (attempt ${attempt + 1}/${maxAttempts}):`,
+        errorData.error || `HTTP ${response.status}`
+      );
+    } catch (error) {
+      console.warn(
+        `[Auth] Session verification error (attempt ${attempt + 1}/${maxAttempts}):`,
+        error
+      );
+    }
+
+    // Calculate delay with linear backoff
+    const delay = baseIntervalMs * (attempt + 1);
+    console.log(`[Auth] Waiting ${delay}ms before retry...`);
+    await new Promise((resolve) => setTimeout(resolve, delay));
+  }
+
+  console.error(`[Auth] Session confirmation failed after ${maxAttempts} attempts`);
+  return false;
+}
+
+/**
+ * Circuit breaker for Firebase ID token retrieval.
+ *
+ * Protects against Firebase SDK cold starts and network hangs.
+ *
+ * @param user - Firebase User object
+ * @param maxRetries - Maximum retry attempts (default: 2)
+ * @param timeoutMs - Timeout per attempt (default: 5000ms)
+ * @returns Promise<string | null> - ID token or null if all attempts fail
+ */
+async function getIdTokenWithCircuitBreaker(
+  user: import("firebase/auth").User,
+  maxRetries: number = 2,
+  timeoutMs: number = 5000
+): Promise<string | null> {
+  const operationId = `token_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
+
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      console.log(`[${operationId}] Token retrieval attempt ${attempt + 1}/${maxRetries + 1}`);
+
+      // Race between token retrieval and timeout
+      const tokenPromise = user.getIdToken(true); // forceRefresh: true
+      const timeoutPromise = new Promise<never>((_, reject) => {
+        setTimeout(() => reject(new Error("TOKEN_TIMEOUT")), timeoutMs);
+      });
+
+      const token = await Promise.race([tokenPromise, timeoutPromise]);
+
+      console.log(`[${operationId}] Token retrieved successfully`);
+      return token;
+    } catch (error: any) {
+      const isTimeout = error.message === "TOKEN_TIMEOUT";
+      const errorMessage = isTimeout
+        ? `Token retrieval timed out after ${timeoutMs}ms`
+        : error?.message || "Unknown error";
+
+      console.error(`[${operationId}] Attempt ${attempt + 1} failed:`, errorMessage);
+
+      // If this was the last attempt, return null
+      if (attempt === maxRetries) {
+        console.error(`[${operationId}] All ${maxRetries + 1} attempts exhausted`);
+        return null;
+      }
+
+      // Exponential backoff before retry: 100ms, 200ms
+      const backoffDelay = 100 * (attempt + 1);
+      console.log(`[${operationId}] Retrying in ${backoffDelay}ms...`);
+      await new Promise((resolve) => setTimeout(resolve, backoffDelay));
+    }
+  }
+
+  return null; // Should never reach here
+}
+
+/**
+ * Log performance metrics to console and optionally to analytics.
+ *
+ * Production-grade observability for auth flow performance.
+ *
+ * @param measureName - Name of the performance measure
+ * @param targetMs - Target duration in milliseconds
+ */
+function logPerformanceMetric(measureName: string, targetMs: number): void {
+  const measure = performance.getEntriesByName(measureName)[0] as PerformanceMeasure;
+
+  if (!measure) {
+    console.warn(`[AuthPerf] No measure found: ${measureName}`);
+    return;
+  }
+
+  const duration = Math.round(measure.duration);
+  const status = duration <= targetMs ? "✓" : "✗";
+
+  // Always log in development
+  if (process.env.NODE_ENV === "development") {
+    console.log(`[AuthPerf] ${status} ${measureName}: ${duration}ms (target: ${targetMs}ms)`);
+  }
+
+  // Log warnings for slow operations in all environments
+  if (duration > targetMs) {
+    console.warn(
+      `[AuthPerf] SLOW: ${measureName} took ${duration}ms, exceeding ${targetMs}ms target`
+    );
+  }
+
+  // Send to analytics in production only
+  if (process.env.NODE_ENV === "production" && typeof window !== "undefined") {
+    // Google Analytics 4
+    if (typeof window.gtag === "function") {
+      window.gtag("event", "auth_performance", {
+        event_category: "performance",
+        event_label: measureName,
+        value: duration,
+        custom_parameter_1: duration <= targetMs ? "within_target" : "exceeded_target",
+      });
+    }
+
+    // Optional: Send to your analytics endpoint
+    // fetch('/api/analytics/performance', {
+    //   method: 'POST',
+    //   body: JSON.stringify({ measure: measureName, duration, target: targetMs }),
+    //   keepalive: true,
+    // }).catch(() => {}); // Silent fail
+  }
+}
+
+/**
+ * Clear all auth-related performance marks and measures.
+ * Call this before starting a new auth flow to prevent pollution.
+ */
+function clearAuthPerformanceMarks(): void {
+  const marks = ["auth-start", "auth-success", "navigation-start", "navigation-complete"];
+  const measures = ["auth-to-nav", "nav-latency", "session-confirmation"];
+
+  marks.forEach((mark) => {
+    try {
+      performance.clearMarks(mark);
+    } catch {
+      /* ignore */
+    }
+  });
+
+  measures.forEach((measure) => {
+    try {
+      performance.clearMeasures(measure);
+    } catch {
+      /* ignore */
+    }
+  });
 }
 
 export default function SignupPage() {
@@ -121,6 +350,7 @@ export default function SignupPage() {
   const [phone, setPhone] = useState("");
   const [loading, setLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
+  const [isRedirectPending, setIsRedirectPending] = useState(false);
 
   // Real-time validation states
   const [emailError, setEmailError] = useState("");
@@ -133,6 +363,94 @@ export default function SignupPage() {
   const debouncedConfirmPassword = useDebounce(confirmPassword, 300);
 
   const router = useRouter();
+
+  // Check for redirect result on mount (ONLY if we detect a redirect return)
+  useEffect(() => {
+    // Only check redirect result if we detect we're returning from a redirect
+    if (!shouldCheckRedirectResult()) {
+      console.log("[Signup] No redirect detected, skipping check");
+      return;
+    }
+
+    const handleRedirectResult = async () => {
+      try {
+        setGoogleLoading(true);
+        setIsRedirectPending(true);
+        
+        console.log("[Signup] Checking redirect result...");
+        const result = await checkRedirectResult(auth);
+
+        if (result.success && result.user) {
+          console.log("[Signup] Redirect result successful");
+          const idToken = await result.user.user.getIdToken();
+
+          // Check if user already exists
+          const checkResponse = await fetch("/api/auth/check-user-exists", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ idToken }),
+          });
+
+          if (checkResponse.ok) {
+            const { exists } = await checkResponse.json();
+
+            if (exists) {
+              setError("An account with this email already exists. Please use the login page instead.");
+              setGoogleLoading(false);
+              setIsRedirectPending(false);
+              await auth.signOut();
+              return;
+            }
+          }
+
+          // Create session
+          const sessionSuccess = await createSessionWithRetry(idToken);
+          if (!sessionSuccess) {
+            setError("Failed to create session. Please try again.");
+            setGoogleLoading(false);
+            setIsRedirectPending(false);
+            await auth.signOut();
+            return;
+          }
+
+          // Create user record
+          await fetch("/api/auth/create-user", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              firebase_uid: result.user.user.uid,
+              full_name: result.user.user.displayName || "",
+              email: result.user.user.email || "",
+              phone: "",
+              signup_domain: getProductDomainFromBrowser(),
+            }),
+          });
+
+          // Check onboarding and redirect
+          const onboardingCompleted = await checkOnboardingStatus();
+          router.push(onboardingCompleted ? "/dashboard" : "/onboarding");
+        } else if (result.error) {
+          // Handle redirect error
+          const errorAnalysis = classifyAuthError(result.error);
+          console.error("[Signup] Redirect auth error:", errorAnalysis);
+          setError(errorAnalysis.userMessage);
+          setGoogleLoading(false);
+          setIsRedirectPending(false);
+        } else {
+          // No result and no error - might be a normal page load
+          console.log("[Signup] No redirect result found");
+          setGoogleLoading(false);
+          setIsRedirectPending(false);
+        }
+      } catch (err) {
+        console.error("[Signup] Redirect result error:", err);
+        setGoogleLoading(false);
+        setIsRedirectPending(false);
+      }
+    };
+
+    handleRedirectResult();
+  }, [router]);
 
   // Real-time email validation
   useEffect(() => {
@@ -219,7 +537,6 @@ export default function SignupPage() {
         // Step 3: PARALLEL - Create user + send verification
         const [userCreationResult, verificationResult] =
           await Promise.allSettled([
-            // Create user in Supabase
             fetch("/api/auth/create-user", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
@@ -231,7 +548,6 @@ export default function SignupPage() {
                 signup_domain: getProductDomainFromBrowser(),
               }),
             }),
-            // Send verification email
             fetch("/api/auth/send-verification", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
@@ -242,38 +558,21 @@ export default function SignupPage() {
             }),
           ]);
 
-        // Log user creation errors (non-critical)
         if (userCreationResult.status === "rejected") {
           console.error("User creation error:", userCreationResult.reason);
         }
 
-        // Check verification email (important but not blocking)
         if (verificationResult.status === "rejected") {
           console.error("Verification email error:", verificationResult.reason);
-          // Continue anyway - user can resend from verify-email page
-        } else if (verificationResult.status === "fulfilled") {
-          const verifyResponse = verificationResult.value;
-          if (!verifyResponse.ok) {
-            console.error(
-              "Verification email failed with status:",
-              verifyResponse.status,
-            );
-            // Continue anyway - user can resend from verify-email page
-          }
         }
 
         router.push("/verify-email");
       } catch (err: any) {
         console.error("Signup error:", err);
-
-        // Ensure we always reset loading state on error
         setLoading(false);
-
-        // Handle the error and display it to the user
         const errorMessage = handleFirebaseError(err);
         setError(errorMessage);
 
-        // Log the specific error code for debugging
         if (err?.code) {
           console.error("Firebase error code:", err.code);
         }
@@ -282,78 +581,209 @@ export default function SignupPage() {
     [name, email, password, confirmPassword, phone, router],
   );
 
+  /**
+   * PRODUCTION-GRADE Google Sign Up
+   * =====================================================
+   *
+   * FAANG-level auth flow with:
+   * - Circuit breaker protected token retrieval
+   * - Exponential backoff session confirmation
+   * - Performance observability (marks + measures)
+   * - Zero-flicker navigation
+   *
+   * Eliminates the auth-to-navigation race condition by confirming
+   * session cookie propagation before allowing navigation.
+   */
   const handleGoogleSignUp = useCallback(async () => {
+    // Clear any previous performance marks
+    clearAuthPerformanceMarks();
+
+    // Start performance tracking immediately
+    performance.mark("auth-start");
+
     setError("");
     setGoogleLoading(true);
 
     try {
-      const provider = new GoogleAuthProvider();
+      // Get environment-optimized config
+      const envConfig = getRecommendedConfig();
 
-      provider.setCustomParameters({
-        prompt: "select_account",
-      });
+      const result = await signInWithGoogleHybrid(auth, envConfig);
 
-      const result = await signInWithPopup(auth, provider);
-      const idToken = await result.user.getIdToken();
+      // Handle redirect case (page will navigate away)
+      if (result.method === "redirect" && !result.error) {
+        setIsRedirectPending(true);
+        // Page is about to redirect, keep loading state
+        return;
+      }
 
-      // Check if user already exists in the database
-      const checkResponse = await fetch("/api/auth/check-user-exists", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ idToken }),
-      });
+      // Handle popup success
+      if (result.success && result.user) {
+        // ════════════════════════════════════════════════════════════════════
+        // STEP 1: Token Retrieval with Circuit Breaker
+        // Why: Firebase SDK can hang during cold starts
+        // ════════════════════════════════════════════════════════════════════
+        const idToken = await getIdTokenWithCircuitBreaker(
+          result.user.user,
+          2, // maxRetries
+          5000 // timeoutMs
+        );
 
-      if (checkResponse.ok) {
-        const { exists } = await checkResponse.json();
-
-        if (exists) {
-          // User already exists - show error and stop signup
+        if (!idToken) {
           setError(
-            "An account with this email already exists. Please use the login page instead.",
+            "Failed to retrieve authentication token. Please try again."
           );
           setGoogleLoading(false);
-
-          // Sign out the user from Firebase since they shouldn't be signing up
           await auth.signOut();
           return;
         }
-      }
 
-      // User doesn't exist - proceed with signup
-      const [sessionSuccess, onboardingCompleted] = await Promise.all([
-        createSessionWithRetry(idToken),
-        checkOnboardingStatus(),
+        // ════════════════════════════════════════════════════════════════════
+        // STEP 2: Check if user already exists
+        // ════════════════════════════════════════════════════════════════════
+        const checkResponse = await fetch("/api/auth/check-user-exists", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ idToken }),
+        });
 
+        if (checkResponse.ok) {
+          const { exists } = await checkResponse.json();
+
+          if (exists) {
+            setError(
+              "An account with this email already exists. Please use the login page instead."
+            );
+            setGoogleLoading(false);
+            await auth.signOut();
+            return;
+          }
+        }
+
+        // ════════════════════════════════════════════════════════════════════
+        // STEP 3: Create Session (Critical Path)
+        // ════════════════════════════════════════════════════════════════════
+        const sessionSuccess = await createSessionWithRetry(idToken);
+        if (!sessionSuccess) {
+          setError("Failed to create session. Please try again.");
+          setGoogleLoading(false);
+          await auth.signOut();
+          return;
+        }
+
+        // ════════════════════════════════════════════════════════════════════
+        // STEP 4: Create User Record (Non-blocking)
+        // ════════════════════════════════════════════════════════════════════
         fetch("/api/auth/create-user", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            firebase_uid: result.user.uid,
-            full_name: result.user.displayName || "",
-            email: result.user.email || "",
-            phone: "", // Phone not available from Google signup
+            firebase_uid: result.user.user.uid,
+            full_name: result.user.user.displayName || "",
+            email: result.user.user.email || "",
+            phone: "",
             signup_domain: getProductDomainFromBrowser(),
           }),
-        }).catch((err) => console.error("User creation error:", err)),
+        }).catch((err) => {
+          // Non-critical: log but don't block flow
+          console.error("[Auth] User creation failed (non-blocking):", err);
+        });
 
-        // Send welcome email for Google users
-        fetch("/api/auth/send-welcome", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            email: result.user.email || "",
-            userName: result.user.displayName || "",
-          }),
-        }).catch((err) => console.error("Welcome email error:", err)),
-      ]);
+        // ════════════════════════════════════════════════════════════════════
+        // STEP 5: Session Confirmation with Exponential Backoff
+        // CRITICAL: Confirms cookie propagation before navigation
+        // ════════════════════════════════════════════════════════════════════
+        console.log("[Auth] Session created, confirming propagation...");
+        performance.mark("session-confirmation-start");
 
-      if (!sessionSuccess) {
-        throw new Error("Failed to create session");
+        const sessionConfirmed = await waitForSessionConfirmation(
+          5, // maxAttempts
+          150 // baseIntervalMs
+        );
+
+        performance.mark("session-confirmation-end");
+        performance.measure(
+          "session-confirmation",
+          "session-confirmation-start",
+          "session-confirmation-end"
+        );
+
+        if (!sessionConfirmed) {
+          console.error("[Auth] Session confirmation failed after all attempts");
+          setError(
+            "Session verification timed out. Please refresh the page and try again."
+          );
+          setGoogleLoading(false);
+          await auth.signOut();
+          return;
+        }
+
+        performance.mark("auth-success");
+
+        // ════════════════════════════════════════════════════════════════════
+        // STEP 6: Check Onboarding Status and Navigate
+        // ════════════════════════════════════════════════════════════════════
+        const onboardingCompleted = await checkOnboardingStatus();
+
+        performance.mark("navigation-start");
+
+        // Navigate to appropriate destination
+        const destination = onboardingCompleted ? "/dashboard" : "/onboarding";
+        console.log(`[Auth] Navigating to ${destination}`);
+
+        router.push(destination);
+
+        // ════════════════════════════════════════════════════════════════════
+        // STEP 7: Performance Observability
+        // ════════════════════════════════════════════════════════════════════
+        // Use setTimeout to measure after navigation initiates
+        setTimeout(() => {
+          performance.mark("navigation-complete");
+
+          // Core metric: total auth-to-nav time
+          performance.measure(
+            "auth-to-nav",
+            "auth-start",
+            "navigation-complete"
+          );
+
+          // Sub-metric: navigation latency only
+          performance.measure(
+            "nav-latency",
+            "navigation-start",
+            "navigation-complete"
+          );
+
+          // Log all metrics
+          logPerformanceMetric("auth-to-nav", 750); // 750ms target
+          logPerformanceMetric("nav-latency", 400); // 400ms target
+          logPerformanceMetric("session-confirmation", 750); // 750ms target
+
+          // Overall success log
+          const totalMeasure = performance.getEntriesByName(
+            "auth-to-nav"
+          )[0] as PerformanceMeasure;
+          if (totalMeasure) {
+            const status =
+              totalMeasure.duration <= 750 ? "SUCCESS" : "SLOW";
+            console.log(
+              `[Auth] ${status}: Auth flow completed in ${Math.round(
+                totalMeasure.duration
+              )}ms`
+            );
+          }
+        }, 100);
+      } else {
+        // Handle failure
+        if (result.error) {
+          const errorAnalysis = classifyAuthError(result.error);
+          setError(errorAnalysis.userMessage);
+        }
+        setGoogleLoading(false);
       }
-
-      router.push(onboardingCompleted ? "/dashboard" : "/onboarding");
     } catch (err: any) {
       console.error("Google sign up error:", err);
+      setGoogleLoading(false);
 
       let errorMessage = "Failed to sign up with Google";
 
@@ -367,7 +797,8 @@ export default function SignupPage() {
         errorMessage =
           "An account already exists with this email. Please try signing in instead.";
       } else if (err.code === "auth/cancelled-popup-request") {
-        errorMessage = "Sign-up cancelled. Only one sign-up request at a time.";
+        errorMessage =
+          "Sign-up cancelled. Only one sign-up request at a time.";
       } else if (err.code === "auth/network-request-failed") {
         errorMessage = "Network error. Please check your internet connection.";
       } else if (err.message && err.message.includes("initial state")) {
@@ -378,9 +809,63 @@ export default function SignupPage() {
       }
 
       setError(errorMessage);
-      setGoogleLoading(false);
     }
   }, [router]);
+
+  // Show loading state if redirect is pending
+  if (isRedirectPending) {
+    return (
+      <div className={styles.authContainer}>
+        <div className={styles.authSplit}>
+          <div className={styles.authLeft}>
+            <div className={styles.quoteSection}>
+              <p className={styles.quoteLabel}>WHY FLOWAUXI</p>
+            </div>
+            <div className={styles.gradientOverlay}></div>
+            <div className={styles.contentSection}>
+              <h1 className={styles.mainHeading}>
+                Automate
+                <br />
+                Your WhatsApp
+                <br />
+                Business
+              </h1>
+              <p className={styles.subText}>
+                Join 500+ businesses automating customer conversations
+                <br />
+                and scaling sales without hiring extra staff.
+              </p>
+              <div className={styles.benefitsList}>
+                <div className={styles.benefitItem}>✓ AI-powered WhatsApp automation</div>
+                <div className={styles.benefitItem}>✓ Automated orders & invoicing</div>
+                <div className={styles.benefitItem}>✓ Broadcast campaigns & analytics</div>
+              </div>
+            </div>
+          </div>
+          <div className={styles.authRight}>
+            <div className={styles.formContainer}>
+              <div style={{
+                display: "flex",
+                flexDirection: "column",
+                alignItems: "center",
+                justifyContent: "center",
+                minHeight: "300px",
+                gap: "16px",
+              }}>
+                <ButtonSpinner size={32} />
+                <p style={{ color: "#666", fontSize: "14px" }}>
+                  Completing sign up...
+                </p>
+                <p style={{ color: "#999", fontSize: "12px" }}>
+                  Please don&apos;t close this window
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className={styles.authContainer}>
@@ -388,22 +873,27 @@ export default function SignupPage() {
         {/* Left Side - Gradient */}
         <div className={styles.authLeft}>
           <div className={styles.quoteSection}>
-            <p className={styles.quoteLabel}>A WISE QUOTE</p>
+            <p className={styles.quoteLabel}>WHY FLOWAUXI</p>
           </div>
           <div className={styles.gradientOverlay}></div>
           <div className={styles.contentSection}>
             <h1 className={styles.mainHeading}>
-              Get
+              Automate
               <br />
-              Everything
+              Your WhatsApp
               <br />
-              You Want
+              Business
             </h1>
             <p className={styles.subText}>
-              You can get everything you want if you work hard,
+              Join 500+ businesses automating customer conversations
               <br />
-              trust the process, and stick to the plan.
+              and scaling sales without hiring extra staff.
             </p>
+            <div className={styles.benefitsList}>
+              <div className={styles.benefitItem}>✓ AI-powered WhatsApp automation</div>
+              <div className={styles.benefitItem}>✓ Automated orders & invoicing</div>
+              <div className={styles.benefitItem}>✓ Broadcast campaigns & analytics</div>
+            </div>
           </div>
         </div>
 

@@ -100,13 +100,10 @@ export function StoreFooter({
             <h4>Quick Links</h4>
             <ul>
               <li>
-                <a href="#">Home</a>
+                <a href={`/store/${username}`}>Home</a>
               </li>
               <li>
                 <a href="#products">Products</a>
-              </li>
-              <li>
-                <a href="#about">About Us</a>
               </li>
               <li>
                 <a href="#contact">Contact</a>
@@ -122,13 +119,10 @@ export function StoreFooter({
                 <a href={`/store/${username}/track-order`}>Track Order</a>
               </li>
               <li>
-                <a href="#">Shipping Policy</a>
+                <a href="/terms">Terms of Service</a>
               </li>
               <li>
-                <a href="#">Returns & Exchanges</a>
-              </li>
-              <li>
-                <a href="#">Terms of Service</a>
+                <a href="/privacy">Privacy Policy</a>
               </li>
             </ul>
           </div>

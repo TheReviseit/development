@@ -1273,7 +1273,7 @@ def create_subscription():
             'pricing_version': pricing_version,
             'amount_paise': amount_paise,
             'currency': currency,
-            'pricing_plan_id': pricing_plan_id,
+            'pricing_plan_id': str(pricing_plan_id) if pricing_plan_id else None,
         }
         
         if SUPABASE_AVAILABLE:

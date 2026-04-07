@@ -61,18 +61,23 @@ export const organizationSchema = {
   address: {
     "@type": "PostalAddress",
     addressCountry: "IN",
-    addressRegion: "India",
+    addressRegion: "Tamil Nadu",
+    addressLocality: "Tirunelveli",
+    postalCode: "627428",
   },
+  telephone: "+916383634873",
   contactPoint: [
     {
       "@type": "ContactPoint",
       contactType: "Customer Support",
+      telephone: "+916383634873",
       availableLanguage: ["English", "Hindi"],
       email: "support@flowauxi.com",
     },
     {
       "@type": "ContactPoint",
       contactType: "Sales",
+      telephone: "+916383634873",
       availableLanguage: ["English"],
       email: "sales@flowauxi.com",
     },

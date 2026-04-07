@@ -161,22 +161,50 @@ export async function GET(request: NextRequest) {
 
     const hasProductSub = !!productSub;
 
+    // ===================================================================
+    // 8. CHECK ACTIVE TRIAL (free_trials table)
+    // ===================================================================
+    const { data: trial } = await supabase
+      .from("free_trials")
+      .select("id, status, plan_slug, domain, expires_at")
+      .eq("user_id", user.id)
+      .eq("domain", domain)
+      .in("status", ["active", "expiring_soon"])
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    const hasTrial = !!trial;
+
     // ========================================================================
-    // 8. DETERMINE ACCESS
+    // 9. DETERMINE ACCESS
     // ========================================================================
 
     // User has access if they have ANY of:
     // 1. Active product membership (trial or active) — user_products table
     // 2. Active subscription for this domain — subscriptions table
     // 3. Active product subscription — product_subscriptions table (new)
-    const hasAccess = hasMembership || hasSubscription || hasProductSub;
+    // 4. Active free trial — free_trials table (NEW)
+    const hasAccess = hasMembership || hasSubscription || hasProductSub || hasTrial;
+
+    console.log(`[CHECK_DOMAIN] User ${user.id} access check:`, {
+      domain,
+      hasMembership,
+      hasSubscription,
+      hasProductSub,
+      hasTrial,
+      hasAccess,
+      trialPlan: trial?.plan_slug,
+    });
 
     return NextResponse.json({
       hasAccess,
       reason: hasAccess
         ? hasMembership
           ? "MEMBERSHIP_ACTIVE"
-          : "SUBSCRIPTION_ACTIVE"
+          : hasTrial
+            ? "TRIAL_ACTIVE"
+            : "SUBSCRIPTION_ACTIVE"
         : "NO_ACCESS",
       membership: hasMembership
         ? {
@@ -189,6 +217,13 @@ export async function GET(request: NextRequest) {
         ? {
             status: subscription.status,
             planSlug,
+          }
+        : null,
+      trial: hasTrial
+        ? {
+            status: trial.status,
+            planSlug: trial.plan_slug,
+            expiresAt: trial.expires_at,
           }
         : null,
       domain,

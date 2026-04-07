@@ -26,7 +26,7 @@ interface PricingCardsProps {
   userId?: string;
   onSubscriptionSuccess?: (planName: string) => void;
   domain?: ProductDomain; // NEW: Domain for pricing
-  theme?: "light" | "dark"; // NEW: Theme selection
+  theme?: "light" | "dark" | "light-transparent"; // NEW: Theme selection
   hideHeader?: boolean; // NEW: Option to hide internal header
 }
 
@@ -247,8 +247,6 @@ export default function PricingCards({
               {(plan.price / 100).toLocaleString("en-IN")}
             </span>
             <div className={styles.period}>
-              per user
-              <br />
               per month
             </div>
           </div>

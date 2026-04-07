@@ -29,6 +29,7 @@ export default async function robots(): Promise<MetadataRoute.Robots> {
   const domain = resolveProductDomain(host);
 
   // ── Comprehensive disallow list — shared across all domains ──────────
+  // FAANG-Level Crawl Budget Optimization
   const sharedDisallowPaths = [
     // Admin & Dashboard (private, not indexable)
     "/admin/",
@@ -44,6 +45,10 @@ export default async function robots(): Promise<MetadataRoute.Robots> {
     // Authentication flows (contain tokens, one-time use)
     "/reset-password/",
     "/activate/",
+    "/login/",
+    "/signup/",
+    "/forgot-password/",
+    "/verify-email/",
 
     // E-commerce private flows
     "/store/*/checkout/",
@@ -59,6 +64,48 @@ export default async function robots(): Promise<MetadataRoute.Robots> {
     // PWA assets (not meaningful pages)
     "/sw.js",
     "/manifest.webmanifest",
+
+    // ════════════════════════════════════════════════════════════════════════
+    // FAANG-LEVEL CRAWL BUDGET OPTIMIZATION
+    // ════════════════════════════════════════════════════════════════════════
+    // Block low-value crawl paths to preserve crawl budget
+    
+    // Parameter URLs (duplicate content)
+    "/*?sort=",
+    "/*?filter=",
+    "/*?page=",
+    "/*?limit=",
+    "/*?offset=",
+    
+    // UTM and tracking parameters (duplicate content)
+    "/*?utm_",
+    "/*?ref=",
+    "/*?fbclid=",
+    "/*?gclid=",
+    "/*?msclkid=",
+    "/*?source=",
+    
+    // Search and query URLs (low value)
+    "/search",
+    "/search?",
+    
+    // Session and state URLs
+    "/*?session=",
+    "/*?state=",
+    "/*?token=",
+    "/*?code=",
+    
+    // Cart and checkout URLs (private)
+    "/cart/",
+    "/checkout/",
+    
+    // Debug and development paths
+    "/_next/",
+    "/__next/",
+    
+    // Static assets (already indexed separately)
+    "/*.json$",
+    "/*.xml$",
   ];
 
   // ── Per-domain additional disallows ──────────────────────────────────

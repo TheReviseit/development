@@ -2,7 +2,6 @@
 
 import Header from "./Header/Header";
 import HeroSection from "./HeroSection/HeroSection";
-import TrustedBy from "./TrustedBy/TrustedBy";
 import WhatsAppFeatures from "./WhatsAppFeatures/WhatsAppFeatures";
 import Testimonials from "./Testimonials/Testimonials";
 import ContactSection from "./ContactSection/ContactSection";
@@ -19,8 +18,14 @@ export default function HomePageContent() {
         <HeroSection />
       </div>
 
-      {/* Trust Section */}
-      <TrustedBy />
+      {/* Trust Section - Trusted by businesses worldwide */}
+      <section className="py-12 bg-white border-b border-gray-100">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <p className="text-center text-gray-500 text-sm font-medium tracking-wide uppercase">
+            Trusted by 500+ businesses worldwide
+          </p>
+        </div>
+      </section>
 
       {/* WhatsApp Features Section */}
       <WhatsAppFeatures />

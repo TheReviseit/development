@@ -281,6 +281,197 @@ def inject_subscription():
     return decorator
 
 
+def require_active_subscription(exempt_endpoints: list = None):
+    """
+    PRODUCTION-GRADE: Decorator that enforces active subscription OR trial.
+    
+    Returns 402 Payment Required with showPaywall=True for:
+      - Expired trials (status='expired' OR expires_at < now())
+      - Expired subscriptions
+      - Cancelled subscriptions (past grace period)
+      - Suspended subscriptions
+      - No subscription at all
+    
+    Allows access for:
+      - Active subscription (billing_status='active')
+      - Active trial (status='active' AND expires_at > now())
+      - Grace period (cancelled/expired but grace_period_end > now())
+    
+    Returns 402 with structured response:
+      {
+        "success": false,
+        "error": "SUBSCRIPTION_REQUIRED",
+        "showPaywall": true,
+        "reason": "trial_expired|expired|cancelled|suspended|no_subscription",
+        "upgradeUrl": "/payment?reason=trial_expired",
+        "message": "..."
+      }
+    
+    Usage:
+      @require_active_subscription()
+      def my_protected_route():
+          ...
+      
+      @require_active_subscription(exempt_endpoints=['/api/user/profile'])
+      def my_route():
+          ...
+    """
+    if exempt_endpoints is None:
+        exempt_endpoints = []
+    
+    def decorator(f: Callable):
+        @wraps(f)
+        def decorated_function(*args, **kwargs):
+            # Check exemptions
+            if request.path in exempt_endpoints:
+                return f(*args, **kwargs)
+            
+            user_id = getattr(g, 'user_id', None)
+            if not user_id:
+                return jsonify({
+                    'success': False,
+                    'error': 'NOT_AUTHENTICATED',
+                    'message': 'Authentication required'
+                }), 401
+            
+            # Check for active trial first
+            try:
+                from supabase_client import get_supabase_client
+                from datetime import datetime, timezone
+                
+                db = get_supabase_client()
+                now_iso = datetime.now(timezone.utc).isoformat()
+                
+                # Check active trial (status IN active/expiring_soon AND expires_at > now)
+                trial_result = db.table('free_trials').select(
+                    'id, status, expires_at, plan_slug'
+                ).eq(
+                    'user_id', str(user_id)
+                ).in_(
+                    'status', ['active', 'expiring_soon']
+                ).gt(
+                    'expires_at', now_iso
+                ).limit(1).execute()
+                
+                if trial_result.data and len(trial_result.data) > 0:
+                    # Active trial — allow access
+                    g.active_trial = trial_result.data[0]
+                    g.subscription_source = 'trial'
+                    return f(*args, **kwargs)
+                
+                # Check for paid subscription
+                org_id = getattr(g, 'console_org_id', None)
+                if org_id:
+                    sub = get_org_subscription(org_id)
+                    if sub:
+                        billing_status = sub.get('billing_status', 'unknown')
+                        
+                        # Active states — allow access
+                        active_statuses = {'active', 'trialing', 'grace_period', 
+                                          'pending_upgrade', 'processing'}
+                        if billing_status in active_statuses:
+                            g.console_subscription = sub
+                            g.subscription_source = 'subscription'
+                            return f(*args, **kwargs)
+                        
+                        # Check grace period for cancelled/expired
+                        grace_end = sub.get('grace_period_end')
+                        if grace_end:
+                            try:
+                                grace_dt = datetime.fromisoformat(
+                                    grace_end.replace('Z', '+00:00')
+                                )
+                                if datetime.now(grace_dt.tzinfo) < grace_dt:
+                                    g.console_subscription = sub
+                                    g.subscription_source = 'grace_period'
+                                    return f(*args, **kwargs)
+                            except Exception:
+                                pass
+                        
+                        # Map billing status to lock reason
+                        reason_map = {
+                            'expired': 'expired',
+                            'cancelled': 'cancelled',
+                            'suspended': 'suspended',
+                            'halted': 'halted',
+                            'past_due': 'past_due',
+                        }
+                        reason = reason_map.get(billing_status, 'expired')
+                        
+                        logger.warning(
+                            f"[SubscriptionGuard] Blocked: user={str(user_id)[:8]} "
+                            f"reason={reason} billing_status={billing_status}"
+                        )
+                        
+                        return jsonify({
+                            'success': False,
+                            'error': 'SUBSCRIPTION_REQUIRED',
+                            'showPaywall': True,
+                            'reason': reason,
+                            'upgradeUrl': f'/payment?reason={reason}',
+                            'message': f'Your subscription is {billing_status}. '
+                                      f'Please upgrade to continue.'
+                        }), 402
+                
+                # Check if trial existed but expired
+                expired_result = db.table('free_trials').select(
+                    'id, status, expires_at'
+                ).eq(
+                    'user_id', str(user_id)
+                ).or_('status.in.(active,expiring_soon),status.eq.expired').limit(1).execute()
+                
+                if expired_result.data and len(expired_result.data) > 0:
+                    trial = expired_result.data[0]
+                    is_expired = (
+                        trial.get('status') == 'expired' or
+                        datetime.fromisoformat(
+                            trial['expires_at'].replace('Z', '+00:00')
+                        ) < datetime.now(timezone.utc)
+                    )
+                    
+                    if is_expired:
+                        logger.warning(
+                            f"[SubscriptionGuard] Trial expired: "
+                            f"user={str(user_id)[:8]} trial_id={trial['id']}"
+                        )
+                        return jsonify({
+                            'success': False,
+                            'error': 'SUBSCRIPTION_REQUIRED',
+                            'showPaywall': True,
+                            'reason': 'trial_expired',
+                            'upgradeUrl': '/payment?reason=trial_expired',
+                            'message': 'Your free trial has ended. '
+                                      'Upgrade to continue using all features.'
+                        }), 402
+                
+                # No subscription and no trial at all
+                logger.warning(
+                    f"[SubscriptionGuard] No subscription: "
+                    f"user={str(user_id)[:8]}"
+                )
+                return jsonify({
+                    'success': False,
+                    'error': 'SUBSCRIPTION_REQUIRED',
+                    'showPaywall': True,
+                    'reason': 'no_subscription',
+                    'upgradeUrl': '/payment?reason=no_subscription',
+                    'message': 'No active subscription found. '
+                              'Please choose a plan to continue.'
+                }), 402
+                
+            except Exception as e:
+                logger.error(
+                    f"[SubscriptionGuard] Error checking subscription: {e}",
+                    exc_info=True
+                )
+                # FAIL OPEN on server error — don't randomly lock users out
+                # But log for investigation
+                return f(*args, **kwargs)
+
+        return decorated_function
+    return decorator
+
+
 # =============================================================================
 # HELPER FOR API KEY CREATION
 # =============================================================================

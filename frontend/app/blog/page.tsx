@@ -1,215 +1,183 @@
+import type { Metadata } from "next";
 import Link from "next/link";
-import {
-  ArrowRight,
-  Clock,
-  MessageSquare,
-  ShoppingBag,
-  Zap,
-} from "lucide-react";
 
-/**
- * Blog Index Page — Long-tail keyword traffic capture
- *
- * These articles target informational queries that funnel into:
- * → shop.flowauxi.com (WhatsApp e-commerce platform)
- * → /signup (conversion)
- */
+export const metadata: Metadata = {
+  title: "Blog | WhatsApp E-commerce Guides, Tips & Best Practices",
+  description: "Learn how to sell on WhatsApp, automate orders, and grow your e-commerce business. Expert guides on WhatsApp commerce, AI chatbots, and D2C selling in India.",
+  keywords: [
+    "WhatsApp e-commerce blog",
+    "sell on WhatsApp guide",
+    "WhatsApp business tips",
+    "D2C selling India",
+    "WhatsApp automation tutorials",
+    "e-commerce best practices",
+  ],
+  openGraph: {
+    title: "Flowauxi Blog | WhatsApp E-commerce Guides",
+    description: "Expert guides on WhatsApp commerce, AI chatbots, and D2C selling in India.",
+    url: "https://www.flowauxi.com/blog",
+    type: "website",
+  },
+  alternates: { canonical: "https://www.flowauxi.com/blog" },
+};
 
-const blogArticles = [
+const BLOG_POSTS = [
   {
-    slug: "how-to-automate-whatsapp-orders",
-    title: "How to Automate WhatsApp Orders for Your Online Store in 2026",
-    excerpt:
-      "A step-by-step guide to setting up WhatsApp order automation for e-commerce. Learn how to connect WhatsApp Business API, configure AI chatbots, and process orders automatically — with real examples from Indian D2C brands.",
-    category: "Guide",
-    readTime: "8 min read",
-    icon: <ShoppingBag className="h-5 w-5" />,
-    keywords: [
-      "automate WhatsApp orders",
-      "WhatsApp order automation",
-      "WhatsApp Business API setup",
-    ],
-    color: "from-green-500 to-emerald-600",
+    slug: "what-is-whatsapp-ecommerce",
+    title: "What is WhatsApp E-commerce? Complete Guide 2026",
+    excerpt: "Learn what WhatsApp e-commerce is, how it works, and why businesses in India are using WhatsApp to sell products.",
+    category: "Getting Started",
+    readTime: "8 min",
+    date: "2026-01-15",
+    featured: true,
+  },
+  {
+    slug: "how-to-sell-on-whatsapp",
+    title: "How to Sell on WhatsApp Without a Website",
+    excerpt: "Step-by-step guide to setting up your WhatsApp store, collecting payments, and automating orders — all without building a website.",
+    category: "Tutorial",
+    readTime: "12 min",
+    date: "2026-01-20",
+    featured: true,
+  },
+  {
+    slug: "whatsapp-order-automation",
+    title: "WhatsApp Order Automation: Complete Guide",
+    excerpt: "Learn how to automate order booking, confirmations, tracking, and invoicing on WhatsApp. Reduce manual work by 80%.",
+    category: "Automation",
+    readTime: "10 min",
+    date: "2026-01-25",
+    featured: false,
   },
   {
     slug: "best-whatsapp-chatbot-ecommerce",
-    title:
-      "Best WhatsApp Chatbot for E-commerce in 2026: Complete Comparison",
-    excerpt:
-      "Comparing the top WhatsApp chatbot platforms for e-commerce businesses. We analyze Flowauxi, Wati, Interakt, and others on features, pricing, ease of use, and India-specific capabilities.",
+    title: "Best WhatsApp Chatbot for E-commerce: 2026 Comparison",
+    excerpt: "Compare Flowauxi, Wati, Interakt, and Dukaan. Find the right WhatsApp chatbot for your e-commerce store.",
     category: "Comparison",
-    readTime: "10 min read",
-    icon: <MessageSquare className="h-5 w-5" />,
-    keywords: [
-      "best WhatsApp chatbot for e-commerce",
-      "WhatsApp chatbot comparison",
-      "Flowauxi vs Wati",
-    ],
-    color: "from-blue-500 to-cyan-600",
+    readTime: "15 min",
+    date: "2026-02-01",
+    featured: false,
   },
-  {
-    slug: "whatsapp-crm-vs-traditional-crm",
-    title:
-      "WhatsApp CRM vs Traditional CRM: Which Is Better for E-commerce?",
-    excerpt:
-      "Traditional CRMs weren't built for WhatsApp-first businesses. Learn why WhatsApp CRM platforms like Flowauxi offer better engagement, higher conversion rates, and seamless customer management for modern online sellers.",
-    category: "Analysis",
-    readTime: "7 min read",
-    icon: <Zap className="h-5 w-5" />,
-    keywords: [
-      "WhatsApp CRM vs traditional CRM",
-      "WhatsApp CRM for e-commerce",
-      "customer management WhatsApp",
-    ],
-    color: "from-purple-500 to-pink-600",
-  },
+];
+
+const CATEGORIES = [
+  { name: "Getting Started", count: 1, description: "New to WhatsApp e-commerce? Start here." },
+  { name: "Tutorial", count: 1, description: "Step-by-step guides and tutorials." },
+  { name: "Automation", count: 1, description: "Automate your WhatsApp business." },
+  { name: "Comparison", count: 1, description: "Platform and tool comparisons." },
 ];
 
 export default function BlogIndexPage() {
   return (
-    <div className="min-h-screen bg-white">
-      {/* Navigation */}
-      <nav className="w-full bg-white/80 backdrop-blur-xl border-b border-gray-100 sticky top-0 z-50">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center h-16">
-            <Link href="/" className="flex items-center gap-2">
-              <img
-                src="/logo.png"
-                alt="Flowauxi Logo"
-                className="h-8 w-8 object-contain"
-              />
-              <span className="text-xl font-bold text-gray-900">
-                Flowauxi
-              </span>
-              <span className="text-sm text-gray-400 ml-1">/ Blog</span>
-            </Link>
-            <Link
-              href="/signup"
-              className="bg-gray-900 text-white px-6 py-2.5 rounded-xl font-medium hover:bg-black transition-colors shadow-lg"
-            >
-              Start Free Trial
-            </Link>
-          </div>
-        </div>
+    <main className="max-w-6xl mx-auto px-4 py-16">
+      <nav className="text-sm text-gray-500 mb-8">
+        <Link href="/" className="hover:text-gray-700">Home</Link>
+        <span className="mx-2">/</span>
+        <span className="text-gray-900">Blog</span>
       </nav>
 
-      {/* Blog Header */}
-      <section className="py-16 bg-gradient-to-br from-gray-50 to-white">
-        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
-          <h1 className="text-4xl md:text-5xl font-bold text-gray-900 mb-4">
-            WhatsApp Automation Blog
-          </h1>
-          <p className="text-xl text-gray-600 max-w-2xl mx-auto">
-            Expert guides, tutorials, and insights on WhatsApp automation
-            for e-commerce, business messaging, and customer engagement.
-          </p>
+      <header className="mb-12">
+        <h1 className="text-4xl md:text-5xl font-bold text-gray-900 mb-4">
+          WhatsApp E-commerce Blog
+        </h1>
+        <p className="text-xl text-gray-600 max-w-3xl">
+          Expert guides on selling on WhatsApp, automating orders, and growing your D2C business in India.
+          Updated weekly with actionable tips and strategies.
+        </p>
+      </header>
+
+      {/* Featured Posts */}
+      <section className="mb-16">
+        <h2 className="text-2xl font-bold text-gray-900 mb-6">Featured Articles</h2>
+        <div className="grid md:grid-cols-2 gap-6">
+          {BLOG_POSTS.filter((post) => post.featured).map((post) => (
+            <Link
+              key={post.slug}
+              href={`/blog/${post.slug}`}
+              className="group block border border-gray-200 rounded-lg overflow-hidden hover:border-green-500 hover:shadow-lg transition-all"
+            >
+              <div className="p-6">
+                <span className="text-xs font-semibold text-green-600 uppercase tracking-wider">
+                  {post.category}
+                </span>
+                <h3 className="text-xl font-bold text-gray-900 mt-2 group-hover:text-green-600">
+                  {post.title}
+                </h3>
+                <p className="text-gray-600 mt-2">{post.excerpt}</p>
+                <div className="flex items-center gap-4 mt-4 text-sm text-gray-500">
+                  <span>{post.readTime} read</span>
+                  <span>•</span>
+                  <span>{new Date(post.date).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })}</span>
+                </div>
+              </div>
+            </Link>
+          ))}
         </div>
       </section>
 
-      {/* Articles */}
-      <section className="py-12">
-        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="space-y-8">
-            {blogArticles.map((article) => (
-              <article
-                key={article.slug}
-                className="group bg-white border border-gray-200 rounded-2xl p-8 hover:shadow-xl hover:-translate-y-1 transition-all duration-300"
-              >
-                <div className="flex items-center gap-3 mb-4">
-                  <div
-                    className={`inline-flex p-2 rounded-lg bg-gradient-to-br ${article.color} text-white shadow-md`}
-                  >
-                    {article.icon}
-                  </div>
-                  <span className="text-sm font-medium text-gray-500 uppercase tracking-wider">
-                    {article.category}
+      {/* Categories */}
+      <section className="mb-16">
+        <h2 className="text-2xl font-bold text-gray-900 mb-6">Browse by Category</h2>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          {CATEGORIES.map((category) => (
+            <div
+              key={category.name}
+              className="border border-gray-200 rounded-lg p-4 hover:border-green-500 transition-colors"
+            >
+              <h3 className="font-semibold text-gray-900">{category.name}</h3>
+              <p className="text-sm text-gray-500 mt-1">{category.description}</p>
+              <span className="text-xs text-green-600 mt-2 inline-block">{category.count} article{category.count !== 1 ? "s" : ""}</span>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {/* All Posts */}
+      <section>
+        <h2 className="text-2xl font-bold text-gray-900 mb-6">All Articles</h2>
+        <div className="space-y-4">
+          {BLOG_POSTS.map((post) => (
+            <Link
+              key={post.slug}
+              href={`/blog/${post.slug}`}
+              className="group block border border-gray-200 rounded-lg p-6 hover:border-green-500 hover:shadow-md transition-all"
+            >
+              <div className="flex flex-col md:flex-row md:items-center md:justify-between">
+                <div>
+                  <span className="text-xs font-semibold text-green-600 uppercase tracking-wider">
+                    {post.category}
                   </span>
-                  <span className="text-gray-300">|</span>
-                  <span className="flex items-center gap-1 text-sm text-gray-500">
-                    <Clock className="h-3.5 w-3.5" />
-                    {article.readTime}
-                  </span>
+                  <h3 className="text-lg font-bold text-gray-900 mt-1 group-hover:text-green-600">
+                    {post.title}
+                  </h3>
+                  <p className="text-gray-600 mt-1 text-sm">{post.excerpt}</p>
                 </div>
-
-                <h2 className="text-2xl font-bold text-gray-900 mb-3 group-hover:text-indigo-600 transition-colors">
-                  {article.title}
-                </h2>
-
-                <p className="text-gray-600 leading-relaxed mb-4">
-                  {article.excerpt}
-                </p>
-
-                <div className="flex items-center justify-between">
-                  <div className="flex flex-wrap gap-2">
-                    {article.keywords.map((kw) => (
-                      <span
-                        key={kw}
-                        className="text-xs bg-gray-100 text-gray-600 px-2.5 py-1 rounded-full"
-                      >
-                        {kw}
-                      </span>
-                    ))}
-                  </div>
-                  <span className="inline-flex items-center gap-1 text-indigo-600 font-medium text-sm group-hover:gap-2 transition-all">
-                    Coming soon
-                    <ArrowRight className="h-4 w-4" />
-                  </span>
+                <div className="flex items-center gap-4 mt-4 md:mt-0 text-sm text-gray-500">
+                  <span>{post.readTime}</span>
+                  <span>•</span>
+                  <span>{new Date(post.date).toLocaleDateString("en-US", { month: "short", day: "numeric" })}</span>
                 </div>
-              </article>
-            ))}
-          </div>
+              </div>
+            </Link>
+          ))}
         </div>
       </section>
 
       {/* CTA */}
-      <section className="py-16 bg-gray-50">
-        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
-          <h2 className="text-3xl font-bold text-gray-900 mb-4">
-            Ready to Automate Your WhatsApp?
-          </h2>
-          <p className="text-lg text-gray-600 mb-6">
-            Start your 14-day free trial and see WhatsApp automation in
-            action.
-          </p>
-          <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
-            <Link
-              href="/signup"
-              className="inline-flex items-center gap-2 bg-gray-900 text-white px-8 py-4 rounded-xl font-semibold hover:bg-black transition-colors shadow-xl text-lg"
-            >
-              Start Free Trial
-              <ArrowRight className="h-5 w-5" />
-            </Link>
-            <Link
-              href="https://shop.flowauxi.com"
-              className="inline-flex items-center gap-2 text-gray-700 font-medium hover:text-gray-900 transition-colors text-lg"
-            >
-              Build Your WhatsApp Store →
-            </Link>
-          </div>
+      <section className="mt-16 bg-green-600 text-white rounded-lg p-8 text-center">
+        <h2 className="text-2xl font-bold mb-4">Ready to Start Selling on WhatsApp?</h2>
+        <p className="mb-6 text-green-100">
+          Flowauxi gives you AI chatbot, store builder, order automation, and payments — all free to start.
+        </p>
+        <div className="flex flex-wrap gap-4 justify-center">
+          <Link href="/signup" className="px-8 py-4 bg-white text-green-600 rounded-lg font-semibold hover:bg-green-50">
+            Start Free Today
+          </Link>
+          <Link href="/features/whatsapp-store" className="px-8 py-4 border-2 border-white rounded-lg font-semibold hover:bg-green-700">
+            See Features
+          </Link>
         </div>
       </section>
-
-      {/* Footer */}
-      <footer className="bg-gray-900 text-gray-400 py-8">
-        <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 text-center text-sm">
-          <p>
-            © 2026 Flowauxi Technologies. All rights reserved. |{" "}
-            <Link
-              href="/privacy"
-              className="hover:text-white transition-colors"
-            >
-              Privacy
-            </Link>{" "}
-            |{" "}
-            <Link
-              href="/terms"
-              className="hover:text-white transition-colors"
-            >
-              Terms
-            </Link>
-          </p>
-        </div>
-      </footer>
-    </div>
+    </main>
   );
 }

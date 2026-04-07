@@ -9,7 +9,7 @@
 
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { onAuthStateChanged, User } from "firebase/auth";
 import { auth } from "@/src/firebase/firebase";
@@ -58,6 +58,9 @@ export default function OnboardingPageEmbedded() {
     useState<ProductDomain>("dashboard");
   const [PLANS, setPLANS] = useState<Plan[]>([]);
 
+  // Guard: prevent concurrent/duplicate trial start API calls
+  const trialStartInProgressRef = useRef(false);
+
   const router = useRouter();
 
   // Detect domain and load pricing on mount
@@ -97,38 +100,88 @@ export default function OnboardingPageEmbedded() {
   }, [router]);
 
   const checkOnboardingStatus = async (): Promise<boolean> => {
+    // CACHE BUST: v4-fix-2024-04-05 - If you don't see this, clear browser cache!
+    console.log("[onboarding-embedded] checkOnboardingStatus START - v4-fix-2024-04-05");
     try {
       const onboardingResponse = await fetch("/api/onboarding/check");
-      const onboardingData = await onboardingResponse.json();
-
-      if (
-        onboardingData.onboardingCompleted ||
-        onboardingData.hasActiveSubscription
-      ) {
-        // Fully onboarded or has active subscription - go to dashboard
-        console.log(
-          "✅ User already onboarded or subscribed, redirecting to dashboard",
-        );
-        router.push("/dashboard");
-        return true; // Indicate that we're redirecting
+      
+      // Handle 503 Service Unavailable - server can't verify, retry with backoff
+      if (onboardingResponse.status === 503) {
+        console.warn("[onboarding-embedded] Onboarding check 503, retrying...");
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        return checkOnboardingStatus(); // Simple retry once
       }
 
+      if (!onboardingResponse.ok) {
+        console.error("[onboarding-embedded] Onboarding check failed:", onboardingResponse.status);
+        return false; // Show onboarding page on error
+      }
+
+      const onboardingData = await onboardingResponse.json();
+      console.log("[onboarding-embedded] Received data:", {
+        onboardingCompleted: onboardingData.onboardingCompleted,
+        hasActiveSubscription: onboardingData.hasActiveSubscription,
+        hasActiveTrial: onboardingData.hasActiveTrial,
+        whatsappConnected: onboardingData.whatsappConnected,
+      });
+
+      // v4: Handle "error" as explicit third state
+      const hasErrors =
+        onboardingData.whatsappConnected === "error" ||
+        onboardingData.hasActiveSubscription === "error" ||
+        onboardingData.hasActiveTrial === "error";
+
+      if (hasErrors) {
+        console.error("[onboarding-embedded] Errors in response:", {
+          whatsappConnected: onboardingData.whatsappConnected,
+          hasActiveSubscription: onboardingData.hasActiveSubscription,
+          hasActiveTrial: onboardingData.hasActiveTrial,
+        });
+        setStep("whatsapp");
+        return false;
+      }
+
+      // v4: Use trial as equivalent to subscription for dashboard access
+      const hasProductAccess =
+        onboardingData.hasActiveSubscription === true ||
+        onboardingData.hasActiveTrial === true;
+
+      console.log("[onboarding-embedded] Decision values:", {
+        hasProductAccess,
+        hasActiveSubscription: onboardingData.hasActiveSubscription,
+        hasActiveTrial: onboardingData.hasActiveTrial,
+        whatsappConnected: onboardingData.whatsappConnected,
+      });
+
+      // CRITICAL FIX: Only redirect if user has PAID subscription
+      if (onboardingData.hasActiveSubscription === true) {
+        console.log("[onboarding-embedded] User has PAID subscription, redirecting to dashboard");
+        router.push("/dashboard");
+        return true;
+      }
+
+      // Only redirect if has product access AND WhatsApp connected
+      if (hasProductAccess && onboardingData.whatsappConnected === true) {
+        console.log("[onboarding-embedded] Has product access AND WhatsApp, redirecting to dashboard");
+        router.push("/dashboard");
+        return true;
+      }
+
+      console.log("[onboarding-embedded] NOT redirecting - showing onboarding");
+
       // Check if WhatsApp is already connected
-      if (onboardingData.whatsappConnected) {
-        // WhatsApp connected but onboarding not complete
-        // Show pricing step instead of connection step
-        console.log("✅ WhatsApp already connected, showing pricing step");
+      if (onboardingData.whatsappConnected === true) {
+        console.log("[onboarding-embedded] WhatsApp connected, showing pricing step");
         setStep("pricing");
       } else {
-        // No WhatsApp connection, show connection step
-        console.log("⚪ No WhatsApp connection, showing connection step");
+        console.log("[onboarding-embedded] No WhatsApp, showing connection step");
         setStep("whatsapp");
       }
 
-      return false; // Not redirecting, show onboarding
+      return false;
     } catch (error) {
-      console.error("Error checking onboarding status:", error);
-      return false; // On error, show onboarding page
+      console.error("[onboarding-embedded] Error:", error);
+      return false;
     }
   };
 
@@ -150,7 +203,88 @@ export default function OnboardingPageEmbedded() {
     setConnectionError(error);
   };
 
+  const handleSelectFreeTrial = async () => {
+    if (!user?.email) {
+      setPaymentError("User email not found. Please try logging in again.");
+      return;
+    }
+
+    // Guard: prevent concurrent/duplicate calls (e.g., double-click,
+    // React StrictMode double-invoke, or redirect-loop re-mount)
+    if (trialStartInProgressRef.current) {
+      console.warn("[trial] Start already in progress, ignoring duplicate call");
+      return;
+    }
+    trialStartInProgressRef.current = true;
+
+    setPaymentLoading("starter");
+    setPaymentError(null);
+
+    try {
+      // Start the free trial via internal API
+      const response = await fetch("/api/trials/internal/start", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Internal-Api-Key": process.env.NEXT_PUBLIC_INTERNAL_API_KEY || "",
+        },
+        body: JSON.stringify({
+          user_id: user.uid,
+          org_id: user.uid,
+          email: user.email,
+          plan_slug: "starter",
+          domain: currentDomain,
+          source: "shop",
+        }),
+      });
+
+      const result = await response.json();
+
+      // Both new trials AND existing trials (is_existing) are success cases.
+      // The backend returns is_existing: true when the trial already exists
+      // and access_granted: true when user_products was written atomically.
+      if (result.success && (result.trial || result.is_existing)) {
+        // Store onboarding data
+        sessionStorage.setItem(
+          "pending_onboarding",
+          JSON.stringify({
+            whatsappConnected: true,
+            wabaId: wabaData?.wabaId,
+            phoneNumberId: wabaData?.phoneNumberId,
+            subscriptionPlan: "starter",
+            trialStarted: true,
+          }),
+        );
+
+        // Redirect to dashboard with success message
+        router.push("/dashboard?trial_started=true");
+      } else if (result.error === "TRIAL_EXISTS") {
+        // Legacy fallback for older backend responses
+        // Still a success case — user has a trial, just go to dashboard
+        router.push("/dashboard?trial_started=true");
+      } else {
+        setPaymentError(
+          result.message || "Failed to start free trial. Please try again.",
+        );
+        setPaymentLoading(null);
+        // Allow retry on terminal failure
+        trialStartInProgressRef.current = false;
+      }
+    } catch (err) {
+      console.error("Free trial error:", err);
+      setPaymentError("Something went wrong. Please try again.");
+      setPaymentLoading(null);
+      // Allow retry on terminal failure
+      trialStartInProgressRef.current = false;
+    }
+  };
+
   const handleSelectPlan = async (planId: PlanName) => {
+    // Handle free trial for Starter plan
+    if (planId === "starter") {
+      return handleSelectFreeTrial();
+    }
+
     if (!user?.email) {
       setPaymentError("User email not found. Please try logging in again.");
       return;
@@ -196,7 +330,10 @@ export default function OnboardingPageEmbedded() {
             "Payment service is temporarily busy. Please try again in a moment.";
         } else if (errorCode === "RAZORPAY_BAD_REQUEST") {
           errorMessage = "Invalid payment information. Please contact support.";
-        } else if (errorCode === "PLAN_NOT_FOUND" || errorCode === "PRICING_UNAVAILABLE") {
+        } else if (
+          errorCode === "PLAN_NOT_FOUND" ||
+          errorCode === "PRICING_UNAVAILABLE"
+        ) {
           errorMessage =
             "This plan is not available yet. Please contact support or try again later.";
         }
@@ -385,45 +522,58 @@ export default function OnboardingPageEmbedded() {
               )}
 
               <div className="pricing-cards-grid">
-                {PLANS.map((plan) => (
-                  <div
-                    key={plan.id}
-                    className={`pricing-card ${plan.popular ? "popular" : ""}`}
-                  >
-                    {plan.popular && (
-                      <div className="popular-badge">Most Popular</div>
-                    )}
-                    <h3>{plan.name}</h3>
-                    <p className="plan-description">{plan.description}</p>
-                    <div className="plan-price">
-                      <span className="price">{plan.priceDisplay}</span>
-                      <span className="period">/month</span>
-                    </div>
-                    <ul className="plan-features">
-                      {plan.features.map((feature, idx) => (
-                        <li key={idx}>
-                          <svg viewBox="0 0 20 20" fill="currentColor">
-                            <path
-                              fillRule="evenodd"
-                              d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
-                              clipRule="evenodd"
-                            />
-                          </svg>
-                          {feature}
-                        </li>
-                      ))}
-                    </ul>
-                    <button
-                      className={`plan-button ${plan.popular ? "primary" : ""}`}
-                      onClick={() => handleSelectPlan(plan.id)}
-                      disabled={paymentLoading !== null}
+                {PLANS.map((plan) => {
+                  const isFreeTrial = plan.id === "starter";
+                  return (
+                    <div
+                      key={plan.id}
+                      className={`pricing-card ${plan.popular ? "popular" : ""}`}
                     >
-                      {paymentLoading === plan.id
-                        ? "Processing..."
-                        : "Select Plan"}
-                    </button>
-                  </div>
-                ))}
+                      {isFreeTrial && (
+                        <div className="free-trial-badge">
+                          ✨ 7-Day Free Trial
+                        </div>
+                      )}
+                      {plan.popular && !isFreeTrial && (
+                        <div className="popular-badge">Most Popular</div>
+                      )}
+                      <h3>{plan.name}</h3>
+                      <p className="plan-description">{plan.description}</p>
+                      <div className="plan-price">
+                        <span className="price">{plan.priceDisplay}</span>
+                        <span className="period">/month</span>
+                      </div>
+                      <ul className="plan-features">
+                        {plan.features.map((feature, idx) => (
+                          <li key={idx}>
+                            <svg viewBox="0 0 20 20" fill="currentColor">
+                              <path
+                                fillRule="evenodd"
+                                d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
+                                clipRule="evenodd"
+                              />
+                            </svg>
+                            {feature}
+                          </li>
+                        ))}
+                      </ul>
+                      <button
+                        className={`plan-button ${plan.popular || isFreeTrial ? "primary" : ""}`}
+                        onClick={() => handleSelectPlan(plan.id)}
+                        disabled={paymentLoading !== null}
+                      >
+                        {paymentLoading === plan.id
+                          ? "Processing..."
+                          : isFreeTrial
+                            ? "Start Free Trial"
+                            : "Select Plan"}
+                      </button>
+                      {isFreeTrial && (
+                        <p className="trial-note">No credit card required</p>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
             </div>
           )}

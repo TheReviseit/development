@@ -351,6 +351,116 @@
   color: rgba(255, 255, 255, 0.35);
 }
 
+/* ─── Trial Timeline (trial_expired only) ──────────────────────────────────── */
+.trialTimeline {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0;
+  padding: 16px 20px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 12px;
+  margin-bottom: 24px;
+  width: 100%;
+}
+
+.trialTimelineItem {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 1;
+}
+
+.trialTimelineIcon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.4);
+  flex-shrink: 0;
+}
+
+.trialTimelineIcon svg {
+  width: 16px;
+  height: 16px;
+}
+
+.trialTimelineContent {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  text-align: left;
+}
+
+.trialTimelineLabel {
+  font-size: 10px;
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.25);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.trialTimelineValue {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.55);
+}
+
+.trialTimelineRelative {
+  font-weight: 400;
+  color: rgba(255, 255, 255, 0.25);
+}
+
+.trialTimelineDivider {
+  width: 1px;
+  height: 40px;
+  background: rgba(255, 255, 255, 0.06);
+  margin: 0 16px;
+}
+
+/* ─── Trial Info List (trial_expired only) ─────────────────────────────────── */
+.trialInfoList {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  width: 100%;
+}
+
+.trialInfoItem {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.45);
+  line-height: 1.5;
+}
+
+.trialInfoItem strong {
+  color: rgba(255, 255, 255, 0.7);
+  font-weight: 600;
+}
+
+.trialInfoIconGreen {
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+  margin-top: 1px;
+  color: #22c55e;
+}
+
+.trialInfoIconRed {
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+  margin-top: 1px;
+  color: #ef4444;
+}
+
 /* ─── Responsive ────────────────────────────────────────────────────────────── */
 @media (max-width: 560px) {
   .cardBody {
@@ -367,6 +477,22 @@
 
   .lockedGrid {
     grid-template-columns: repeat(2, 1fr);
+  }
+
+  .trialTimeline {
+    flex-direction: column;
+    gap: 12px;
+    padding: 16px;
+  }
+
+  .trialTimelineItem {
+    width: 100%;
+  }
+
+  .trialTimelineDivider {
+    width: 40px;
+    height: 1px;
+    margin: 0;
   }
 
   .cardFooter {

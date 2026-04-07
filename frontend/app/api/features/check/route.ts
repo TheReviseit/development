@@ -147,8 +147,120 @@ export async function GET(request: NextRequest) {
       }
     }
 
+    // ===================================================================
+    // CRITICAL FIX: Check for active trial if no subscription found
+    // Trial users should have feature access based on their plan
+    // ===================================================================
     if (!subscriptionRaw) {
-      // FAIL CLOSED: No subscription = deny access
+      // Check free_trials table for active trial
+      const { data: trial } = await supabase
+        .from("free_trials")
+        .select("id, status, plan_slug, domain, expires_at")
+        .eq("user_id", supabaseUserId)
+        .eq("domain", domain)
+        .in("status", ["active", "expiring_soon"])
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (trial) {
+        console.log(
+          `✅ [FeatureCheck] User ${firebaseUid} has active trial (${trial.plan_slug}), granting feature access`
+        );
+
+        // Get plan features for the trial plan
+        const { data: trialPlan } = await supabase
+          .from("pricing_plans")
+          .select("id, plan_slug")
+          .eq("plan_slug", trial.plan_slug)
+          .eq("product_domain", domain)
+          .eq("is_active", true)
+          .limit(1)
+          .maybeSingle();
+
+        if (trialPlan) {
+          // Get feature limits for trial plan
+          const { data: trialFeatures } = await supabase
+            .from("plan_features")
+            .select("hard_limit, soft_limit, is_unlimited, feature_key")
+            .eq("plan_id", trialPlan.id)
+            .eq("feature_key", featureKey)
+            .limit(1)
+            .maybeSingle();
+
+          if (trialFeatures) {
+            // Get current usage
+            let used = 0;
+            const { data: counter } = await supabase
+              .from("usage_counters")
+              .select("current_value")
+              .eq("user_id", supabaseUserId)
+              .eq("domain", domain)
+              .eq("feature_key", featureKey)
+              .maybeSingle();
+            used = counter?.current_value ?? 0;
+
+            // Handle create_product counter reconciliation
+            if (featureKey === "create_product") {
+              const { count: productCount } = await supabase
+                .from("products")
+                .select("id", { count: "exact", head: true })
+                .eq("user_id", firebaseUid)
+                .neq("is_deleted", true);
+
+              const pCount = productCount ?? 0;
+              let vCount = 0;
+              if (pCount > 0) {
+                const { data: productIds } = await supabase
+                  .from("products")
+                  .select("id")
+                  .eq("user_id", firebaseUid)
+                  .neq("is_deleted", true);
+
+                if (productIds && productIds.length > 0) {
+                  const ids = productIds.map((p) => p.id);
+                  const { count: variantCount } = await supabase
+                    .from("product_variants")
+                    .select("id", { count: "exact", head: true })
+                    .in("product_id", ids);
+                  vCount = variantCount ?? 0;
+                }
+              }
+
+              const actualCount = pCount + vCount;
+              if (actualCount > used) {
+                used = actualCount;
+              }
+            }
+
+            const allowed = trialFeatures.is_unlimited || 
+                           trialFeatures.hard_limit === null || 
+                           used < trialFeatures.hard_limit;
+
+            return NextResponse.json({
+              allowed,
+              hard_limit: trialFeatures.hard_limit,
+              soft_limit: trialFeatures.soft_limit,
+              is_unlimited: trialFeatures.is_unlimited,
+              used,
+              remaining: trialFeatures.is_unlimited
+                ? null
+                : trialFeatures.hard_limit !== null
+                  ? Math.max(0, trialFeatures.hard_limit - used)
+                  : null,
+              feature_key: featureKey,
+              trial_mode: true,
+              trial_plan: trial.plan_slug,
+              trial_expires_at: trial.expires_at,
+            });
+          }
+        }
+      }
+
+      // FAIL CLOSED: No subscription and no trial = deny access
+      console.log(
+        `🚫 [FeatureCheck] No subscription or trial for user ${firebaseUid}, domain=${domain}`
+      );
       return NextResponse.json({
         allowed: false,
         hard_limit: 0,
