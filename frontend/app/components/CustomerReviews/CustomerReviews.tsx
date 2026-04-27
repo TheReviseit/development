@@ -9,11 +9,14 @@ interface Review {
   role: string;
   company: string;
   avatar: string;
-  rating: number;
+  rating?: number; // TODO: Populate with real ratings from a verified source (e.g., G2, Capterra)
   review: string;
   category: string;
 }
 
+// TODO: Replace all review data below with real customer reviews from a verified
+// source (e.g., G2, Capterra). Names, companies, ratings, and testimonials are
+// currently placeholder/fabricated and must not be presented as genuine.
 const reviews: Review[] = [
   {
     id: 1,
@@ -21,7 +24,7 @@ const reviews: Review[] = [
     role: "Support Manager",
     company: "TechCorp",
     avatar: "from-purple-400 to-pink-400",
-    rating: 4.9,
+    // rating removed — must come from a verified review source
     review:
       "Flowauxi cut our response time by 70%. The AI handles routine questions perfectly, and our team can focus on complex issues.",
     category: "Customer Support",
@@ -32,7 +35,7 @@ const reviews: Review[] = [
     role: "Sales Director",
     company: "SalesHub",
     avatar: "from-blue-400 to-cyan-400",
-    rating: 5.0,
+    // rating removed — must come from a verified review source
     review:
       "Our conversion rate increased 45% in the first month. The smart broadcasts and CRM integration are game-changers.",
     category: "Sales",
@@ -43,7 +46,7 @@ const reviews: Review[] = [
     role: "Marketing Lead",
     company: "StartupXYZ",
     avatar: "from-green-400 to-emerald-400",
-    rating: 4.8,
+    // rating removed — must come from a verified review source
     review:
       "Finally, a WhatsApp tool that actually understands marketing. The segmentation and automation features are excellent.",
     category: "Marketing",
@@ -54,7 +57,7 @@ const reviews: Review[] = [
     role: "Customer Success Manager",
     company: "GrowthCo",
     avatar: "from-orange-400 to-red-400",
-    rating: 5.0,
+    // rating removed — must come from a verified review source
     review:
       "The analytics dashboard gives us insights we never had before. We can now track every interaction and optimize our approach in real-time.",
     category: "Customer Support",
@@ -65,7 +68,7 @@ const reviews: Review[] = [
     role: "Head of Sales",
     company: "ScaleVentures",
     avatar: "from-indigo-400 to-purple-400",
-    rating: 4.9,
+    // rating removed — must come from a verified review source
     review:
       "Integration with our existing CRM was seamless. The automated follow-ups have doubled our lead engagement rate.",
     category: "Sales",
@@ -76,7 +79,7 @@ const reviews: Review[] = [
     role: "Digital Marketing Manager",
     company: "BrandBoost",
     avatar: "from-pink-400 to-rose-400",
-    rating: 4.8,
+    // rating removed — must come from a verified review source
     review:
       "The campaign scheduling and audience segmentation tools are incredibly powerful. ROI has improved by over 60% since we started.",
     category: "Marketing",
@@ -188,16 +191,18 @@ export default function CustomerReviews() {
                       </p>
                     </div>
                   </div>
-                  <div className="review-rating">
-                    <svg
-                      className="star-icon"
-                      fill="currentColor"
-                      viewBox="0 0 20 20"
-                    >
-                      <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
-                    </svg>
-                    <span className="rating-value">{review.rating}</span>
-                  </div>
+                  {review.rating != null && (
+                    <div className="review-rating">
+                      <svg
+                        className="star-icon"
+                        fill="currentColor"
+                        viewBox="0 0 20 20"
+                      >
+                        <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
+                      </svg>
+                      <span className="rating-value">{review.rating}</span>
+                    </div>
+                  )}
                 </div>
 
                 {/* Review Content */}
@@ -270,19 +275,20 @@ export default function CustomerReviews() {
         </div>
 
         {/* Stats Section */}
+        {/* TODO: Replace stats below with verified metrics from G2, Capterra, or similar */}
         <div className="reviews-stats">
           <div className="stat-item">
-            <div className="stat-value">4.9</div>
+            <div className="stat-value">—</div>
             <div className="stat-label">Average Rating</div>
           </div>
           <div className="stat-divider"></div>
           <div className="stat-item">
-            <div className="stat-value">10,000+</div>
+            <div className="stat-value">—</div>
             <div className="stat-label">Happy Customers</div>
           </div>
           <div className="stat-divider"></div>
           <div className="stat-item">
-            <div className="stat-value">98%</div>
+            <div className="stat-value">—</div>
             <div className="stat-label">Satisfaction Rate</div>
           </div>
         </div>

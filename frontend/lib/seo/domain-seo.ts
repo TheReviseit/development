@@ -30,6 +30,12 @@
 
 import type { Metadata } from "next";
 
+import {
+  getReviewRating,
+  ORGANIZATION_SAME_AS,
+  KNOWS_ABOUT_ENTITIES,
+} from "./entity-definition";
+
 // =============================================================================
 // TYPES
 // =============================================================================
@@ -102,12 +108,12 @@ interface DomainSeoConfig {
     description: string;
   };
 
-  /** AggregateRating for SoftwareApplication schema */
+  /** AggregateRating for SoftwareApplication schema — null when reviews disabled */
   rating: {
     ratingValue: string;
     ratingCount: string;
     bestRating: string;
-  };
+  } | null;
 
   /** FAQ questions sourced from real "People Also Ask" queries */
   faqs: DomainFAQ[];
@@ -131,14 +137,6 @@ const ALL_SUBDOMAIN_URLS = [
   "https://api.flowauxi.com",
 ];
 
-const SOCIAL_URLS = [
-  "https://www.linkedin.com/company/flowauxi",
-  "https://twitter.com/flowauxi",
-  "https://www.facebook.com/flowauxi",
-  "https://www.youtube.com/@flowauxi",
-  "https://github.com/flowauxi",
-];
-
 // =============================================================================
 // DOMAIN SEO CONFIGURATIONS — THE CORE
 // =============================================================================
@@ -153,7 +151,7 @@ const DOMAIN_SEO_CONFIGS: Record<ProductDomain, DomainSeoConfig> = {
     title: "WhatsApp-Powered Online Store with Automated Order Booking | Flowauxi Shop",
     titleTemplate: "%s | Flowauxi Shop",
     description:
-      "Create your free WhatsApp online store with Flowauxi. AI chatbot, order automation, invoice delivery, payment integration. Get a free website + 7-day trial. Plans start at ₹1,999/month.",
+      "Create your free WhatsApp online store with Flowauxi. AI chatbot, order automation, invoice delivery, payment integration. Get a free website + 7-day trial.",
     keywords: [
       "WhatsApp store builder",
       "WhatsApp order automation",
@@ -198,18 +196,14 @@ const DOMAIN_SEO_CONFIGS: Record<ProductDomain, DomainSeoConfig> = {
         "WhatsApp-powered e-commerce platform enabling businesses to create online stores with automated order booking, AI chatbot for customer support, and WhatsApp CRM integration.",
       url: "https://shop.flowauxi.com",
       logo: "https://shop.flowauxi.com/icon-512.png",
-      sameAs: [...SOCIAL_URLS, ...ALL_SUBDOMAIN_URLS],
+      sameAs: [...ORGANIZATION_SAME_AS, ...ALL_SUBDOMAIN_URLS],
     },
     website: {
       name: "Flowauxi Shop",
       description:
         "WhatsApp-Powered E-commerce Store Builder with Automated Order Booking",
     },
-    rating: {
-      ratingValue: "4.8",
-      ratingCount: "520",
-      bestRating: "5",
-    },
+    rating: getReviewRating(),
     faqs: [
       {
         question:
@@ -298,17 +292,13 @@ const DOMAIN_SEO_CONFIGS: Record<ProductDomain, DomainSeoConfig> = {
         "AI-powered marketing automation platform for campaign management, audience segmentation, and multi-channel broadcasting across WhatsApp, SMS, and email.",
       url: "https://marketing.flowauxi.com",
       logo: "https://marketing.flowauxi.com/icon-512.png",
-      sameAs: [...SOCIAL_URLS, ...ALL_SUBDOMAIN_URLS],
+      sameAs: [...ORGANIZATION_SAME_AS, ...ALL_SUBDOMAIN_URLS],
     },
     website: {
       name: "Flowauxi Marketing",
       description: "AI Marketing Automation & Campaign Management Platform",
     },
-    rating: {
-      ratingValue: "4.7",
-      ratingCount: "380",
-      bestRating: "5",
-    },
+    rating: getReviewRating(),
     faqs: [
       {
         question: "What is the best WhatsApp marketing automation tool?",
@@ -388,17 +378,13 @@ const DOMAIN_SEO_CONFIGS: Record<ProductDomain, DomainSeoConfig> = {
         "Professional portfolio and showcase website builder with 50+ premium templates, visual editor, and AI-powered content tools for creators and businesses.",
       url: "https://pages.flowauxi.com",
       logo: "https://pages.flowauxi.com/icon-512.png",
-      sameAs: [...SOCIAL_URLS, ...ALL_SUBDOMAIN_URLS],
+      sameAs: [...ORGANIZATION_SAME_AS, ...ALL_SUBDOMAIN_URLS],
     },
     website: {
       name: "Flowauxi Pages",
       description: "Professional Portfolio & Showcase Website Builder",
     },
-    rating: {
-      ratingValue: "4.9",
-      ratingCount: "210",
-      bestRating: "5",
-    },
+    rating: getReviewRating(),
     faqs: [
       {
         question: "What is the best free portfolio website builder?",
@@ -440,7 +426,7 @@ const DOMAIN_SEO_CONFIGS: Record<ProductDomain, DomainSeoConfig> = {
       "OTP Verification API — WhatsApp & SMS Authentication | Flowauxi API",
     titleTemplate: "%s | Flowauxi API",
     description:
-      "Enterprise-grade OTP verification API for WhatsApp and SMS. 99.9% uptime, sub-200ms delivery, developer-friendly SDKs & documentation. Trusted by 500+ businesses. Start with free credits.",
+      "Enterprise-grade OTP verification API for WhatsApp and SMS. 99.9% uptime, sub-200ms delivery, developer-friendly SDKs & documentation. Start with free credits.",
     keywords: [
       "flowauxi api",
       "OTP API",
@@ -481,17 +467,13 @@ const DOMAIN_SEO_CONFIGS: Record<ProductDomain, DomainSeoConfig> = {
         "Enterprise OTP verification API for WhatsApp and SMS with 99.9% uptime, sub-200ms delivery, and developer-friendly SDKs.",
       url: "https://api.flowauxi.com",
       logo: "https://api.flowauxi.com/icon-512.png",
-      sameAs: [...SOCIAL_URLS, ...ALL_SUBDOMAIN_URLS],
+      sameAs: [...ORGANIZATION_SAME_AS, ...ALL_SUBDOMAIN_URLS],
     },
     website: {
       name: "Flowauxi API",
       description: "Enterprise OTP Verification API Platform",
     },
-    rating: {
-      ratingValue: "4.9",
-      ratingCount: "450",
-      bestRating: "5",
-    },
+    rating: getReviewRating(),
     faqs: [
       {
         question: "What is the best OTP verification API?",
@@ -531,7 +513,7 @@ const DOMAIN_SEO_CONFIGS: Record<ProductDomain, DomainSeoConfig> = {
       "WhatsApp Automation Platform — AI Chatbot, CRM & Business Messaging | Flowauxi",
     titleTemplate: "%s | Flowauxi",
     description:
-      "Automate WhatsApp for your business with AI chatbots, CRM integration, smart broadcasting & analytics. Trusted by 500+ businesses across India. Start your free trial today — no credit card required.",
+      "Automate WhatsApp for your business with AI chatbots, CRM integration, smart broadcasting & analytics. Start your free trial today — no credit card required.",
     keywords: [
       "WhatsApp automation",
       "WhatsApp automation platform",
@@ -598,15 +580,12 @@ const DOMAIN_SEO_CONFIGS: Record<ProductDomain, DomainSeoConfig> = {
     organization: {
       name: "Flowauxi",
       description:
-        "WhatsApp Automation Platform with AI chatbots, CRM integration, and smart broadcasting. Trusted by 500+ businesses across India.",
+        "WhatsApp Automation Platform with AI chatbots, CRM integration, and smart broadcasting.",
       url: "https://www.flowauxi.com",
       logo: "https://www.flowauxi.com/icon-512.png",
       sameAs: [
-        ...SOCIAL_URLS,
+        ...ORGANIZATION_SAME_AS,
         ...ALL_SUBDOMAIN_URLS,
-        "https://www.crunchbase.com/organization/flowauxi",
-        "https://www.producthunt.com/products/flowauxi",
-        "https://www.trustpilot.com/review/flowauxi.com",
       ],
     },
     website: {
@@ -614,11 +593,7 @@ const DOMAIN_SEO_CONFIGS: Record<ProductDomain, DomainSeoConfig> = {
       description:
         "WhatsApp Automation Platform — AI Chatbot, CRM & Business Messaging",
     },
-    rating: {
-      ratingValue: "4.8",
-      ratingCount: "500",
-      bestRating: "5",
-    },
+    rating: getReviewRating(),
     faqs: [
       {
         question: "What is WhatsApp automation and how does it work?",
@@ -629,7 +604,7 @@ const DOMAIN_SEO_CONFIGS: Record<ProductDomain, DomainSeoConfig> = {
         question:
           "How much does WhatsApp automation cost for businesses?",
         answer:
-          "Flowauxi offers flexible pricing plans starting with a free trial. Costs depend on message volume and features needed. Plans range from affordable starter tiers for small businesses to enterprise plans with custom SLAs. WhatsApp Business API itself charges per-conversation fees set by Meta. Start with our 14-day free trial — no credit card required.",
+          "Flowauxi offers flexible pricing plans starting with a free trial. Costs depend on message volume and features needed. Plans range from affordable starter tiers for small businesses to enterprise plans with custom SLAs. WhatsApp Business API itself charges per-conversation fees set by Meta. Start with our 7-day free trial — no credit card required.",
       },
       {
         question:
@@ -640,7 +615,7 @@ const DOMAIN_SEO_CONFIGS: Record<ProductDomain, DomainSeoConfig> = {
       {
         question: "What is the best WhatsApp automation platform?",
         answer:
-          "Flowauxi is a leading WhatsApp automation platform trusted by 500+ businesses in India. It offers AI-powered chatbots, CRM integration, smart broadcasting, analytics dashboard, and multi-agent support. Unlike competitors, Flowauxi also includes e-commerce store building, marketing automation, and OTP verification — all from one platform.",
+          "Flowauxi is a WhatsApp automation platform with AI-powered chatbots, CRM integration, smart broadcasting, analytics dashboard, and multi-agent support. Unlike competitors focused on just messaging, Flowauxi also includes e-commerce store building, marketing automation, and OTP verification — all from one platform.",
       },
     ],
     breadcrumb: [{ name: "Flowauxi", url: "https://www.flowauxi.com" }],
@@ -831,6 +806,7 @@ export function generateDomainSchemas(host: string): Record<string, unknown>[] {
     orgSchema.areaServed = { "@type": "Country", name: "India" };
     orgSchema.knowsLanguage = ["en", "hi"];
   }
+  orgSchema.knowsAbout = KNOWS_ABOUT_ENTITIES.map((e) => e.name);
   schemas.push(orgSchema);
 
   // ── 2. Primary Schema Type (domain-specific) ────────────────────────
@@ -881,13 +857,17 @@ export function generateDomainSchemas(host: string): Record<string, unknown>[] {
         description: "Flexible plans available — get started instantly",
         availability: "https://schema.org/InStock",
       },
-      aggregateRating: {
-        "@type": "AggregateRating",
-        ratingValue: config.rating.ratingValue,
-        ratingCount: config.rating.ratingCount,
-        bestRating: config.rating.bestRating,
-        worstRating: "1",
-      },
+      ...(config.rating
+        ? {
+            aggregateRating: {
+              "@type": "AggregateRating",
+              ratingValue: config.rating.ratingValue,
+              ratingCount: config.rating.ratingCount,
+              bestRating: config.rating.bestRating,
+              worstRating: "1",
+            },
+          }
+        : {}),
       creator: {
         "@type": "Organization",
         name: "Flowauxi Technologies",
@@ -914,13 +894,17 @@ export function generateDomainSchemas(host: string): Record<string, unknown>[] {
         priceCurrency: "INR",
         description: "Flexible plans available — get started instantly",
       },
-      aggregateRating: {
-        "@type": "AggregateRating",
-        ratingValue: config.rating.ratingValue,
-        ratingCount: config.rating.ratingCount,
-        bestRating: config.rating.bestRating,
-        worstRating: "1",
-      },
+      ...(config.rating
+        ? {
+            aggregateRating: {
+              "@type": "AggregateRating",
+              ratingValue: config.rating.ratingValue,
+              ratingCount: config.rating.ratingCount,
+              bestRating: config.rating.bestRating,
+              worstRating: "1",
+            },
+          }
+        : {}),
       creator: {
         "@type": "Organization",
         name: "Flowauxi Technologies",

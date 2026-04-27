@@ -9,7 +9,7 @@ const baseUrl = "https://www.flowauxi.com";
 export const homeMetadata: Metadata = {
   title: "WhatsApp Automation Platform — AI Chatbot, CRM & Business Messaging | Flowauxi",
   description:
-    "Automate WhatsApp for your business with AI chatbots, CRM integration, smart broadcasting & analytics. Trusted by 500+ businesses across India. Start your free trial today!",
+    "Automate WhatsApp for your business with AI chatbots, CRM integration, smart broadcasting & analytics. Trusted by businesses across India. Start your free trial today!",
   keywords: [
     "WhatsApp automation",
     "WhatsApp automation platform",
@@ -35,7 +35,7 @@ export const homeMetadata: Metadata = {
   openGraph: {
     title: "WhatsApp Automation Platform — AI Chatbot, CRM & Business Messaging | Flowauxi",
     description:
-      "Automate WhatsApp for your business with AI chatbots, CRM integration, smart broadcasting & analytics. Trusted by 500+ businesses.",
+      "Automate WhatsApp for your business with AI chatbots, CRM integration, smart broadcasting & analytics. Trusted by businesses across India.",
     url: baseUrl,
     type: "website",
     images: [
@@ -102,11 +102,11 @@ export const loginMetadata: Metadata = {
 export const signupMetadata: Metadata = {
   title: "Sign Up - Start Your Free WhatsApp Automation Trial",
   description:
-    "Create your Flowauxi account and start automating WhatsApp messages in minutes. 14-day free trial, no credit card required.",
+    "Create your Flowauxi account and start automating WhatsApp messages in minutes. 7-day free trial, no credit card required.",
   openGraph: {
     title: "Sign Up for Flowauxi - Free WhatsApp Automation Trial",
     description:
-      "Start automating WhatsApp in minutes. 14-day free trial, no credit card required.",
+      "Start automating WhatsApp in minutes. 7-day free trial, no credit card required.",
     url: `${baseUrl}/signup`,
   },
 };

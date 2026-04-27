@@ -11,7 +11,7 @@ import React, {
 import type { User as FirebaseUserType } from "firebase/auth";
 import { onAuthStateChanged, User as FirebaseUser } from "firebase/auth";
 import { auth } from "@/src/firebase/firebase";
-import { detectProductFromRequest } from "@/lib/auth-helpers";
+import { getProductDomainFromBrowser } from "@/lib/domain/client";
 import type {
   AuthContextType,
   AuthState,
@@ -61,49 +61,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const SYNC_DEBOUNCE_MS = 3000; // Minimum 3s between syncs across tabs
 
   const detectCurrentProduct = useCallback((): ProductDomain => {
-    if (typeof window === "undefined") return "dashboard";
-
-    const hostname = window.location.hostname;
-    const pathname = window.location.pathname;
-    const port = window.location.port;
-
-    // Production subdomain detection
-    if (process.env.NODE_ENV === "production") {
-      if (hostname.startsWith("shop.")) return "shop";
-      if (hostname.startsWith("pages.")) return "showcase";
-      if (hostname.startsWith("marketing.")) return "marketing";
-      if (hostname.startsWith("api.")) return "api";
-    }
-
-    // Development port-based detection
-    if (process.env.NODE_ENV === "development") {
-      if (port === "3001") return "shop";
-      if (port === "3002") return "showcase";
-      if (port === "3003") return "marketing";
-      if (port === "3004") return "api";
-
-      // Pathname-based fallback
-      if (
-        pathname.startsWith("/dashboard/products") ||
-        pathname.startsWith("/dashboard/orders")
-      ) {
-        return "shop";
-      }
-      if (
-        pathname.startsWith("/dashboard/showcase") ||
-        pathname.startsWith("/dashboard/pages")
-      ) {
-        return "showcase";
-      }
-      if (
-        pathname.startsWith("/dashboard/campaigns") ||
-        pathname.startsWith("/dashboard/marketing")
-      ) {
-        return "marketing";
-      }
-    }
-
-    return "dashboard";
+    return getProductDomainFromBrowser();
   }, []);
 
   /**

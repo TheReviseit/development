@@ -4,7 +4,7 @@ import { Metadata } from "next";
 export const metadata: Metadata = {
   title: "Sign Up Free - WhatsApp Automation | 14-Day Trial",
   description:
-    "Create your free Flowauxi account in 60 seconds. Start automating WhatsApp messages with AI-powered responses. No credit card required for 14-day trial. Join 500+ businesses automating customer conversations.",
+    "Create your free Flowauxi account in 60 seconds. Start automating WhatsApp messages with AI-powered responses. No credit card required for 14-day trial. Join businesses across India automating customer conversations.",
   keywords: [
     "WhatsApp automation signup",
     "free WhatsApp automation trial",
@@ -15,7 +15,7 @@ export const metadata: Metadata = {
   openGraph: {
     title: "Sign Up for Flowauxi - Free WhatsApp Automation Trial",
     description:
-      "Start automating WhatsApp in 60 seconds. 14-day free trial, no credit card required. Join 500+ businesses.",
+      "Start automating WhatsApp in 60 seconds. 14-day free trial, no credit card required. Trusted by businesses across India.",
     url: "https://www.flowauxi.com/signup",
     images: [
       {

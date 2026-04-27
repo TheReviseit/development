@@ -413,6 +413,8 @@ try:
 except ImportError as e:
     logger.warning(f"Billing admin routes not available: {e}")
 
+# NOTE: Billing API routes are now registered in routes/__init__.py
+
 # Register Forms API routes (form builder + public submissions)
 try:
     from routes.forms_api import forms_bp
@@ -2188,6 +2190,14 @@ if __name__ == '__main__':
         _start_dev_billing_scheduler()
     else:
         print(f'💰 Billing Monitor: Production mode (Celery Beat)')
+
+    # Start FAANG Database Outbox Processor
+    try:
+        from outbox_processor import db_outbox_processor
+        db_outbox_processor.start()
+        print(f'📦 Database Outbox Processor: Started ✅ (Polling events_outbox)')
+    except Exception as e:
+        print(f'❌ Failed to start outbox processor: {e}')
 
     print()
     

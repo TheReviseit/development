@@ -190,7 +190,7 @@ interface Subscription {
 
 declare global {
   interface Window {
-    Razorpay: any;
+    Razorpay?: any;
   }
 }
 

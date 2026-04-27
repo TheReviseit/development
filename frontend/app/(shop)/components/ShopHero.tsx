@@ -1,10 +1,8 @@
 "use client";
 
-import { useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
-import { Check, ShoppingBag } from "lucide-react";
-import DemoModal from "./DemoModal";
+import { Check } from "lucide-react";
 import styles from "./ShopHero.module.css";
 
 /**
@@ -13,8 +11,6 @@ import styles from "./ShopHero.module.css";
  * Right: hero photo with tightly composed floating UI cards
  */
 export default function ShopHero() {
-  const [demoOpen, setDemoOpen] = useState(false);
-
   return (
     <section className={styles.hero}>
       <div className={styles.heroInner}>
@@ -49,12 +45,9 @@ export default function ShopHero() {
             <Link href="/signup" className={styles.btnPrimary}>
               Try Now
             </Link>
-            <button
-              className={styles.btnSecondary}
-              onClick={() => setDemoOpen(true)}
-            >
-              See Demo
-            </button>
+            <Link href="/login" className={styles.btnSecondary}>
+              Login
+            </Link>
           </div>
         </div>
 
@@ -146,9 +139,6 @@ export default function ShopHero() {
           </div>
         </div>
       </div>
-
-      {/* Demo Video Modal */}
-      <DemoModal open={demoOpen} onClose={() => setDemoOpen(false)} />
     </section>
   );
 }

@@ -3,7 +3,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { INDIA_CITIES, generateCityMetaDescription, generateCityUniqueContent, type CityData } from "@/lib/seo/programmatic";
 import { generateFaqSchemaForPAA } from "@/lib/seo/ctr-optimization";
-
+import { generateLocalBusinessSchema } from "@/lib/seo/schema-extensions";
 interface Props {
   params: Promise<{ city: string }>;
 }
@@ -80,23 +80,7 @@ export default async function CityPage({ params }: Props) {
   return (
     <>
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(generateFaqSchemaForPAA(faqQuestions)) }} />
-      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify({
-        "@context": "https://schema.org",
-        "@type": "LocalBusiness",
-        name: `Flowauxi ${city.name}`,
-        description: `WhatsApp Store Builder in ${city.name}, ${city.state}`,
-        address: {
-          "@type": "PostalAddress",
-          addressLocality: city.name,
-          addressRegion: city.state,
-          addressCountry: "IN",
-        },
-        areaServed: {
-          "@type": "City",
-          name: city.name,
-          containedInPlace: { "@type": "State", name: city.state },
-        },
-      }) }} />
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(generateLocalBusinessSchema(city)) }} />
 
       <main className="max-w-4xl mx-auto px-4 py-16">
         <nav className="text-sm text-gray-500 mb-8">

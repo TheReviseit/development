@@ -4,7 +4,6 @@ import { useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { Menu, X } from "lucide-react";
-import DemoModal from "./DemoModal";
 import styles from "./ShopNavbar.module.css";
 
 const NAV_LINKS = [
@@ -16,7 +15,7 @@ const NAV_LINKS = [
 
 /**
  * ShopNavbar — reel.ai-inspired clean navigation
- * Company logo | Links center | See Demo + Try Now right
+ * Company logo | Links center | Login + Try Now right
  */
 export default function ShopNavbar({
   isPricingPage = false,
@@ -24,7 +23,6 @@ export default function ShopNavbar({
   isPricingPage?: boolean;
 }) {
   const [mobileOpen, setMobileOpen] = useState(false);
-  const [demoOpen, setDemoOpen] = useState(false);
 
   return (
     <>
@@ -64,12 +62,9 @@ export default function ShopNavbar({
                 Back to Main
               </Link>
             ) : (
-              <button
-                className={styles.seeDemoBtn}
-                onClick={() => setDemoOpen(true)}
-              >
-                See Demo
-              </button>
+              <Link href="/login" className={styles.seeDemoBtn}>
+                Login
+              </Link>
             )}
             <Link href="/signup" className={styles.getStartedBtn}>
               Try Now
@@ -109,15 +104,13 @@ export default function ShopNavbar({
                 Back to Main
               </Link>
             ) : (
-              <button
+              <Link
+                href="/login"
                 className={styles.mobileDemoBtn}
-                onClick={() => {
-                  setMobileOpen(false);
-                  setDemoOpen(true);
-                }}
+                onClick={() => setMobileOpen(false)}
               >
-                See Demo
-              </button>
+                Login
+              </Link>
             )}
             <Link
               href="/signup"
@@ -129,11 +122,6 @@ export default function ShopNavbar({
           </div>
         </div>
       </nav>
-
-      {/* Demo Video Modal */}
-      {!isPricingPage && (
-        <DemoModal open={demoOpen} onClose={() => setDemoOpen(false)} />
-      )}
     </>
   );
 }

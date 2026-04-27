@@ -4,7 +4,7 @@ import { INDIA_CITIES } from "@/lib/seo/programmatic";
 
 export const metadata: Metadata = {
   title: "WhatsApp Store Builder | Create Your Free WhatsApp Store",
-  description: "Create a free WhatsApp store in 10 minutes. AI chatbot, order management, payment integration included. 500+ businesses in India use Flowauxi.",
+  description: "Create a free WhatsApp store in 10 minutes. AI chatbot, order management, payment integration included. Businesses across India use Flowauxi.",
   keywords: [
     "WhatsApp store builder",
     "create WhatsApp store",
@@ -33,7 +33,7 @@ export default function WhatsAppStoreIndexPage() {
           WhatsApp Store Builder
         </h1>
         <p className="text-xl text-gray-600 mb-8 max-w-3xl mx-auto">
-          Create your free WhatsApp store in 10 minutes. AI chatbot, order management, and payment integration included. Join 500+ businesses selling on WhatsApp.
+          Create your free WhatsApp store in 10 minutes. AI chatbot, order management, and payment integration included. Join businesses across India selling on WhatsApp.
         </p>
         <div className="flex flex-wrap gap-4 justify-center">
           <Link href="/signup" className="px-8 py-4 bg-green-600 text-white rounded-lg font-semibold hover:bg-green-700">

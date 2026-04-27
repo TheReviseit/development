@@ -10,6 +10,7 @@ import { handleFirebaseError } from "../utils/firebaseErrors";
 import { signInWithEmailAndPassword } from "firebase/auth";
 import { auth } from "@/src/firebase/firebase";
 import styles from "./Login.module.css";
+import { getProductDomainFromBrowser } from "@/lib/domain/client";
 import {
   signInWithGoogleHybrid,
   checkRedirectResult,
@@ -77,26 +78,46 @@ const GoogleIcon = memo(() => (
 ));
 GoogleIcon.displayName = "GoogleIcon";
 
-// Helper function to create session with retry logic
-async function createSessionWithRetry(
+// Helper function to provision user + set session cookie (canonical path)
+async function syncWithRetry(
   idToken: string,
-  retries = 2,
-): Promise<boolean> {
+  allowCreate: boolean,
+  retries = 1,
+): Promise<{ ok: boolean; status: number; code?: string; message?: string }> {
   for (let i = 0; i <= retries; i++) {
     try {
-      const response = await fetch("/api/auth/login", {
+      const response = await fetch("/api/auth/sync", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ idToken }),
+        credentials: "include",
+        body: JSON.stringify({ idToken, allowCreate }),
       });
-      if (response.ok) return true;
-      if (i === retries) throw new Error("Session creation failed");
+
+      if (response.ok) return { ok: true, status: response.status };
+
+      const errorData = await response.json().catch(() => ({}));
+      const code = errorData.code || errorData.error;
+      const message = errorData.message || errorData.error;
+
+      if (i === retries) return { ok: false, status: response.status, code, message };
     } catch (error) {
-      if (i === retries) throw error;
-      await new Promise((resolve) => setTimeout(resolve, 100 * (i + 1)));
+      if (i === retries) {
+        return { ok: false, status: 0, code: "NETWORK_ERROR", message: "Failed to reach auth server" };
+      }
+      await new Promise((resolve) => setTimeout(resolve, 150 * (i + 1)));
     }
   }
-  return false;
+
+  return { ok: false, status: 0, code: "UNKNOWN", message: "Auth sync failed" };
+}
+
+async function syncLoginWithAutoHeal(idToken: string) {
+  const first = await syncWithRetry(idToken, false);
+  if (first.ok) return first;
+  if (first.status === 404 || first.code === "USER_NOT_FOUND") {
+    return await syncWithRetry(idToken, true);
+  }
+  return first;
 }
 
 // Helper function to check onboarding status with fallback
@@ -290,7 +311,13 @@ export default function LoginPage() {
   const [googleLoading, setGoogleLoading] = useState(false);
   const [checkingSession, setCheckingSession] = useState(true);
   const [isRedirectPending, setIsRedirectPending] = useState(false);
+  const [domain, setDomain] = useState<string>("dashboard");
   const router = useRouter();
+
+  // Resolve current domain for dynamic marketing copy
+  useEffect(() => {
+    setDomain(getProductDomainFromBrowser());
+  }, []);
 
   // Check for redirect result on mount (ONLY if we detect a redirect return)
   useEffect(() => {
@@ -312,37 +339,10 @@ export default function LoginPage() {
           console.log("[Login] Redirect result successful");
           const idToken = await result.user.user.getIdToken();
 
-          // Check/create user
-          const checkResponse = await fetch("/api/auth/check-user-exists", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ idToken }),
-          });
-
-          if (!checkResponse.ok) {
-            throw new Error("Failed to verify user account");
-          }
-
-          const { exists } = await checkResponse.json();
-
-          // Create user if doesn't exist
-          if (!exists) {
-            console.log("[Login] User not found, creating...");
-            await fetch("/api/auth/create-user", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                firebase_uid: result.user.user.uid,
-                full_name: result.user.user.displayName || "",
-                email: result.user.user.email || "",
-              }),
-            });
-          }
-
-          // Create session
-          const sessionSuccess = await createSessionWithRetry(idToken);
-          if (!sessionSuccess) {
-            throw new Error("Failed to create session");
+          // Provision user + set session cookie (canonical, with auto-heal)
+          const syncResult = await syncLoginWithAutoHeal(idToken);
+          if (!syncResult.ok) {
+            throw new Error(syncResult.code || "AUTH_SYNC_FAILED");
           }
 
           // Check onboarding and redirect
@@ -397,29 +397,19 @@ export default function LoginPage() {
         if (firebaseUser) {
           try {
             const idToken = await firebaseUser.getIdToken(true);
+            const syncResult = await syncLoginWithAutoHeal(idToken);
 
-            const checkResponse = await fetch("/api/auth/check-user-exists", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ idToken }),
-            });
-
-            if (checkResponse.ok) {
-              const { exists } = await checkResponse.json();
-
-              if (exists) {
-                const onboardingDone = await checkOnboardingStatus();
-                if (isMounted) {
-                  router.replace(onboardingDone ? "/dashboard" : "/onboarding");
-                }
-                return;
-              } else {
-                console.log("User not found in DB, clearing stale session");
-                await auth.signOut();
+            if (syncResult.ok) {
+              const onboardingDone = await checkOnboardingStatus();
+              if (isMounted) {
+                router.replace(onboardingDone ? "/dashboard" : "/onboarding");
               }
-            } else {
-              console.warn("Failed to verify user, allowing login");
+              return;
             }
+
+            // If we couldn't sync, clear stale Firebase session and show login form
+            console.warn("[Login] Session sync failed:", syncResult);
+            await auth.signOut();
           } catch (error) {
             console.error("Session validation error:", error);
             try {
@@ -475,11 +465,9 @@ export default function LoginPage() {
       try {
         const result = await signInWithEmailAndPassword(auth, email, password);
         const idToken = await result.user.getIdToken();
-
-        const sessionSuccess = await createSessionWithRetry(idToken);
-
-        if (!sessionSuccess) {
-          throw new Error("Failed to create session");
+        const syncResult = await syncLoginWithAutoHeal(idToken);
+        if (!syncResult.ok) {
+          throw new Error(syncResult.code || "AUTH_SYNC_FAILED");
         }
 
         const onboardingCompleted = await checkOnboardingStatus();
@@ -533,40 +521,13 @@ export default function LoginPage() {
           return;
         }
 
-        // STEP 2: Check if user exists
-        const checkResponse = await fetch("/api/auth/check-user-exists", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ idToken }),
-        });
-
-        if (!checkResponse.ok) {
-          throw new Error("Failed to verify user account");
+        // STEP 2: Provision user + set session cookie (canonical, with auto-heal)
+        const syncResult = await syncLoginWithAutoHeal(idToken);
+        if (!syncResult.ok) {
+          throw new Error(syncResult.code || "AUTH_SYNC_FAILED");
         }
 
-        const { exists } = await checkResponse.json();
-
-        // Create user if doesn't exist
-        if (!exists) {
-          console.log("[Login] User not found, creating...");
-          await fetch("/api/auth/create-user", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              firebase_uid: result.user.user.uid,
-              full_name: result.user.user.displayName || "",
-              email: result.user.user.email || "",
-            }),
-          });
-        }
-
-        // STEP 3: Create session
-        const sessionSuccess = await createSessionWithRetry(idToken);
-        if (!sessionSuccess) {
-          throw new Error("Failed to create session");
-        }
-
-        // STEP 4: Session confirmation with polling
+        // STEP 3: Session confirmation with polling
         performance.mark("session-confirmation-start");
         const sessionConfirmed = await waitForSessionConfirmation(5, 150);
         performance.mark("session-confirmation-end");
@@ -640,6 +601,56 @@ export default function LoginPage() {
     }
   }, [router]);
 
+  // Dynamic left pane content
+  const isBooking = domain === "booking";
+  
+  const marketingContent = {
+    quoteLabel: isBooking ? "WHY FLOWAUXI BOOKINGS" : "WHY FLOWAUXI",
+    heading: isBooking ? (
+      <>
+        Provide
+        <br />
+        Lovely
+        <br />
+        Services
+      </>
+    ) : (
+      <>
+        Automate
+        <br />
+        Your WhatsApp
+        <br />
+        Business
+      </>
+    ),
+    subText: isBooking ? (
+      <>
+        List your offerings. Get booked instantly
+        <br />
+        and grow your community without the hassle.
+      </>
+    ) : (
+      <>
+        Join businesses across India automating customer conversations
+        <br />
+        and scaling sales without hiring extra staff.
+      </>
+    ),
+    benefits: isBooking ? (
+      <div className={styles.benefitsList}>
+        <div className={styles.benefitItem}>✓ Instant booking confirmation</div>
+        <div className={styles.benefitItem}>✓ Automated smart reminders</div>
+        <div className={styles.benefitItem}>✓ Real-time calendar sync</div>
+      </div>
+    ) : (
+      <div className={styles.benefitsList}>
+        <div className={styles.benefitItem}>✓ AI-powered WhatsApp automation</div>
+        <div className={styles.benefitItem}>✓ Automated orders & invoicing</div>
+        <div className={styles.benefitItem}>✓ Broadcast campaigns & analytics</div>
+      </div>
+    )
+  };
+
   // Show loading state if redirect is pending
   if (isRedirectPending) {
     return (
@@ -647,22 +658,17 @@ export default function LoginPage() {
         <div className={styles.authSplit}>
           <div className={styles.authLeft}>
             <div className={styles.quoteSection}>
-              <p className={styles.quoteLabel}>A WISE QUOTE</p>
+              <p className={styles.quoteLabel}>{marketingContent.quoteLabel}</p>
             </div>
             <div className={styles.gradientOverlay}></div>
             <div className={styles.contentSection}>
               <h1 className={styles.mainHeading}>
-                Get
-                <br />
-                Everything
-                <br />
-                You Want
+                {marketingContent.heading}
               </h1>
               <p className={styles.subText}>
-                You can get everything you want if you work hard,
-                <br />
-                trust the process, and stick to the plan.
+                {marketingContent.subText}
               </p>
+              {marketingContent.benefits}
             </div>
           </div>
           <div className={styles.authRight}>
@@ -696,22 +702,17 @@ export default function LoginPage() {
         {/* Left Side - Gradient */}
         <div className={styles.authLeft}>
           <div className={styles.quoteSection}>
-            <p className={styles.quoteLabel}>A WISE QUOTE</p>
+            <p className={styles.quoteLabel}>{marketingContent.quoteLabel}</p>
           </div>
           <div className={styles.gradientOverlay}></div>
           <div className={styles.contentSection}>
             <h1 className={styles.mainHeading}>
-              Get
-              <br />
-              Everything
-              <br />
-              You Want
+              {marketingContent.heading}
             </h1>
             <p className={styles.subText}>
-              You can get everything you want if you work hard,
-              <br />
-              trust the process, and stick to the plan.
+              {marketingContent.subText}
             </p>
+            {marketingContent.benefits}
           </div>
         </div>
 

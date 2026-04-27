@@ -39,8 +39,8 @@ export default function BookingCTA() {
           </h2>
 
           <p className="text-lg md:text-xl text-[#111111] font-bold mb-12 max-w-2xl relative z-10">
-            Join 500+ service providers who dropped the manual scheduling and 2x
-            their bookings in the first month.
+            Join service providers across India who dropped the manual scheduling
+            and 2x their bookings.
           </p>
 
           <div className="flex flex-col sm:flex-row items-center gap-6 relative z-10">

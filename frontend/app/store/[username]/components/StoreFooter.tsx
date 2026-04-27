@@ -151,20 +151,16 @@ export function StoreFooter({
           </p>
           <div className={styles.poweredByContainer}>
             <span>Powered by</span>
-
             <a
-              href="https://flowauxi.com/"
+              href="https://shop.flowauxi.com"
               target="_blank"
               rel="noopener noreferrer"
               className={styles.flowauxiLink}
+              title="Free Website Builder by Flowauxi"
             >
-              <span className={styles.flowauxiBrand}>Flowauxi</span>
-              <img
-                src="/logo.png"
-                alt="Flowauxi"
-                className={styles.flowauxiLogo}
-              />
+              <span className={styles.flowauxiBrand}>Free Website Builder</span>
             </a>
+            <span> — Flowauxi</span>
           </div>
         </div>
       </div>

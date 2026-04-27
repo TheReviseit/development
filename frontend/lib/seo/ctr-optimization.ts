@@ -197,10 +197,10 @@ export const EMOTIONAL_TRIGGERS = {
     "Automate Everything",
   ],
   social_proof: [
-    "500+ Businesses Trust Us",
-    "Join 1,000+ Businesses",
-    "Trusted by 500+ Merchants",
-    "Used by 10,000+ Stores",
+    "Trusted by Businesses Across India",
+    "Join Businesses Growing with Flowauxi",
+    "WhatsApp-Powered E-commerce Platform",
+    "Built for Indian Businesses",
   ],
   ease: [
     "Start in 5 Minutes",

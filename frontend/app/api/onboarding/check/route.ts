@@ -17,7 +17,8 @@ import {
   getSubscriptionByUserId,
 } from "@/lib/supabase/queries";
 import { getWhatsAppAccountsByUserId } from "@/lib/supabase/facebook-whatsapp-queries";
-import { createClient } from "@supabase/supabase-js";
+import { createSupabaseServiceClientOrThrow } from "@/lib/auth/provisioning.server";
+import { withTimeout } from "@/lib/server/fetchWithTimeout";
 
 /**
  * Result type for onboarding check.
@@ -62,17 +63,13 @@ async function checkTrialStatus(userId: string): Promise<{
   };
 }> {
   try {
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-    const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-
-    if (!supabaseUrl || !supabaseServiceKey) {
+    let supabase;
+    try {
+      supabase = createSupabaseServiceClientOrThrow({ timeoutMs: 5000 });
+    } catch {
       console.error("[onboarding/check] Missing Supabase env vars");
       return { hasActiveTrial: false, isExpired: false };
     }
-
-    const supabase = createClient(supabaseUrl, supabaseServiceKey, {
-      auth: { autoRefreshToken: false, persistSession: false },
-    });
 
     // Optimized: Index-only scan, check BOTH status AND expires_at
     // Only trials with status IN ('active', 'expiring_soon') AND expires_at > NOW() are valid
@@ -186,7 +183,11 @@ export async function GET(request: NextRequest) {
     }
 
     // Verify the session cookie with safe error handling
-    const authResult = await verifySessionCookieSafe(sessionCookie, true);
+    const authResult = await withTimeout(
+      verifySessionCookieSafe(sessionCookie, true),
+      5000,
+      "FIREBASE_SESSION_VERIFY_TIMEOUT",
+    );
 
     if (!authResult.success) {
       const response = NextResponse.json(

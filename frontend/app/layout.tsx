@@ -1,7 +1,7 @@
 import { Suspense } from "react";
 import type { Metadata } from "next";
 import { headers } from "next/headers";
-import { Outfit, Plus_Jakarta_Sans, Inter } from "next/font/google";
+import { Outfit, Plus_Jakarta_Sans, Inter, Dancing_Script } from "next/font/google";
 import "./globals.css";
 import { SpeedInsights } from "@vercel/speed-insights/next";
 import { ServiceWorkerRegistration } from "@/components/pwa/ServiceWorkerRegistration";
@@ -40,6 +40,14 @@ const outfit = Outfit({
   preload: true,
 });
 
+const dancingScript = Dancing_Script({
+  variable: "--font-script",
+  subsets: ["latin"],
+  weight: ["400", "700"],
+  display: "swap",
+  preload: true,
+});
+
 import type { Viewport } from "next";
 
 // Viewport Configuration for Mobile Responsiveness
@@ -63,7 +71,7 @@ const baseMetadata: Metadata = {
     template: "%s | Flowauxi",
   },
   description:
-    "Automate WhatsApp for your business with AI chatbots, CRM integration, smart broadcasting & analytics. Trusted by 500+ businesses across India. Start your free trial today!",
+    "Automate WhatsApp for your business with AI chatbots, CRM integration, smart broadcasting & analytics. Trusted by businesses across India. Start your free trial today!",
   keywords: [
     // Primary keywords
     "WhatsApp automation",
@@ -137,7 +145,7 @@ const baseMetadata: Metadata = {
     siteName: "Flowauxi — WhatsApp Automation Platform",
     title: "WhatsApp Automation Platform — AI Chatbot, CRM & Business Messaging | Flowauxi",
     description:
-      "Automate WhatsApp for your business with AI chatbots, CRM integration, smart broadcasting & analytics. Trusted by 500+ businesses across India. Start free!",
+      "Automate WhatsApp for your business with AI chatbots, CRM integration, smart broadcasting & analytics. Trusted by businesses across India. Start free!",
     images: [
       {
         url: "/og-image.png",
@@ -342,7 +350,9 @@ export default async function RootLayout({
           />
         ))}
       </head>
-      <body className={`${inter.variable} ${jakarta.variable} ${outfit.variable} antialiased`}>
+      <body
+        className={`${inter.variable} ${jakarta.variable} ${outfit.variable} ${dancingScript.variable} antialiased`}
+      >
         <QueryProvider>
           <ServiceWorkerRegistration />
           <PWAInstallPrompt />

@@ -1,23 +1,11 @@
-/**
- * Dashboard Auth Guard Inner Component
- * This component is rendered INSIDE AuthProvider and can safely use useAuth()
- *
- * CRITICAL: Uses window.location.href (NOT router.push) for auth-failure redirects.
- * router.push is unreliable from within layout effects — it triggers client-side
- * navigation that can be swallowed by React re-renders. window.location.href
- * performs a hard browser navigation that is deterministic and uninterruptible.
- *
- * ARCHITECTURE CHANGE (v5):
- *   - Trial expiry is NO LONGER handled here
- *   - BillingLockScreen (in layout.tsx) handles all billing/trial locks
- *   - This guard ONLY handles auth state + onboarding check
- *   - Expired trials MUST NOT redirect to onboarding (critical fix)
- */
 "use client";
 
 import { useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/app/components/auth/AuthProvider";
+import { getProductDomainFromBrowser } from "@/lib/domain/client";
+import { getDomainVisibility } from "@/lib/domain/config";
+import { getSelfServiceProducts } from "@/lib/auth-helpers";
 
 interface DashboardAuthGuardProps {
   setUser: (user: any) => void;
@@ -31,7 +19,13 @@ export function DashboardAuthGuard({
   user,
 }: DashboardAuthGuardProps) {
   const router = useRouter();
-  const { authState, user: authUser, clearSession, currentProduct, syncUser } = useAuth();
+  const {
+    authState,
+    user: authUser,
+    clearSession,
+    currentProduct,
+    syncUser,
+  } = useAuth();
   // Prevent duplicate redirects (React Strict Mode fires effects twice)
   const redirectInProgressRef = useRef(false);
 
@@ -96,7 +90,7 @@ export function DashboardAuthGuard({
         // Paid products (marketing, shop, showcase) must go through the
         // onboarding/payment flow — NOT the free-trial activate page.
         const product = currentProduct || "dashboard";
-        const PAID_DOMAINS = ["marketing", "shop", "showcase"];
+        const PAID_DOMAINS = getSelfServiceProducts();
 
         // ===================================================================
         // BOUNDED RETRY: If we just came from trial activation, the atomic
@@ -284,7 +278,24 @@ export function DashboardAuthGuard({
             // Use trial status as equivalent to subscription for dashboard access
             // v4: Explicit boolean checks now that "error" is separate
             const hasProductAccess =
-              data.hasActiveSubscription === true || data.hasActiveTrial === true;
+              data.hasActiveSubscription === true ||
+              data.hasActiveTrial === true;
+
+            // ═══════════════════════════════════════════════════════════════
+            // DOMAIN-AWARE WhatsApp REQUIREMENT (v6)
+            // ═══════════════════════════════════════════════════════════════
+            // WhatsApp connection is ONLY required for the `dashboard` domain
+            // (core WhatsApp chatbot product). Shop, booking, showcase, and
+            // marketing are independent products that work without WhatsApp.
+            //
+            // The requirement is read from lib/domain/config.ts — the single
+            // source of truth for all domain-specific behaviour.
+            // ═══════════════════════════════════════════════════════════════
+            const currentDomain = getProductDomainFromBrowser();
+            const domainConfig = getDomainVisibility(currentDomain);
+            const whatsappRequired = domainConfig.requiresWhatsApp;
+            const whatsappSatisfied =
+              !whatsappRequired || data.whatsappConnected === true;
 
             // DEBUG: Log decision values
             console.log("[DASHBOARD] Access check values:", {
@@ -293,19 +304,26 @@ export function DashboardAuthGuard({
               hasActiveTrial: data.hasActiveTrial,
               isTrialExpired: data.isTrialExpired,
               whatsappConnected: data.whatsappConnected,
+              currentDomain,
+              whatsappRequired,
+              whatsappSatisfied,
             });
 
             // Redirect to onboarding only if:
             // - No subscription AND no trial AND trial is NOT expired (needs to select plan)
             // OR
-            // - Has trial/subscription BUT WhatsApp not connected (needs to connect WhatsApp)
+            // - WhatsApp is REQUIRED for this domain AND not connected
             //
-            // CRITICAL SAFETY NET: If onboarding IS completed and WhatsApp IS 
-            // connected but there's no product access, it means the trial/sub 
+            // CRITICAL SAFETY NET: If onboarding IS completed and WhatsApp IS
+            // satisfied but there's no product access, it means the trial/sub
             // expired. DO NOT redirect — let BillingLockScreen handle it.
-            if (!hasProductAccess && data.onboardingCompleted === true && data.whatsappConnected === true) {
+            if (
+              !hasProductAccess &&
+              data.onboardingCompleted === true &&
+              whatsappSatisfied
+            ) {
               console.info(
-                "[DASHBOARD] ✅ Onboarding complete, WhatsApp connected, but no product access " +
+                "[DASHBOARD] ✅ Onboarding complete, WhatsApp satisfied, but no product access " +
                   "— trial/sub likely expired. Allowing dashboard load (BillingLockScreen will handle paywall)",
               );
               setUser(authUser);
@@ -313,16 +331,19 @@ export function DashboardAuthGuard({
               return;
             }
 
-            const needsOnboarding = !hasProductAccess || data.whatsappConnected !== true;
-            
+            const needsOnboarding = !hasProductAccess || !whatsappSatisfied;
+
             if (needsOnboarding) {
               console.log("[DASHBOARD] User needs onboarding:", {
                 hasProductAccess,
                 whatsappConnected: data.whatsappConnected,
+                whatsappRequired,
+                whatsappSatisfied,
                 hasActiveSubscription: data.hasActiveSubscription,
                 hasActiveTrial: data.hasActiveTrial,
+                currentDomain,
               });
-              router.push("/onboarding-embedded?domain=shop");
+              router.push(`/onboarding-embedded?domain=${currentDomain}`);
               return;
             }
 

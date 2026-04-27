@@ -309,7 +309,7 @@ export default function BestWhatsAppChatbotPage() {
               <p className="text-gray-500 text-sm">Last updated: {new Date().toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" })}</p>
             </div>
           </div>
-          <p className="text-gray-600 text-sm mt-4">This article was written by the Flowauxi team, experts in WhatsApp commerce and AI chatbots. We've helped 500+ businesses in India automate their WhatsApp sales.</p>
+          <p className="text-gray-600 text-sm mt-4">This article was written by the Flowauxi team, experts in WhatsApp commerce and AI chatbots. We've helped businesses across India automate their WhatsApp sales.</p>
         </section>
       </article>
     </>

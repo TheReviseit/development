@@ -2,33 +2,40 @@
  * Trial Utilities — Client-side trial management
  *
  * Provides:
- * - Auto-start trial on signup
+ * - Auto-start trial on signup (domain-agnostic)
  * - Check trial status
  * - Get trial entitlement for frontend
+ *
+ * ARCHITECTURE: plan_slug and source are derived from PRODUCT_REGISTRY
+ * via getStarterPlanSlug(), ensuring every product gets its correct
+ * product-scoped starter plan (e.g., "booking_starter" not "starter").
  */
 
 import { supabase } from "@/lib/supabase/client";
+import { getStarterPlanSlug } from "@/lib/auth-helpers";
+import type { ProductDomain } from "@/lib/domain/config";
 
 /**
  * Auto-start a free trial for a new user.
  *
- * Called during signup flow for shop domain.
+ * Called during signup flow for any self-service product domain.
+ * Uses getStarterPlanSlug() to derive the correct product-scoped plan.
  */
 export async function auto_start_trial_on_signup(
   userId: string,
   orgId: string,
   email: string,
-  domain: string,
+  domain: ProductDomain | string,
 ): Promise<TrialContext | null> {
   try {
     const isServer = typeof window === "undefined";
-    
+
     const deviceFingerprint = !isServer ? await getDeviceFingerprint() : null;
     const userAgent = !isServer && typeof navigator !== "undefined" ? navigator.userAgent : null;
     const ipAddress = null;
-    const emailDomain = email.split("@")[1];
+    const planSlug = getStarterPlanSlug(domain as ProductDomain);
 
-    const apiUrl = process.env.NEXT_PUBLIC_API_URL 
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL
       ? `${process.env.NEXT_PUBLIC_API_URL}/api/trials/internal/start`
       : "/api/trials/internal/start";
 
@@ -42,9 +49,9 @@ export async function auto_start_trial_on_signup(
         user_id: userId,
         org_id: orgId,
         email: email,
-        plan_slug: "starter",
+        plan_slug: planSlug,
         domain: domain,
-        source: "shop",
+        source: domain,
         ip_address: ipAddress,
         device_fingerprint: deviceFingerprint,
         user_agent: userAgent,
@@ -74,7 +81,7 @@ export async function auto_start_trial_on_signup(
  * Get trial status for the current user.
  */
 export async function get_trial_status(
-  domain: string = "shop",
+  domain: string = "dashboard",
 ): Promise<TrialStatus | null> {
   try {
     const { data: sessionData } = await supabase.auth.getSession();
@@ -112,7 +119,7 @@ export async function get_trial_status(
  * Get trial entitlement formatted for frontend.
  */
 export async function get_trial_entitlement(
-  domain: string = "shop",
+  domain: string = "dashboard",
 ): Promise<FrontendEntitlement | null> {
   try {
     const { data: sessionData } = await supabase.auth.getSession();

@@ -3,24 +3,60 @@
 import Link from "next/link";
 import { Menu, X } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { useAuthRedirect } from "@/app/hooks/useAuthRedirect";
 
 export default function BookingNavbar() {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [isScrolled, setIsScrolled] = useState(false);
   const pathname = usePathname();
-  const { handleLoginClick, handleGetStartedClick, isLoading } = useAuthRedirect();
+  const { handleLoginClick, handleGetStartedClick, isLoading } =
+    useAuthRedirect();
 
   const isPricingPage = pathname === "/pricing";
+
+  // Track scroll position for dynamic styling
+  useEffect(() => {
+    const handleScrollEvent = () => {
+      setIsScrolled(window.scrollY > 20);
+    };
+    window.addEventListener("scroll", handleScrollEvent);
+    return () => window.removeEventListener("scroll", handleScrollEvent);
+  }, []);
+
+  const handleScroll = (
+    e: React.MouseEvent<HTMLAnchorElement>,
+    targetId: string,
+  ) => {
+    e.preventDefault();
+    const element = document.getElementById(targetId);
+    if (element) {
+      // Adjust header offset slightly more if we have a shrinking sticky header
+      const headerOffset = 80;
+      const elementPosition = element.getBoundingClientRect().top;
+      const offsetPosition =
+        elementPosition + window.pageYOffset - headerOffset;
+
+      window.scrollTo({
+        top: offsetPosition,
+        behavior: "smooth",
+      });
+    }
+    setIsMobileMenuOpen(false);
+  };
 
   return (
     <motion.nav
       initial={{ y: -20, opacity: 0 }}
       animate={{ y: 0, opacity: 1 }}
       transition={{ duration: 0.8, ease: "easeOut" }}
-      className="w-full relative z-50 pt-6 pb-4"
+      className={`w-full sticky top-0 z-50 transition-all duration-300 ease-in-out ${
+        isScrolled
+          ? "py-4 bg-[#F1F3F4]/85 backdrop-blur-xl border-b border-gray-200/50 shadow-sm"
+          : "pt-6 pb-4 bg-transparent"
+      }`}
     >
       <div className="max-w-[1400px] mx-auto px-6 sm:px-10 lg:px-16">
         <div className="flex justify-between items-center">
@@ -44,16 +80,18 @@ export default function BookingNavbar() {
           {!isPricingPage && (
             <div className="hidden md:flex items-center gap-8 text-[15px] font-bold text-gray-800">
               <Link
-                href="/booking#features"
+                href="#features"
+                onClick={(e) => handleScroll(e, "features")}
                 className="hover:text-black transition-colors"
               >
-                Services <span>.</span>
+                Features <span>.</span>
               </Link>
               <Link
-                href="/booking#how-it-works"
+                href="#how-it-works"
+                onClick={(e) => handleScroll(e, "how-it-works")}
                 className="hover:text-black transition-colors"
               >
-                Providers <span>.</span>
+                How it works <span>.</span>
               </Link>
               <Link
                 href="/pricing"
@@ -61,8 +99,12 @@ export default function BookingNavbar() {
               >
                 Pricing <span>.</span>
               </Link>
-              <Link href="/booking#partners" className="hover:text-black transition-colors">
-                Partners
+              <Link
+                href="#contact"
+                onClick={(e) => handleScroll(e, "contact")}
+                className="hover:text-black transition-colors"
+              >
+                Contact
               </Link>
             </div>
           )}
@@ -117,20 +159,30 @@ export default function BookingNavbar() {
                 <Link
                   href="#features"
                   className="text-[16px] font-bold text-gray-800"
+                  onClick={(e) => handleScroll(e, "features")}
                 >
-                  Services
+                  Features
                 </Link>
                 <Link
                   href="#how-it-works"
                   className="text-[16px] font-bold text-gray-800"
+                  onClick={(e) => handleScroll(e, "how-it-works")}
                 >
-                  Providers
+                  How it works
                 </Link>
                 <Link
                   href="/pricing"
                   className="text-[16px] font-bold text-gray-800"
+                  onClick={() => setIsMobileMenuOpen(false)}
                 >
                   Pricing
+                </Link>
+                <Link
+                  href="#contact"
+                  className="text-[16px] font-bold text-gray-800"
+                  onClick={(e) => handleScroll(e, "contact")}
+                >
+                  Contact
                 </Link>
                 <div className="w-full h-px bg-gray-200 my-2"></div>
               </>

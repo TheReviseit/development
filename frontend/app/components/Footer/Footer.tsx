@@ -1,14 +1,18 @@
 "use client";
 
 import Image from "next/image";
+import { SocialMediaIcons } from "@/components/shared/SocialMediaIcons";
+import { CONTACT_CONFIG } from "@/config/contact";
 import styles from "./Footer.module.css";
 
-// Contact constants for this component
-const CONTACT = {
-  email: "contact@flowauxi.com",
-  phone: "+916383634873",
-  phoneFormatted: "+91 6383634873",
-} as const;
+/**
+ * Footer Component
+ * 
+ * A production-grade footer component that uses centralized
+ * configuration for contact information and social media links.
+ * 
+ * @production-grade
+ */
 
 export default function Footer() {
   return (
@@ -25,17 +29,17 @@ export default function Footer() {
                 height={40}
                 className={styles.logo}
               />
-              <span className={styles.brandName}>Flowauxi</span>
+              <span className={styles.brandName}>{CONTACT_CONFIG.companyName}</span>
             </div>
           </div>
 
           <div className={styles.legal}>
             <p className={styles.copyright}>
-              © 2026 Flowauxi. All rights reserved.
+              © {new Date().getFullYear()} {CONTACT_CONFIG.companyName}. All rights reserved.
               <br />
-              <strong>Flowauxi</strong> – AI WhatsApp Automation Platform
+              <strong>{CONTACT_CONFIG.companyName}</strong> – AI WhatsApp Automation Platform
               <br />
-              Legal Business Name: SIVASANKARA BOOPATHY RAJA RAMAN
+              Legal Business Name: {CONTACT_CONFIG.legalName}
             </p>
             <div className={styles.legalLinks}>
               <a href="/terms" className={styles.legalLink}>
@@ -50,6 +54,16 @@ export default function Footer() {
                 Data Deletion
               </a>
             </div>
+          </div>
+
+          {/* Social Media Icons */}
+          <div className={styles.socialLinks}>
+            <SocialMediaIcons 
+              variant="minimal"
+              size={20}
+              color="current"
+              gap={16}
+            />
           </div>
         </div>
 
@@ -95,20 +109,20 @@ export default function Footer() {
             <ul className={styles.linkList}>
               <li>
                 <a
-                  href={`tel:${CONTACT.phone}`}
+                  href={`tel:${CONTACT_CONFIG.phone}`}
                   className={styles.link}
-                  aria-label={`Call ${CONTACT.phoneFormatted}`}
+                  aria-label={`Call ${CONTACT_CONFIG.phoneFormatted}`}
                 >
-                  {CONTACT.phoneFormatted}
+                  {CONTACT_CONFIG.phoneFormatted}
                 </a>
               </li>
               <li>
                 <a
-                  href={`mailto:${CONTACT.email}`}
+                  href={`mailto:${CONTACT_CONFIG.email}`}
                   className={styles.link}
-                  aria-label={`Send email to ${CONTACT.email}`}
+                  aria-label={`Send email to ${CONTACT_CONFIG.email}`}
                 >
-                  {CONTACT.email}
+                  {CONTACT_CONFIG.email}
                 </a>
               </li>
             </ul>
@@ -124,13 +138,9 @@ export default function Footer() {
                 </a>
               </li>
               <li>
-                <span className={styles.link}>We'd love to hear from you</span>
+                <span className={styles.link}>We&apos;d love to hear from you</span>
               </li>
             </ul>
-            {/* Social Icons Placeholder - matching design structure */}
-            <div className={styles.socialLinks}>
-              {/* Add social icons here if needed, keeping it simple as per request */}
-            </div>
           </div>
         </div>
       </div>

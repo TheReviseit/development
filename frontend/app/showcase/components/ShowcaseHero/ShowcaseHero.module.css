@@ -90,23 +90,23 @@
 }
 
 .statUsers {
-  font-family: 'Inter', sans-serif;
+  font-family: "Inter", sans-serif;
   font-size: 13px;
   font-style: normal;
   font-weight: 600;
   line-height: 1.4;
-  color: #4B5563;
+  color: #4b5563;
   text-overflow: ellipsis;
   overflow: hidden;
 }
 
 .statRead {
-  font-family: 'Inter', sans-serif;
+  font-family: "Inter", sans-serif;
   font-size: 13px;
   font-style: normal;
   font-weight: 400;
   line-height: 1.4;
-  color: #4B5563;
+  color: #4b5563;
   text-overflow: ellipsis;
   overflow: hidden;
 }
@@ -120,8 +120,8 @@
 
 .heading {
   font-family: ui-serif, Georgia, Cambria, "Times New Roman", Times, serif;
-  font-size: 8rem;
-  line-height: 0.9;
+  font-size: clamp(4rem, 10vw, 8rem);
+  line-height: 0.95;
   font-weight: 400;
   color: #111;
   letter-spacing: -0.04em;
@@ -129,10 +129,10 @@
 }
 
 .plusSign {
-  font-size: 3.5rem;
+  font-size: clamp(2.5rem, 5vw, 3.5rem);
   font-weight: 300;
   vertical-align: super;
-  margin-left: -1rem;
+  margin-left: -0.5rem;
 }
 
 .subtitle {
@@ -454,7 +454,8 @@
   position: absolute;
   bottom: -5%;
   right: -5%;
-  width: 330px;
+  width: 90%;
+  max-width: 330px;
   background: rgba(255, 255, 255, 0.5);
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
@@ -521,10 +522,20 @@
 }
 
 /* RESPONSIVE DESIGN */
+@media (max-width: 1280px) {
+  .heroSection {
+    width: 98%;
+    padding: 3rem 1.5rem 4rem 1.5rem;
+  }
+  .orangeImageBox {
+    width: 85%;
+  }
+}
+
 @media (max-width: 1024px) {
   .heroContainer {
     grid-template-columns: 1fr;
-    gap: 2rem;
+    gap: 3rem;
   }
 
   .leftCol {
@@ -536,6 +547,7 @@
   .subtitle {
     margin-left: auto;
     margin-right: auto;
+    max-width: 100%;
   }
 
   .divider {
@@ -544,34 +556,58 @@
   }
 
   .rightCol {
-    height: 500px;
+    height: 600px;
   }
 }
 
-@media (max-width: 640px) {
-  .heading {
-    font-size: 5rem;
+@media (max-width: 768px) {
+  .statsCard {
+    transform: scale(0.85);
+    transform-origin: top right;
   }
-  .plusSign {
-    font-size: 2rem;
-  }
-  .rightCol {
-    height: 400px;
-  }
-  .statsCard,
   .chatBubbleBottom {
     display: none;
   }
   .productCard {
-    right: 0;
-    transform: scale(0.85);
-    bottom: -10%;
-  }
-  .orangeImageBox {
-    width: 90%;
+    right: 5%;
+    transform: scale(0.9);
+    transform-origin: bottom right;
   }
   .chatBubbleTop {
-    left: 0;
-    top: 10%;
+    top: 5%;
+    left: 5%;
+  }
+}
+
+@media (max-width: 480px) {
+  .heroSection {
+    padding: 2rem 1rem 3rem 1rem;
+    border-radius: 24px;
+  }
+  .rightCol {
+    height: 450px;
+  }
+  .statsCard,
+  .chatBubbleTop {
+    display: none;
+  }
+  .productCard {
+    bottom: -10%;
+    right: auto;
+    left: 50%;
+    transform: translateX(-50%) scale(0.95);
+    width: 95%;
+  }
+  .orangeImageBox {
+    width: 95%;
+    height: 90%;
+  }
+  .btnGroup {
+    flex-direction: column;
+    width: 100%;
+    gap: 1rem;
+  }
+  .primaryBtn {
+    width: 100%;
   }
 }

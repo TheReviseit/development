@@ -482,7 +482,34 @@ const mainEntries: MetadataRoute.Sitemap = [
     changeFrequency: "weekly",
     priority: 0.75,
   },
-  // Auth
+  // ════════════════════════════════════════════════════════════════════════════
+    // P0: Money keyword landing pages (54K+ monthly search volume)
+    // ══════════════════════════════════════════════════════════════════════════
+    {
+      url: `${baseUrl}/online-store-builder`,
+      lastModified: now,
+      changeFrequency: "weekly",
+      priority: 1.0,
+    },
+    {
+      url: `${baseUrl}/free-website-builder`,
+      lastModified: now,
+      changeFrequency: "weekly",
+      priority: 1.0,
+    },
+    {
+      url: `${baseUrl}/ecommerce-website-builder`,
+      lastModified: now,
+      changeFrequency: "weekly",
+      priority: 1.0,
+    },
+    {
+      url: `${baseUrl}/create-online-store-free`,
+      lastModified: now,
+      changeFrequency: "weekly",
+      priority: 1.0,
+    },
+    // Auth
   {
     url: `${baseUrl}/signup`,
     lastModified: now,

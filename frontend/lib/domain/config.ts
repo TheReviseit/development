@@ -87,6 +87,7 @@ export function resolveDomain(hostname: string, port?: string): ProductDomain {
   if (hostname.startsWith("pages.")) return "showcase";
   if (hostname.startsWith("marketing.")) return "marketing";
   if (hostname.startsWith("api.")) return "api";
+  if (hostname.startsWith("booking.")) return "booking";
 
   // Development: port-based mapping
   if (
@@ -136,6 +137,13 @@ export interface DomainVisibilityRules {
   templates: boolean;
   forms: boolean;
   contacts: boolean;
+
+  // Onboarding requirements
+  // Only domains that are WhatsApp-centric (the core chatbot product)
+  // require WhatsApp connection as a prerequisite to access the dashboard.
+  // E-commerce (shop), appointments (booking), portfolio (showcase), and
+  // campaigns (marketing) are independent products.
+  requiresWhatsApp: boolean;
 }
 
 const DOMAIN_VISIBILITY: Record<ProductDomain, DomainVisibilityRules> = {
@@ -154,6 +162,7 @@ const DOMAIN_VISIBILITY: Record<ProductDomain, DomainVisibilityRules> = {
     templates: false,
     forms: false,
     contacts: false,
+    requiresWhatsApp: false,
   },
 
   showcase: {
@@ -171,6 +180,7 @@ const DOMAIN_VISIBILITY: Record<ProductDomain, DomainVisibilityRules> = {
     templates: false,
     forms: false,
     contacts: false,
+    requiresWhatsApp: false,
   },
 
   marketing: {
@@ -188,6 +198,7 @@ const DOMAIN_VISIBILITY: Record<ProductDomain, DomainVisibilityRules> = {
     templates: true,
     forms: true,
     contacts: true,
+    requiresWhatsApp: false,
   },
 
   api: {
@@ -205,6 +216,7 @@ const DOMAIN_VISIBILITY: Record<ProductDomain, DomainVisibilityRules> = {
     templates: false,
     forms: false,
     contacts: false,
+    requiresWhatsApp: false,
   },
 
   booking: {
@@ -222,6 +234,7 @@ const DOMAIN_VISIBILITY: Record<ProductDomain, DomainVisibilityRules> = {
     templates: false,
     forms: false,
     contacts: false,
+    requiresWhatsApp: false,
   },
 
   dashboard: {
@@ -239,6 +252,7 @@ const DOMAIN_VISIBILITY: Record<ProductDomain, DomainVisibilityRules> = {
     templates: false,
     forms: false,
     contacts: false,
+    requiresWhatsApp: true,
   },
 };
 

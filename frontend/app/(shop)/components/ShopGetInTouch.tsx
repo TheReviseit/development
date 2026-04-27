@@ -2,14 +2,18 @@
 
 import { useState, useEffect } from "react";
 import Image from "next/image";
+import { SocialMediaIcons } from "@/components/shared/SocialMediaIcons";
+import { CONTACT_CONFIG, CONTACT_FORM_CONFIG } from "@/config/contact";
 import styles from "./ShopGetInTouch.module.css";
 
-// Contact constants for this component
-const CONTACT = {
-  email: "contact@flowauxi.com",
-  phone: "+916383634873",
-  phoneFormatted: "+91 6383634873",
-} as const;
+/**
+ * ShopGetInTouch Component (Route Group Version)
+ * 
+ * A production-grade contact section component that uses centralized
+ * configuration for contact information and social media links.
+ * 
+ * @production-grade
+ */
 
 export default function ShopGetInTouch() {
   const [formData, setFormData] = useState({
@@ -39,22 +43,22 @@ export default function ShopGetInTouch() {
 
   const validateForm = () => {
     const newErrors: Record<string, string> = {};
-    if (!formData.name.trim()) newErrors.name = "Name is required";
+    if (!formData.name.trim()) newErrors.name = CONTACT_FORM_CONFIG.validation.nameRequired;
     if (!formData.email.trim()) {
-      newErrors.email = "Email is required";
+      newErrors.email = CONTACT_FORM_CONFIG.validation.emailRequired;
     } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
-      newErrors.email = "Please enter a valid email";
+      newErrors.email = CONTACT_FORM_CONFIG.validation.emailInvalid;
     }
     if (!formData.phone.trim()) {
-      newErrors.phone = "Phone number is required";
+      newErrors.phone = CONTACT_FORM_CONFIG.validation.phoneRequired;
     } else if (!/^\+?[\d\s\-()]+$/.test(formData.phone)) {
-      newErrors.phone = "Please enter a valid phone number";
+      newErrors.phone = CONTACT_FORM_CONFIG.validation.phoneInvalid;
     }
-    if (!formData.subject.trim()) newErrors.subject = "Subject is required";
+    if (!formData.subject.trim()) newErrors.subject = CONTACT_FORM_CONFIG.validation.subjectRequired;
     if (!formData.message.trim()) {
-      newErrors.message = "Message is required";
+      newErrors.message = CONTACT_FORM_CONFIG.validation.messageRequired;
     } else if (formData.message.trim().length < 10) {
-      newErrors.message = "Message must be at least 10 characters";
+      newErrors.message = CONTACT_FORM_CONFIG.validation.messageMinLength;
     }
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
@@ -68,11 +72,11 @@ export default function ShopGetInTouch() {
     setSubmitStatus({ type: null, message: "" });
 
     try {
-      const response = await fetch("https://api.web3forms.com/submit", {
+      const response = await fetch(CONTACT_FORM_CONFIG.apiEndpoint, {
         method: "POST",
         headers: { "Content-Type": "application/json", Accept: "application/json" },
         body: JSON.stringify({
-          access_key: "a0f0556c-a204-4c99-96a8-a876893be26f",
+          access_key: CONTACT_FORM_CONFIG.accessKey,
           ...formData,
         }),
       });
@@ -80,16 +84,16 @@ export default function ShopGetInTouch() {
       if (result.success) {
         setSubmitStatus({
           type: "success",
-          message: "Thank you for contacting us! We'll get back to you soon.",
+          message: CONTACT_FORM_CONFIG.successMessage,
         });
         setFormData({ name: "", email: "", phone: "", subject: "", message: "" });
       } else {
-        setSubmitStatus({ type: "error", message: "Something went wrong. Please try again." });
+        setSubmitStatus({ type: "error", message: CONTACT_FORM_CONFIG.errorMessage });
       }
     } catch {
       setSubmitStatus({
         type: "error",
-        message: "Failed to send message. Please check your connection and try again.",
+        message: CONTACT_FORM_CONFIG.networkErrorMessage,
       });
     } finally {
       setIsSubmitting(false);
@@ -232,11 +236,11 @@ export default function ShopGetInTouch() {
               <h3 className={styles.infoTitle}>Email Us</h3>
               <p className={styles.infoText}>Our team is here to help you</p>
               <a
-                href={`mailto:${CONTACT.email}`}
+                href={`mailto:${CONTACT_CONFIG.email}`}
                 className={styles.infoLink}
-                aria-label={`Send email to ${CONTACT.email}`}
+                aria-label={`Send email to ${CONTACT_CONFIG.email}`}
               >
-                {CONTACT.email}
+                {CONTACT_CONFIG.email}
               </a>
             </div>
 
@@ -250,13 +254,13 @@ export default function ShopGetInTouch() {
                 <Image src="/phone.jpg" alt="Call contact" fill className={styles.infoCardImg} />
               </div>
               <h3 className={styles.infoTitle}>Call Us</h3>
-              <p className={styles.infoText}>Mon–Fri, 9 AM to 6 PM IST — we&apos;ll be there!</p>
+              <p className={styles.infoText}>{CONTACT_CONFIG.businessHours?.schedule}</p>
               <a
-                href={`tel:${CONTACT.phone}`}
+                href={`tel:${CONTACT_CONFIG.phone}`}
                 className={styles.infoLink}
-                aria-label={`Call ${CONTACT.phoneFormatted}`}
+                aria-label={`Call ${CONTACT_CONFIG.phoneFormatted}`}
               >
-                {CONTACT.phoneFormatted}
+                {CONTACT_CONFIG.phoneFormatted}
               </a>
             </div>
 
@@ -272,35 +276,20 @@ export default function ShopGetInTouch() {
               </div>
               <h3 className={styles.infoTitle}>Visit Us</h3>
               <p className={styles.infoText}>Come say hello at our office</p>
-              <p className={styles.infoAddress}>Tirunelveli, Tamil Nadu 627428<br />India</p>
+              <p className={styles.infoAddress}>{CONTACT_CONFIG.address?.full}</p>
             </div>
           </div>
 
-          {/* Social Links */}
+          {/* Social Links - Using centralized component */}
           <div className={styles.socialCard}>
             <h3 className={styles.socialTitle}>Follow Us</h3>
-            <div className={styles.socialLinks}>
-              <a href="#linkedin" className={styles.socialLink} aria-label="LinkedIn">
-                <svg width="24" height="24" fill="currentColor" viewBox="0 0 24 24">
-                  <path d="M19 0h-14c-2.761 0-5 2.239-5 5v14c0 2.761 2.239 5 5 5h14c2.762 0 5-2.239 5-5v-14c0-2.761-2.238-5-5-5zm-11 19h-3v-11h3v11zm-1.5-12.268c-.966 0-1.75-.79-1.75-1.764s.784-1.764 1.75-1.764 1.75.79 1.75 1.764-.783 1.764-1.75 1.764zm13.5 12.268h-3v-5.604c0-3.368-4-3.113-4 0v5.604h-3v-11h3v1.765c1.396-2.586 7-2.777 7 2.476v6.759z" />
-                </svg>
-              </a>
-              <a href="#twitter" className={styles.socialLink} aria-label="Twitter">
-                <svg width="24" height="24" fill="currentColor" viewBox="0 0 24 24">
-                  <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z" />
-                </svg>
-              </a>
-              <a href="#youtube" className={styles.socialLink} aria-label="YouTube">
-                <svg width="24" height="24" fill="currentColor" viewBox="0 0 24 24">
-                  <path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z" />
-                </svg>
-              </a>
-              <a href="#instagram" className={styles.socialLink} aria-label="Instagram">
-                <svg width="24" height="24" fill="currentColor" viewBox="0 0 24 24">
-                  <path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zm0-2.163c-3.259 0-3.667.014-4.947.072-4.358.2-6.78 2.618-6.98 6.98-.059 1.281-.073 1.689-.073 4.948 0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98 1.281.058 1.689.072 4.948.072 3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98-1.281-.059-1.69-.073-4.949-.073zm0 5.838c-3.403 0-6.162 2.759-6.162 6.162s2.759 6.163 6.162 6.163 6.162-2.759 6.162-6.163c0-3.403-2.759-6.162-6.162-6.162zm0 10.162c-2.209 0-4-1.79-4-4 0-2.209 1.791-4 4-4s4 1.791 4 4c0 2.21-1.791 4-4 4zm6.406-11.845c-.796 0-1.441.645-1.441 1.44s.645 1.44 1.441 1.44c.795 0 1.439-.645 1.439-1.44s-.644-1.44-1.439-1.44z" />
-                </svg>
-              </a>
-            </div>
+            <SocialMediaIcons 
+              variant="minimal"
+              size={24}
+              className={styles.socialLinks}
+              iconClassName={styles.socialLink}
+              gap={12}
+            />
           </div>
         </div>
       </div>

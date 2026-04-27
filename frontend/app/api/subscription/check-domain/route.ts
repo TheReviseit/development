@@ -45,7 +45,7 @@ export async function GET(request: NextRequest) {
     // ========================================================================
 
     const domain = request.nextUrl.searchParams.get("domain");
-    const validDomains = ["shop", "showcase", "marketing", "api"];
+    const validDomains = ["shop", "showcase", "marketing", "api", "dashboard", "booking"];
 
     if (!domain || !validDomains.includes(domain)) {
       return NextResponse.json(
@@ -105,8 +105,15 @@ export async function GET(request: NextRequest) {
       .eq("product", domain)
       .maybeSingle();
 
-    const hasMembership =
-      membership && ["trial", "active"].includes(membership.status);
+    const now = new Date();
+    const membershipStatus = membership?.status as string | undefined;
+    const hasActiveMembership = membershipStatus === "active";
+    const hasValidTrialMembership =
+      membershipStatus === "trial" &&
+      !!membership?.trial_ends_at &&
+      new Date(membership.trial_ends_at) > now;
+
+    const hasMembership = hasActiveMembership || hasValidTrialMembership;
 
     // ========================================================================
     // 6. CHECK SUBSCRIPTION (subscriptions table)
@@ -115,21 +122,10 @@ export async function GET(request: NextRequest) {
     const { data: subscription } = await supabase
       .from("subscriptions")
       .select(
-        "id, status, product_domain, plan_id, pricing_plan_id, created_at",
+        "id, status, product_domain, plan_id, pricing_plan_id, current_period_end, created_at",
       )
       .eq("user_id", user.id)
       .eq("product_domain", domain)
-      .in("status", [
-        "active",
-        "completed",
-        "past_due",
-        "grace_period",
-        "trialing",
-        "trial",
-        "processing",
-        "pending_upgrade",
-        "upgrade_failed",
-      ])
       .order("created_at", { ascending: false })
       .limit(1)
       .maybeSingle();
@@ -145,7 +141,26 @@ export async function GET(request: NextRequest) {
       planSlug = plan?.plan_slug || null;
     }
 
-    const hasSubscription = !!subscription;
+    const subscriptionStatus = (subscription?.status as string | undefined)?.toLowerCase();
+    const allowedSubscriptionStatuses = new Set([
+      "active",
+      "completed",
+      "trialing",
+      "trial",
+      "grace_period",
+      "pending_upgrade",
+      "upgrade_failed",
+    ]);
+
+    let hasSubscription = false;
+    if (subscriptionStatus && allowedSubscriptionStatuses.has(subscriptionStatus)) {
+      if (subscriptionStatus === "active" && subscription?.current_period_end) {
+        const periodEnd = new Date(subscription.current_period_end);
+        hasSubscription = periodEnd > now;
+      } else {
+        hasSubscription = true;
+      }
+    }
 
     // ========================================================================
     // 7. CHECK PRODUCT SUBSCRIPTIONS (product_subscriptions table — NEW)
@@ -206,19 +221,21 @@ export async function GET(request: NextRequest) {
             ? "TRIAL_ACTIVE"
             : "SUBSCRIPTION_ACTIVE"
         : "NO_ACCESS",
-      membership: hasMembership
-        ? {
-            status: membership.status,
-            product: membership.product,
-            trialEndsAt: membership.trial_ends_at,
-          }
-        : null,
-      subscription: hasSubscription
-        ? {
-            status: subscription.status,
-            planSlug,
-          }
-        : null,
+      membership:
+        hasMembership && membership
+          ? {
+              status: membership.status,
+              product: membership.product,
+              trialEndsAt: membership.trial_ends_at,
+            }
+          : null,
+      subscription:
+        hasSubscription && subscription
+          ? {
+              status: subscription.status,
+              planSlug,
+            }
+          : null,
       trial: hasTrial
         ? {
             status: trial.status,

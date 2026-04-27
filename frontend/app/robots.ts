@@ -106,6 +106,17 @@ export default async function robots(): Promise<MetadataRoute.Robots> {
     // Static assets (already indexed separately)
     "/*.json$",
     "/*.xml$",
+
+    // Content restrictions
+    "/blog/page/",
+    "/blog/tag/",
+    "/blog/author/",
+    "/preview/",
+    "/draft/",
+    "/api/health",
+    "/api/metrics",
+    "/_debug/",
+    "/sw.js.map",
   ];
 
   // ── Per-domain additional disallows ──────────────────────────────────
@@ -145,7 +156,7 @@ export default async function robots(): Promise<MetadataRoute.Robots> {
     rules: [
       {
         userAgent: "*",
-        allow: "/",
+        allow: ["/", "/flowauxi2024seo.txt"],
         disallow: disallowPaths,
       },
       {

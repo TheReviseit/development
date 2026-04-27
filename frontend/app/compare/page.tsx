@@ -100,6 +100,57 @@ const COMPARISONS = [
       "Both have chatbot features",
     ],
   },
+  {
+    name: "Wix",
+    tagline: "General Website Builder",
+    volume: "22K/month",
+    winner: "WhatsApp Native Checkout",
+    href: "/compare/wix",
+    keyDifferences: [
+      "Flowauxi has WhatsApp Checkout (Wix: No)",
+      "True Free Plan (Wix: Ads on free plan)",
+      "India-first payments (Wix: Third-party apps)",
+      "AI Bot Included (Wix: Paid add-on)",
+    ],
+  },
+  {
+    name: "Squarespace",
+    tagline: "Design & Portfolio Builder",
+    volume: "14K/month",
+    winner: "Conversational Commerce",
+    href: "/compare/squarespace",
+    keyDifferences: [
+      "Flowauxi is WhatsApp-first (Squarespace: Web-only)",
+      "Free Forever Plan (Squarespace: 14-day trial)",
+      "AI Customer Bot Included (Squarespace: No)",
+      "Optimized for conversion speed",
+    ],
+  },
+  {
+    name: "Gallabox",
+    tagline: "Enterprise WhatsApp CRM",
+    volume: "880/month",
+    winner: "Great for SMBs & Creators",
+    href: "/compare/gallabox",
+    keyDifferences: [
+      "Flowauxi focuses on DIY SMBs (Gallabox: Enterprise)",
+      "Free Plan Available (Gallabox: Starts expensive)",
+      "E-commerce Store Built-in (Gallabox: No storefront)",
+      "Quick 5-min setup",
+    ],
+  },
+  {
+    name: "MyAlice",
+    tagline: "Omnichannel Inbox",
+    volume: "240/month",
+    winner: "Integrated E-commerce",
+    href: "/compare/myalice",
+    keyDifferences: [
+      "Flowauxi gives you a Store Builder (MyAlice: Inbox only)",
+      "Native WhatsApp Checkout (MyAlice: Chat routing)",
+      "Ideal for direct selling vs ticketing",
+    ],
+  },
 ];
 
 export default function CompareHubPage() {

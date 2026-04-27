@@ -259,7 +259,7 @@ export default function WhatIsWhatsAppEcommercePage() {
               <p className="text-gray-500 text-sm">Last updated: {new Date().toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" })}</p>
             </div>
           </div>
-          <p className="text-gray-600 text-sm mt-4">This article was written by the Flowauxi team, experts in WhatsApp commerce and e-commerce automation. We've helped 500+ businesses in India sell on WhatsApp.</p>
+          <p className="text-gray-600 text-sm mt-4">This article was written by the Flowauxi team, experts in WhatsApp commerce and e-commerce automation. We've helped businesses across India sell on WhatsApp.</p>
         </section>
       </article>
     </>

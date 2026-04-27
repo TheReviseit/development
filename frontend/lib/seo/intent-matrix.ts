@@ -29,6 +29,7 @@ export interface KeywordIntentMapping {
   internalLinkDensity: number;
   priority: "immediate" | "high" | "medium" | "low";
   competitorGap: boolean; // True if competitors don't rank for this
+  intentModules?: IntentModule[];
 }
 
 interface MediaRequirement {
@@ -61,11 +62,100 @@ type CTAType =
   | "sidebar"
   | "floating";
 
+interface IntentModule {
+  name: string;
+  titlePattern: string;
+  trafficPct: number;
+  intentSignal: string;
+}
+
 // =============================================================================
 // INTENT CLASSIFICATION MATRIX
 // =============================================================================
 
 export const INTENT_MATRIX: KeywordIntentMapping[] = [
+  // ═══════════════════════════════════════════════════════════════════════════
+  // P0 MONEY KEYWORD LANDING PAGES — 54K+ monthly search volume
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  {
+    keyword: "online store builder",
+    volume: 12000,
+    difficulty: 45,
+    intent: "commercial",
+    contentFormat: "landing_page",
+    pageTemplate: "/online-store-builder",
+    wordCount: [4000, 6000],
+    mediaRequirements: [
+      { type: "screenshot", minCount: 6, purpose: "Product demo" },
+      { type: "infographic", minCount: 1, purpose: "Comparison visualization" },
+      { type: "table", minCount: 1, purpose: "Feature comparison vs competitors" },
+    ],
+    schema: ["SoftwareApplication", "FAQPage", "HowTo", "BreadcrumbList"],
+    ctaPlacements: ["top-hero", "after-intro", "middle", "after-comparison", "bottom"],
+    internalLinkDensity: 15,
+    priority: "immediate",
+    competitorGap: true,
+    intentModules: [
+      { name: "comparison", titlePattern: "Online Store Builder Comparison — Flowauxi vs the Competition", trafficPct: 35, intentSignal: "Which builder is best?" },
+      { name: "how-to", titlePattern: "How to Create Your Online Store in 3 Steps", trafficPct: 25, intentSignal: "How do I start?" },
+      { name: "whatsapp", titlePattern: "The Only Online Store Builder with Native WhatsApp Selling", trafficPct: 20, intentSignal: "I sell on WhatsApp" },
+      { name: "india", titlePattern: "Built for Indian Businesses — UPI, GST, WhatsApp", trafficPct: 20, intentSignal: "I need India-specific features" },
+    ],
+  },
+
+  {
+    keyword: "free website builder",
+    volume: 22000,
+    difficulty: 50,
+    intent: "transactional",
+    contentFormat: "landing_page",
+    pageTemplate: "/free-website-builder",
+    wordCount: [4000, 6000],
+    mediaRequirements: [
+      { type: "screenshot", minCount: 6, purpose: "Product demo" },
+      { type: "infographic", minCount: 1, purpose: "Pricing comparison" },
+      { type: "table", minCount: 1, purpose: "Free plan comparison vs competitors" },
+    ],
+    schema: ["SoftwareApplication", "FAQPage", "HowTo", "BreadcrumbList"],
+    ctaPlacements: ["top-hero", "after-intro", "middle", "after-pricing", "bottom"],
+    internalLinkDensity: 12,
+    priority: "immediate",
+    competitorGap: true,
+    intentModules: [
+      { name: "comparison", titlePattern: "Free Website Builder Comparison — We Actually Mean Free", trafficPct: 40, intentSignal: "Which free builder is best?" },
+      { name: "free-proof", titlePattern: "Really Free? Yes — Here's the Proof", trafficPct: 25, intentSignal: "Is it actually free?" },
+      { name: "whatsapp", titlePattern: "Free Website Builder with WhatsApp Selling Built In", trafficPct: 20, intentSignal: "I sell on WhatsApp" },
+      { name: "india", titlePattern: "Built for Indian Businesses — UPI, GST, WhatsApp", trafficPct: 15, intentSignal: "I need India-specific features" },
+    ],
+  },
+
+  {
+    keyword: "ecommerce website builder",
+    volume: 8500,
+    difficulty: 48,
+    intent: "commercial",
+    contentFormat: "landing_page",
+    pageTemplate: "/ecommerce-website-builder",
+    wordCount: [4000, 6000],
+    mediaRequirements: [
+      { type: "screenshot", minCount: 8, purpose: "Feature demo" },
+      { type: "infographic", minCount: 1, purpose: "Ecommerce features" },
+      { type: "table", minCount: 2, purpose: "Feature comparison" },
+    ],
+    schema: ["SoftwareApplication", "FAQPage", "HowTo", "BreadcrumbList"],
+    ctaPlacements: ["top-hero", "after-intro", "middle", "after-comparison", "bottom"],
+    internalLinkDensity: 15,
+    priority: "immediate",
+    competitorGap: true,
+    intentModules: [
+      { name: "comparison", titlePattern: "Ecommerce Website Builder Comparison — Flowauxi vs Shopify vs Wix vs Dukaan", trafficPct: 40, intentSignal: "Which ecommerce platform?" },
+      { name: "feature-deep", titlePattern: "Full Ecommerce Features Built In", trafficPct: 25, intentSignal: "I need a complete feature set" },
+      { name: "whatsapp", titlePattern: "The Only Ecommerce Builder with Native WhatsApp Selling", trafficPct: 20, intentSignal: "I sell on WhatsApp" },
+      { name: "india", titlePattern: "Built for Indian Businesses — UPI, GST, WhatsApp", trafficPct: 15, intentSignal: "India e-commerce" },
+    ],
+  },
+
   // ═══════════════════════════════════════════════════════════════════════════
   // IMMEDIATE PRIORITY - High Volume, Low Competition, No Competitor Focus
   // ═══════════════════════════════════════════════════════════════════════════
@@ -295,20 +385,27 @@ export const INTENT_MATRIX: KeywordIntentMapping[] = [
   {
     keyword: "create online store free",
     volume: 18000,
-    difficulty: 50,
+    difficulty: 55,
     intent: "transactional",
     contentFormat: "landing_page",
-    pageTemplate: "/signup",
-    wordCount: [1000, 2000],
+    pageTemplate: "/create-online-store-free",
+    wordCount: [3000, 5000],
     mediaRequirements: [
-      { type: "screenshot", minCount: 2, purpose: "Product preview" },
-      { type: "video", minCount: 1, purpose: "Quick demo" },
+      { type: "screenshot", minCount: 4, purpose: "Step-by-step demo" },
+      { type: "video", minCount: 1, purpose: "5-minute setup walkthrough" },
+      { type: "table", minCount: 1, purpose: "Free vs paid comparison" },
     ],
-    schema: ["SoftwareApplication"],
-    ctaPlacements: ["top-hero", "above-fold", "after-benefits", "bottom"],
-    internalLinkDensity: 5,
-    priority: "medium",
-    competitorGap: false,
+    schema: ["SoftwareApplication", "FAQPage", "HowTo", "BreadcrumbList"],
+    ctaPlacements: ["top-hero", "after-intro", "middle", "after-pricing", "bottom"],
+    internalLinkDensity: 12,
+    priority: "immediate",
+    competitorGap: true,
+    intentModules: [
+      { name: "speed", titlePattern: "3 Steps to Your Free Online Store", trafficPct: 35, intentSignal: "How fast can I launch?" },
+      { name: "free-proof", titlePattern: "Really Free? Yes — Here's the Proof", trafficPct: 30, intentSignal: "Is it actually free?" },
+      { name: "whatsapp", titlePattern: "Free Website Builder with WhatsApp Selling Built In", trafficPct: 20, intentSignal: "I sell on WhatsApp" },
+      { name: "tutorial", titlePattern: "How to Build Your Free Website in 5 Minutes", trafficPct: 15, intentSignal: "Show me how step by step" },
+    ],
   },
 
   {

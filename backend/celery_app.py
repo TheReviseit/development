@@ -48,6 +48,7 @@ try:
             "tasks.forms_maintenance",  # Form soft-delete purge (enterprise two-phase delete)
             "tasks.usage_events",  # Feature usage event processing
             "tasks.messaging_tasks",  # Instagram/WhatsApp omni-channel messaging
+            "tasks.auth_sync_jobs",  # Auth sync durable background jobs
         ]
     )
     
@@ -268,6 +269,16 @@ celery_app.conf.beat_schedule = {
     "health-check": {
         "task": "tasks.maintenance.health_check",
         "schedule": 300.0,  # Every 5 minutes
+        "options": {"queue": "default"},
+    },
+
+    # =========================================================================
+    # Auth Sync Background Jobs (Durable queue + retries)
+    # =========================================================================
+
+    "auth-sync-background-jobs": {
+        "task": "auth_sync_jobs.process_background_jobs",
+        "schedule": 10.0,  # Every 10 seconds
         "options": {"queue": "default"},
     },
 

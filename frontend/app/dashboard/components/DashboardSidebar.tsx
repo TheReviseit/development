@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { getDomainVisibility, type ProductDomain } from "@/lib/domain/config";
+import { auth } from "@/src/firebase/firebase";
 import styles from "../dashboard.module.css";
 
 interface SubNavItem {
@@ -1288,7 +1289,16 @@ export default function DashboardSidebar({
                       onClick={async () => {
                         setShowProfileMenu(false);
                         try {
-                          await fetch("/api/auth/logout", { method: "POST" });
+                          await fetch("/api/auth/logout", {
+                            method: "POST",
+                            credentials: "include",
+                          });
+                          // CRITICAL: also sign out from Firebase client.
+                          // Otherwise Firebase persistence keeps the user logged-in
+                          // and /login auto-redirects back to dashboard.
+                          try {
+                            await auth.signOut();
+                          } catch {}
                           window.location.href = "/login";
                         } catch (error) {
                           console.error("Logout error:", error);

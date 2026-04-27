@@ -147,6 +147,15 @@ class TestSubscriptionStatusGate:
 
         assert decision.allowed is True
 
+    def test_unknown_status_denies_fail_closed(self):
+        """Unknown/unsupported statuses must never grant access."""
+        ctx = make_context(subscription_status="mystery_state")
+        decision = evaluate_policy(ctx)
+
+        assert decision.allowed is False
+        assert decision.denial_reason == DenialReason.SUBSCRIPTION_INACTIVE
+        assert decision.upgrade_required is True
+
 
 # =============================================================================
 # GATE 4: FEATURE NOT IN PLAN

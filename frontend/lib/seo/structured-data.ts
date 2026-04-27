@@ -9,7 +9,21 @@
  *
  * All schemas follow Google's structured data guidelines:
  * https://developers.google.com/search/docs/appearance/structured-data
+ *
+ * ENTITY DEFINITION INTEGRATION:
+ *   - Review ratings are controlled by ENABLE_REVIEWS in entity-definition.ts
+ *   - sameAs URLs are centralized in ORGANIZATION_SAME_AS
+ *   - Entity mappings use KNOWS_ABOUT_ENTITIES for Knowledge Graph signals
+ *   - Founder name and founding date use FOUNDER_NAME and FOUNDING_DATE
  */
+
+import {
+  getReviewRating,
+  ORGANIZATION_SAME_AS,
+  KNOWS_ABOUT_ENTITIES,
+  FOUNDING_DATE,
+  FOUNDER_NAME,
+} from "./entity-definition";
 
 // Use build-time date to avoid server/client hydration mismatch
 const BUILD_DATE =
@@ -33,7 +47,7 @@ export const organizationSchema = {
     "Flowauxi AI",
   ],
   description:
-    "AI-Powered WhatsApp Automation and Business Messaging Platform trusted by 500+ businesses",
+    "AI-Powered WhatsApp Automation and Business Messaging Platform",
   disambiguatingDescription:
     "A specialized AI software platform for WhatsApp Business automation, distinct from retail or gifting services.",
   slogan: "Transform WhatsApp into Your Business Superpower",
@@ -54,8 +68,8 @@ export const organizationSchema = {
     width: "1200",
     height: "630",
   },
-  founder: { "@type": "Person", name: "Flowauxi Team" },
-  foundingDate: "2024",
+  founder: { "@type": "Person", name: FOUNDER_NAME },
+  foundingDate: FOUNDING_DATE,
   naics: "541512",
   isicV4: "6201",
   address: {
@@ -82,31 +96,9 @@ export const organizationSchema = {
       email: "sales@flowauxi.com",
     },
   ],
-  sameAs: [
-    "https://www.linkedin.com/company/flowauxi",
-    "https://twitter.com/flowauxi",
-    "https://www.facebook.com/flowauxi",
-    "https://www.youtube.com/@flowauxi",
-    "https://github.com/flowauxi",
-    "https://www.crunchbase.com/organization/flowauxi",
-    "https://www.producthunt.com/products/flowauxi",
-    "https://www.trustpilot.com/review/flowauxi.com",
-  ],
+  sameAs: [...ORGANIZATION_SAME_AS],
   areaServed: { "@type": "Country", name: "India" },
-  knowsAbout: [
-    "WhatsApp Automation",
-    "WhatsApp Business API",
-    "Business Messaging",
-    "AI Chatbots",
-    "Customer Engagement",
-    "CRM Integration",
-    "Conversational AI",
-    "Marketing Automation",
-    "OTP Verification API",
-    "Two-Factor Authentication",
-    "Phone Verification",
-    "SMS OTP",
-  ],
+  knowsAbout: KNOWS_ABOUT_ENTITIES.map((e) => e.name),
   knowsLanguage: ["en", "hi"],
   keywords:
     "WhatsApp API, Business Automation, Flowauxi AI, CRM Integration, OTP API, Phone Verification",
@@ -146,7 +138,7 @@ export const webPageSchema = {
   url: "https://www.flowauxi.com",
   name: "WhatsApp Automation Platform — AI Chatbot, CRM & Business Messaging | Flowauxi",
   description:
-    "Automate WhatsApp for your business with AI chatbots, CRM integration, smart broadcasting & analytics. Trusted by 500+ businesses across India.",
+    "Automate WhatsApp for your business with AI chatbots, CRM integration, smart broadcasting & analytics.",
   isPartOf: { "@id": "https://www.flowauxi.com/#website" },
   about: { "@id": "https://www.flowauxi.com/#organization" },
   primaryImageOfPage: {
@@ -161,6 +153,8 @@ export const webPageSchema = {
 // =============================================================================
 // SOFTWARE APPLICATION SCHEMA
 // =============================================================================
+
+const rating = getReviewRating();
 
 export const softwareAppSchema = {
   "@context": "https://schema.org",
@@ -177,13 +171,17 @@ export const softwareAppSchema = {
     availability: "https://schema.org/InStock",
     description: "Flexible plans available — get started instantly",
   },
-  aggregateRating: {
-    "@type": "AggregateRating",
-    ratingValue: "4.8",
-    ratingCount: "500",
-    bestRating: "5",
-    worstRating: "1",
-  },
+  ...(rating
+    ? {
+        aggregateRating: {
+          "@type": "AggregateRating",
+          ratingValue: rating.ratingValue,
+          ratingCount: rating.ratingCount,
+          bestRating: rating.bestRating,
+          worstRating: "1",
+        },
+      }
+    : {}),
   creator: { "@id": "https://www.flowauxi.com/#organization" },
   description:
     "WhatsApp automation platform for businesses. Automate customer conversations, manage e-commerce orders, send broadcasts, and integrate with your CRM — all powered by AI.",
@@ -248,7 +246,7 @@ export const faqSchema = {
       name: "Is Flowauxi the best WhatsApp automation tool?",
       acceptedAnswer: {
         "@type": "Answer",
-        text: "Flowauxi is a leading WhatsApp automation platform trusted by 500+ businesses in India. It uniquely combines AI chatbots, CRM, e-commerce store building, marketing automation, and OTP verification — all from one platform. Unlike competitors focused on just messaging, Flowauxi provides a complete business automation stack.",
+        text: "Flowauxi is a WhatsApp automation platform with AI-powered chatbots, CRM integration, smart broadcasting, analytics dashboard, and multi-agent support. Unlike competitors focused on just messaging, Flowauxi also includes e-commerce store building, marketing automation, and OTP verification — all from one platform.",
       },
     },
     {

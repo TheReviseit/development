@@ -55,8 +55,13 @@ export async function GET(request: NextRequest) {
     const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
     if (!supabaseUrl || !supabaseServiceKey) {
-      // Fail open: don't block dashboard if env is misconfigured
-      return NextResponse.json({ locked: false, reason: null, status: null });
+      // Fail closed: if we can't verify billing, do not allow a bypass.
+      return NextResponse.json({
+        locked: true,
+        reason: "unknown",
+        status: null,
+        error: "SERVER_MISCONFIG",
+      });
     }
 
     const supabase = createClient(supabaseUrl, supabaseServiceKey, {
@@ -78,34 +83,82 @@ export async function GET(request: NextRequest) {
     }
 
     // ──────────────────────────────────────────────────────────────────────────
-    // 4. Fetch latest subscription OR active trial
-    //    We check both `subscriptions` table (for paid users) AND 
-    //    `free_trials` table (for trial users) to determine access.
+    // 4. Fetch latest subscription and trial in PARALLEL
     // ──────────────────────────────────────────────────────────────────────────
+    const domain = request.headers.get("x-product-domain") || "dashboard";
     
-    // Check for paid subscription first
-    const { data: subscription } = await supabase
-      .from("subscriptions")
-      .select("id, status, current_period_end, plan_name, product_domain")
-      .eq("user_id", user.id)
-      .order("created_at", { ascending: false })
-      .limit(1)
-      .maybeSingle();
+    const ALLOWED_SUB_STATUSES = [
+      "active",
+      "trialing",
+      "trial",
+      "grace_period",
+      "pending_upgrade",
+      "upgrade_failed",
+      "completed",
+    ];
+    const WARN_SUB_STATUSES = ["past_due"];
+    const BLOCKED_SUB_STATUSES = [
+      "suspended",
+      "halted",
+      "cancelled",
+      "expired",
+      "paused",
+      "pending",
+      "created",
+      "processing",
+      "failed",
+    ];
 
-    // Check for active trial (for users without subscription)
-    // CRITICAL: Must check BOTH status AND expires_at
-    // A trial with status='active' but expires_at in the past is EXPIRED
-    const { data: trial, error: trialError } = await supabase
-      .from("free_trials")
-      .select("id, status, expires_at, plan_slug, domain, started_at")
-      .eq("user_id", user.id)
-      .in("status", ["active", "expiring_soon"])
-      .gt("expires_at", new Date().toISOString())  // CRITICAL: expires_at must be in future
-      .order("created_at", { ascending: false })
-      .limit(1)
-      .maybeSingle();
+    const [
+      { data: entitledSub },
+      { data: blockedSub },
+      { data: trialRecord },
+    ] = await Promise.all([
+      // Prefer an entitled/warned subscription if it exists (domain-agnostic).
+      supabase
+        .from("subscriptions")
+        .select("id, status, current_period_end, plan_name, product_domain")
+        .eq("user_id", user.id)
+        .in("status", [...ALLOWED_SUB_STATUSES, ...WARN_SUB_STATUSES])
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle(),
+      // Otherwise, pick a blocked subscription for a specific lock reason.
+      supabase
+        .from("subscriptions")
+        .select("id, status, current_period_end, plan_name, product_domain")
+        .eq("user_id", user.id)
+        .in("status", BLOCKED_SUB_STATUSES)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle(),
+      // Trials are domain-specific.
+      supabase
+        .from("free_trials")
+        .select("id, status, expires_at, plan_slug, domain, started_at")
+        .eq("user_id", user.id)
+        .eq("domain", domain)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle(),
+    ]);
+
+    const subscription = entitledSub ?? blockedSub;
     
-    console.log(`[BILLING_STATUS] User ${user.id}: subscription=${subscription ? subscription.status : 'none'}, trial=${trial ? trial.status : 'none'}`);
+    // Parse trial state
+    let trial = null;
+    let expiredTrial = null;
+    
+    if (trialRecord) {
+      const isExpired = trialRecord.status === 'expired' || new Date(trialRecord.expires_at) < new Date();
+      if (!isExpired && (trialRecord.status === 'active' || trialRecord.status === 'expiring_soon')) {
+        trial = trialRecord;
+      } else {
+        expiredTrial = trialRecord;
+      }
+    }
+    
+    console.log(`[BILLING_STATUS] User ${user.id} on domain ${domain}: subscription=${subscription ? subscription.status : 'none'}, trial=${trial ? trial.status : (expiredTrial ? 'expired' : 'none')}`);
 
     // ──────────────────────────────────────────────────────────────────────────
     // 5. Determine lock state
@@ -151,7 +204,6 @@ export async function GET(request: NextRequest) {
         "grace_period",
         "pending_upgrade",
         "upgrade_failed",
-        "processing",
         "completed",
       ]);
 
@@ -179,55 +231,39 @@ export async function GET(request: NextRequest) {
         halted:     "halted",
         cancelled:  "cancelled",
         expired:    "expired",
+        paused:     "suspended",
+        // Non-entitled / unpaid / pre-billing states should behave like "no plan selected"
+        pending:    "no_subscription",
+        created:    "no_subscription",
+        processing: "no_subscription",
+        failed:     "no_subscription",
       };
-
-      // For blocked subscription states, check if it's pending (new sub being created)
-      // pending = user just initiated payment, don't lock them
-      if (subStatus === "pending") {
-        console.log(`[BILLING_STATUS] User ${user.id} has pending subscription, allowing access`);
-        return NextResponse.json({ locked: false, reason: null, status: subStatus });
-      }
 
       const reason = LOCK_REASON_MAP[subStatus] ?? "unknown";
       return NextResponse.json({ locked: true, reason, status: subStatus });
     }
 
     // ── PRIORITY 3: Expired trial (no active subscription) → lock ────────────
-    const { data: expiredTrial } = await supabase
-      .from("free_trials")
-      .select("id, status, expires_at, started_at, plan_slug, domain")
-      .eq("user_id", user.id)
-      .or('status.eq.expired,status.eq.active,status.eq.expiring_soon')
-      .order("created_at", { ascending: false })
-      .limit(1)
-      .maybeSingle();
-
     if (expiredTrial) {
-      const isActuallyExpired = 
-        expiredTrial.status === 'expired' || 
-        new Date(expiredTrial.expires_at) < new Date();
-      
-      if (isActuallyExpired) {
-        const durationMs = Date.now() - startTime;
-        console.info(`[BILLING_STATUS] trial_expired user=${user.id.slice(0, 8)} duration=${durationMs}ms`);
-        console.log(`[BILLING_STATUS] User ${user.id} has EXPIRED trial (no active subscription), showing expired lock`);
-        return NextResponse.json({
-          locked: true,
-          reason: "trial_expired",
+      const durationMs = Date.now() - startTime;
+      console.info(`[BILLING_STATUS] trial_expired user=${user.id.slice(0, 8)} duration=${durationMs}ms`);
+      console.log(`[BILLING_STATUS] User ${user.id} has EXPIRED trial (no active subscription), showing expired lock`);
+      return NextResponse.json({
+        locked: true,
+        reason: "trial_expired",
+        status: "expired",
+        trial: {
+          id: expiredTrial.id,
           status: "expired",
-          trial: {
-            id: expiredTrial.id,
-            status: "expired",
-            expires_at: expiredTrial.expires_at,
-            started_at: expiredTrial.started_at,
-            plan: expiredTrial.plan_slug,
-          },
-          _meta: {
-            durationMs,
-            event: "trial_expired",
-          },
-        });
-      }
+          expires_at: expiredTrial.expires_at,
+          started_at: expiredTrial.started_at,
+          plan: expiredTrial.plan_slug,
+        },
+        _meta: {
+          durationMs,
+          event: "trial_expired",
+        },
+      });
     }
 
     // ── PRIORITY 4: No subscription AND no trial → lock ──────────────────────
@@ -243,8 +279,8 @@ export async function GET(request: NextRequest) {
     console.error(`[BILLING_STATUS] error duration=${durationMs}ms`);
     // FAIL OPEN on server error — don't randomly lock users out
     return NextResponse.json({
-      locked: false,
-      reason: null,
+      locked: true,
+      reason: "unknown",
       status: null,
       error: "SERVER_ERROR",
     });

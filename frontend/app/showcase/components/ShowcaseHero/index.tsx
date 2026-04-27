@@ -23,7 +23,7 @@ const carouselItems = [
     smallTitle1: "Facial",
     smallTitle2: "Cream",
     smallPrice: "$24.99",
-    smallRating: "4.8",
+    smallRating: "New",
     bubble1: "Is it organic?",
     bubble2: "Will it suit sensitive skin?",
     statsLabel: "UP TO",
@@ -42,9 +42,9 @@ const carouselItems = [
     smallRating: "4.9",
     bubble1: "Do you deliver today?",
     bubble2: "Eggless options available?",
-    statsLabel: "OVER",
-    statsValue: "500+",
-    statsDesc: "Weekly fresh orders",
+    statsLabel: "MADE",
+    statsValue: "Fresh",
+    statsDesc: "Every week",
   },
   {
     src: "/pages/carosel-img-3.jpg",
@@ -145,7 +145,7 @@ export default function ShowcaseHero() {
               </svg>
             </div>
             <div className={styles.statPillText}>
-              <span className={styles.statUsers}>About Grow+</span>
+              <span className={styles.statUsers}>About Flowauxi</span>
               <span className={styles.statRead}>
                 Your <u>Growth Partner</u>
               </span>
@@ -194,9 +194,9 @@ export default function ShowcaseHero() {
 
           {/* Buttons */}
           <div className={styles.btnGroup}>
-            <Link href="/download" className={styles.primaryBtn}>
-              <strong>Download</strong> — It&apos;s Free
-            </Link>
+<Link href="/signup" className={styles.primaryBtn}>
+                <strong>Get Started</strong> — It&apos;s Free
+              </Link>
             <Link href="/pricing" className={styles.secondaryLink}>
               Our Pricing <ArrowUpRight size={18} />
             </Link>

@@ -38,6 +38,17 @@ from typing import Dict, Any, Optional, Tuple
 
 logger = logging.getLogger('reviseit.webhook_processor')
 
+try:
+    from prometheus_client import Counter  # type: ignore
+
+    billing_webhook_events_total = Counter(
+        "billing_webhook_events_total",
+        "Total billing webhook events received (domain-scoped)",
+        ["event_type", "domain"],
+    )
+except Exception:
+    billing_webhook_events_total = None
+
 
 class WebhookProcessingError(Exception):
     """Raised when webhook processing fails."""
@@ -193,6 +204,16 @@ class WebhookProcessor:
                 'action': 'subscription_not_found',
                 'duplicate': False,
             }
+
+        # Observability: increment per-domain counter once tenant is known
+        if billing_webhook_events_total:
+            try:
+                billing_webhook_events_total.labels(
+                    event_type=event_type,
+                    domain=subscription.get('product_domain', 'unknown') or 'unknown',
+                ).inc()
+            except Exception:
+                pass
 
         # 5. Route to handler
         handler = self._get_handler(event_type)

@@ -374,7 +374,7 @@ export default function CompareShopifyPage() {
         {/* Final CTA */}
         <section className="bg-green-600 text-white rounded-lg p-12 text-center">
           <h2 className="text-3xl font-bold mb-4">Ready to Start? Try Flowauxi Free</h2>
-          <p className="mb-8 text-green-100">Join 500+ businesses selling on WhatsApp. AI chatbot included.</p>
+          <p className="mb-8 text-green-100">Join businesses across India selling on WhatsApp. AI chatbot included.</p>
           <div className="flex flex-wrap gap-4 justify-center">
             <Link href="/signup" className="px-8 py-4 bg-white text-green-600 rounded-lg font-semibold hover:bg-green-50">
               Start Free Today

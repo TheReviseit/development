@@ -39,14 +39,35 @@ logger = logging.getLogger('reviseit.feature_gate')
 # CONSTANTS
 # =============================================================================
 
-# Subscription statuses that ALLOW feature access
-ALLOWED_STATUSES = frozenset({"active", "completed", "trialing", "grace_period", "pending_upgrade"})
+# Subscription statuses that ALLOW feature access.
+# IMPORTANT: This is a strict allow-list. Any status not in ALLOWED_STATUSES or
+# WARN_STATUSES is treated as inactive (fail-closed) to prevent unpaid access.
+ALLOWED_STATUSES = frozenset({
+    "active",
+    "completed",
+    "trialing",
+    "trial",
+    "grace_period",
+    "pending_upgrade",
+    "upgrade_failed",
+})
 
 # Statuses that allow but flag upgrade_required (warn user)
 WARN_STATUSES = frozenset({"past_due"})
 
 # Statuses that BLOCK all feature access
-BLOCKED_STATUSES = frozenset({"cancelled", "expired", "halted", "paused", "pending", "suspended"})
+BLOCKED_STATUSES = frozenset({
+    "cancelled",
+    "expired",
+    "halted",
+    "paused",
+    "pending",
+    "suspended",
+    # Pre-entitlement / non-billable / error states
+    "created",
+    "processing",
+    "failed",
+})
 
 # Cache TTLs (seconds)
 SUBSCRIPTION_CACHE_TTL = 60      # 1 minute — may change on payment events
@@ -57,6 +78,21 @@ FEATURE_FLAGS_CACHE_TTL = 300    # 5 minutes — admin toggle
 CACHE_PREFIX_SUB = "fg:sub"
 CACHE_PREFIX_PLAN = "fg:plan"
 CACHE_PREFIX_FLAGS = "fg:flags"
+
+# DB fetch allow-list: only statuses that can grant access (or warn) are fetched.
+# This prevents "processing"/"created" rows from being interpreted as entitlements.
+FETCHABLE_SUBSCRIPTION_STATUSES = sorted(ALLOWED_STATUSES | WARN_STATUSES)
+
+# Cross-domain subscription fallback is ONLY for domains that do not carry their
+# own billing subscription rows and should inherit from a billing domain.
+# NOTE: Do NOT include "shop" here — shop must have an explicit subscription/trial.
+CROSS_DOMAIN_SUBSCRIPTION_FALLBACK_REQUEST_DOMAINS = frozenset({
+    "dashboard",
+    "marketing",
+    "showcase",
+    "api",
+    "booking",
+})
 
 
 # =============================================================================
@@ -197,6 +233,21 @@ def evaluate_policy(ctx: PolicyContext) -> PolicyDecision:
     status = ctx.subscription_status.lower()
 
     if status in BLOCKED_STATUSES:
+        return PolicyDecision(
+            allowed=False,
+            hard_limit=ctx.hard_limit,
+            soft_limit=ctx.soft_limit,
+            used=ctx.usage,
+            remaining=None,
+            soft_limit_exceeded=False,
+            upgrade_required=True,
+            denial_reason=DenialReason.SUBSCRIPTION_INACTIVE,
+            feature_key=ctx.feature_key,
+        )
+
+    # Fail-closed: any status not explicitly allowed/warned is treated as inactive.
+    # This prevents "created"/"processing"/unknown states from granting access.
+    if status not in ALLOWED_STATUSES and status not in WARN_STATUSES:
         return PolicyDecision(
             allowed=False,
             hard_limit=ctx.hard_limit,
@@ -1009,9 +1060,9 @@ class FeatureGateEngine:
             ).match({
                 'user_id': supabase_uuid,
                 'product_domain': domain,
-            }).in_(
-                'status', ['active', 'completed', 'past_due', 'grace_period', 'trialing', 'trial', 'processing', 'pending_upgrade', 'upgrade_failed']
-            ).order('created_at', desc=True).limit(1).execute()
+            }).in_('status', FETCHABLE_SUBSCRIPTION_STATUSES).order(
+                'created_at', desc=True
+            ).limit(1).execute()
 
             if not result.data:
                 # =============================================================
@@ -1034,18 +1085,18 @@ class FeatureGateEngine:
                 # This mirrors the cross-domain fallback in _get_plan_features_map
                 # (Step B) without hard-coding any domain name.
                 # =============================================================
-                fallback_result = self.supabase.table('subscriptions').select(
-                    'id, user_id, plan_id, pricing_plan_id, plan_name, '
-                    'status, product_domain, created_at, current_period_end'
-                ).eq(
-                    'user_id', supabase_uuid,
-                ).in_(
-                    'status', ['active', 'completed', 'past_due', 'grace_period',
-                               'trialing', 'trial', 'processing', 'pending_upgrade',
-                               'upgrade_failed']
-                ).order('created_at', desc=True).limit(1).execute()
+                fallback_result = None
+                if domain in CROSS_DOMAIN_SUBSCRIPTION_FALLBACK_REQUEST_DOMAINS:
+                    fallback_result = self.supabase.table('subscriptions').select(
+                        'id, user_id, plan_id, pricing_plan_id, plan_name, '
+                        'status, product_domain, created_at, current_period_end'
+                    ).eq(
+                        'user_id', supabase_uuid,
+                    ).in_(
+                        'status', FETCHABLE_SUBSCRIPTION_STATUSES
+                    ).order('created_at', desc=True).limit(1).execute()
 
-                if fallback_result.data:
+                if fallback_result and fallback_result.data:
                     result = fallback_result
                     resolved_domain = result.data[0].get('product_domain', '?')
                     logger.info(

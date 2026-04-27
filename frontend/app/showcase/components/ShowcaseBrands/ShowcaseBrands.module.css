@@ -53,9 +53,23 @@
   }
 }
 
+@media (max-width: 768px) {
+  .brandsSection {
+    padding: 2rem 1.5rem 4rem 1.5rem;
+  }
+}
+
 @media (max-width: 640px) {
   .brandsContainer {
-    gap: 2.5rem;
-    flex-direction: column;
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 2rem 1rem;
+    align-items: center;
+    justify-items: center;
+  }
+  
+  /* Make the last odd item span 2 columns to stay centered if needed */
+  .brandLogo:last-child:nth-child(odd) {
+    grid-column: 1 / -1;
   }
 }

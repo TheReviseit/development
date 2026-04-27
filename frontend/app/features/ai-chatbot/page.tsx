@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { generateFaqSchemaForPAA, validateFaqSchema } from "@/lib/seo/ctr-optimization";
+import { getReviewRating } from "@/lib/seo";
 
 /**
  * AI Chatbot for WhatsApp - Pillar Page (FAANG-Level SEO)
@@ -18,7 +19,7 @@ import { generateFaqSchemaForPAA, validateFaqSchema } from "@/lib/seo/ctr-optimi
 export const metadata: Metadata = {
   title: "AI Chatbot for WhatsApp - 24/7 Customer Support | Flowauxi",
   description:
-    "AI-powered WhatsApp chatbot for your business. Automates customer queries, order support, and product recommendations. Included free with Flowauxi. 500+ businesses in India.",
+    "AI-powered WhatsApp chatbot for your business. Automates customer queries, order support, and product recommendations. Included free with Flowauxi. Trusted by businesses across India.",
   keywords: [
     "AI chatbot for WhatsApp",
     "WhatsApp chatbot for business",
@@ -107,7 +108,7 @@ export default function AIChatbotPage() {
               priceValidUntil: "2026-12-31",
               availability: "https://schema.org/InStock",
             },
-            aggregateRating: { "@type": "AggregateRating", ratingValue: "4.8", ratingCount: "500" },
+            ...(getReviewRating() ? { aggregateRating: { "@type": "AggregateRating", ratingValue: getReviewRating()!.ratingValue, ratingCount: getReviewRating()!.ratingCount } } : {}),
             featureList: [
               "AI-Powered Customer Support",
               "WhatsApp Business Integration",
@@ -374,7 +375,7 @@ export default function AIChatbotPage() {
         {/* CTA */}
         <section className="bg-green-600 text-white rounded-lg p-12 text-center">
           <h2 className="text-3xl font-bold mb-4">Get AI Chatbot Free — Start Today</h2>
-          <p className="mb-8 text-green-100 text-lg">Join 500+ businesses using AI chatbot for WhatsApp.</p>
+          <p className="mb-8 text-green-100 text-lg">Join businesses across India using AI chatbot for WhatsApp.</p>
           <div className="flex flex-wrap gap-4 justify-center">
             <Link href="/signup" className="inline-flex items-center px-8 py-4 bg-white text-green-600 rounded-lg font-semibold hover:bg-green-50 transition">
               Start Free

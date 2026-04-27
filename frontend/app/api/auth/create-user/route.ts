@@ -1,157 +1,141 @@
 import { NextRequest, NextResponse } from "next/server";
+import { verifyIdToken } from "@/lib/firebase-admin";
+import { withTimeout } from "@/lib/server/fetchWithTimeout";
 import {
-  createUser,
-  getUserByFirebaseUID,
-  getUserByEmail,
-  updateUserFirebaseUID,
-  ensureBusinessExists,
-  recordProductSubscription,
-} from "@/lib/supabase/queries";
-import { sendWelcomeEmail } from "@/lib/email/automated-emails";
-import { createUserSchema } from "@/lib/validation/schemas";
+  createSupabaseServiceClientOrThrow,
+  ensureSupabaseUserAndMembership,
+} from "@/lib/auth/provisioning.server";
+import { detectProductFromRequest, getRequestContext, isProductAvailableForActivation } from "@/lib/auth-helpers";
+import type { AuthErrorCode, ProductDomain } from "@/types/auth.types";
 import { getUserCache } from "@/app/utils/userCache";
 
+/**
+ * POST /api/auth/create-user (LEGACY COMPAT)
+ *
+ * Canonical provisioning is `POST /api/auth/sync`.
+ * This endpoint is retained for older clients/tools.
+ *
+ * Security:
+ * - Requires a Firebase ID token (idToken)
+ * - Never trusts client-supplied firebase_uid/email/name without token verification
+ */
 export async function POST(request: NextRequest) {
   try {
-    const body = await request.json();
+    const body = (await request.json().catch(() => ({}))) as any;
+    const idToken = body?.idToken as string | undefined;
+    const requestedDomain = body?.signup_domain as ProductDomain | undefined;
 
-    // ✅ SECURE: Validate input with Zod
-    const validationResult = createUserSchema.safeParse(body);
-
-    if (!validationResult.success) {
+    if (!idToken || typeof idToken !== "string") {
       return NextResponse.json(
         {
-          error: "Validation failed",
-          details: validationResult.error.flatten(),
+          success: false,
+          error: "Missing idToken in request body",
+          code: "MISSING_REQUIRED_FIELD" as AuthErrorCode,
         },
         { status: 400 },
       );
     }
 
-    const { firebase_uid, email, full_name, phone, signup_domain } =
-      validationResult.data;
+    const requestContext = getRequestContext(request);
+    const currentProduct: ProductDomain =
+      requestedDomain || detectProductFromRequest(request);
 
-    // Check if user already exists by firebase_uid
-    const existingUser = await getUserByFirebaseUID(firebase_uid);
-    if (existingUser) {
-      // User exists with same firebase_uid - add to cache if not already there
-      const cache = getUserCache();
-      cache.set(existingUser);
-
-      // REMOVED: Auto-creation of business records during login
-      // Business records should only be created when user explicitly updates business data
-      // await ensureBusinessExists(existingUser.id);
-
-      return NextResponse.json({ user: existingUser, created: false });
-    }
-
-    // Check if user exists by email (handles Firebase project migration)
-    const existingUserByEmail = await getUserByEmail(email);
-    if (existingUserByEmail) {
-      console.log(
-        `[create-user] Email ${email} exists with different firebase_uid. Updating...`,
-      );
-      // User exists with different firebase_uid - this happens when switching Firebase projects
-      const updatedUser = await updateUserFirebaseUID(email, firebase_uid);
-
-      // Update cache with new firebase_uid
-      const cache = getUserCache();
-      cache.set(updatedUser);
-
-      // REMOVED: Auto-creation of business records during migration
-      // await ensureBusinessExists(updatedUser.id);
-
-      console.log(
-        `[create-user] Successfully migrated user ${email} to new Firebase project`,
-      );
-      return NextResponse.json({
-        user: updatedUser,
-        created: false,
-        migrated: true,
-      });
-    }
-
-    // Create new user
-    const user = await createUser({
-      firebase_uid,
-      full_name: full_name || "",
-      email,
-      phone,
-    });
-
-    // REMOVED: Auto-creation of business records during signup
-    // Business records should only be created when user explicitly updates business data
-    // This prevents duplicate business records with inconsistent user_id formats
-    // await ensureBusinessExists(user.id);
-
-    // Add newly created user to cache for fast future lookups
-    const cache = getUserCache();
-    cache.set(user);
-    console.log(
-      "[create-user] User created successfully (business record will be created on first update)",
+    const verificationResult = await withTimeout(
+      verifyIdToken(idToken),
+      5000,
+      "FIREBASE_ID_TOKEN_VERIFY_TIMEOUT",
     );
 
-    // Note: Welcome email is now sent AFTER email verification
-    // (see /api/auth/verify-email route)
-
-    // Record product subscription for the domain user signed up from
-    if (signup_domain && signup_domain !== "dashboard") {
-      await recordProductSubscription(user.id, signup_domain).catch((err) =>
-        console.error("[create-user] Product subscription error:", err),
+    if (!verificationResult.success || !verificationResult.data) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: "Invalid or expired Firebase token",
+          code: "INVALID_TOKEN" as AuthErrorCode,
+        },
+        { status: 401 },
       );
     }
 
-    // Auto-start free trial for shop domain
+    const decoded = verificationResult.data;
+    const firebaseUid = decoded.uid;
+    const email = decoded.email || "";
+    const phoneNumber = decoded.phone_number || null;
+    const fullName = decoded.name || email.split("@")[0] || "User";
+
+    const supabase = createSupabaseServiceClientOrThrow({ timeoutMs: 5000 });
+
+    const { user, created } = await ensureSupabaseUserAndMembership({
+      supabase,
+      firebaseUid,
+      email,
+      fullName,
+      phoneNumber,
+      currentProduct,
+      allowCreate: true,
+      requestContext,
+      allowLegacyMigration: true,
+    });
+
+    // Cache for fast lookups used by check-user-exists
+    try {
+      const cache = getUserCache();
+      cache.set(user);
+    } catch {
+      // Cache is a performance optimization only.
+    }
+
+    // Auto-start free trial for self-service products (best-effort, idempotent)
     let trial = null;
-    if (signup_domain === "shop") {
+    if (isProductAvailableForActivation(currentProduct)) {
       try {
         const { auto_start_trial_on_signup } = await import("@/lib/trial");
         trial = await auto_start_trial_on_signup(
           user.id,
-          user.id, // org_id same as user_id for now
+          user.id,
           email,
-          signup_domain
+          currentProduct,
         );
       } catch (trialErr) {
-        // Non-fatal: user is created, trial start is best-effort
         console.error("[create-user] Trial start error:", trialErr);
       }
     }
 
-    const response: { user: any; created: boolean; trial?: any } = {
+    return NextResponse.json({
+      success: true,
       user,
-      created: true,
-    };
-
-    if (trial) {
-      response.trial = trial;
-    }
-
-    return NextResponse.json(response);
-  } catch (error: any) {
-    console.error("Error creating user:", error);
-    // Log more detailed error information
-    console.error("Error details:", {
-      message: error.message,
-      code: error.code,
-      details: error.details,
-      hint: error.hint,
+      created,
+      trial,
+      deprecated: true,
     });
+  } catch (error: any) {
+    const message = String(error?.message || "Unknown error");
+    const looksLikeTimeout =
+      message.includes("AbortError") ||
+      message.includes("aborted") ||
+      message.includes("timeout");
 
-    // In development, log the full stack trace
-    if (process.env.NODE_ENV !== "production") {
-      console.error("Full error stack:", error);
+    if (looksLikeTimeout) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: "Upstream timeout",
+          code: "UPSTREAM_TIMEOUT" as AuthErrorCode,
+        },
+        { status: 504 },
+      );
     }
 
+    console.error("[create-user] Error:", error);
     return NextResponse.json(
       {
+        success: false,
         error: "Internal server error",
-        message:
-          process.env.NODE_ENV === "production"
-            ? undefined
-            : error.message || "Unknown error",
+        code: "SERVER_ERROR" as AuthErrorCode,
+        details: process.env.NODE_ENV === "production" ? undefined : message,
       },
       { status: 500 },
     );
   }
 }
+

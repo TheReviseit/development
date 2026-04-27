@@ -1,707 +1,553 @@
 import { NextRequest, NextResponse } from "next/server";
-import { verifyIdToken, adminAuth } from "@/lib/firebase-admin";
-import { createClient } from "@supabase/supabase-js";
 import { cookies } from "next/headers";
-import { sendEmail } from "@/lib/email/resend";
-import { generateEmailHtml } from "@/lib/email/email-templates";
+import { verifyIdToken, adminAuth } from "@/lib/firebase-admin";
 import {
   detectProductFromRequest,
   getRequestContext,
-  isProductAvailableForActivation,
-  calculateTrialEndDate,
+  getSelfServiceProducts,
+  getStarterPlanSlug,
 } from "@/lib/auth-helpers";
-import type {
-  SyncUserRequest,
-  SyncUserResponse,
-  SupabaseUser,
-  ProductDomain,
+import {
+  createSupabaseServiceClientOrThrow,
+  ensureSupabaseUserAndMembershipFull,
+} from "@/lib/auth/provisioning.server";
+import { withTimeout } from "@/lib/server/fetchWithTimeout";
+import { checkRateLimit } from "@/lib/server/rateLimit";
+import {
+  claimAuthSyncIdempotency,
+  completeAuthSyncIdempotency,
+  generateAuthSyncIdempotencyKey,
+  waitForAuthSyncCompletion,
+} from "@/lib/auth/authSyncIdempotency";
+import {
   AuthErrorCode,
-  ProductMembership,
+  type ProductDomain,
+  type SupabaseUser,
+  type SyncUserRequest,
+  type SyncUserResponse,
 } from "@/types/auth.types";
+import { trace as otelTrace } from "@opentelemetry/api";
 
-/**
- * POST /api/auth/sync
- *
- * Enterprise-grade auth sync endpoint with product membership validation
- * Standard: Google Workspace / Zoho One Architecture
- *
- * Flow (Option B):
- * 1. Verify Firebase ID token
- * 2. Detect current product domain from request
- * 3. Check if user exists in Supabase
- * 4. NEW: Check product membership for current domain
- * 5. Create session cookie ONLY if membership valid
- * 6. Return user data OR product_not_enabled state
- *
- * Response States:
- * - 200 AUTHENTICATED: User exists + has product membership
- * - 403 PRODUCT_NOT_ENABLED: User exists but NO membership for current domain
- * - 404 USER_NOT_FOUND: User not in DB (orphaned Firebase account)
- * - 401 INVALID_TOKEN: Firebase token verification failed
- * - 500 SERVER_ERROR: Database or system error
- */
+type SyncResult = {
+  status: number;
+  body: SyncUserResponse;
+  clearSession?: boolean;
+  setCookieIfAuthenticated?: boolean;
+};
+
 export async function POST(request: NextRequest) {
   const startTime = Date.now();
+  const requestContext = getRequestContext(request);
+  const traceparent = request.headers.get("traceparent") || null;
+  const traceId =
+    otelTrace.getActiveSpan()?.spanContext().traceId ||
+    (traceparent ? traceparent.split("-")[1] : undefined);
+
+  const lockOwnerId = crypto.randomUUID();
+
+  const buildResponse = async (params: {
+    result: SyncResult;
+    idempotencyKey?: string;
+    hasValidSessionCookie: boolean;
+    idToken: string;
+  }) => {
+    const { result, idempotencyKey, hasValidSessionCookie, idToken } = params;
+
+    const response = NextResponse.json<SyncUserResponse>(result.body, {
+      status: result.status,
+    });
+
+    response.headers.set("x-request-id", requestContext.request_id);
+    if (traceparent) response.headers.set("traceparent", traceparent);
+    if (idempotencyKey) response.headers.set("x-idempotency-key", idempotencyKey);
+
+    if (result.clearSession) {
+      response.cookies.delete("session");
+    }
+
+    if (result.setCookieIfAuthenticated && !hasValidSessionCookie) {
+      try {
+        const expiresInMs = 60 * 60 * 24 * 5 * 1000;
+        const sessionCookie = await withTimeout(
+          adminAuth.createSessionCookie(idToken, { expiresIn: expiresInMs }),
+          5000,
+          "FIREBASE_CREATE_SESSION_COOKIE_TIMEOUT",
+        );
+
+        const cookieStore = await cookies();
+        cookieStore.set("session", sessionCookie, {
+          maxAge: 60 * 60 * 24 * 5,
+          httpOnly: true,
+          secure: process.env.NODE_ENV === "production",
+          path: "/",
+          sameSite: "lax",
+        });
+      } catch (cookieError) {
+        console.error(`[AUTH_SYNC] Failed to create session cookie:`, cookieError);
+      }
+    }
+
+    return response;
+  };
 
   try {
-    // ========================================================================
-    // SECTION 1: REQUEST PARSING & VALIDATION
-    // ========================================================================
+    const body: SyncUserRequest = await request.json().catch(() => ({} as any));
+    const idToken = body?.idToken;
+    const allowCreate = body?.allowCreate === true;
 
-    const body: SyncUserRequest = await request.json();
-    const { idToken } = body;
-
-    // CRITICAL: Explicit allowCreate blocking (fail closed, not open)
-    const allowCreate = body.allowCreate === true;
-
-    // Detect current product domain (NEW in Option B)
     const currentProduct: ProductDomain = detectProductFromRequest(request);
-
-    // Extract request context for audit logging
-    const requestContext = getRequestContext(request);
 
     console.log(
       `[AUTH_SYNC] Request started - product=${currentProduct}, allowCreate=${allowCreate}, request_id=${requestContext.request_id}`,
     );
 
-    if (!idToken) {
-      return NextResponse.json(
+    // ----------------------------------------------------------------------
+    // Rate limit: per-IP (before token verification)
+    // ----------------------------------------------------------------------
+    const ipKey = requestContext.ip_address || "unknown";
+    const ipLimit = await checkRateLimit({
+      namespace: "authsync:ip",
+      key: ipKey,
+      limitPerMinute: 60,
+    });
+    if (!ipLimit.allowed) {
+      const response = NextResponse.json<SyncUserResponse>(
+        {
+          success: false,
+          error: "Too many requests",
+          code: AuthErrorCode.RATE_LIMIT_EXCEEDED,
+          requestId: requestContext.request_id,
+          traceId,
+        },
+        { status: 429 },
+      );
+      response.headers.set("Retry-After", String(ipLimit.retryAfterSeconds));
+      response.headers.set("x-request-id", requestContext.request_id);
+      return response;
+    }
+
+    if (!idToken || typeof idToken !== "string") {
+      return NextResponse.json<SyncUserResponse>(
         {
           success: false,
           error: "Missing idToken in request body",
-          code: "MISSING_REQUIRED_FIELD" as AuthErrorCode,
+          code: AuthErrorCode.MISSING_REQUIRED_FIELD,
+          requestId: requestContext.request_id,
+          traceId,
         },
         { status: 400 },
       );
     }
 
-    // ========================================================================
-    // SECTION 2: FIREBASE TOKEN VERIFICATION
-    // ========================================================================
-
-    const verificationResult = await verifyIdToken(idToken);
+    // ----------------------------------------------------------------------
+    // Verify Firebase token
+    // ----------------------------------------------------------------------
+    const verificationResult = await withTimeout(
+      verifyIdToken(idToken),
+      5000,
+      "FIREBASE_ID_TOKEN_VERIFY_TIMEOUT",
+    );
 
     if (!verificationResult.success || !verificationResult.data) {
-      console.warn(
-        `[AUTH_SYNC] Token verification failed - request_id=${requestContext.request_id}`,
-      );
-
-      return NextResponse.json(
+      return NextResponse.json<SyncUserResponse>(
         {
           success: false,
           error: "Invalid or expired Firebase token",
-          code: "INVALID_TOKEN" as AuthErrorCode,
+          code: AuthErrorCode.INVALID_TOKEN,
+          requestId: requestContext.request_id,
+          traceId,
         },
         { status: 401 },
       );
     }
 
-    const decodedToken = verificationResult.data;
-    const firebaseUid = decodedToken.uid;
-    const email = decodedToken.email || "";
-    const phoneNumber = decodedToken.phone_number || null;
-    const fullName = decodedToken.name || email.split("@")[0] || "User";
-    const provider = decodedToken.firebase?.sign_in_provider || "unknown";
+    const decodedToken = verificationResult.data as any;
+    const firebaseUid: string = decodedToken.uid;
+    const email: string = decodedToken.email || "";
+    const phoneNumber: string | null = decodedToken.phone_number || null;
+    const fullName: string = decodedToken.name || email.split("@")[0] || "User";
+    const tokenIat: number = typeof decodedToken.iat === "number" ? decodedToken.iat : 0;
 
-    console.log(
-      `[AUTH_SYNC] Token verified - firebase_uid=${firebaseUid}, email=${email}`,
-    );
+    // ----------------------------------------------------------------------
+    // Rate limit: per-user (after token verification)
+    // ----------------------------------------------------------------------
+    const uidLimit = await checkRateLimit({
+      namespace: "authsync:uid",
+      key: firebaseUid,
+      limitPerMinute: 20,
+    });
+    if (!uidLimit.allowed) {
+      const response = NextResponse.json<SyncUserResponse>(
+        {
+          success: false,
+          error: "Too many requests",
+          code: AuthErrorCode.RATE_LIMIT_EXCEEDED,
+          requestId: requestContext.request_id,
+          traceId,
+        },
+        { status: 429 },
+      );
+      response.headers.set("Retry-After", String(uidLimit.retryAfterSeconds));
+      response.headers.set("x-request-id", requestContext.request_id);
+      return response;
+    }
 
-    // ========================================================================
-    // SECTION 2B: CHECK EXISTING SESSION COOKIE
-    // ========================================================================
-    // If a valid session cookie already exists for the SAME Firebase user,
-    // skip createSessionCookie entirely. This prevents race conditions when
-    // multiple tabs (e.g., duplicate tab) call /api/auth/sync simultaneously —
-    // createSessionCookie can invalidate in-flight tokens from other tabs.
-
+    // ----------------------------------------------------------------------
+    // Session cookie reuse / mismatch clearing (identity safety)
+    // ----------------------------------------------------------------------
     let hasValidSessionCookie = false;
     try {
       const cookieStore = await cookies();
       const existingSession = cookieStore.get("session");
       if (existingSession?.value) {
-        const decodedSession = await adminAuth.verifySessionCookie(
-          existingSession.value,
-          false, // Don't check revocation (fast path)
-        );
-        if (decodedSession.uid === firebaseUid) {
-          hasValidSessionCookie = true;
-          console.log(
-            `[AUTH_SYNC] Valid session cookie exists for same user — will skip createSessionCookie`,
+        try {
+          const decodedSession = await withTimeout(
+            adminAuth.verifySessionCookie(existingSession.value, false),
+            5000,
+            "FIREBASE_VERIFY_SESSION_COOKIE_TIMEOUT",
           );
+
+          const sessionUid = decodedSession.uid;
+          if (sessionUid === firebaseUid) {
+            hasValidSessionCookie = true;
+          } else {
+            cookieStore.delete("session");
+            hasValidSessionCookie = false;
+          }
+        } catch {
+          cookieStore.delete("session");
         }
       }
     } catch {
-      // No valid session cookie — will create one below
-      hasValidSessionCookie = false;
+      // Cookie verification is best-effort.
     }
 
-    // ========================================================================
-    // SECTION 3: INITIALIZE SUPABASE CLIENT
-    // ========================================================================
+    // ----------------------------------------------------------------------
+    // Supabase service client
+    // ----------------------------------------------------------------------
+    const supabase = createSupabaseServiceClientOrThrow({ timeoutMs: 5000 });
 
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-    const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-
-    if (!supabaseUrl || !supabaseServiceKey) {
-      console.error("[AUTH_SYNC] Missing Supabase environment variables");
-      return NextResponse.json(
-        {
-          success: false,
-          error: "Server configuration error",
-          code: "SERVER_ERROR" as AuthErrorCode,
-        },
-        { status: 500 },
-      );
-    }
-
-    const supabase = createClient(supabaseUrl, supabaseServiceKey, {
-      auth: {
-        autoRefreshToken: false,
-        persistSession: false,
-      },
+    // ----------------------------------------------------------------------
+    // Idempotency (lock-safe claim-first)
+    // ----------------------------------------------------------------------
+    const idempotencyKey = generateAuthSyncIdempotencyKey({
+      firebaseUid,
+      product: currentProduct,
+      allowCreate,
+      tokenIat,
     });
 
-    // ========================================================================
-    // SECTION 4: CHECK IF USER EXISTS
-    // ========================================================================
+    const claim = await claimAuthSyncIdempotency({
+      supabase,
+      idempotencyKey,
+      lockedBy: lockOwnerId,
+      ttlSeconds: 300,
+    });
 
-    const { data: existingUser, error: fetchError } = await supabase
-      .from("users")
-      .select("*")
-      .eq("firebase_uid", firebaseUid)
-      .single();
-
-    if (fetchError && fetchError.code !== "PGRST116") {
-      // PGRST116 = not found error (expected), other errors are critical
-      console.error(`[AUTH_SYNC] Database error fetching user:`, fetchError);
-      return NextResponse.json(
-        {
-          success: false,
-          error: "Database error",
-          code: "DATABASE_ERROR" as AuthErrorCode,
-          details: fetchError.message,
-        },
-        { status: 500 },
-      );
-    }
-
-    // ========================================================================
-    // SECTION 5A: USER DOES NOT EXIST (NEW USER OR ORPHANED FIREBASE ACCOUNT)
-    // ========================================================================
-
-    if (!existingUser) {
-      if (!allowCreate) {
-        // User not in DB and creation not allowed → orphaned Firebase account
-        console.warn(
-          `[AUTH_SYNC] User not found - firebase_uid=${firebaseUid}, allowCreate=false`,
-        );
-
-        // Clear session cookie
-        const cookieStore = await cookies();
-        cookieStore.delete("session");
-
-        const response = NextResponse.json(
-          {
-            success: false,
-            error: "User account not found in database",
-            code: "USER_NOT_FOUND" as AuthErrorCode,
-            message:
-              "Your account was not fully created. Please sign up again to complete setup.",
-          },
-          { status: 404 },
-        );
-
-        response.cookies.delete("session");
-        return response;
-      }
-
-      // ======================================================================
-      // NEW USER CREATION (SIGNUP FLOW)
-      // ======================================================================
-
-      console.log(
-        `[AUTH_SYNC] Creating new user - firebase_uid=${firebaseUid}, product=${currentProduct}`,
-      );
-
-      // Insert user record
-      const { data: newUser, error: insertError } = await supabase
-        .from("users")
-        .insert({
-          firebase_uid: firebaseUid,
-          full_name: fullName,
-          email: email,
-          phone: phoneNumber,
-          role: "user",
-          onboarding_completed: false,
-        })
-        .select()
-        .single();
-
-      if (insertError || !newUser) {
-        console.error(`[AUTH_SYNC] Failed to create user:`, insertError);
-        return NextResponse.json(
-          {
-            success: false,
-            error: "Failed to create user account",
-            code: "DATABASE_ERROR" as AuthErrorCode,
-            details: insertError?.message,
-          },
-          { status: 500 },
-        );
-      }
-
-      // NEW (Option B): Create product membership for signup domain
-      const trialEndsAt = isProductAvailableForActivation(currentProduct)
-        ? calculateTrialEndDate(14)
-        : null;
-
-      const membershipStatus =
-        currentProduct === "dashboard" ? "active" : "trial";
-
-      const { error: membershipError } = await supabase
-        .from("user_products")
-        .insert({
-          user_id: newUser.id,
-          product: currentProduct,
-          status: membershipStatus,
-          activated_by: "signup",
-          trial_ends_at: trialEndsAt?.toISOString(),
-          trial_days: 14,
-        });
-
-      if (membershipError) {
-        console.error(
-          `[AUTH_SYNC] Failed to create product membership:`,
-          membershipError,
-        );
-        // Don't fail signup if membership creation fails, log for manual fix
-      } else {
-        console.log(
-          `[AUTH_SYNC] Product membership created - user_id=${newUser.id}, product=${currentProduct}, status=${membershipStatus}`,
-        );
-      }
-
-      // Log activation event
-      await supabase.from("product_activation_logs").insert({
-        user_id: newUser.id,
-        product: currentProduct,
-        action: membershipStatus === "trial" ? "trial_started" : "activated",
-        new_status: membershipStatus,
-        initiated_by: "signup",
-        ip_address: requestContext.ip_address,
-        user_agent: requestContext.user_agent,
-        request_id: requestContext.request_id,
-      });
-
-      // Create session cookie for new user
-      try {
-        const expiresInMs = 60 * 60 * 24 * 5 * 1000; // 5 days
-        const sessionCookie = await adminAuth.createSessionCookie(idToken, {
-          expiresIn: expiresInMs,
-        });
-
-        const cookieStore = await cookies();
-        cookieStore.set("session", sessionCookie, {
-          maxAge: 60 * 60 * 24 * 5,
-          httpOnly: true,
-          secure: process.env.NODE_ENV === "production",
-          path: "/",
-          sameSite: "lax",
-        });
-
-        console.log(`[AUTH_SYNC] Session cookie created for new user`);
-      } catch (cookieError) {
-        console.error(
-          `[AUTH_SYNC] Failed to create session cookie:`,
-          cookieError,
-        );
-      }
-
-      // Send welcome email (async, don't wait) - only if enabled
-      const isWelcomeEmailEnabled = process.env.ENABLE_WELCOME_EMAIL !== "false";
-
-      if (isWelcomeEmailEnabled) {
-        sendEmail({
-          to: email,
-          subject: "Welcome to Flowauxi! 🎉",
-          html:
-            generateEmailHtml("custom", {
-              message: `
-            <h3>Welcome to Flowauxi, ${fullName}!</h3>
-            <p>Thank you for signing up. We're excited to have you on board.</p>
-            <p>Your ${currentProduct} product is now active${membershipStatus === "trial" ? " with a 14-day free trial" : ""}.</p>
-            <p>Get started by completing your profile setup.</p>
-          `,
-            }) ?? "",
-        }).catch((err) =>
-          console.error("[AUTH_SYNC] Failed to send welcome email:", err),
-        );
-      } else {
-        console.log("[AUTH_SYNC] Welcome email skipped (disabled via ENABLE_WELCOME_EMAIL)");
-      }
-
-      const elapsedMs = Date.now() - startTime;
-      console.log(
-        `[AUTH_SYNC] ✅ New user created - elapsed=${elapsedMs}ms, firebase_uid=${firebaseUid}`,
-      );
-
-      return NextResponse.json<SyncUserResponse>({
-        success: true,
-        user: newUser as SupabaseUser,
-      });
-    }
-
-    // ========================================================================
-    // SECTION 5B: USER EXISTS - CHECK PRODUCT MEMBERSHIP (OPTION B)
-    // ========================================================================
-
-    console.log(
-      `[AUTH_SYNC] User exists - user_id=${existingUser.id}, checking product membership for ${currentProduct}`,
-    );
-
-    // Dashboard is always accessible (free tier)
-    if (currentProduct === "dashboard") {
-      console.log(`[AUTH_SYNC] Dashboard access granted (always free)`);
-
-      // Create session cookie ONLY if one doesn't already exist for this user.
-      // This prevents race conditions when multiple tabs sync simultaneously.
-      if (!hasValidSessionCookie) {
-        try {
-          const expiresInMs = 60 * 60 * 24 * 5 * 1000;
-          const sessionCookie = await adminAuth.createSessionCookie(idToken, {
-            expiresIn: expiresInMs,
-          });
-
-          const cookieStore = await cookies();
-          cookieStore.set("session", sessionCookie, {
-            maxAge: 60 * 60 * 24 * 5,
-            httpOnly: true,
-            secure: process.env.NODE_ENV === "production",
-            path: "/",
-            sameSite: "lax",
-          });
-        } catch (cookieError) {
-          console.error(
-            `[AUTH_SYNC] Failed to create session cookie:`,
-            cookieError,
-          );
-        }
-      }
-
-      // Update user record (non-destructive update)
-      // Only update if current data is null or a low-quality fallback
-      const isFallbackName = !existingUser.full_name || 
-                           existingUser.full_name === "User" || 
-                           existingUser.full_name === existingUser.email?.split('@')[0];
-      
-      const updatePayload: any = {};
-      if (isFallbackName && fullName && fullName !== existingUser.email?.split('@')[0]) {
-        updatePayload.full_name = fullName;
-      }
-      if (!existingUser.phone && phoneNumber) {
-        updatePayload.phone = phoneNumber;
-      }
-
-      if (Object.keys(updatePayload).length > 0) {
-        await supabase
-          .from("users")
-          .update(updatePayload)
-          .eq("firebase_uid", firebaseUid);
-      }
-
-      const elapsedMs = Date.now() - startTime;
-      console.log(`[AUTH_SYNC] ✅ Dashboard access - elapsed=${elapsedMs}ms`);
-
-      return NextResponse.json<SyncUserResponse>({
-        success: true,
-        user: existingUser as SupabaseUser,
-      });
-    }
-
-    // Check product membership for non-dashboard products
-    // Two-layer check: user_products (fast path) → subscriptions (fallback)
-    const { data: membership, error: membershipError } = await supabase
-      .from("user_products")
-      .select("*")
-      .eq("user_id", existingUser.id)
-      .eq("product", currentProduct)
-      .maybeSingle();
-
-    if (membershipError) {
-      console.error(
-        `[AUTH_SYNC] Database error checking membership:`,
-        membershipError,
-      );
-      return NextResponse.json(
-        {
-          success: false,
-          error: "Database error",
-          code: "DATABASE_ERROR" as AuthErrorCode,
-        },
-        { status: 500 },
-      );
-    }
-
-    let hasAccess =
-      membership && ["trial", "active"].includes(membership.status);
-
-    // Fallback: check subscriptions table (covers the gap where payment
-    // succeeded but user_products row wasn't created yet)
-    if (!hasAccess) {
-      const { data: activeSub } = await supabase
-        .from("subscriptions")
-        .select("id, status, product_domain")
-        .eq("user_id", existingUser.id)
-        .eq("product_domain", currentProduct)
-        .in("status", ["active", "pending_upgrade"])
-        .limit(1)
-        .maybeSingle();
-
-      if (activeSub) {
-        hasAccess = true;
-        console.log(
-          `[AUTH_SYNC] Subscription fallback hit — active subscription found for ${currentProduct}, auto-healing user_products`,
-        );
-        // Auto-heal: create the missing user_products row so future
-        // requests take the fast path and never hit this fallback again.
-        await supabase.from("user_products").upsert(
-          {
-            user_id: existingUser.id,
-            product: currentProduct,
-            status: "active",
-            activated_by: "system",
-          },
-          { onConflict: "user_id,product" },
-        );
-      }
-    }
-
-    // =========================================================================
-    // Fallback 2: Check free_trials table (defense-in-depth)
-    // =========================================================================
-    // Covers the gap where the Trial Engine created a trial but user_products
-    // row wasn't created. With Fix 1 (atomic RPC), this should NEVER fire.
-    // If it does, Fix 1 has a regression — the auto-heal metrics below will
-    // detect it.
-    //
-    // This is a SAFETY NET, not load-bearing infrastructure.
-    // =========================================================================
-    if (!hasAccess) {
-      const { data: activeTrial } = await supabase
-        .from("free_trials")
-        .select("id, status, domain, expires_at, plan_slug")
-        .eq("user_id", existingUser.id)
-        .eq("domain", currentProduct)
-        .in("status", ["active", "expiring_soon"])
-        .limit(1)
-        .maybeSingle();
-
-      if (activeTrial) {
-        hasAccess = true;
-
-        // ⚠️ OBSERVABILITY: This auto-heal firing means the atomic RPC
-        // (Fix 1) failed silently. Track frequency to detect regressions.
-        console.warn(
-          `[AUTH_SYNC] ⚠️ AUTO-HEAL TRIGGERED: free_trials→user_products gap detected`,
-          JSON.stringify({
-            user_id: existingUser.id,
-            product: currentProduct,
-            trial_id: activeTrial.id,
-            trial_status: activeTrial.status,
-            heal_reason: "trial_access_gap",
-          }),
-        );
-
-        // Auto-heal: create the missing user_products row
-        const { error: healError } = await supabase
-          .from("user_products")
-          .upsert(
-            {
-              user_id: existingUser.id,
-              product: currentProduct,
-              status: "trial",
-              activated_by: "system",
-              trial_ends_at: activeTrial.expires_at,
-              trial_days: 7,
-            },
-            { onConflict: "user_id,product" },
-          );
-
-        if (healError) {
-          console.error(
-            `[AUTH_SYNC] ❌ AUTO-HEAL FAILED: Could not create user_products row`,
-            JSON.stringify({
-              user_id: existingUser.id,
-              product: currentProduct,
-              error: healError.message,
-            }),
-          );
-          // Don't revoke access — trial exists, grant it even if heal write failed
-        } else {
-          console.info(
-            `[AUTH_SYNC] ✅ AUTO-HEAL SUCCESS: user_products row created from free_trials`,
-            JSON.stringify({
-              user_id: existingUser.id,
-              product: currentProduct,
-              trial_id: activeTrial.id,
-            }),
-          );
-
-          // Write to product_activation_logs for persistent observability
-          // This is the table that monitoring queries check to track auto-heal
-          // frequency. Without this, the monitoring SQL returns 0 forever.
-          try {
-            await supabase.from("product_activation_logs").insert({
-              user_id: existingUser.id,
-              product: currentProduct,
-              action: "trial_started",
-              previous_status: null,
-              new_status: "trial",
-              initiated_by: "system",
-              metadata: {
-                heal_reason: "trial_access_gap",
-                trial_id: activeTrial.id,
-                trial_status: activeTrial.status,
-                source: "auth_sync_auto_heal",
-              },
-            });
-          } catch (logErr) {
-            // Logging failure is never fatal
-            console.warn(
-              `[AUTH_SYNC] product_activation_logs write failed (non-fatal):`,
-              logErr,
-            );
-          }
-        }
-      }
-    }
-
-    if (!hasAccess) {
-      console.warn(
-        `[AUTH_SYNC] Product not enabled - user_id=${existingUser.id}, product=${currentProduct}, membership_status=${membership?.status || "none"}`,
-      );
-
-      // Check if user has an active subscription (they paid but something
-      // went wrong with membership creation) — already checked above, so
-      // reaching here means genuinely no access.
-
-      // Fetch all user's products to show in activation UI
-      const { data: userMemberships } = await supabase
-        .from("user_products")
-        .select("product")
-        .eq("user_id", existingUser.id)
-        .in("status", ["trial", "active"]);
-
-      const availableProducts: ProductDomain[] = [
-        "shop",
-        "showcase",
-        "marketing",
-      ].filter(
-        (p) => !userMemberships?.some((m) => m.product === p),
-      ) as ProductDomain[];
-
-      const elapsedMs = Date.now() - startTime;
-      console.log(
-        `[AUTH_SYNC] ⚠️  PRODUCT_NOT_ENABLED - elapsed=${elapsedMs}ms, available=${availableProducts.join(",")}`,
-      );
-
-      // DO NOT create session cookie (user doesn't have access to this product)
+    if (!claim) {
       return NextResponse.json<SyncUserResponse>(
         {
           success: false,
-          code: "PRODUCT_NOT_ENABLED" as AuthErrorCode,
-          message: `Activate ${currentProduct} to continue`,
-          currentProduct,
-          availableProducts,
+          error: "Idempotency unavailable",
+          code: AuthErrorCode.SERVER_ERROR,
+          requestId: requestContext.request_id,
+          idempotencyKey,
+          traceId,
         },
-        { status: 403 }, // 403 Forbidden (not 401 Unauthorized)
+        { status: 500 },
       );
     }
 
-    // ========================================================================
-    // SECTION 6: PRODUCT MEMBERSHIP VALID - CREATE SESSION & RETURN USER
-    // ========================================================================
+    const respondFromCached = async (cached: {
+      statusCode: number;
+      responseBody: any;
+    }) => {
+      const body = (cached.responseBody ?? {}) as SyncUserResponse;
+      const result: SyncResult = {
+        status: cached.statusCode,
+        body: {
+          ...body,
+          requestId: body.requestId ?? requestContext.request_id,
+          idempotencyKey,
+          traceId: (body as any)?.traceId ?? traceId,
+        },
+        clearSession:
+          (body as any)?.code === "USER_NOT_FOUND" ||
+          (body as any)?.code === "INVALID_TOKEN" ||
+          (body as any)?.code === "TOKEN_VERIFICATION_FAILED",
+        setCookieIfAuthenticated: Boolean((body as any)?.success),
+      };
 
-    console.log(
-      `[AUTH_SYNC] Product membership valid - user_id=${existingUser.id}, product=${currentProduct}, status=${membership.status}`,
-    );
+      return await buildResponse({
+        result,
+        idempotencyKey,
+        hasValidSessionCookie,
+        idToken,
+      });
+    };
 
-    // Create session cookie ONLY if one doesn't already exist for this user.
-    if (!hasValidSessionCookie) {
-      try {
-        const expiresInMs = 60 * 60 * 24 * 5 * 1000;
-        const sessionCookie = await adminAuth.createSessionCookie(idToken, {
-          expiresIn: expiresInMs,
+    if (!claim.claimed) {
+      if ((claim.status === "completed" || claim.status === "failed") && claim.status_code != null) {
+        return await respondFromCached({
+          statusCode: claim.status_code,
+          responseBody: claim.response_body,
         });
-
-        const cookieStore = await cookies();
-        cookieStore.set("session", sessionCookie, {
-          maxAge: 60 * 60 * 24 * 5,
-          httpOnly: true,
-          secure: process.env.NODE_ENV === "production",
-          path: "/",
-          sameSite: "lax",
-        });
-
-        console.log(`[AUTH_SYNC] Session cookie created`);
-      } catch (cookieError) {
-        console.error(
-          `[AUTH_SYNC] Failed to create session cookie:`,
-          cookieError,
-        );
       }
-    } else {
-      console.log(`[AUTH_SYNC] Reusing existing valid session cookie`);
+
+      if (claim.status === "processing") {
+        const waited = await waitForAuthSyncCompletion({
+          supabase,
+          idempotencyKey,
+          timeoutMs: 5000,
+          pollMs: 250,
+        });
+
+        if (waited.done) {
+          return await respondFromCached({
+            statusCode: waited.statusCode,
+            responseBody: waited.responseBody,
+          });
+        }
+
+        const inProgress: SyncResult = {
+          status: 202,
+          body: {
+            success: false,
+            error: "Sync in progress",
+            code: AuthErrorCode.SYNC_IN_PROGRESS,
+            requestId: requestContext.request_id,
+            idempotencyKey,
+            traceId,
+          },
+        };
+
+        const response = await buildResponse({
+          result: inProgress,
+          idempotencyKey,
+          hasValidSessionCookie,
+          idToken,
+        });
+        response.headers.set("Retry-After", "1");
+        return response;
+      }
+
+      return NextResponse.json<SyncUserResponse>(
+        {
+          success: false,
+          error: "Idempotency conflict",
+          code: AuthErrorCode.SERVER_ERROR,
+          requestId: requestContext.request_id,
+          idempotencyKey,
+          traceId,
+        },
+        { status: 500 },
+      );
     }
 
-    // Update user record (non-destructive update)
-    const isFallbackName = !existingUser.full_name ||
-                         existingUser.full_name === "User" || 
-                         existingUser.full_name === existingUser.email?.split('@')[0];
-    
-    const updatePayload: any = {};
-    if (isFallbackName && fullName && fullName !== existingUser.email?.split('@')[0]) {
-      updatePayload.full_name = fullName;
-    }
-    if (!existingUser.phone && phoneNumber) {
-      updatePayload.phone = phoneNumber;
+    // ----------------------------------------------------------------------
+    // Owner: provisioning (single RPC) + access decision
+    // ----------------------------------------------------------------------
+    let result: SyncResult;
+    try {
+      const provisioned = await ensureSupabaseUserAndMembershipFull({
+        supabase,
+        firebaseUid,
+        email,
+        fullName,
+        phoneNumber,
+        currentProduct,
+        allowCreate,
+        requestContext,
+        allowLegacyMigration: true,
+      });
+
+      const user = provisioned.user as SupabaseUser;
+      const selfServiceProducts = getSelfServiceProducts();
+      const isSelfService = selfServiceProducts.includes(currentProduct);
+
+      // Durable async jobs (best-effort, owner only)
+      if (provisioned.created) {
+        try {
+          const jobs: Array<{ type: string; payload: Record<string, unknown> }> = [];
+          const isWelcomeEmailEnabled = process.env.ENABLE_WELCOME_EMAIL !== "false";
+
+          if (isWelcomeEmailEnabled && email) {
+            jobs.push({
+              type: "SEND_WELCOME_EMAIL",
+              payload: {
+                email,
+                full_name: fullName,
+                product: currentProduct,
+              },
+            });
+          }
+
+          if (allowCreate && isSelfService) {
+            jobs.push({
+              type: "START_TRIAL",
+              payload: {
+                user_id: user.id,
+                org_id: user.id,
+                email,
+                domain: currentProduct,
+                product: currentProduct,
+                plan_slug: getStarterPlanSlug(currentProduct),
+                idempotency_key: idempotencyKey,
+                ip_address: requestContext.ip_address,
+                user_agent: requestContext.user_agent,
+              },
+            });
+          }
+
+          if (jobs.length > 0) {
+            const rows = jobs.map((j) => ({
+              type: j.type,
+              payload: j.payload,
+              status: "pending",
+              attempts: 0,
+              max_attempts: 3,
+              next_attempt_at: new Date().toISOString(),
+              traceparent,
+              request_id: requestContext.request_id,
+            }));
+            const { error: jobError } = await supabase
+              .from("background_jobs")
+              .insert(rows as any);
+            if (jobError) {
+              console.warn("[AUTH_SYNC] Failed to enqueue background jobs (non-fatal):", jobError);
+            }
+          }
+        } catch (jobErr) {
+          console.warn("[AUTH_SYNC] Background job enqueue failed (non-fatal):", jobErr);
+        }
+      }
+
+      if (!provisioned.hasAccess) {
+        const { data: userMemberships } = await supabase
+          .from("user_products")
+          .select("product")
+          .eq("user_id", user.id)
+          .in("status", ["trial", "active"]);
+
+        const availableProducts: ProductDomain[] = getSelfServiceProducts().filter(
+          (p) => !userMemberships?.some((m: any) => m.product === p),
+        ) as ProductDomain[];
+
+        result = {
+          status: 403,
+          body: {
+            success: false,
+            code: AuthErrorCode.PRODUCT_NOT_ENABLED,
+            message: `Activate ${currentProduct} to continue`,
+            currentProduct,
+            availableProducts,
+            action: allowCreate ? "AUTO_PROVISION_AVAILABLE" : "ACTIVATION_REQUIRED",
+            requestId: requestContext.request_id,
+            idempotencyKey,
+            traceId,
+          },
+        };
+      } else {
+        result = {
+          status: 200,
+          body: {
+            success: true,
+            user,
+            requestId: requestContext.request_id,
+            idempotencyKey,
+            traceId,
+          },
+          setCookieIfAuthenticated: true,
+        };
+      }
+    } catch (e: any) {
+      const errMsg = String(e?.message || e);
+      const looksLikeTimeout =
+        errMsg.includes("AbortError") || errMsg.includes("aborted") || errMsg.includes("timeout");
+
+      if (e?.code === "USER_NOT_FOUND" || errMsg === "USER_NOT_FOUND") {
+        result = {
+          status: 404,
+          clearSession: true,
+          body: {
+            success: false,
+            error: "User account not found in database",
+            code: AuthErrorCode.USER_NOT_FOUND,
+            message:
+              "Your account was not fully created. Please sign up again to complete setup.",
+            requestId: requestContext.request_id,
+            idempotencyKey,
+            traceId,
+          },
+        };
+      } else if (looksLikeTimeout) {
+        result = {
+          status: 504,
+          body: {
+            success: false,
+            error: "Upstream timeout",
+            code: AuthErrorCode.UPSTREAM_TIMEOUT,
+            requestId: requestContext.request_id,
+            idempotencyKey,
+            traceId,
+          },
+        };
+      } else {
+        console.error(`[AUTH_SYNC] Provisioning error:`, e);
+        result = {
+          status: 500,
+          body: {
+            success: false,
+            error: "Database error",
+            code: AuthErrorCode.DATABASE_ERROR,
+            details: e?.message,
+            requestId: requestContext.request_id,
+            idempotencyKey,
+            traceId,
+          } as any,
+        };
+      }
     }
 
-    let updatedUser = null;
-    if (Object.keys(updatePayload).length > 0) {
-      const { data } = await supabase
-        .from("users")
-        .update(updatePayload)
-        .eq("firebase_uid", firebaseUid)
-        .select()
-        .single();
-      updatedUser = data;
+    // Complete idempotency cache (owner only)
+    try {
+      await completeAuthSyncIdempotency({
+        supabase,
+        idempotencyKey,
+        lockedBy: lockOwnerId,
+        status: "completed",
+        statusCode: result.status,
+        responseBody: result.body,
+        errorCode: (result.body.code as any) ?? null,
+      });
+    } catch (cacheErr) {
+      console.warn("[AUTH_SYNC] Failed to finalize idempotency (non-fatal):", cacheErr);
     }
 
     const elapsedMs = Date.now() - startTime;
     console.log(
-      `[AUTH_SYNC] ✅ AUTHENTICATED - elapsed=${elapsedMs}ms, firebase_uid=${firebaseUid}, product=${currentProduct}`,
+      `[AUTH_SYNC] Completed - elapsed=${elapsedMs}ms, firebase_uid=${firebaseUid}, product=${currentProduct}, status=${result.status}`,
     );
 
-    return NextResponse.json<SyncUserResponse>({
-      success: true,
-      user: (updatedUser || existingUser) as SupabaseUser,
+    return await buildResponse({
+      result,
+      idempotencyKey,
+      hasValidSessionCookie,
+      idToken,
     });
   } catch (error: any) {
     const elapsedMs = Date.now() - startTime;
-    console.error(
-      `[AUTH_SYNC] ❌ Unhandled error - elapsed=${elapsedMs}ms:`,
-      error,
-    );
+    console.error(`[AUTH_SYNC] Unhandled error - elapsed=${elapsedMs}ms:`, error);
 
-    return NextResponse.json(
+    return NextResponse.json<SyncUserResponse>(
       {
         success: false,
         error: "Internal server error",
-        code: "SERVER_ERROR" as AuthErrorCode,
-        details: error.message,
-      },
+        code: AuthErrorCode.SERVER_ERROR,
+        details: error?.message,
+        requestId: requestContext.request_id,
+        traceId,
+      } as any,
       { status: 500 },
     );
   }

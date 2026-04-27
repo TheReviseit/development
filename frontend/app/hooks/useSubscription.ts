@@ -27,6 +27,7 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useRef } from "react";
 import type { BillingLockReason, TrialInfo } from "@/app/dashboard/components/BillingLockScreen";
+import { getProductDomainFromBrowser } from "@/lib/domain/client";
 
 // =============================================================================
 // TYPES
@@ -81,13 +82,13 @@ export interface UseSubscriptionReturn {
 const STALE_TIME_MS = 30_000; // 30 seconds
 
 /** Max time a fetch can take before abort */
-const FETCH_TIMEOUT_MS = 3_000; // 3 seconds
+const FETCH_TIMEOUT_MS = 8_000; // 8 seconds
 
 /** How long to allow access on network error before locking */
 const FAIL_OPEN_GRACE_MS = 30_000; // 30 seconds
 
-/** Query cache key */
-const QUERY_KEY = ["subscription-status"] as const;
+/** Query cache key base (domain is appended) */
+const QUERY_KEY_BASE = ["subscription-status"] as const;
 
 // =============================================================================
 // FETCH FUNCTION
@@ -97,7 +98,7 @@ const QUERY_KEY = ["subscription-status"] as const;
  * Fetch billing status with timeout protection.
  * Returns structured data or throws on fatal error.
  */
-async function fetchBillingStatus(): Promise<SubscriptionStatus> {
+async function fetchBillingStatus(domain: string): Promise<SubscriptionStatus> {
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
 
@@ -105,6 +106,10 @@ async function fetchBillingStatus(): Promise<SubscriptionStatus> {
     const response = await fetch("/api/subscription/billing-status", {
       credentials: "include",
       cache: "no-store",
+      headers: {
+        // Billing status is domain-aware on the server.
+        "x-product-domain": domain,
+      },
       signal: controller.signal,
     });
 
@@ -145,6 +150,7 @@ async function fetchBillingStatus(): Promise<SubscriptionStatus> {
 
 export function useSubscription(): UseSubscriptionReturn {
   const queryClient = useQueryClient();
+  const domain = getProductDomainFromBrowser();
 
   // Bounded fail-open: track last successful check
   const lastSuccessRef = useRef<number>(Date.now());
@@ -155,8 +161,8 @@ export function useSubscription(): UseSubscriptionReturn {
     isRefetching,
     error,
   } = useQuery<SubscriptionStatus>({
-    queryKey: QUERY_KEY,
-    queryFn: fetchBillingStatus,
+    queryKey: [...QUERY_KEY_BASE, domain],
+    queryFn: () => fetchBillingStatus(domain),
     staleTime: STALE_TIME_MS,
     refetchOnWindowFocus: true,   // Catch real-time trial expiry
     refetchOnReconnect: true,     // Network recovery
@@ -176,12 +182,12 @@ export function useSubscription(): UseSubscriptionReturn {
   useEffect(() => {
     const handleSubUpdated = () => {
       console.info("[useSubscription] subscription-updated event → invalidating cache");
-      queryClient.invalidateQueries({ queryKey: QUERY_KEY });
+      queryClient.invalidateQueries({ queryKey: QUERY_KEY_BASE });
     };
 
     const handleProductActivated = () => {
       console.info("[useSubscription] product-activated event → invalidating cache");
-      queryClient.invalidateQueries({ queryKey: QUERY_KEY });
+      queryClient.invalidateQueries({ queryKey: QUERY_KEY_BASE });
     };
 
     window.addEventListener("subscription-updated", handleSubUpdated);
@@ -254,7 +260,7 @@ export function useSubscription(): UseSubscriptionReturn {
   // =======================================================================
   const refresh = useCallback(async () => {
     console.info("[useSubscription] Manual refresh triggered");
-    await queryClient.invalidateQueries({ queryKey: QUERY_KEY });
+    await queryClient.invalidateQueries({ queryKey: QUERY_KEY_BASE });
   }, [queryClient]);
 
   return {

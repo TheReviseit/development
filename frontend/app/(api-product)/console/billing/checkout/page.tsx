@@ -7,7 +7,7 @@ import "../billing.css";
 
 declare global {
   interface Window {
-    Razorpay: any;
+    Razorpay?: any;
   }
 }
 

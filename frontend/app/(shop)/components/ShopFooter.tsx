@@ -1,8 +1,17 @@
 import Link from "next/link";
 import Image from "next/image";
-import { Instagram } from "lucide-react";
+import { SocialMediaIcons } from "@/components/shared/SocialMediaIcons";
 import styles from "./ShopFooter.module.css";
 import logo from "@/public/logo.png";
+
+/**
+ * ShopFooter Component (Route Group Version)
+ * 
+ * A production-grade footer component that uses centralized
+ * social media configuration.
+ * 
+ * @production-grade
+ */
 
 const PRODUCT_LINKS = [
   { href: "#features", label: "Features" },
@@ -47,16 +56,14 @@ export default function ShopFooter({ dark = false }: { dark?: boolean }) {
               globally with ease.
             </p>
 
+            {/* Social Links - Using centralized component */}
             <div className={styles.socialLinks}>
-              <a
-                href="https://instagram.com/flowauxi"
-                target="_blank"
-                rel="noopener noreferrer"
-                className={styles.socialIcon}
-                aria-label="Follow us on Instagram"
-              >
-                <Instagram size={20} />
-              </a>
+              <SocialMediaIcons 
+                variant="minimal"
+                size={20}
+                color="current"
+                gap={16}
+              />
             </div>
           </div>
 

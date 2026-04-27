@@ -67,77 +67,65 @@ interface SubscriptionState {
 
 async function validateSession(): Promise<UserSession | null> {
   const cookieStore = await cookies();
-  const sessionCookie = cookieStore.get('flowauxi_session');
+  // CRITICAL: The auth system sets the cookie as 'session' (via Firebase Admin
+  // createSessionCookie in auth/sync/route.ts), NOT 'flowauxi_session'.
+  const sessionCookie = cookieStore.get('session')?.value;
 
-  if (!sessionCookie?.value) {
+  if (!sessionCookie) {
+    console.warn('[Payment] No session cookie found');
     return null;
   }
 
   try {
-    // Validate session with backend
-    const backendUrl = process.env.BACKEND_URL || 'http://localhost:5000';
-    const response = await fetch(`${backendUrl}/api/auth/validate-session`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        sessionToken: sessionCookie.value,
-      }),
-      // Short timeout to fail fast
-      signal: AbortSignal.timeout(5000),
-    });
+    // Use Firebase Admin SDK to verify session cookie (same pattern as verify-request.ts)
+    const { verifySessionCookieSafe } = await import('@/lib/firebase-admin');
+    const result = await verifySessionCookieSafe(sessionCookie, false); // false = skip revocation check for speed
 
-    if (!response.ok) {
+    if (!result.success || !result.data) {
+      console.warn('[Payment] Session cookie verification failed:', result.error);
       return null;
     }
 
-    const data = await response.json();
-    
-    if (!data.valid) {
+    const decodedClaims = result.data;
+
+    // Look up user in Supabase (same pattern as auth/sync)
+    const { getUserByFirebaseUID } = await import('@/lib/supabase/queries');
+    const user = await getUserByFirebaseUID(decodedClaims.uid);
+
+    if (!user) {
+      console.warn('[Payment] User not found in database for firebase_uid:', decodedClaims.uid);
       return null;
     }
 
     return {
-      userId: data.userId,
-      email: data.email,
-      name: data.name,
-      phone: data.phone,
+      userId: user.id,
+      email: user.email || decodedClaims.email || '',
+      name: user.full_name || decodedClaims.name,
+      phone: user.phone || decodedClaims.phone_number,
     };
   } catch (error) {
-    console.error('Session validation error:', error);
+    console.error('[Payment] Session validation error:', error);
     return null;
   }
 }
 
 // =============================================================================
-// TENANT RESOLUTION
+// TENANT RESOLUTION (uses centralized domain config)
 // =============================================================================
 
 async function resolveTenant(): Promise<TenantInfo | null> {
   const headersList = await headers();
   const host = headersList.get('host') || '';
-  
-  // Domain mapping (must match backend domain_middleware.py)
-  const domainMap: Record<string, string> = {
-    'shop.flowauxi.com': 'shop',
-    'marketing.flowauxi.com': 'marketing',
-    'pages.flowauxi.com': 'showcase',
-    'flowauxi.com': 'dashboard',
-    'www.flowauxi.com': 'dashboard',
-    'api.flowauxi.com': 'api',
-    'localhost:3000': 'dashboard',
-    'localhost:3001': 'shop',
-    'localhost:3002': 'showcase',
-    'localhost:3003': 'marketing',
-    'localhost:3004': 'api',
-  };
 
-  const productDomain = domainMap[host];
+  // Use the centralized domain resolution (single source of truth)
+  const { resolveDomain } = await import('@/lib/domain/config');
 
-  if (!productDomain) {
-    return null;
-  }
+  // Parse host into hostname and port
+  const [hostname, port] = host.includes(':')
+    ? [host.split(':')[0], host.split(':')[1]]
+    : [host, undefined];
+
+  const productDomain = resolveDomain(hostname, port);
 
   return {
     domain: host,
@@ -145,47 +133,47 @@ async function resolveTenant(): Promise<TenantInfo | null> {
   };
 }
 
-// =============================================================================
-// SERVER-SIDE PRICING FETCH
-// =============================================================================
-
 async function fetchPricing(
   tenant: TenantInfo,
-  userSession: UserSession
+  _userSession: UserSession
 ): Promise<PricingData | null> {
   try {
-    const backendUrl = process.env.BACKEND_URL || 'http://localhost:5000';
-    
-    // Server-side request includes user context and tenant
-    const response = await fetch(
-      `${backendUrl}/api/billing/pricing?domain=${tenant.productDomain}`,
-      {
-        method: 'GET',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-User-Id': userSession.userId,
-          'X-Product-Domain': tenant.productDomain,
-          'X-Request-Source': 'nextjs-server-component',
-        },
-        // Cache pricing for 5 minutes at server level
-        next: { revalidate: 300 },
-      }
-    );
+    // Use the existing pricing engine (same source of truth as onboarding-embedded)
+    // This is a pure function — no network call needed
+    const { getPricingForProduct } = await import('@/lib/pricing/pricing-engine');
+    const { PRODUCT_REGISTRY } = await import('@/lib/product/registry');
 
-    if (!response.ok) {
-      console.error('Pricing fetch failed:', response.status);
+    const product = PRODUCT_REGISTRY[tenant.productDomain as keyof typeof PRODUCT_REGISTRY];
+    if (!product) {
+      console.error(`[Payment] Unknown product domain: ${tenant.productDomain}`);
       return null;
     }
 
-    return await response.json();
+    const plans = getPricingForProduct(tenant.productDomain as any);
+
+    return {
+      domain: tenant.productDomain,
+      displayName: product.name,
+      plans: plans.map((plan) => ({
+        id: plan.id,
+        name: plan.name,
+        slug: plan.id,
+        price: plan.price,
+        priceDisplay: plan.priceDisplay,
+        currency: plan.currency,
+        description: plan.description,
+        features: plan.features,
+        popular: plan.popular,
+      })),
+    };
   } catch (error) {
-    console.error('Pricing fetch error:', error);
+    console.error('[Payment] Pricing fetch error:', error);
     return null;
   }
 }
 
 // =============================================================================
-// SUBSCRIPTION STATE CHECK
+// SUBSCRIPTION STATE CHECK (direct Supabase queries matching billing-status)
 // =============================================================================
 
 async function checkSubscriptionState(
@@ -193,41 +181,124 @@ async function checkSubscriptionState(
   tenant: TenantInfo
 ): Promise<SubscriptionState> {
   try {
-    const backendUrl = process.env.BACKEND_URL || 'http://localhost:5000';
-    
-    const response = await fetch(
-      `${backendUrl}/api/billing/subscription-state?domain=${tenant.productDomain}`,
-      {
-        method: 'GET',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-User-Id': userSession.userId,
-          'X-Product-Domain': tenant.productDomain,
-        },
-        // Short cache for subscription state
-        next: { revalidate: 60 },
-      }
-    );
+    const { createClient } = await import('@supabase/supabase-js');
 
-    if (!response.ok) {
-      // Fail closed - assume they can't subscribe
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+    if (!supabaseUrl || !supabaseServiceKey) {
+      console.error('[Payment] Missing Supabase env vars');
       return {
         hasSubscription: false,
         hasActiveTrial: false,
         trialExpired: false,
-        canSubscribe: false,
-        reason: 'state_check_failed',
+        canSubscribe: true,
+        reason: 'config_error',
       };
     }
 
-    return await response.json();
-  } catch (error) {
-    console.error('Subscription state check error:', error);
+    const supabase = createClient(supabaseUrl, supabaseServiceKey, {
+      auth: { autoRefreshToken: false, persistSession: false },
+    });
+
+    const domain = tenant.productDomain;
+
+    // 1. Check for paid subscription (mirrors billing-status API)
+    const { data: subscription } = await supabase
+      .from('subscriptions')
+      .select('status, current_period_end')
+      .eq('user_id', userSession.userId)
+      .eq('product_domain', domain)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (subscription) {
+      const subStatus = subscription.status as string;
+      // IMPORTANT: The payment page must NOT redirect away for pre-payment states
+      // like pending/processing/created. Those can be created as part of the
+      // checkout flow and would cause a redirect loop back to /dashboard.
+      //
+      // Redirect away only for truly entitled states (the user already has access).
+      const ENTITLED_STATUSES = new Set([
+        "active",
+        "trialing",
+        "trial",
+        "grace_period",
+        "completed",
+      ]);
+
+      let isEffectivelyActive = ENTITLED_STATUSES.has(subStatus);
+
+      // Explicitly fail if active but past the period end
+      if (subStatus === "active" && subscription.current_period_end) {
+        if (new Date(subscription.current_period_end) < new Date()) {
+          isEffectivelyActive = false;
+        }
+      }
+
+      if (isEffectivelyActive) {
+        return {
+          hasSubscription: true,
+          hasActiveTrial: false,
+          trialExpired: false,
+          canSubscribe: false,
+          reason: `active_subscription_${subStatus}`,
+        };
+      }
+
+      // Subscription exists but it's not entitled yet (or it's locked/failed).
+      // Allow the user to subscribe/repay from this screen.
+      return {
+        hasSubscription: false,
+        hasActiveTrial: false,
+        trialExpired: false,
+        canSubscribe: true,
+        reason: `subscription_not_entitled_${subStatus}`,
+      };
+      
+      // If we made it here, they have a sub but it's in a locked state 
+      // (e.g. past_due, cancelled, expired, suspended, halted)
+      // Therefore, they SHOULD be allowed to subscribe!
+    }
+
+    // 2. Check for active trial (mirrors billing-status API)
+    const { data: trial } = await supabase
+      .from('free_trials')
+      .select('status, expires_at')
+      .eq('user_id', userSession.userId)
+      .eq('domain', domain)
+      .in('status', ['active', 'expiring_soon'])
+      .gt('expires_at', new Date().toISOString())
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (trial) {
+      return {
+        hasSubscription: false,
+        hasActiveTrial: true,
+        trialExpired: false,
+        canSubscribe: true, // They CAN upgrade while on a trial
+        reason: 'active_trial',
+      };
+    }
+
+    // No subscription and no active trial → user can subscribe
     return {
       hasSubscription: false,
       hasActiveTrial: false,
       trialExpired: false,
-      canSubscribe: false,
+      canSubscribe: true,
+    };
+  } catch (error) {
+    console.error('[Payment] Subscription state check error:', error);
+    // Fail OPEN for payment page — let them see pricing even if check fails
+    return {
+      hasSubscription: false,
+      hasActiveTrial: false,
+      trialExpired: false,
+      canSubscribe: true,
       reason: 'state_check_error',
     };
   }
@@ -304,10 +375,8 @@ export default async function PaymentPage({ searchParams }: PaymentPageProps) {
     redirect('/dashboard');
   }
 
-  // If they have an active trial and aren't expired, redirect to dashboard
-  if (subscriptionState.hasActiveTrial && !subscriptionState.trialExpired) {
-    redirect('/dashboard');
-  }
+  // If they have an active trial and aren't expired, still allow payment page.
+  // Users should be able to upgrade early (trial -> paid) without being bounced.
 
   // =============================================================================
   // RENDER PAYMENT PAGE

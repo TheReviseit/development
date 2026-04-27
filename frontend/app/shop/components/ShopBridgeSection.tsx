@@ -65,7 +65,7 @@ const features = [
 ];
 
 const stats = [
-  { value: "500+", label: "BUSINESSES", suffix: "Trusted" },
+  { value: "Many", label: "BUSINESSES", suffix: "Across India" },
   { value: "10k+", label: "ORDERS PROCESSED", suffix: "Monthly" },
   { value: "98%", label: "DELIVERY RATE", suffix: "Guaranteed" },
 ];
@@ -158,7 +158,7 @@ export default function ShopBridgeSection() {
               Ready to Start Your WhatsApp Store?
             </h3>
             <p className={styles.ctaDesc}>
-              Join 500+ businesses selling on WhatsApp. Start your free trial
+              Join businesses across India selling on WhatsApp. Start your free trial
               today — no credit card required.
             </p>
 
@@ -175,7 +175,7 @@ export default function ShopBridgeSection() {
             <div className={styles.ctaTags}>
               <span className={styles.ctaTag}>
                 <Check className={styles.ctaTagIcon} />
-                14-day free trial
+                7-day free trial
               </span>
               <span className={styles.ctaTag}>
                 <Check className={styles.ctaTagIcon} />
@@ -198,7 +198,7 @@ export default function ShopBridgeSection() {
           transition={{ delay: 0.5 }}
         >
           <p className={styles.trustText}>
-            Trusted by 500+ e-commerce businesses across India
+            Trusted by e-commerce businesses across India
           </p>
           <div className={styles.trustStars}>
             {[...Array(5)].map((_, i) => (
@@ -211,7 +211,7 @@ export default function ShopBridgeSection() {
                 <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
               </svg>
             ))}
-            <span className={styles.trustRating}>4.8/5 rating</span>
+            <span className={styles.trustRating}>Trusted</span>
           </div>
         </motion.div>
       </div>

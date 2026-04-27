@@ -199,7 +199,7 @@ export default async function IndustryPage({ params }: Props) {
         <section className="mt-16 bg-green-600 text-white rounded-lg p-8 text-center">
           <h2 className="text-2xl font-bold mb-4">Start Your {industry.name} WhatsApp Store</h2>
           <p className="mb-6 text-green-100">
-            Free AI chatbot, order management, and payments. Join 500+ {industry.name.toLowerCase()} businesses.
+            Free AI chatbot, order management, and payments. Join {industry.name.toLowerCase()} businesses across India.
           </p>
           <div className="flex flex-wrap gap-4 justify-center">
             <Link href="/signup" className="px-8 py-4 bg-white text-green-600 rounded-lg font-semibold hover:bg-green-50">

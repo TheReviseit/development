@@ -11,8 +11,7 @@
  * @securityLevel FAANG-Production
  */
 
-import { NextResponse } from "next/server";
-import type { NextRequest } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import {
   evaluateDomainAccess,
   applyDecision,
@@ -20,6 +19,7 @@ import {
 } from "@/lib/domain-policy";
 import { resolveDomain, getLandingRoute } from "@/lib/domain/config";
 import { getProductByDomain } from "@/lib/product/registry";
+import { domainResolver, DomainContext } from "@/lib/domain/resolver";
 
 // =============================================================================
 // CONSTANTS - Single Source of Truth
@@ -53,21 +53,6 @@ const BILLING_CONFIG = {
 
 // In-memory rate limiting store (use Redis in production)
 const rateLimitStore = new Map<string, { count: number; resetTime: number }>();
-
-// Domain mapping for tenant resolution
-const DOMAIN_MAP: Record<string, string> = {
-  'shop.flowauxi.com': 'shop',
-  'marketing.flowauxi.com': 'marketing',
-  'pages.flowauxi.com': 'showcase',
-  'flowauxi.com': 'dashboard',
-  'www.flowauxi.com': 'dashboard',
-  'api.flowauxi.com': 'api',
-  'localhost:3000': 'dashboard',
-  'localhost:3001': 'shop',
-  'localhost:3002': 'showcase',
-  'localhost:3003': 'marketing',
-  'localhost:3004': 'api',
-};
 
 // =============================================================================
 // RATE LIMITING
@@ -165,9 +150,25 @@ async function validateAuthToken(request: NextRequest): Promise<AuthResult> {
   
   if (!authHeader?.startsWith('Bearer ')) {
     // Check for session cookie as fallback
-    const sessionCookie = request.cookies.get('flowauxi_session');
+    // CRITICAL: The auth system sets the cookie as 'session' (via Firebase Admin
+    // createSessionCookie in auth/sync/route.ts). Check BOTH names for compat.
+    const sessionCookie = request.cookies.get('session') || request.cookies.get('flowauxi_session');
     if (sessionCookie?.value) {
-      // Session cookie exists - will be validated by backend
+      try {
+        // Decode the JWT payload (Firebase session cookie is a JWT)
+        // We only decode here; cryptographic verification is expected to be done by the backend
+        const [, payloadBase64] = sessionCookie.value.split('.');
+        const payloadJson = Buffer.from(payloadBase64, 'base64').toString('utf-8');
+        const payload = JSON.parse(payloadJson);
+        const userId = payload.user_id || payload.sub;
+        
+        if (userId) {
+          return { authenticated: true, userId: userId, email: payload.email };
+        }
+      } catch (e) {
+        // Fallback on error
+        console.error('Failed to decode session cookie payload in proxy:', e);
+      }
       return { authenticated: true, userId: 'session_based' };
     }
     return { authenticated: false, error: 'NO_AUTH_TOKEN' };
@@ -183,7 +184,7 @@ async function validateAuthToken(request: NextRequest): Promise<AuthResult> {
   
   // Call backend to validate token with Firebase Admin SDK
   try {
-    const backendUrl = process.env.BACKEND_URL || 'http://localhost:5000';
+    const backendUrl = process.env.BACKEND_URL || process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
     
     const response = await fetch(`${backendUrl}/api/billing/auth/verify`, {
       method: 'POST',
@@ -191,6 +192,8 @@ async function validateAuthToken(request: NextRequest): Promise<AuthResult> {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({ token }),
+      // Add timeout to prevent hanging
+      signal: AbortSignal.timeout(5000),
     });
     
     const data = await response.json();
@@ -218,23 +221,56 @@ async function validateAuthToken(request: NextRequest): Promise<AuthResult> {
     return result;
     
   } catch (error) {
+    // Check if it's a connection error (backend not running)
+    const isConnectionError = error instanceof Error && (
+      error.message.includes('ECONNREFUSED') ||
+      error.message.includes('fetch failed') ||
+      error.message.includes('connect') ||
+      error.name === 'AbortError'
+    );
+    
+    if (isConnectionError) {
+      console.error('[Proxy] Backend connection failed - is the Flask server running on port 5000?', error);
+      // Return a specific error for connection issues
+      return { 
+        authenticated: false, 
+        error: 'BACKEND_UNAVAILABLE',
+      };
+    }
+    
     console.error('Token validation error:', error);
     return { authenticated: false, error: 'VALIDATION_SERVICE_ERROR' };
   }
 }
 
 // =============================================================================
-// TENANT RESOLUTION
+// TENANT RESOLUTION (FAANG Pattern: Read from global middleware headers)
 // =============================================================================
+// NOTE: Global middleware.ts now resolves domain ONCE and injects headers.
+// This function just reads what's already been resolved.
 
-function resolveTenant(host: string): { domain: string; productDomain: string; isValid: boolean } {
-  const productDomain = DOMAIN_MAP[host];
+function getTenantFromHeaders(request: NextRequest): { 
+  domain: string; 
+  productDomain: string; 
+  tenantId: string;
+  signedContext: string | null;
+  isValid: boolean 
+} {
+  // Read from headers injected by global middleware.ts
+  const productDomain = request.headers.get('x-tenant-domain') || 'unknown';
+  const tenantId = request.headers.get('x-tenant-id') || 'unknown';
+  const signedContext = request.headers.get('x-signed-context');
+  const host = request.headers.get('host') || '';
   
-  if (!productDomain) {
-    return { domain: host, productDomain: 'unknown', isValid: false };
-  }
-
-  return { domain: host, productDomain, isValid: true };
+  const isValid = productDomain !== 'unknown' && signedContext !== null;
+  
+  return { 
+    domain: host, 
+    productDomain, 
+    tenantId,
+    signedContext,
+    isValid 
+  };
 }
 
 // =============================================================================
@@ -305,23 +341,22 @@ async function handleBillingSecurity(
     );
   }
 
-  // Tenant resolution
-  const host = request.headers.get('host') || '';
-  const tenant = resolveTenant(host);
+  // Tenant resolution (FAANG Pattern: Read from global middleware headers)
+  const tenant = getTenantFromHeaders(request);
 
   if (!tenant.isValid) {
     return NextResponse.json(
       {
         success: false,
-        error: 'INVALID_TENANT',
-        message: 'Unknown domain. Access denied.',
+        error: 'INVALID_DOMAIN',
+        message: 'Domain not recognized. Global middleware may not be running.',
       },
-      { 
-        status: 403,
-        headers: securityHeaders,
-      }
+      { status: 400, headers: securityHeaders }
     );
   }
+  
+  // Use signed context from global middleware (already signed, just pass through)
+  const signedContext = tenant.signedContext!;
 
   // Authentication
   const authResult = await validateAuthToken(request);
@@ -406,13 +441,31 @@ async function handleBillingSecurity(
     );
   }
 
-  // Add billing security headers to the response
-  const response = NextResponse.next();
+  // Add billing security headers (FAANG Pattern: Signed context, never plain domain)
+  const requestHeaders = new Headers(request.headers);
+  requestHeaders.set('X-Signed-Context', signedContext);
+  requestHeaders.set('X-Tenant-Domain', tenant.productDomain);
+  requestHeaders.set('X-Tenant-Id', tenant.tenantId);
+  requestHeaders.set('X-Domain', tenant.domain);
+  
+  if (authResult.userId) {
+    requestHeaders.set('X-User-Id', authResult.userId);
+  }
+  if (authResult.email) {
+    requestHeaders.set('X-User-Email', authResult.email);
+  }
+
+  const response = NextResponse.next({
+    request: {
+      headers: requestHeaders,
+    },
+  });
   
   Object.entries(securityHeaders).forEach(([key, value]) => {
     response.headers.set(key, value);
   });
   
+  // Also set them on the response for client context if needed
   response.headers.set('X-Product-Domain', tenant.productDomain);
   response.headers.set('X-Domain', tenant.domain);
   
@@ -443,6 +496,75 @@ export async function proxy(request: NextRequest) {
   const hostname = request.nextUrl.hostname;
   const protocol = request.nextUrl.protocol;
   const port = request.nextUrl.port;
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // STEP 0: GLOBAL DOMAIN RESOLUTION (FAANG Pattern - Single Source of Truth)
+  // ═══════════════════════════════════════════════════════════════════════════
+  // Resolve domain ONCE here, inject headers for ALL downstream handlers.
+  // This ensures API routes, page routes, and backend all see the same context.
+  
+  const resolution = domainResolver.resolve(request);
+  
+  if (resolution.matched && resolution.context) {
+    // Extract user ID from auth if available
+    const authHeader = request.headers.get('authorization');
+    let userId: string | undefined;
+    
+    if (authHeader?.startsWith('Bearer ')) {
+      try {
+        const token = authHeader.substring(7);
+        const [, payloadB64] = token.split('.');
+        if (payloadB64) {
+          const payload = JSON.parse(atob(payloadB64));
+          userId = payload.sub || payload.user_id;
+        }
+      } catch (e) {
+        // Invalid token, ignore
+      }
+    }
+    
+    // Check session cookie as fallback
+    if (!userId) {
+      const sessionCookie = request.cookies.get('session')?.value;
+      if (sessionCookie) {
+        try {
+          const [, payloadB64] = sessionCookie.split('.');
+          if (payloadB64) {
+            const payload = JSON.parse(atob(payloadB64));
+            userId = payload.sub || payload.user_id;
+          }
+        } catch (e) {
+          // Invalid cookie, ignore
+        }
+      }
+    }
+    
+    // Sign context (async - needs await)
+    const signedContext = await domainResolver.signContext(resolution.context, userId);
+    
+    // Inject headers on request (for downstream handlers)
+    const requestHeaders = new Headers(request.headers);
+    requestHeaders.set('x-signed-context', signedContext);
+    requestHeaders.set('x-tenant-domain', resolution.context.domain);
+    requestHeaders.set('x-tenant-id', resolution.context.tenantId);
+    if (userId) {
+      requestHeaders.set('x-user-id', userId);
+    }
+    
+    // Create new request with modified headers
+    request = new NextRequest(request.url, {
+      ...request,
+      headers: requestHeaders,
+    });
+    
+    // Log in dev mode
+    if (process.env.NODE_ENV === 'development') {
+      console.log(
+        `[Proxy Global] ${pathname} → domain=${resolution.context.domain}, ` +
+        `user=${userId?.substring(0, 8) || 'anon'}...`
+      );
+    }
+  }
 
   // ═══════════════════════════════════════════════════════════════════════════
   // STEP 1: BILLING SECURITY (for payment routes)
@@ -616,6 +738,16 @@ async function processRequest(
         port,
       );
     }
+
+    // For non-public API routes (like /api/billing/*), still add product headers
+    // This ensures domain context is available for all API handlers
+    return addProductHeaders(
+      NextResponse.next(),
+      resolvedDomain,
+      domainDecision.seo.canonical,
+      hostname,
+      port,
+    );
   }
 
   const AUTH_ROUTE_POLICY: Record<string, "normal" | "console"> = {

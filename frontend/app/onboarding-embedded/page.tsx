@@ -24,22 +24,16 @@ import {
 } from "../../lib/api/razorpay";
 import { detectDomainFromWindow } from "@/lib/pricing/domain-detection";
 import { getPricingForDomain } from "@/lib/pricing/pricing-engine";
+import { getDomainVisibility } from "@/lib/domain/config";
 import type { ProductDomain } from "@/lib/pricing/pricing-config";
 import "../onboarding/onboarding.css";
 import "./onboarding-embedded.css";
+import OnboardingPricingReplica, {
+  type OnboardingPricingPlan,
+} from "./OnboardingPricingReplica";
 
 type Step = "whatsapp" | "pricing" | "complete";
-type PlanName = "starter" | "business" | "pro";
-
-interface Plan {
-  id: PlanName;
-  name: string;
-  price: number;
-  priceDisplay: string;
-  description: string;
-  popular?: boolean;
-  features: string[];
-}
+type PlanName = OnboardingPricingPlan["id"];
 
 export default function OnboardingPageEmbedded() {
   const [user, setUser] = useState<User | null>(null);
@@ -56,7 +50,12 @@ export default function OnboardingPageEmbedded() {
   // Domain-based pricing
   const [currentDomain, setCurrentDomain] =
     useState<ProductDomain>("dashboard");
-  const [PLANS, setPLANS] = useState<Plan[]>([]);
+  const [PLANS, setPLANS] = useState<OnboardingPricingPlan[]>([]);
+  // Whether the current domain requires WhatsApp connection
+  // Read from lib/domain/config.ts — single source of truth
+  const [whatsappRequired, setWhatsappRequired] = useState(true);
+  // Whether to show the WhatsApp connect step even if optional (shop)
+  const [showWhatsappStep, setShowWhatsappStep] = useState(true);
 
   // Guard: prevent concurrent/duplicate trial start API calls
   const trialStartInProgressRef = useRef(false);
@@ -68,15 +67,22 @@ export default function OnboardingPageEmbedded() {
     const domain = detectDomainFromWindow();
     setCurrentDomain(domain);
 
+    // Read WhatsApp requirement from centralized config
+    const domainConfig = getDomainVisibility(domain as any);
+    const domainRequiresWhatsApp = domainConfig.requiresWhatsApp;
+    setWhatsappRequired(domainRequiresWhatsApp);
+    // Offer WhatsApp connect step for shop onboarding even if optional
+    setShowWhatsappStep(domainRequiresWhatsApp || domain === "shop");
+
     const domainPricing = getPricingForDomain(domain);
-    const plans = domainPricing.plans.map((plan) => ({
+    const plans: OnboardingPricingPlan[] = domainPricing.plans.map((plan) => ({
       id: plan.id as PlanName,
       name: plan.name,
-      price: plan.price,
       priceDisplay: plan.priceDisplay,
       description: plan.description,
       popular: plan.popular,
       features: plan.features as string[],
+      tagline: plan.tagline,
     }));
     setPLANS(plans);
   }, []);
@@ -100,29 +106,43 @@ export default function OnboardingPageEmbedded() {
   }, [router]);
 
   const checkOnboardingStatus = async (): Promise<boolean> => {
-    // CACHE BUST: v4-fix-2024-04-05 - If you don't see this, clear browser cache!
-    console.log("[onboarding-embedded] checkOnboardingStatus START - v4-fix-2024-04-05");
+    // CACHE BUST: v6-domain-aware-whatsapp — domain-aware WhatsApp check
+    console.log(
+      "[onboarding-embedded] checkOnboardingStatus START - v6-domain-aware",
+    );
     try {
       const onboardingResponse = await fetch("/api/onboarding/check");
-      
+
       // Handle 503 Service Unavailable - server can't verify, retry with backoff
       if (onboardingResponse.status === 503) {
         console.warn("[onboarding-embedded] Onboarding check 503, retrying...");
-        await new Promise(resolve => setTimeout(resolve, 1000));
+        await new Promise((resolve) => setTimeout(resolve, 1000));
         return checkOnboardingStatus(); // Simple retry once
       }
 
       if (!onboardingResponse.ok) {
-        console.error("[onboarding-embedded] Onboarding check failed:", onboardingResponse.status);
+        console.error(
+          "[onboarding-embedded] Onboarding check failed:",
+          onboardingResponse.status,
+        );
         return false; // Show onboarding page on error
       }
 
       const onboardingData = await onboardingResponse.json();
+
+      // Read domain config for WhatsApp requirement
+      const domain = detectDomainFromWindow();
+      const domainConfig = getDomainVisibility(domain as any);
+      const domainRequiresWhatsApp = domainConfig.requiresWhatsApp;
+      const shouldShowWhatsappStep = domainRequiresWhatsApp || domain === "shop";
+
       console.log("[onboarding-embedded] Received data:", {
         onboardingCompleted: onboardingData.onboardingCompleted,
         hasActiveSubscription: onboardingData.hasActiveSubscription,
         hasActiveTrial: onboardingData.hasActiveTrial,
         whatsappConnected: onboardingData.whatsappConnected,
+        currentDomain: domain,
+        domainRequiresWhatsApp,
       });
 
       // v4: Handle "error" as explicit third state
@@ -137,7 +157,7 @@ export default function OnboardingPageEmbedded() {
           hasActiveSubscription: onboardingData.hasActiveSubscription,
           hasActiveTrial: onboardingData.hasActiveTrial,
         });
-        setStep("whatsapp");
+        setStep(shouldShowWhatsappStep ? "whatsapp" : "pricing");
         return false;
       }
 
@@ -146,41 +166,47 @@ export default function OnboardingPageEmbedded() {
         onboardingData.hasActiveSubscription === true ||
         onboardingData.hasActiveTrial === true;
 
+      // Determine if WhatsApp requirement is satisfied
+      const whatsappSatisfied = !domainRequiresWhatsApp || onboardingData.whatsappConnected === true;
+
       console.log("[onboarding-embedded] Decision values:", {
         hasProductAccess,
         hasActiveSubscription: onboardingData.hasActiveSubscription,
         hasActiveTrial: onboardingData.hasActiveTrial,
         whatsappConnected: onboardingData.whatsappConnected,
+        domainRequiresWhatsApp,
+        whatsappSatisfied,
       });
 
-      // CRITICAL FIX: Only redirect if user has PAID subscription
-      if (onboardingData.hasActiveSubscription === true) {
-        console.log("[onboarding-embedded] User has PAID subscription, redirecting to dashboard");
-        router.push("/dashboard");
-        return true;
-      }
-
-      // Only redirect if has product access AND WhatsApp connected
-      if (hasProductAccess && onboardingData.whatsappConnected === true) {
-        console.log("[onboarding-embedded] Has product access AND WhatsApp, redirecting to dashboard");
+      // CRITICAL FIX (v6): For domains that DON'T require WhatsApp,
+      // redirect to dashboard if user has product access — don't check WhatsApp.
+      if (hasProductAccess && whatsappSatisfied) {
+        console.log(
+          "[onboarding-embedded] Has product access AND WhatsApp satisfied, redirecting to dashboard",
+        );
         router.push("/dashboard");
         return true;
       }
 
       console.log("[onboarding-embedded] NOT redirecting - showing onboarding");
 
-      // Check if WhatsApp is already connected
-      if (onboardingData.whatsappConnected === true) {
-        console.log("[onboarding-embedded] WhatsApp connected, showing pricing step");
+      // Decide which step to show:
+      // - If WhatsApp step is not shown for this domain: pricing
+      // - If shown and already connected: pricing
+      // - If shown and not connected: WhatsApp connect (required or optional)
+      if (!shouldShowWhatsappStep) {
+        setStep("pricing");
+      } else if (onboardingData.whatsappConnected === true) {
         setStep("pricing");
       } else {
-        console.log("[onboarding-embedded] No WhatsApp, showing connection step");
         setStep("whatsapp");
       }
 
       return false;
     } catch (error) {
       console.error("[onboarding-embedded] Error:", error);
+      // Fail-safe: keep user on a deterministic step instead of blank UI
+      setStep(showWhatsappStep ? "whatsapp" : "pricing");
       return false;
     }
   };
@@ -212,7 +238,9 @@ export default function OnboardingPageEmbedded() {
     // Guard: prevent concurrent/duplicate calls (e.g., double-click,
     // React StrictMode double-invoke, or redirect-loop re-mount)
     if (trialStartInProgressRef.current) {
-      console.warn("[trial] Start already in progress, ignoring duplicate call");
+      console.warn(
+        "[trial] Start already in progress, ignoring duplicate call",
+      );
       return;
     }
     trialStartInProgressRef.current = true;
@@ -421,6 +449,8 @@ export default function OnboardingPageEmbedded() {
     return <SpaceshipLoader text="Loading" />;
   }
 
+  const isPricingStep = step === "pricing";
+
   return (
     <div className="onboarding-container onboarding-two-step">
       {/* Left Sidebar */}
@@ -432,12 +462,16 @@ export default function OnboardingPageEmbedded() {
 
         <div className="sidebar-header">
           <h1>
-            {step === "whatsapp" && "Connect WhatsApp Business"}
+            {step === "whatsapp" &&
+              showWhatsappStep &&
+              (whatsappRequired
+                ? "Connect WhatsApp Business"
+                : "Connect WhatsApp (Optional)")}
             {step === "pricing" && "Choose Your Plan"}
             {step === "complete" && "Setup Complete!"}
           </h1>
           <p className="sidebar-description">
-            {step === "whatsapp" &&
+            {step === "whatsapp" && showWhatsappStep &&
               "Connect your WhatsApp Business Account in one simple step using Meta's official Embedded Signup flow."}
             {step === "pricing" &&
               "Select a plan that fits your business needs. You can upgrade or downgrade anytime."}
@@ -446,22 +480,28 @@ export default function OnboardingPageEmbedded() {
           </p>
         </div>
 
-        {/* Step Indicator */}
+        {/* Step Indicator — adapts dynamically based on domain */}
         <div className="onboarding-steps">
-          <div
-            className={`step-item ${step === "whatsapp" ? "active" : "completed"}`}
-          >
-            <div className="step-number">{step === "whatsapp" ? "1" : "✓"}</div>
-            <span>Connect WhatsApp</span>
-          </div>
+          {showWhatsappStep && (
+            <div
+              className={`step-item ${step === "whatsapp" ? "active" : "completed"}`}
+            >
+              <div className="step-number">{step === "whatsapp" ? "1" : "✓"}</div>
+              <span>
+                {whatsappRequired
+                  ? "Connect WhatsApp"
+                  : "Connect WhatsApp (Optional)"}
+              </span>
+            </div>
+          )}
           <div
             className={`step-item ${step === "pricing" ? "active" : step === "complete" ? "completed" : ""}`}
           >
-            <div className="step-number">{step === "complete" ? "✓" : "2"}</div>
+            <div className="step-number">{step === "complete" ? "✓" : showWhatsappStep ? "2" : "1"}</div>
             <span>Choose Plan</span>
           </div>
           <div className={`step-item ${step === "complete" ? "active" : ""}`}>
-            <div className="step-number">3</div>
+            <div className="step-number">{showWhatsappStep ? "3" : "2"}</div>
             <span>Start Using</span>
           </div>
         </div>
@@ -479,7 +519,7 @@ export default function OnboardingPageEmbedded() {
             <path d="M12 16v-4M12 8h.01" />
           </svg>
           <p>
-            {step === "whatsapp" &&
+            {step === "whatsapp" && showWhatsappStep &&
               "Your WhatsApp Business Account credentials remain with Meta. We only access what you explicitly authorize."}
             {step === "pricing" &&
               "Secure payments powered by Razorpay. All plans include WhatsApp API costs."}
@@ -490,7 +530,9 @@ export default function OnboardingPageEmbedded() {
       </div>
 
       {/* Right Panel - Dynamic Content Based on Step */}
-      <div className="onboarding-main onboarding-main-embedded">
+      <div
+        className={`onboarding-main onboarding-main-embedded ${isPricingStep ? "onboarding-main-embedded--pricing" : ""}`}
+      >
         {/* Mobile Header */}
         <div className="mobile-header">
           <img src="/logo.png" alt="Flowauxi Logo" />
@@ -498,7 +540,9 @@ export default function OnboardingPageEmbedded() {
         </div>
 
         {/* Main Content */}
-        <div className="embedded-content">
+        <div
+          className={`embedded-content ${isPricingStep ? "embedded-content--pricing" : ""}`}
+        >
           {step === "whatsapp" && (
             <WhatsAppEmbeddedSignupForm
               onSuccess={handleConnectionSuccess}
@@ -507,75 +551,13 @@ export default function OnboardingPageEmbedded() {
           )}
 
           {step === "pricing" && (
-            <div className="pricing-step">
-              <h2>Select Your Plan</h2>
-              <p className="pricing-subtitle">
-                WhatsApp connected! Now choose a plan to activate your AI
-                assistant.
-              </p>
-
-              {paymentError && (
-                <div className="payment-error">
-                  <p>{paymentError}</p>
-                  <button onClick={() => setPaymentError(null)}>✕</button>
-                </div>
-              )}
-
-              <div className="pricing-cards-grid">
-                {PLANS.map((plan) => {
-                  const isFreeTrial = plan.id === "starter";
-                  return (
-                    <div
-                      key={plan.id}
-                      className={`pricing-card ${plan.popular ? "popular" : ""}`}
-                    >
-                      {isFreeTrial && (
-                        <div className="free-trial-badge">
-                          ✨ 7-Day Free Trial
-                        </div>
-                      )}
-                      {plan.popular && !isFreeTrial && (
-                        <div className="popular-badge">Most Popular</div>
-                      )}
-                      <h3>{plan.name}</h3>
-                      <p className="plan-description">{plan.description}</p>
-                      <div className="plan-price">
-                        <span className="price">{plan.priceDisplay}</span>
-                        <span className="period">/month</span>
-                      </div>
-                      <ul className="plan-features">
-                        {plan.features.map((feature, idx) => (
-                          <li key={idx}>
-                            <svg viewBox="0 0 20 20" fill="currentColor">
-                              <path
-                                fillRule="evenodd"
-                                d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
-                                clipRule="evenodd"
-                              />
-                            </svg>
-                            {feature}
-                          </li>
-                        ))}
-                      </ul>
-                      <button
-                        className={`plan-button ${plan.popular || isFreeTrial ? "primary" : ""}`}
-                        onClick={() => handleSelectPlan(plan.id)}
-                        disabled={paymentLoading !== null}
-                      >
-                        {paymentLoading === plan.id
-                          ? "Processing..."
-                          : isFreeTrial
-                            ? "Start Free Trial"
-                            : "Select Plan"}
-                      </button>
-                      {isFreeTrial && (
-                        <p className="trial-note">No credit card required</p>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
+            <OnboardingPricingReplica
+              plans={PLANS}
+              paymentLoading={paymentLoading}
+              paymentError={paymentError}
+              onDismissError={() => setPaymentError(null)}
+              onSelectPlan={(planId) => handleSelectPlan(planId)}
+            />
           )}
 
           {step === "complete" && (
@@ -589,340 +571,6 @@ export default function OnboardingPageEmbedded() {
           )}
         </div>
       </div>
-
-      <style jsx>{`
-        .onboarding-steps {
-          margin-top: 40px;
-          display: flex;
-          flex-direction: column;
-          gap: 16px;
-        }
-
-        .step-item {
-          display: flex;
-          align-items: center;
-          gap: 12px;
-          padding: 12px 16px;
-          border-radius: 12px;
-          background: rgba(255, 255, 255, 0.05);
-          transition: all 0.3s ease;
-        }
-
-        .step-item.active {
-          background: rgba(34, 193, 90, 0.15);
-          border: 1px solid rgba(34, 193, 90, 0.3);
-        }
-
-        .step-item.completed {
-          opacity: 0.7;
-        }
-
-        .step-number {
-          width: 28px;
-          height: 28px;
-          border-radius: 50%;
-          background: rgba(255, 255, 255, 0.1);
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          font-size: 14px;
-          font-weight: 600;
-          color: white;
-        }
-
-        .step-item.active .step-number {
-          background: #22c15a;
-        }
-
-        .step-item.completed .step-number {
-          background: #22c15a;
-        }
-
-        .step-item span {
-          color: rgba(255, 255, 255, 0.8);
-          font-size: 14px;
-        }
-
-        .sidebar-note {
-          position: absolute;
-          bottom: 30px;
-          left: 0;
-          right: 0;
-          padding: 0 2.5rem;
-          display: flex;
-          align-items: flex-start;
-          gap: 12px;
-        }
-
-        .sidebar-note svg {
-          flex-shrink: 0;
-          color: rgba(255, 255, 255, 0.4);
-          margin-top: 2px;
-        }
-
-        .sidebar-note p {
-          margin: 0;
-          font-size: 13px;
-          line-height: 1.5;
-          color: rgba(255, 255, 255, 0.6);
-        }
-
-        .pricing-step {
-          width: 100%;
-          max-width: 1200px;
-          padding: 40px 20px;
-          margin: 0 auto;
-          box-sizing: border-box;
-        }
-
-        .pricing-step h2 {
-          font-size: 32px;
-          font-weight: 700;
-          margin: 0 0 12px;
-          color: var(--text-primary, #111);
-          text-align: center;
-        }
-
-        .pricing-subtitle {
-          color: var(--text-secondary, #6b7280);
-          margin: 0 0 40px;
-          font-size: 16px;
-          text-align: center;
-        }
-
-        .payment-error {
-          display: flex;
-          align-items: center;
-          justify-content: space-between;
-          background: #fef2f2;
-          border: 1px solid #fca5a5;
-          border-radius: 12px;
-          padding: 16px 20px;
-          margin-bottom: 24px;
-        }
-
-        .payment-error p {
-          margin: 0;
-          color: #dc2626;
-          font-size: 14px;
-        }
-
-        .payment-error button {
-          background: none;
-          border: none;
-          color: #dc2626;
-          cursor: pointer;
-          font-size: 18px;
-        }
-
-        .pricing-cards-grid {
-          display: grid;
-          grid-template-columns: repeat(3, 1fr);
-          gap: 24px;
-          max-width: 1100px;
-          margin: 0 auto;
-        }
-
-        @media (max-width: 1024px) {
-          .pricing-cards-grid {
-            grid-template-columns: repeat(2, 1fr);
-            gap: 20px;
-          }
-        }
-
-        @media (max-width: 768px) {
-          .onboarding-main-embedded {
-            overflow-y: auto !important;
-            -webkit-overflow-scrolling: touch;
-            height: auto !important;
-            min-height: auto !important;
-          }
-
-          .embedded-content {
-            max-height: none !important;
-            height: auto !important;
-            overflow: visible !important;
-            align-items: flex-start;
-            display: block;
-            padding-bottom: 40px;
-          }
-
-          .pricing-step {
-            padding: 20px 16px 40px;
-            width: 100%;
-            min-height: auto !important;
-          }
-
-          .pricing-step h2 {
-            font-size: 24px;
-          }
-
-          .pricing-cards-grid {
-            grid-template-columns: 1fr;
-            gap: 20px;
-            width: 100%;
-            display: flex !important;
-            flex-direction: column;
-          }
-
-          .pricing-card {
-            width: 100% !important;
-            max-width: 100% !important;
-            margin: 0 auto;
-          }
-        }
-
-        .pricing-card {
-          background: white;
-          border: 2px solid #e5e7eb;
-          border-radius: 20px;
-          padding: 32px 28px;
-          position: relative;
-          transition: all 0.3s ease;
-          display: flex;
-          flex-direction: column;
-          min-width: 280px;
-        }
-
-        .pricing-card:hover {
-          border-color: #22c15a;
-          transform: translateY(-6px);
-          box-shadow: 0 16px 48px rgba(0, 0, 0, 0.12);
-        }
-
-        .pricing-card.popular {
-          border-color: #22c15a;
-          background: linear-gradient(180deg, #ffffff 0%, #f0fdf4 100%);
-        }
-
-        .popular-badge {
-          position: absolute;
-          top: -12px;
-          left: 50%;
-          transform: translateX(-50%);
-          background: linear-gradient(135deg, #22c15a 0%, #10b981 100%);
-          color: white;
-          padding: 6px 16px;
-          border-radius: 20px;
-          font-size: 12px;
-          font-weight: 600;
-          text-transform: uppercase;
-        }
-
-        .pricing-card h3 {
-          font-size: 20px;
-          font-weight: 700;
-          margin: 0 0 4px;
-          color: #111;
-        }
-
-        .plan-description {
-          color: #6b7280;
-          font-size: 15px;
-          margin: 0 0 20px;
-          line-height: 1.4;
-        }
-
-        .plan-price {
-          margin-bottom: 24px;
-          padding-bottom: 24px;
-          border-bottom: 1px solid #f3f4f6;
-        }
-
-        .plan-price .price {
-          font-size: 36px;
-          font-weight: 800;
-          color: #111;
-          letter-spacing: -0.02em;
-        }
-
-        .plan-price .period {
-          font-size: 16px;
-          color: #6b7280;
-          font-weight: 500;
-        }
-
-        .plan-features {
-          list-style: none;
-          padding: 0;
-          margin: 0 0 28px;
-          flex: 1;
-        }
-
-        .plan-features li {
-          display: flex;
-          align-items: flex-start;
-          gap: 10px;
-          padding: 10px 0;
-          font-size: 14px;
-          color: #374151;
-          line-height: 1.5;
-        }
-
-        .plan-features li svg {
-          width: 16px;
-          height: 16px;
-          color: #22c15a;
-          flex-shrink: 0;
-        }
-
-        .plan-button {
-          width: 100%;
-          padding: 14px;
-          border: 2px solid #e5e7eb;
-          border-radius: 10px;
-          background: white;
-          font-size: 15px;
-          font-weight: 600;
-          cursor: pointer;
-          transition: all 0.2s ease;
-        }
-
-        .plan-button:hover {
-          border-color: #22c15a;
-          background: #f0fdf4;
-        }
-
-        .plan-button.primary {
-          background: #111;
-          border-color: #111;
-          color: white;
-        }
-
-        .plan-button.primary:hover {
-          background: #22c15a;
-          border-color: #22c15a;
-        }
-
-        .plan-button:disabled {
-          opacity: 0.7;
-          cursor: not-allowed;
-        }
-
-        .success-message {
-          text-align: center;
-          padding: 60px 40px;
-          background: var(--card-bg, rgba(255, 255, 255, 0.05));
-          border-radius: 16px;
-          border: 1px solid var(--border-color, rgba(255, 255, 255, 0.1));
-        }
-
-        .success-icon {
-          font-size: 64px;
-          margin-bottom: 24px;
-        }
-
-        .success-message h2 {
-          color: #10b981;
-          margin: 0 0 12px;
-          font-size: 24px;
-        }
-
-        .success-message p {
-          color: var(--text-secondary);
-          margin: 0;
-        }
-      `}</style>
     </div>
   );
 }

@@ -81,26 +81,37 @@ const GoogleIcon = memo(() => (
 ));
 GoogleIcon.displayName = "GoogleIcon";
 
-// Helper function to create session with retry
-async function createSessionWithRetry(
+// Helper function to provision user + set session cookie (canonical path)
+async function syncWithRetry(
   idToken: string,
-  retries = 2,
-): Promise<boolean> {
+  allowCreate: boolean,
+  retries = 1,
+): Promise<{ ok: boolean; status: number; code?: string; message?: string }> {
   for (let i = 0; i <= retries; i++) {
     try {
-      const response = await fetch("/api/auth/login", {
+      const response = await fetch("/api/auth/sync", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ idToken }),
+        credentials: "include",
+        body: JSON.stringify({ idToken, allowCreate }),
       });
-      if (response.ok) return true;
-      if (i === retries) throw new Error("Session creation failed");
+
+      if (response.ok) return { ok: true, status: response.status };
+
+      const errorData = await response.json().catch(() => ({}));
+      const code = errorData.code || errorData.error;
+      const message = errorData.message || errorData.error;
+
+      if (i === retries) return { ok: false, status: response.status, code, message };
     } catch (error) {
-      if (i === retries) throw error;
-      await new Promise((resolve) => setTimeout(resolve, 100 * (i + 1)));
+      if (i === retries) {
+        return { ok: false, status: 0, code: "NETWORK_ERROR", message: "Failed to reach auth server" };
+      }
+      await new Promise((resolve) => setTimeout(resolve, 150 * (i + 1)));
     }
   }
-  return false;
+
+  return { ok: false, status: 0, code: "UNKNOWN", message: "Auth sync failed" };
 }
 
 // Helper function to check if user has completed WhatsApp onboarding
@@ -362,7 +373,13 @@ export default function SignupPage() {
   const debouncedPassword = useDebounce(password, 300);
   const debouncedConfirmPassword = useDebounce(confirmPassword, 300);
 
+  const [domain, setDomain] = useState<string>("dashboard");
   const router = useRouter();
+
+  // Resolve current domain for dynamic marketing copy
+  useEffect(() => {
+    setDomain(getProductDomainFromBrowser());
+  }, []);
 
   // Check for redirect result on mount (ONLY if we detect a redirect return)
   useEffect(() => {
@@ -403,28 +420,19 @@ export default function SignupPage() {
             }
           }
 
-          // Create session
-          const sessionSuccess = await createSessionWithRetry(idToken);
-          if (!sessionSuccess) {
-            setError("Failed to create session. Please try again.");
+          // Provision user + create session cookie (canonical)
+          const syncResult = await syncWithRetry(idToken, true);
+          if (!syncResult.ok) {
+            setError(
+              syncResult.code === "UPSTREAM_TIMEOUT"
+                ? "Signup is taking too long. Please retry."
+                : "Failed to complete signup. Please try again.",
+            );
             setGoogleLoading(false);
             setIsRedirectPending(false);
             await auth.signOut();
             return;
           }
-
-          // Create user record
-          await fetch("/api/auth/create-user", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              firebase_uid: result.user.user.uid,
-              full_name: result.user.user.displayName || "",
-              email: result.user.user.email || "",
-              phone: "",
-              signup_domain: getProductDomainFromBrowser(),
-            }),
-          });
 
           // Check onboarding and redirect
           const onboardingCompleted = await checkOnboardingStatus();
@@ -528,43 +536,30 @@ export default function SignupPage() {
 
         const idToken = await userCredential.user.getIdToken();
 
-        // Step 2: Create session first (critical path)
-        const sessionSuccess = await createSessionWithRetry(idToken);
-        if (!sessionSuccess) {
-          throw new Error("Failed to create session");
+        // Step 2: Provision user + set session cookie (canonical)
+const syncResult = await syncWithRetry(idToken, true);
+        if (!syncResult.ok) {
+          // Graceful degradation: if product provisioning fails
+          // but user was created, redirect to onboarding instead of blocking
+          if (syncResult.code === "PRODUCT_NOT_ENABLED") {
+            console.warn(
+              "[Signup] Product not auto-provisioned, redirecting to onboarding",
+            );
+            router.push(`/onboarding-embedded?domain=${domain}`);
+            return;
+          }
+          throw new Error(syncResult.code || "AUTH_SYNC_FAILED");
         }
 
-        // Step 3: PARALLEL - Create user + send verification
-        const [userCreationResult, verificationResult] =
-          await Promise.allSettled([
-            fetch("/api/auth/create-user", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                firebase_uid: userCredential.user.uid,
-                full_name: name,
-                email: email,
-                phone: phone,
-                signup_domain: getProductDomainFromBrowser(),
-              }),
-            }),
-            fetch("/api/auth/send-verification", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                userId: userCredential.user.uid,
-                email: email,
-              }),
-            }),
-          ]);
-
-        if (userCreationResult.status === "rejected") {
-          console.error("User creation error:", userCreationResult.reason);
-        }
-
-        if (verificationResult.status === "rejected") {
-          console.error("Verification email error:", verificationResult.reason);
-        }
+        // Step 3: Send verification email (best-effort)
+        fetch("/api/auth/send-verification", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            userId: userCredential.user.uid,
+            email: email,
+          }),
+        }).catch((e) => console.error("Verification email error:", e));
 
         router.push("/verify-email");
       } catch (err: any) {
@@ -663,9 +658,16 @@ export default function SignupPage() {
         // ════════════════════════════════════════════════════════════════════
         // STEP 3: Create Session (Critical Path)
         // ════════════════════════════════════════════════════════════════════
-        const sessionSuccess = await createSessionWithRetry(idToken);
-        if (!sessionSuccess) {
-          setError("Failed to create session. Please try again.");
+const syncResult = await syncWithRetry(idToken, true);
+        if (!syncResult.ok) {
+          if (syncResult.code === "PRODUCT_NOT_ENABLED") {
+            console.warn(
+              "[Signup] Product not auto-provisioned, redirecting to onboarding",
+            );
+            router.push(`/onboarding-embedded?domain=${domain}`);
+            return;
+          }
+          setError("Failed to complete signup. Please try again.");
           setGoogleLoading(false);
           await auth.signOut();
           return;
@@ -674,20 +676,7 @@ export default function SignupPage() {
         // ════════════════════════════════════════════════════════════════════
         // STEP 4: Create User Record (Non-blocking)
         // ════════════════════════════════════════════════════════════════════
-        fetch("/api/auth/create-user", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            firebase_uid: result.user.user.uid,
-            full_name: result.user.user.displayName || "",
-            email: result.user.user.email || "",
-            phone: "",
-            signup_domain: getProductDomainFromBrowser(),
-          }),
-        }).catch((err) => {
-          // Non-critical: log but don't block flow
-          console.error("[Auth] User creation failed (non-blocking):", err);
-        });
+        // User provisioning is handled by /api/auth/sync above.
 
         // ════════════════════════════════════════════════════════════════════
         // STEP 5: Session Confirmation with Exponential Backoff
@@ -812,6 +801,56 @@ export default function SignupPage() {
     }
   }, [router]);
 
+  // Dynamic left pane content
+  const isBooking = domain === "booking";
+  
+  const marketingContent = {
+    quoteLabel: isBooking ? "WHY FLOWAUXI BOOKINGS" : "WHY FLOWAUXI",
+    heading: isBooking ? (
+      <>
+        Provide
+        <br />
+        Lovely
+        <br />
+        Services
+      </>
+    ) : (
+      <>
+        Automate
+        <br />
+        Your WhatsApp
+        <br />
+        Business
+      </>
+    ),
+    subText: isBooking ? (
+      <>
+        List your offerings. Get booked instantly
+        <br />
+        and grow your community without the hassle.
+      </>
+    ) : (
+      <>
+        Join businesses across India automating customer conversations
+        <br />
+        and scaling sales without hiring extra staff.
+      </>
+    ),
+    benefits: isBooking ? (
+      <div className={styles.benefitsList}>
+        <div className={styles.benefitItem}>✓ Instant booking confirmation</div>
+        <div className={styles.benefitItem}>✓ Automated smart reminders</div>
+        <div className={styles.benefitItem}>✓ Real-time calendar sync</div>
+      </div>
+    ) : (
+      <div className={styles.benefitsList}>
+        <div className={styles.benefitItem}>✓ AI-powered WhatsApp automation</div>
+        <div className={styles.benefitItem}>✓ Automated orders & invoicing</div>
+        <div className={styles.benefitItem}>✓ Broadcast campaigns & analytics</div>
+      </div>
+    )
+  };
+
   // Show loading state if redirect is pending
   if (isRedirectPending) {
     return (
@@ -819,27 +858,17 @@ export default function SignupPage() {
         <div className={styles.authSplit}>
           <div className={styles.authLeft}>
             <div className={styles.quoteSection}>
-              <p className={styles.quoteLabel}>WHY FLOWAUXI</p>
+              <p className={styles.quoteLabel}>{marketingContent.quoteLabel}</p>
             </div>
             <div className={styles.gradientOverlay}></div>
             <div className={styles.contentSection}>
               <h1 className={styles.mainHeading}>
-                Automate
-                <br />
-                Your WhatsApp
-                <br />
-                Business
+                {marketingContent.heading}
               </h1>
               <p className={styles.subText}>
-                Join 500+ businesses automating customer conversations
-                <br />
-                and scaling sales without hiring extra staff.
+                {marketingContent.subText}
               </p>
-              <div className={styles.benefitsList}>
-                <div className={styles.benefitItem}>✓ AI-powered WhatsApp automation</div>
-                <div className={styles.benefitItem}>✓ Automated orders & invoicing</div>
-                <div className={styles.benefitItem}>✓ Broadcast campaigns & analytics</div>
-              </div>
+              {marketingContent.benefits}
             </div>
           </div>
           <div className={styles.authRight}>
@@ -873,27 +902,17 @@ export default function SignupPage() {
         {/* Left Side - Gradient */}
         <div className={styles.authLeft}>
           <div className={styles.quoteSection}>
-            <p className={styles.quoteLabel}>WHY FLOWAUXI</p>
+            <p className={styles.quoteLabel}>{marketingContent.quoteLabel}</p>
           </div>
           <div className={styles.gradientOverlay}></div>
           <div className={styles.contentSection}>
             <h1 className={styles.mainHeading}>
-              Automate
-              <br />
-              Your WhatsApp
-              <br />
-              Business
+              {marketingContent.heading}
             </h1>
             <p className={styles.subText}>
-              Join 500+ businesses automating customer conversations
-              <br />
-              and scaling sales without hiring extra staff.
+              {marketingContent.subText}
             </p>
-            <div className={styles.benefitsList}>
-              <div className={styles.benefitItem}>✓ AI-powered WhatsApp automation</div>
-              <div className={styles.benefitItem}>✓ Automated orders & invoicing</div>
-              <div className={styles.benefitItem}>✓ Broadcast campaigns & analytics</div>
-            </div>
+            {marketingContent.benefits}
           </div>
         </div>
 

@@ -26,6 +26,8 @@ type PaymentStatus =
   | "processing"
   | "completed"
   | "active"
+  | "trialing"
+  | "grace_period"
   | "failed"
   | "expired"
   | "cancelled";
@@ -43,12 +45,12 @@ interface SubscriptionData {
 
 interface StatusCheckResult {
   success: boolean;
-  has_subscription: boolean;
+  hasSubscription: boolean;
   subscription: SubscriptionData | null;
-  request_id?: string;
+  requestId?: string;
+  code?: string;
+  message?: string;
 }
-
-const BACKEND_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
 
 // Polling configuration
 const PHASE_1_INTERVAL = 2000; // 2 seconds
@@ -82,6 +84,7 @@ function PaymentStatusContent() {
   );
 
   const subscriptionId = searchParams.get("subscription_id");
+  const authTokenRef = useRef<string | null>(null);
 
   /**
    * Fetch subscription status from backend
@@ -90,11 +93,22 @@ function PaymentStatusContent() {
     if (!user) return false;
 
     try {
-      const response = await fetch(`${BACKEND_URL}/api/subscriptions/status`, {
+      // Use Next.js domain-scoped proxy (signed context server-side)
+      if (!authTokenRef.current) {
+        try {
+          authTokenRef.current = await user.getIdToken();
+        } catch {
+          authTokenRef.current = null;
+        }
+      }
+
+      const response = await fetch(`/api/billing/subscription-status`, {
         method: "GET",
         headers: {
           "Content-Type": "application/json",
-          "X-User-Id": user.uid,
+          ...(authTokenRef.current
+            ? { Authorization: `Bearer ${authTokenRef.current}` }
+            : {}),
           "X-Request-Id": requestId.current,
         },
       });
@@ -108,7 +122,12 @@ function PaymentStatusContent() {
         const status = data.subscription.status;
 
         // If completed/active, stop polling and redirect
-        if (status === "completed" || status === "active") {
+        if (
+          status === "completed" ||
+          status === "active" ||
+          status === "trialing" ||
+          status === "grace_period"
+        ) {
           setLoading(false);
 
           // Explicitly mark onboarding as complete
@@ -136,7 +155,12 @@ function PaymentStatusContent() {
         // Still processing
         return false;
       } else {
-        setError("Could not find subscription");
+        // If the backend can't find it yet, keep polling for a bit.
+        // This happens when the DB write/webhook is delayed.
+        if (elapsedTime < MAX_POLL_TIME) {
+          return false;
+        }
+        setError(data?.message || "Could not find subscription");
         setLoading(false);
         return true;
       }
@@ -145,7 +169,7 @@ function PaymentStatusContent() {
       // Don't stop polling on network errors
       return false;
     }
-  }, [user, router]);
+  }, [user, router, elapsedTime]);
 
   /**
    * Progressive polling with backoff
@@ -385,12 +409,13 @@ function PaymentStatusContent() {
                   subscription.plan_name.slice(1)}
               </span>
             </div>
-            <div className="detail-item">
-              <span className="detail-label">AI Responses</span>
-              <span className="detail-value">
-                {subscription.ai_responses_limit.toLocaleString()} / month
-              </span>
-            </div>
+	            <div className="detail-item">
+	              <span className="detail-label">AI Responses</span>
+	              <span className="detail-value">
+	                {Number(subscription.ai_responses_limit ?? 0).toLocaleString()}{" "}
+	                / month
+	              </span>
+	            </div>
           </div>
         )}
 

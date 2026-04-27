@@ -2,145 +2,161 @@
  * Enterprise Auth Helper Functions
  * Standard: Google Workspace / Zoho One Level
  * Purpose: Domain detection, product validation, session management
+ *
+ * ARCHITECTURE: Domain resolution delegates to canonical resolveDomain()
+ * from lib/domain/config.ts. Product eligibility derives from PRODUCT_REGISTRY.
+ * No hardcoded allow-lists or domain maps — adding a product requires
+ * editing ONLY PRODUCT_REGISTRY + domain/config.ts.
  */
 
 import { NextRequest } from "next/server";
 import { ProductDomain, isValidProductDomain } from "@/types/auth.types";
+import { PRODUCT_REGISTRY } from "@/lib/product/registry";
+import { resolveDomain } from "@/lib/domain/config";
 
 /**
- * Detect the current product domain from the request
+ * Detect the current product domain from the request.
  *
- * Priority (Production):
- * 1. Subdomain (shop.flowauxi.com → 'shop')
- * 2. Header X-Product-Context (set by middleware)
- * 3. Default: 'dashboard'
- *
- * Priority (Development):
- * 1. Port (3001 → 'shop', 3002 → 'showcase', etc.)
- * 2. Query param ?product=shop
- * 3. Header X-Product-Context
- * 4. Pathname-based (/dashboard/products → 'shop')
- * 5. Default: 'dashboard'
+ * Delegates hostname/port resolution to the canonical resolveDomain()
+ * from lib/domain/config.ts, preserving ONLY the request-specific
+ * override mechanisms (X-Product-Context header, ?product= query param,
+ * pathname fallback) that have no equivalent in the canonical resolver.
  */
 export function detectProductFromRequest(request: NextRequest): ProductDomain {
-  const hostname = request.headers.get("host") || "";
-  const pathname = request.nextUrl.pathname;
-  const searchParams = request.nextUrl.searchParams;
-
-  // Check X-Product-Context header (set by middleware or dev tools)
+  // Priority 1: Explicit header override (set by middleware or dev tools)
   const productHeader = request.headers.get("x-product-context");
   if (productHeader && isValidProductDomain(productHeader)) {
     return productHeader as ProductDomain;
   }
 
-  // Production: Subdomain detection
+  // Priority 2: Canonical domain resolution (single source of truth)
+  const hostname = request.headers.get("host") || "";
+  const port = hostname.split(":")[1] || undefined;
+  const resolvedDomain = resolveDomain(hostname, port);
+
+  // In production, resolveDomain is sufficient — return it directly.
   if (process.env.NODE_ENV === "production") {
-    if (hostname.startsWith("shop.")) return "shop";
-    if (hostname.startsWith("pages.")) return "showcase";
-    if (hostname.startsWith("marketing.")) return "marketing";
-    if (hostname.startsWith("api.")) return "api";
-    if (hostname.startsWith("booking.")) return "booking";
+    return resolvedDomain;
   }
 
-  // Development: Port-based detection
-  if (process.env.NODE_ENV === "development") {
-    const port = hostname.split(":")[1];
-    if (port === "3001") return "shop";
-    if (port === "3002") return "showcase";
-    if (port === "3003") return "marketing";
-    if (port === "3004") return "api";
-    if (port === "3005") return "booking";
-
-    // Query param override
-    const productParam = searchParams.get("product");
-    if (productParam && isValidProductDomain(productParam)) {
-      return productParam as ProductDomain;
-    }
-
-    // Pathname-based detection (for development convenience)
-    if (
-      pathname.startsWith("/dashboard/products") ||
-      pathname.startsWith("/dashboard/orders")
-    ) {
-      return "shop";
-    }
-    if (
-      pathname.startsWith("/dashboard/showcase") ||
-      pathname.startsWith("/dashboard/pages")
-    ) {
-      return "showcase";
-    }
-    if (
-      pathname.startsWith("/dashboard/campaigns") ||
-      pathname.startsWith("/dashboard/marketing")
-    ) {
-      return "marketing";
-    }
+  // In development, allow query param and pathname overrides
+  // for local testing convenience (these are dev-only, not production paths)
+  const searchParams = request.nextUrl.searchParams;
+  const productParam = searchParams.get("product");
+  if (productParam && isValidProductDomain(productParam)) {
+    return productParam as ProductDomain;
   }
 
-  // Default: dashboard (always accessible)
-  return "dashboard";
+  const pathname = request.nextUrl.pathname;
+  if (pathname.startsWith("/dashboard/products") || pathname.startsWith("/dashboard/orders")) {
+    return "shop";
+  }
+  if (pathname.startsWith("/dashboard/showcase") || pathname.startsWith("/dashboard/pages")) {
+    return "showcase";
+  }
+  if (pathname.startsWith("/dashboard/campaigns") || pathname.startsWith("/dashboard/marketing")) {
+    return "marketing";
+  }
+  if (pathname.startsWith("/dashboard/appointments") || pathname.startsWith("/dashboard/services")) {
+    return "booking";
+  }
+
+  return resolvedDomain;
 }
 
 /**
- * Get the canonical domain URL for a product
+ * Get the canonical domain URL for a product.
+ * Derives hostname and port from PRODUCT_REGISTRY — no hardcoded maps.
  */
 export function getProductDomainURL(product: ProductDomain): string {
+  const config = PRODUCT_REGISTRY[product];
+  if (!config) return process.env.NEXT_PUBLIC_BASE_URL || "https://flowauxi.com";
+
   if (process.env.NODE_ENV === "production") {
-    const baseURL = process.env.NEXT_PUBLIC_BASE_URL || "https://flowauxi.com";
-    const subdomains: Record<ProductDomain, string> = {
-      shop: "shop.flowauxi.com",
-      showcase: "pages.flowauxi.com",
-      marketing: "marketing.flowauxi.com",
-      api: "api.flowauxi.com",
-      booking: "booking.flowauxi.com",
-      dashboard: "flowauxi.com",
-    };
-    return `https://${subdomains[product]}`;
-  } else {
-    // Development: Use ports
-    const ports: Record<ProductDomain, number> = {
-      shop: 3001,
-      showcase: 3002,
-      marketing: 3003,
-      api: 3004,
-      booking: 3005,
-      dashboard: 3000,
-    };
-    return `http://localhost:${ports[product]}`;
+    return `https://${config.domain}`;
   }
+
+  // Development: use devPort from registry
+  const port = config.devPort ?? 3000;
+  return `http://localhost:${port}`;
 }
 
 /**
  * Extract request context for audit logging
  */
 export function getRequestContext(request: NextRequest) {
+  let rawIp =
+    request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
+    request.headers.get("x-real-ip") ||
+    (request as any).ip ||
+    null;
+
+  if (rawIp) {
+    if (rawIp.startsWith("[")) {
+      rawIp = rawIp.split("]")[0].substring(1); // extract from [::1]:3005
+    } else if (rawIp.includes(":") && rawIp.split(":").length === 2) {
+      rawIp = rawIp.split(":")[0]; // extract from 127.0.0.1:3005
+    }
+  }
+
   return {
-    ip_address:
-      request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
-      request.headers.get("x-real-ip") ||
-      (request as any).ip ||
-      null,
+    ip_address: rawIp,
     user_agent: request.headers.get("user-agent") || null,
     request_id: request.headers.get("x-request-id") || crypto.randomUUID(),
+    traceparent: request.headers.get("traceparent") || null,
   };
 }
 
 /**
- * Validate that a product is available for activation
- * (Future: Check if product is deprecated, enterprise-only, etc.)
+ * Validate that a product is available for self-service activation.
+ *
+ * Derives eligibility from PRODUCT_REGISTRY — adding a product with
+ * pricing tiers automatically makes it self-service. No hardcoded lists.
+ *
+ * Products without pricing (e.g. future enterprise-only products)
+ * are excluded by design: isProductAvailableForActivation() returns false.
+ *
+ * Dashboard and API are special cases:
+ *   - Dashboard: auto-granted, never needs "activation"
+ *   - API: requires admin approval, not self-service
  */
 export function isProductAvailableForActivation(
   product: ProductDomain,
 ): boolean {
-  // Dashboard is always available but cannot be "activated" (auto-granted)
   if (product === "dashboard") return false;
-
-  // API product is not self-service (requires admin approval)
   if (product === "api") return false;
 
-  // Shop, showcase, marketing are self-service
-  return ["shop", "showcase", "marketing"].includes(product);
+  const config = PRODUCT_REGISTRY[product];
+  if (!config) return false;
+
+  return config.pricing.length > 0;
+}
+
+/**
+ * Get all self-service product domains (derived from registry).
+ * Used for PRODUCT_NOT_ENABLED responses and activation UIs.
+ * Never goes stale when new products are added to PRODUCT_REGISTRY.
+ */
+export function getSelfServiceProducts(): ProductDomain[] {
+  return (Object.keys(PRODUCT_REGISTRY) as ProductDomain[]).filter(
+    (p) => isProductAvailableForActivation(p),
+  );
+}
+
+/**
+ * Get the default (starter) plan slug for a product.
+ * Returns the product-scoped planId (e.g., "booking_starter") or
+ * "starter" as fallback for unknown products.
+ *
+ * This ensures the trial system creates memberships with the correct
+ * product-scoped plan identifier, not a generic "starter" string that
+ * may not match the backend's plan registry.
+ */
+export function getStarterPlanSlug(product: ProductDomain): string {
+  const config = PRODUCT_REGISTRY[product];
+  if (!config) return "starter";
+  const starterTier = config.pricing.find((t) => t.id === "starter");
+  return starterTier?.planId ?? "starter";
 }
 
 /**

@@ -511,7 +511,7 @@ class SubscriptionLifecycleEngine:
         user_id = sub['user_id']
         domain = sub.get('product_domain', 'shop')
 
-        # Record payment success event
+        # Record payment success event (idempotent across verify + webhook)
         self._record_event(
             subscription_id=subscription_id,
             event_type=BillingEventType.PAYMENT_CAPTURED,
@@ -520,6 +520,7 @@ class SubscriptionLifecycleEngine:
                 'razorpay_payment_id': razorpay_payment_id,
                 'previous_status': current_status,
             },
+            idempotency_key=idem_key,
             razorpay_event_id=razorpay_event_id,
             razorpay_payment_id=razorpay_payment_id,
         )
@@ -599,6 +600,10 @@ class SubscriptionLifecycleEngine:
             f"payment_success_handled sub={subscription_id} user={user_id} "
             f"domain={domain} previous_status={current_status}"
         )
+
+        # Always invalidate caches so the UI unlocks immediately even if the
+        # subscription was already active (verify/webhook race).
+        self._invalidate_caches_for_subscription(subscription_id)
 
         return True
 
@@ -991,6 +996,19 @@ class SubscriptionLifecycleEngine:
     ):
         """Record a billing event (fire-and-forget, never fails the caller)."""
         try:
+            # Idempotency guard: avoid duplicate events when verify and webhook
+            # both process the same payment.
+            if idempotency_key:
+                try:
+                    existing = self._supabase.table('billing_events').select('id').eq(
+                        'idempotency_key', idempotency_key
+                    ).limit(1).execute()
+                    if existing.data:
+                        return
+                except Exception:
+                    # Fail open: event insert will still be best-effort below
+                    pass
+
             # Get user_id from subscription if not in payload
             user_id = (payload or {}).get('user_id')
             domain = (payload or {}).get('domain')
@@ -1001,7 +1019,7 @@ class SubscriptionLifecycleEngine:
                     user_id = sub['user_id']
                     domain = domain or sub.get('product_domain')
 
-            self._supabase.table('billing_events').insert({
+            event_row = {
                 'user_id': user_id,
                 'subscription_id': subscription_id,
                 'product_domain': domain,
@@ -1014,9 +1032,28 @@ class SubscriptionLifecycleEngine:
                 'razorpay_event_id': razorpay_event_id,
                 'razorpay_payment_id': razorpay_payment_id,
                 'processed_by': 'subscription_lifecycle_engine',
-            }).execute()
+            }
+
+            if idempotency_key:
+                self._supabase.table('billing_events').upsert(
+                    event_row,
+                    on_conflict='idempotency_key',
+                ).execute()
+            else:
+                self._supabase.table('billing_events').insert(event_row).execute()
         except Exception as e:
-            # Never fail the caller — billing events are best-effort
+            # Never fail the caller — billing events are best-effort.
+            # Suppress duplicate key errors if verify/webhook races still happen.
+            try:
+                if isinstance(e, dict) and e.get('code') == '23505':
+                    return
+                args = getattr(e, 'args', None)
+                if args and isinstance(args, (list, tuple)) and args:
+                    first = args[0]
+                    if isinstance(first, dict) and first.get('code') == '23505':
+                        return
+            except Exception:
+                pass
             self.logger.error(f"billing_event_record_error: {e}")
 
     def _schedule_retry_sequence(

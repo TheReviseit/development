@@ -148,6 +148,50 @@ export {
 } from "./ctr-optimization";
 
 // =============================================================================
+// SCHEMA EXTENSIONS
+// =============================================================================
+
+export {
+  type HowToStep,
+  generateHowToSchema,
+  generateLocalBusinessSchema,
+  generateReviewSchema,
+  generatePricingSchema,
+  generatePricingRangeSchema,
+} from "./schema-extensions";
+
+// =============================================================================
+// BLOG SCHEMA
+// =============================================================================
+
+export { generateBlogSchema } from "./blog-schema";
+
+// =============================================================================
+// ENTITY DEFINITION — SINGLE SOURCE OF TRUTH
+// =============================================================================
+
+export {
+  ENABLE_REVIEWS,
+  getReviewRating,
+  ORGANIZATION_SAME_AS,
+  WIKIDATA_IDS,
+  KNOWS_ABOUT_ENTITIES,
+  FOUNDING_DATE,
+  FOUNDER_NAME,
+  VERIFIABLE_METRICS,
+} from "./entity-definition";
+
+// =============================================================================
+// INDEXNOW PROTOCOL
+// =============================================================================
+
+export {
+  submitToIndexNow,
+  notifySearchEngines,
+  batchNotifySearchEngines,
+} from "./indexnow";
+
+// =============================================================================
 // EXISTING SEO MODULES
 // =============================================================================
 

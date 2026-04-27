@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { generateFaqSchemaForPAA, validateFaqSchema } from "@/lib/seo/ctr-optimization";
 import { TOPIC_CLUSTERS, getClusterEntities } from "@/lib/seo/entity-graph";
+import { getReviewRating } from "@/lib/seo";
 
 /**
  * WhatsApp Store Builder - Pillar Page (FAANG-Level SEO)
@@ -161,13 +162,15 @@ export default function WhatsAppStorePage() {
               availability: "https://schema.org/InStock",
               description: "Free forever plan available — upgrade for advanced features",
             },
-            aggregateRating: {
-              "@type": "AggregateRating",
-              ratingValue: "4.8",
-              ratingCount: "500",
-              bestRating: "5",
-              worstRating: "1",
-            },
+            ...(getReviewRating() ? {
+              aggregateRating: {
+                "@type": "AggregateRating",
+                ratingValue: getReviewRating()!.ratingValue,
+                ratingCount: getReviewRating()!.ratingCount,
+                bestRating: getReviewRating()!.bestRating,
+                worstRating: "1",
+              },
+            } : {}),
             featureList: [
               "AI-Powered WhatsApp Chatbot",
               "Automated Order Booking",
@@ -210,7 +213,7 @@ export default function WhatsAppStorePage() {
         {/* Subtitle - Secondary Keywords */}
         <p className="text-xl text-gray-600 mb-8 max-w-3xl">
           Create your free online store with AI chatbot, automated orders, invoice delivery, payment
-          integration, and order tracking — all powered by WhatsApp. Trusted by 500+ businesses in
+          integration, and order tracking — all powered by WhatsApp. Trusted by businesses across
           India.
         </p>
 
@@ -546,7 +549,7 @@ export default function WhatsAppStorePage() {
             Create Your Free WhatsApp Store Today
           </h2>
           <p className="mb-8 text-green-100 text-lg">
-            Join 500+ businesses in India selling on WhatsApp. AI chatbot included free.
+            Join businesses across India selling on WhatsApp. AI chatbot included free.
           </p>
           <div className="flex flex-wrap gap-4 justify-center">
             <Link
@@ -613,7 +616,7 @@ export default function WhatsAppStorePage() {
           </div>
           <p className="text-gray-600 text-sm mt-4">
             This article was written by the Flowauxi team, experts in WhatsApp commerce and
-            e-commerce automation. We've helped 500+ businesses in India sell on WhatsApp. Our
+            e-commerce automation. We've helped businesses across India sell on WhatsApp. Our
             content is based on real merchant data and industry best practices.
           </p>
         </section>

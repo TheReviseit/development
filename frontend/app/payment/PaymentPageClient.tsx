@@ -14,11 +14,17 @@
 
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import logo from '@/public/logo.png';
+
+declare global {
+  interface Window {
+    Razorpay?: any;
+  }
+}
 
 // =============================================================================
 // TYPES
@@ -141,62 +147,76 @@ const DOMAIN_CONFIG: Record<string, { displayName: string; themeColor: string }>
 async function createCheckoutSession(
   planSlug: string,
   idempotencyKey: string
-): Promise<{ success: boolean; checkoutUrl?: string; error?: string }> {
-  try {
-    const response = await fetch('/api/billing/checkout-session', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        planSlug,
-        idempotencyKey,
-      }),
-    });
+): Promise<{
+  success: boolean;
+  checkoutUrl?: string;
+  sessionId?: string;
+  keyId?: string;
+  pendingSubscriptionId?: string;
+  error?: string;
+}> {
+  const maxAttempts = 3;
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 15000);
 
-    if (!response.ok) {
-      const error = await response.json();
-      
-      // Handle specific error codes
-      if (response.status === 429) {
-        return {
-          success: false,
-          error: 'Too many attempts. Please wait a moment.',
-        };
-      }
-      
-      if (response.status === 409) {
-        return {
-          success: false,
-          error: 'You already have an active subscription.',
-        };
-      }
-      
-      if (response.status === 503) {
-        return {
-          success: false,
-          error: 'Payment service temporarily unavailable. Please try again.',
-        };
+      const response = await fetch('/api/billing/checkout-session', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          planSlug,
+          idempotencyKey,
+        }),
+        signal: controller.signal,
+      });
+
+      clearTimeout(timeout);
+
+      if (!response.ok) {
+        const error = await response.json().catch(() => ({}));
+
+        // Retry only on transient gateway/service errors
+        if ((response.status === 502 || response.status === 503) && attempt < maxAttempts) {
+          await new Promise((r) => setTimeout(r, 500 * 2 ** attempt));
+          continue;
+        }
+
+        if (response.status === 429) {
+          return { success: false, error: 'Too many attempts. Please wait a moment.' };
+        }
+        if (response.status === 409) {
+          return { success: false, error: 'You already have an active subscription.' };
+        }
+        if (response.status === 503) {
+          return { success: false, error: 'Payment service temporarily unavailable. Please try again.' };
+        }
+
+        return { success: false, error: (error as any).message || 'Failed to create checkout session.' };
       }
 
+      const data = await response.json();
       return {
-        success: false,
-        error: error.message || 'Failed to create checkout session.',
+        success: true,
+        checkoutUrl: data.checkoutUrl,
+        sessionId: data.sessionId,
+        keyId: data.keyId,
+        pendingSubscriptionId: data.pendingSubscriptionId,
       };
+    } catch (error) {
+      // Retry on network/abort errors
+      if (attempt < maxAttempts) {
+        await new Promise((r) => setTimeout(r, 500 * 2 ** attempt));
+        continue;
+      }
+      console.error('Checkout session error:', error);
+      return { success: false, error: 'Network error. Please try again.' };
     }
-
-    const data = await response.json();
-    return {
-      success: true,
-      checkoutUrl: data.checkoutUrl,
-    };
-  } catch (error) {
-    console.error('Checkout session error:', error);
-    return {
-      success: false,
-      error: 'Network error. Please try again.',
-    };
   }
+
+  return { success: false, error: 'Failed to create checkout session.' };
 }
 
 // =============================================================================
@@ -214,27 +234,214 @@ export default function PaymentPageClient({
   const [isLoading, setIsLoading] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [showSupport, setShowSupport] = useState(false);
+  const [razorpayLoaded, setRazorpayLoaded] = useState(false);
+  const [fallbackCheckoutUrl, setFallbackCheckoutUrl] = useState<string | null>(null);
+  const verifyRequestId = useRef<string>(`pay_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`);
 
   const domainConfig = DOMAIN_CONFIG[tenant.productDomain] || DOMAIN_CONFIG.dashboard;
   const reasonConfig = REASON_CONFIG[reason] || REASON_CONFIG.no_subscription;
 
+  // Load Razorpay script once (Checkout.js modal)
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    if (window.Razorpay) {
+      setRazorpayLoaded(true);
+      return;
+    }
+    if (document.getElementById('razorpay-sdk')) {
+      const check = setInterval(() => {
+        if (window.Razorpay) {
+          setRazorpayLoaded(true);
+          clearInterval(check);
+        }
+      }, 100);
+      return () => clearInterval(check);
+    }
+    const script = document.createElement('script');
+    script.id = 'razorpay-sdk';
+    script.src = 'https://checkout.razorpay.com/v1/checkout.js';
+    script.async = true;
+    script.onload = () => setRazorpayLoaded(true);
+    script.onerror = () => {
+      setError('Failed to load payment system. Please refresh and try again.');
+      setRazorpayLoaded(false);
+    };
+    document.body.appendChild(script);
+  }, []);
+
+  const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+  const verifyWithRetry = useCallback(
+    async (payload: {
+      razorpay_subscription_id: string;
+      razorpay_payment_id: string;
+      razorpay_signature: string;
+    }, sessionId: string) => {
+      const maxRetries = 3;
+      let attempt = 0;
+
+      while (attempt < maxRetries) {
+        try {
+          const idempotencyKey =
+            (typeof crypto !== 'undefined' && 'randomUUID' in crypto && crypto.randomUUID())
+              ? crypto.randomUUID()
+              : `${user.userId}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+
+          const res = await fetch('/api/billing/verify-subscription', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Idempotency-Key': idempotencyKey,
+              'X-Request-Id': verifyRequestId.current,
+            },
+            body: JSON.stringify(payload),
+          });
+
+          const data = await res.json().catch(() => ({}));
+
+          // Success (or already activated)
+          if (res.ok && data?.success) {
+            router.push(`/payment/status?subscription_id=${encodeURIComponent(sessionId)}`);
+            return;
+          }
+
+          const code = data?.code as string | undefined;
+
+          // Transient: gateway unavailable / concurrent verify → backoff + retry
+          if (res.status === 202 || res.status === 429 || code === 'RAZORPAY_UNAVAILABLE' || code === 'CONCURRENT_REQUEST') {
+            attempt += 1;
+            const backoffMs = Math.min(4000, 1000 * 2 ** attempt);
+            await sleep(backoffMs);
+            continue;
+          }
+
+          // Permanent failure
+          setError(data?.message || 'Payment verification failed. Please contact support.');
+          router.push(`/payment/status?subscription_id=${encodeURIComponent(sessionId)}`);
+          return;
+        } catch (e) {
+          attempt += 1;
+          const backoffMs = Math.min(4000, 1000 * 2 ** attempt);
+          await sleep(backoffMs);
+        }
+      }
+
+      // After max retries, fall back to status polling (webhook path)
+      router.push(`/payment/status?subscription_id=${encodeURIComponent(sessionId)}`);
+    },
+    [router, user.userId],
+  );
+
   const handleSubscribe = useCallback(async (plan: PricingPlan) => {
     setIsLoading(plan.slug);
     setError(null);
+    setFallbackCheckoutUrl(null);
 
     // Generate idempotency key
     const idempotencyKey = `${user.userId}_${plan.slug}_${tenant.productDomain}_${Date.now()}`;
 
     const result = await createCheckoutSession(plan.slug, idempotencyKey);
 
-    if (result.success && result.checkoutUrl) {
-      // Redirect to Razorpay checkout
-      window.location.href = result.checkoutUrl;
-    } else {
-      setError(result.error || 'Something went wrong. Please try again.');
+    if (!result.success || !result.sessionId || !result.keyId) {
+      setError(result.error || 'Failed to start checkout. Please try again.');
+      setIsLoading(null);
+      return;
+    }
+
+    // Store hosted checkout URL as a fallback when Checkout.js is blocked
+    if (result.checkoutUrl) setFallbackCheckoutUrl(result.checkoutUrl);
+
+    // Known issue: Razorpay Checkout.js can break on legacy Android WebViews/older browsers.
+    // When detected, force hosted checkout + status polling (webhook/verify will settle).
+    const ua = typeof navigator !== 'undefined' ? navigator.userAgent || '' : '';
+    const androidMatch = ua.match(/Android\s(\d+)\./i);
+    const androidMajor = androidMatch ? Number(androidMatch[1]) : null;
+    const legacyAndroid = androidMajor !== null && androidMajor <= 7;
+
+    if (legacyAndroid && result.checkoutUrl) {
+      try {
+        window.open(result.checkoutUrl, '_blank', 'noopener,noreferrer');
+      } catch {
+        window.location.href = result.checkoutUrl;
+        return;
+      }
+      router.push(`/payment/status?subscription_id=${encodeURIComponent(result.sessionId)}`);
+      setIsLoading(null);
+      return;
+    }
+
+    if (!razorpayLoaded || !window.Razorpay) {
+      setError('Payment system is still loading. Please wait a moment and try again.');
+      setIsLoading(null);
+      return;
+    }
+
+    const sessionId = result.sessionId;
+
+    const options = {
+      key: result.keyId,
+      subscription_id: sessionId,
+      name: 'Flowauxi',
+      description: `${plan.name} Plan Subscription`,
+      image: '/logo.png',
+      handler: async function (response: any) {
+        setIsLoading('verifying');
+        await verifyWithRetry(
+          {
+            razorpay_subscription_id: response.razorpay_subscription_id,
+            razorpay_payment_id: response.razorpay_payment_id,
+            razorpay_signature: response.razorpay_signature,
+          },
+          sessionId,
+        );
+      },
+      modal: {
+        ondismiss: function () {
+          setIsLoading(null);
+          if (result.checkoutUrl) {
+            setError(
+              'Checkout was closed. If you saw "This content is blocked", disable ad blockers / tracker protection or use the secure checkout page below.',
+            );
+          }
+        },
+      },
+      theme: {
+        color: domainConfig.themeColor,
+      },
+      notes: {
+        product_domain: tenant.productDomain,
+      },
+    };
+
+    try {
+      const rzp = new window.Razorpay(options);
+
+      // If the browser/network blocks Razorpay resources, some environments surface
+      // as a payment.failed event. Capture it and show a clean fallback.
+      if (typeof rzp?.on === 'function') {
+        rzp.on('payment.failed', function (resp: any) {
+          const reasonText =
+            resp?.error?.description ||
+            resp?.error?.reason ||
+            resp?.error?.source ||
+            'Payment failed or was blocked by the browser/network.';
+
+          setError(
+            `${reasonText} ${result.checkoutUrl ? 'You can also open the secure checkout page below.' : ''}`,
+          );
+          setIsLoading(null);
+        });
+      }
+
+      rzp.open();
+    } catch (e) {
+      console.error('Razorpay open error:', e);
+      setError(
+        `Failed to open payment window. ${result.checkoutUrl ? 'You can also open the secure checkout page below.' : ''}`,
+      );
       setIsLoading(null);
     }
-  }, [user.userId, tenant.productDomain]);
+  }, [user.userId, tenant.productDomain, domainConfig.themeColor, razorpayLoaded, verifyWithRetry]);
 
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col">
@@ -297,15 +504,29 @@ export default function PaymentPageClient({
         </p>
       </div>
 
-      {/* Error Banner */}
-      {error && (
-        <div className="max-w-4xl mx-auto px-6 mb-6">
-          <div className="bg-red-50 border border-red-200 rounded-lg p-4 flex items-center justify-between">
-            <p className="text-red-700 text-sm">{error}</p>
-            <button
-              onClick={() => setError(null)}
-              className="text-red-500 hover:text-red-700"
-            >
+	      {/* Error Banner */}
+	      {error && (
+	        <div className="max-w-4xl mx-auto px-6 mb-6">
+	          <div className="bg-red-50 border border-red-200 rounded-lg p-4 flex items-center justify-between">
+	            <div className="text-red-700 text-sm">
+	              <p>{error}</p>
+	              {fallbackCheckoutUrl && (
+	                <p className="mt-2">
+	                  <a
+	                    href={fallbackCheckoutUrl}
+	                    target="_blank"
+	                    rel="noreferrer"
+	                    className="underline font-semibold"
+	                  >
+	                    Open secure checkout page
+	                  </a>
+	                </p>
+	              )}
+	            </div>
+	            <button
+	              onClick={() => setError(null)}
+	              className="text-red-500 hover:text-red-700"
+	            >
               ✕
             </button>
           </div>

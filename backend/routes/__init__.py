@@ -18,6 +18,8 @@ from .showcase_api import showcase_bp
 from .slug_cache import slug_cache_bp  # ✅ Slug cache invalidation
 from .shop_business import shop_business_bp  # ✅ Shop business update (replaces service-role writes)
 from .monitor import monitor_bp  # Platform monitoring dashboard
+from .health_api import health_bp  # Health check endpoints
+from .billing_api import billing_bp  # Billing API endpoints
 
 __all__ = [
     'templates_bp',
@@ -35,6 +37,8 @@ __all__ = [
     'slug_cache_bp',  # ✅ Export slug cache
     'shop_business_bp',  # ✅ Shop business update
     'monitor_bp',  # Platform monitoring
+    'health_bp',  # Health check endpoints
+    'billing_bp',  # Billing API endpoints
 ]
 
 
@@ -53,9 +57,11 @@ def register_routes(app):
     app.register_blueprint(slug_cache_bp)  # ✅ Slug cache invalidation
     app.register_blueprint(shop_business_bp)  # ✅ Shop business update (entitlement-gated)
     app.register_blueprint(monitor_bp)  # Platform monitoring dashboard
+    app.register_blueprint(health_bp)  # Health check endpoints (MUST be registered before billing)
+    app.register_blueprint(billing_bp)  # Billing API endpoints
     register_test_routes(app)  # Register test push endpoint
     register_messaging_routes(app)  # Register messaging endpoint
-    print("✅ Registered API routes: templates, contacts, analytics, campaigns, bulk-campaigns, appointments, orders, payments, inventory, showcase, slug-cache, monitor, test-push, messaging")
+    print("✅ Registered API routes: templates, contacts, analytics, campaigns, bulk-campaigns, appointments, orders, payments, inventory, showcase, slug-cache, monitor, health, billing, test-push, messaging")
 
 
 

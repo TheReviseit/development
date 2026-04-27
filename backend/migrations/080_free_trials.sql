@@ -21,7 +21,7 @@ CREATE TABLE IF NOT EXISTS free_trials (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
 
     -- Identity
-    user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+    user_id TEXT NOT NULL, -- Firebase UID (Unified)
     org_id UUID NOT NULL REFERENCES otp_organizations(id) ON DELETE CASCADE,
 
     -- Plan configuration (references pricing_plans)
@@ -354,7 +354,7 @@ $$ LANGUAGE plpgsql;
 -- FUNCTION: Start a trial (idempotent)
 -- =============================================================================
 CREATE OR REPLACE FUNCTION start_trial(
-    p_user_id UUID,
+    p_user_id TEXT,
     p_org_id UUID,
     p_plan_id UUID,
     p_plan_slug TEXT,
@@ -763,22 +763,27 @@ ALTER TABLE trial_abuse_signals ENABLE ROW LEVEL SECURITY;
 ALTER TABLE trial_converted_subscriptions ENABLE ROW LEVEL SECURITY;
 
 -- Users can view their own trials
+DROP POLICY IF EXISTS trials_select_own ON free_trials;
 CREATE POLICY trials_select_own ON free_trials
-    FOR SELECT USING (auth.uid() = user_id);
+    FOR SELECT USING (true); -- Backend validates Firebase UID
 
 -- Service role can do everything
+DROP POLICY IF EXISTS trials_service_policy ON free_trials;
 CREATE POLICY trials_service_policy ON free_trials
     FOR ALL USING (auth.jwt() ->> 'role' = 'service_role');
 
 -- Service role only for events (internal use)
+DROP POLICY IF EXISTS trial_events_service_policy ON trial_events;
 CREATE POLICY trial_events_service_policy ON trial_events
     FOR ALL USING (auth.jwt() ->> 'role' = 'service_role');
 
 -- Service role only for abuse signals (internal use)
+DROP POLICY IF EXISTS trial_abuse_signals_service_policy ON trial_abuse_signals;
 CREATE POLICY trial_abuse_signals_service_policy ON trial_abuse_signals
     FOR ALL USING (auth.jwt() ->> 'role' = 'service_role');
 
 -- Service role only for converted subscriptions (internal use)
+DROP POLICY IF EXISTS trial_converted_service_policy ON trial_converted_subscriptions;
 CREATE POLICY trial_converted_service_policy ON trial_converted_subscriptions
     FOR ALL USING (auth.jwt() ->> 'role' = 'service_role');
 

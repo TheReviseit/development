@@ -107,14 +107,11 @@ def require_auth(f):
 
         # Set Flask global context
         g.firebase_uid = user_id
+        g.user_id = user_id  # Unified: user_id is now the Firebase UID
+        
+        # Keep Supabase UUID available for legacy tables
         supabase_user_id = map_to_supabase_user_id(user_id)
-        if not supabase_user_id:
-            return error_response(
-                'User account not found. Please complete signup first.',
-                'USER_NOT_FOUND',
-                404
-            )
-        g.user_id = supabase_user_id
+        g.supabase_user_id = supabase_user_id
 
         return f(*args, **kwargs)
 
@@ -434,8 +431,7 @@ def create_upgrade_checkout():
 
         if not user_email:
             logger.error(
-                f"NO_EMAIL: user_id={user_id}, firebase_uid={firebase_uid[:10] if firebase_uid else 'None'}. "
-                f"All 4 email resolution strategies failed."
+                f"NO_EMAIL: user_id={user_id}. All email resolution strategies failed."
             )
             return error_response(
                 'User email not found. Cannot create subscription.',

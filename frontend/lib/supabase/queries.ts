@@ -392,8 +392,10 @@ export async function getSubscriptionByUserId(userId: string) {
 }
 
 // =============================================================================
-// PRODUCT SUBSCRIPTIONS — Per-Domain Access Control
+// LEGACY: PRODUCT_SUBSCRIPTIONS — Per-Domain Access Control (Deprecated)
 // =============================================================================
+// This table is kept for backwards compatibility with older deployments.
+// The canonical access-control model is Option B `public.user_products`.
 
 const SUBSCRIBABLE_DOMAINS = new Set(["shop", "marketing", "showcase", "api"]);
 

@@ -19,7 +19,7 @@ import ContactSection from "@/app/components/ContactSection/ContactSection";
  */
 export default function BookingLandingPage() {
   return (
-    <div className="min-h-screen bg-[#F1F3F4] font-sans text-gray-900 overflow-x-hidden flex flex-col relative w-full selection:bg-black selection:text-white">
+    <div className="min-h-screen bg-[#F1F3F4] font-sans text-gray-900 flex flex-col relative w-full selection:bg-black selection:text-white overflow-x-clip">
       {/* Global Navigation */}
       <BookingNavbar />
 

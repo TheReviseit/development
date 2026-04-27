@@ -49,10 +49,18 @@ export interface SyncUserResponse {
   error?: string;
   code?: AuthErrorCode;
 
-  // NEW: Product activation data (returned when PRODUCT_NOT_ENABLED)
+  // Observability / support
+  requestId?: string;
+  traceId?: string;
+  idempotencyKey?: string;
+
+  // Product activation data (returned when PRODUCT_NOT_ENABLED)
   currentProduct?: ProductDomain;
   availableProducts?: ProductDomain[];
   message?: string;
+
+  // Actionable hint for the client — tells the signup/sync UI what to do next
+  action?: "AUTO_PROVISION_AVAILABLE" | "ACTIVATION_REQUIRED";
 }
 
 export interface ProductActivationRequest {
@@ -198,6 +206,12 @@ export enum AuthErrorCode {
 
   /** Rate limit exceeded */
   RATE_LIMIT_EXCEEDED = "RATE_LIMIT_EXCEEDED",
+
+  /** Another request is currently processing the same idempotent operation */
+  SYNC_IN_PROGRESS = "SYNC_IN_PROGRESS",
+
+  /** Upstream service (Supabase, Firebase) timed out */
+  UPSTREAM_TIMEOUT = "UPSTREAM_TIMEOUT",
 }
 
 export interface AuthError {
@@ -406,6 +420,10 @@ export function getErrorMessage(code: AuthErrorCode): string {
     [AuthErrorCode.INVALID_REQUEST]: "Invalid request.",
     [AuthErrorCode.RATE_LIMIT_EXCEEDED]:
       "Too many requests. Please wait and try again.",
+    [AuthErrorCode.SYNC_IN_PROGRESS]:
+      "Your account sync is in progress. Please wait a moment.",
+    [AuthErrorCode.UPSTREAM_TIMEOUT]:
+      "The server took too long to respond. Please try again.",
   };
 
   return messages[code] || "An unknown error occurred.";
