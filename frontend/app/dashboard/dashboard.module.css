@@ -815,6 +815,12 @@
   border-color: var(--dash-accent);
 }
 
+.secondaryBtn:focus-visible {
+  outline: none;
+  border-color: rgba(34, 193, 90, 0.72);
+  box-shadow: 0 0 0 3px rgba(34, 193, 90, 0.18);
+}
+
 .periodSelect {
   padding: 0.625rem 1rem;
   background: var(--dash-bg-tertiary);
@@ -823,6 +829,12 @@
   color: var(--dash-text-primary);
   font-size: 0.875rem;
   cursor: pointer;
+}
+
+.periodSelect:focus-visible {
+  outline: none;
+  border-color: rgba(34, 193, 90, 0.72);
+  box-shadow: 0 0 0 3px rgba(34, 193, 90, 0.18);
 }
 
 /* ============================================

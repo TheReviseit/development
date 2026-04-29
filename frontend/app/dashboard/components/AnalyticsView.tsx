@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import styles from "../dashboard.module.css";
 import { useAuth } from "@/app/components/auth/AuthProvider";
 import { fetchAnalyticsOverview, AnalyticsOverview } from "@/lib/api/whatsapp";
@@ -8,11 +8,16 @@ import { RevenueAnalyticsChart } from "../orders/components/RevenueAnalyticsChar
 import {
   useRevenueAnalytics,
   formatCurrency,
-  TimeRange,
 } from "@/lib/hooks/useRevenueAnalytics";
 import { useFeatureGate } from "@/lib/hooks/useFeatureGate";
 import { getProductDomainFromBrowser } from "@/lib/domain/client";
 import LoadingSpinner from "@/app/components/ui/LoadingSpinner";
+import { AnalyticsDateRangeSelector } from "./AnalyticsDateRangeSelector";
+import {
+  createPresetAnalyticsDateRange,
+  getRecommendedChartGrouping,
+  toRevenueAnalyticsRequest,
+} from "@/lib/analytics/dateRange";
 
 // Icon components
 const SendIcon = () => (
@@ -172,10 +177,9 @@ export default function AnalyticsView() {
   const [analytics, setAnalytics] = useState<AnalyticsOverview | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [period, setPeriod] = useState<"7d" | "30d" | "90d">("7d");
-  const [chartGrouping, setChartGrouping] = useState<
-    "Daily" | "Weekly" | "Monthly"
-  >("Daily");
+  const [selectedRange, setSelectedRange] = useState(() =>
+    createPresetAnalyticsDateRange("week"),
+  );
 
   // Use Firebase UID for backend API calls (X-User-Id header expects Firebase UID)
   // user?.id is the Supabase UUID which the backend cannot map
@@ -193,18 +197,27 @@ export default function AnalyticsView() {
   const { allowed: canAccessAnalytics, isLoading: subLoading } =
     useFeatureGate("advanced_analytics", { domain: currentDomain });
 
-  // Map period to TimeRange for revenue analytics
-  const revenueRange: TimeRange =
-    period === "7d" ? "week" : period === "30d" ? "month" : "month";
-  const { data: revenueData, loading: revenueLoading } =
-    useRevenueAnalytics(revenueRange, canAccessAnalytics);
+  const chartGrouping = useMemo(
+    () => getRecommendedChartGrouping(selectedRange),
+    [selectedRange],
+  );
+  const revenueRange = useMemo(
+    () => toRevenueAnalyticsRequest(selectedRange),
+    [selectedRange],
+  );
+  const {
+    data: revenueData,
+    loading: revenueLoading,
+    error: revenueError,
+    refetch: refetchRevenue,
+  } = useRevenueAnalytics(revenueRange, canAccessAnalytics);
 
   // Fetch analytics data
   const loadAnalytics = useCallback(async () => {
     try {
       setLoading(true);
       setError(null);
-      const data = await fetchAnalyticsOverview(userId, period);
+      const data = await fetchAnalyticsOverview(userId, selectedRange);
       setAnalytics(data);
     } catch (err: any) {
       console.error("Failed to fetch analytics:", err);
@@ -212,7 +225,12 @@ export default function AnalyticsView() {
     } finally {
       setLoading(false);
     }
-  }, [userId, period]);
+  }, [userId, selectedRange]);
+
+  const handleRefresh = useCallback(() => {
+    loadAnalytics();
+    refetchRevenue();
+  }, [loadAnalytics, refetchRevenue]);
 
   useEffect(() => {
     if (canAccessAnalytics) {
@@ -271,37 +289,40 @@ export default function AnalyticsView() {
       ]
     : [];
 
-  // Build grouped chart data based on Daily/Weekly/Monthly toggle
+  // Build grouped chart data based on the selected date span.
   const buildChartData = () => {
     const rawDates = analytics?.trends.dates || [];
     const rawSent = analytics?.trends.sent || [];
 
     if (rawDates.length === 0) return { data: [], labels: [] };
 
+    const parseChartDate = (value: string) => new Date(`${value}T00:00:00`);
+
     if (chartGrouping === "Daily") {
       return {
         data: rawSent,
         labels: rawDates.map((d) => {
-          const date = new Date(d);
+          const date = parseChartDate(d);
           return `${date.getMonth() + 1}/${date.getDate()}`;
         }),
       };
     }
 
     if (chartGrouping === "Weekly") {
-      const buckets: { label: string; total: number }[] = [];
+      const buckets: { key: string; label: string; total: number }[] = [];
       rawDates.forEach((d, i) => {
-        const date = new Date(d);
+        const date = parseChartDate(d);
         // ISO week number
         const dayOfWeek = date.getDay(); // 0=Sun
         const monday = new Date(date);
         monday.setDate(date.getDate() - ((dayOfWeek + 6) % 7));
+        const key = monday.toISOString().slice(0, 10);
         const label = `${monday.getMonth() + 1}/${monday.getDate()}`;
-        const existing = buckets.find((b) => b.label === label);
+        const existing = buckets.find((b) => b.key === key);
         if (existing) {
           existing.total += rawSent[i] || 0;
         } else {
-          buckets.push({ label, total: rawSent[i] || 0 });
+          buckets.push({ key, label, total: rawSent[i] || 0 });
         }
       });
       return {
@@ -311,15 +332,19 @@ export default function AnalyticsView() {
     }
 
     // Monthly
-    const buckets: { label: string; total: number }[] = [];
+    const buckets: { key: string; label: string; total: number }[] = [];
     rawDates.forEach((d, i) => {
-      const date = new Date(d);
-      const label = date.toLocaleString("default", { month: "short" });
-      const existing = buckets.find((b) => b.label === label);
+      const date = parseChartDate(d);
+      const key = `${date.getFullYear()}-${date.getMonth()}`;
+      const label = date.toLocaleString("default", {
+        month: "short",
+        year: "2-digit",
+      });
+      const existing = buckets.find((b) => b.key === key);
       if (existing) {
         existing.total += rawSent[i] || 0;
       } else {
-        buckets.push({ label, total: rawSent[i] || 0 });
+        buckets.push({ key, label, total: rawSent[i] || 0 });
       }
     });
     return {
@@ -658,8 +683,8 @@ export default function AnalyticsView() {
         <div className={styles.headerActions}>
           <button
             className={styles.secondaryBtn}
-            onClick={loadAnalytics}
-            disabled={loading}
+            onClick={handleRefresh}
+            disabled={loading || revenueLoading}
           >
             <svg
               width="16"
@@ -669,22 +694,19 @@ export default function AnalyticsView() {
               stroke="currentColor"
               strokeWidth="2"
               style={{
-                animation: loading ? "spin 1s linear infinite" : "none",
+                animation:
+                  loading || revenueLoading ? "spin 1s linear infinite" : "none",
               }}
             >
               <path d="M21 12a9 9 0 11-6.219-8.56" />
             </svg>
             Refresh
           </button>
-          <select
-            className={styles.periodSelect}
-            value={period}
-            onChange={(e) => setPeriod(e.target.value as "7d" | "30d" | "90d")}
-          >
-            <option value="7d">Last 7 days</option>
-            <option value="30d">Last 30 days</option>
-            <option value="90d">Last 90 days</option>
-          </select>
+          <AnalyticsDateRangeSelector
+            value={selectedRange}
+            onChange={setSelectedRange}
+            disabled={loading && !analytics}
+          />
         </div>
       </div>
 
@@ -760,7 +782,12 @@ export default function AnalyticsView() {
           </div>
 
           {/* Revenue Analytics Chart (Shop domain) */}
-          <RevenueAnalyticsChart />
+          <RevenueAnalyticsChart
+            data={revenueData}
+            loading={revenueLoading}
+            error={revenueError}
+            onRetry={refetchRevenue}
+          />
 
           {/* Trends Chart - Redesigned */}
           {chartData.length > 0 &&
@@ -814,45 +841,8 @@ export default function AnalyticsView() {
                           margin: "4px 0 0 0",
                         }}
                       >
-                        Messages sent in the last{" "}
-                        {period === "7d" ? "7" : period === "30d" ? "30" : "90"}{" "}
-                        days
+                        Messages sent for {selectedRange.label}
                       </p>
-                    </div>
-                    <div
-                      style={{
-                        display: "flex",
-                        background: "#1a1a1a",
-                        borderRadius: "8px",
-                        padding: "4px",
-                        gap: "4px",
-                      }}
-                    >
-                      {(["Daily", "Weekly", "Monthly"] as const).map(
-                        (label) => (
-                          <button
-                            key={label}
-                            onClick={() => setChartGrouping(label)}
-                            style={{
-                              padding: "6px 12px",
-                              fontSize: "12px",
-                              fontWeight: 500,
-                              border: "none",
-                              borderRadius: "6px",
-                              cursor: "pointer",
-                              background:
-                                chartGrouping === label
-                                  ? "#2a2a2a"
-                                  : "transparent",
-                              color:
-                                chartGrouping === label ? "#ffffff" : "#6b7280",
-                              transition: "all 0.2s",
-                            }}
-                          >
-                            {label}
-                          </button>
-                        ),
-                      )}
                     </div>
                   </div>
 

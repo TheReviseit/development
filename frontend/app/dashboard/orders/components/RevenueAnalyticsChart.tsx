@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useMemo } from "react";
 import {
   AreaChart,
   Area,
@@ -11,24 +11,18 @@ import {
   CartesianGrid,
 } from "recharts";
 import {
-  useRevenueAnalytics,
+  type RevenueData,
   formatCurrency,
-  getTimeRangeLabel,
-  type TimeRange,
 } from "@/lib/hooks/useRevenueAnalytics";
 import styles from "./RevenueAnalyticsChart.module.css";
 
 interface Props {
   className?: string;
+  data: RevenueData | null;
+  loading: boolean;
+  error: string | null;
+  onRetry?: () => void;
 }
-
-const TIME_RANGE_OPTIONS: { value: TimeRange; label: string }[] = [
-  { value: "day", label: "Day" },
-  { value: "week", label: "Week" },
-  { value: "month", label: "Monthly" },
-  { value: "6months", label: "6 Months" },
-  { value: "year", label: "Year" },
-];
 
 /**
  * Custom tooltip component for the chart
@@ -67,7 +61,6 @@ function ChartSkeleton() {
     <div className={styles.skeleton}>
       <div className={styles.skeletonHeader}>
         <div className={styles.skeletonTitle}></div>
-        <div className={styles.skeletonDropdown}></div>
       </div>
       <div className={styles.skeletonChart}>
         <div className={styles.skeletonPulse}></div>
@@ -81,17 +74,18 @@ function ChartSkeleton() {
  *
  * Features:
  * - Stripe-style smooth area chart with gradient fill
- * - Time range selector (Day/Week/Month/6M/Year)
  * - Hover tooltip with exact revenue
  * - Skeleton loading state
  * - Responsive design
  * - Previous period comparison
  */
-export function RevenueAnalyticsChart({ className }: Props) {
-  const [range, setRange] = useState<TimeRange>("month");
-  const [isDropdownOpen, setIsDropdownOpen] = useState(false);
-  const { data, loading, error } = useRevenueAnalytics(range);
-
+export function RevenueAnalyticsChart({
+  className,
+  data,
+  loading,
+  error,
+  onRetry,
+}: Props) {
   // Format Y-axis tick
   const yAxisFormatter = useMemo(() => {
     return (value: number) => {
@@ -109,17 +103,6 @@ export function RevenueAnalyticsChart({ className }: Props) {
     const roundedMax = Math.ceil(maxRevenue / 5000) * 5000;
     return [0, Math.max(roundedMax, 1000)];
   }, [data]);
-
-  // Handle dropdown toggle
-  const handleDropdownToggle = () => {
-    setIsDropdownOpen(!isDropdownOpen);
-  };
-
-  // Handle range selection
-  const handleRangeSelect = (newRange: TimeRange) => {
-    setRange(newRange);
-    setIsDropdownOpen(false);
-  };
 
   // Show skeleton while loading (first load only)
   if (loading && !data) {
@@ -139,7 +122,7 @@ export function RevenueAnalyticsChart({ className }: Props) {
           <div className={styles.errorMessage}>{error}</div>
           <button
             className={styles.retryButton}
-            onClick={() => window.location.reload()}
+            onClick={onRetry || (() => window.location.reload())}
           >
             Retry
           </button>
@@ -156,7 +139,6 @@ export function RevenueAnalyticsChart({ className }: Props) {
 
   // Empty state: no revenue data
   const hasNoData = chartData.length === 0 || totalRevenue === 0;
-  const isNewRevenue = comparison?.deltaPercent === null;
 
   return (
     <div className={`${styles.container} ${className || ""}`}>
@@ -180,50 +162,6 @@ export function RevenueAnalyticsChart({ className }: Props) {
             )}
         </div>
 
-        {/* Time Range Dropdown */}
-        <div className={styles.dropdownContainer}>
-          <button
-            className={styles.dropdownButton}
-            onClick={handleDropdownToggle}
-            aria-expanded={isDropdownOpen}
-            aria-haspopup="listbox"
-          >
-            <span>{getTimeRangeLabel(range)}</span>
-            <svg
-              className={`${styles.dropdownIcon} ${isDropdownOpen ? styles.dropdownIconOpen : ""}`}
-              width="16"
-              height="16"
-              viewBox="0 0 16 16"
-              fill="none"
-            >
-              <path
-                d="M4 6L8 10L12 6"
-                stroke="currentColor"
-                strokeWidth="1.5"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
-            </svg>
-          </button>
-
-          {isDropdownOpen && (
-            <div className={styles.dropdownMenu} role="listbox">
-              {TIME_RANGE_OPTIONS.map((option) => (
-                <button
-                  key={option.value}
-                  className={`${styles.dropdownItem} ${
-                    range === option.value ? styles.dropdownItemActive : ""
-                  }`}
-                  onClick={() => handleRangeSelect(option.value)}
-                  role="option"
-                  aria-selected={range === option.value}
-                >
-                  {option.label}
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
       </div>
 
       {/* Empty State */}

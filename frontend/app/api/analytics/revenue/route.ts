@@ -4,6 +4,54 @@ import { cookies } from "next/headers";
 // Prevent Next.js from caching this route — analytics must always be fresh
 export const dynamic = "force-dynamic";
 
+const MAX_CUSTOM_RANGE_DAYS = 366;
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+function parseDateOnly(value: string | null): Date | null {
+  if (!value || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return null;
+
+  const [year, month, day] = value.split("-").map(Number);
+  const date = new Date(Date.UTC(year, month - 1, day));
+
+  if (
+    date.getUTCFullYear() !== year ||
+    date.getUTCMonth() !== month - 1 ||
+    date.getUTCDate() !== day
+  ) {
+    return null;
+  }
+
+  return date;
+}
+
+function validateCustomRange(startDate: string | null, endDate: string | null) {
+  const start = parseDateOnly(startDate);
+  const end = parseDateOnly(endDate);
+
+  if (!start || !end) {
+    return "start_date and end_date must use YYYY-MM-DD.";
+  }
+
+  if (start.getTime() > end.getTime()) {
+    return "start_date must be before or equal to end_date.";
+  }
+
+  const days = Math.floor((end.getTime() - start.getTime()) / DAY_MS) + 1;
+  if (days > MAX_CUSTOM_RANGE_DAYS) {
+    return "Custom revenue analytics ranges can be up to 1 year.";
+  }
+
+  return null;
+}
+
+function getErrorMessage(errorData: any, fallback: string): string {
+  if (typeof errorData?.error === "string") return errorData.error;
+  if (typeof errorData?.error?.message === "string") {
+    return errorData.error.message;
+  }
+  return fallback;
+}
+
 /**
  * Revenue Analytics API Proxy
  *
@@ -15,9 +63,11 @@ export async function GET(request: NextRequest) {
     // Get the range parameter from the query string
     const { searchParams } = new URL(request.url);
     const range = searchParams.get("range") || "month";
+    const startDate = searchParams.get("start_date");
+    const endDate = searchParams.get("end_date");
 
     // Validate range
-    const validRanges = ["day", "week", "month", "6months", "year"];
+    const validRanges = ["day", "week", "month", "6months", "year", "custom"];
     if (!validRanges.includes(range)) {
       return NextResponse.json(
         {
@@ -26,6 +76,16 @@ export async function GET(request: NextRequest) {
         },
         { status: 400 },
       );
+    }
+
+    if (range === "custom") {
+      const validationError = validateCustomRange(startDate, endDate);
+      if (validationError) {
+        return NextResponse.json(
+          { success: false, error: validationError },
+          { status: 400 },
+        );
+      }
     }
 
     // Get user ID from session cookie
@@ -77,8 +137,14 @@ export async function GET(request: NextRequest) {
 
     let response: Response;
     try {
+      const backendParams = new URLSearchParams({ range });
+      if (range === "custom" && startDate && endDate) {
+        backendParams.set("start_date", startDate);
+        backendParams.set("end_date", endDate);
+      }
+
       response = await fetch(
-        `${backendUrl}/api/analytics/revenue?range=${range}`,
+        `${backendUrl}/api/analytics/revenue?${backendParams.toString()}`,
         {
           method: "GET",
           headers: {
@@ -109,7 +175,10 @@ export async function GET(request: NextRequest) {
       return NextResponse.json(
         {
           success: false,
-          error: errorData.error || `Backend returned ${response.status}`,
+          error: getErrorMessage(
+            errorData,
+            `Backend returned ${response.status}`,
+          ),
         },
         { status: response.status },
       );

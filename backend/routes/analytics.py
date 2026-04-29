@@ -245,15 +245,55 @@ _EMPTY_MARKETING = {
 
 _PERIOD_DAYS: Dict[str, int] = {
     "today": 0,
+    "week":   6,
     "7d":    7,
+    "month": 29,
     "30d":  30,
     "80d":  80,
     "90d":  90,
+    "6months": 182,
+    "year":  364,
 }
 
+_MAX_CUSTOM_RANGE_DAYS = 366
 
-def get_date_range(period: str) -> Tuple[str, str]:
-    """Return (start_iso, end_iso) for a named period. Defaults to 7d."""
+
+def _parse_date_param(value: Optional[str], field_name: str):
+    if not value or not re.fullmatch(r"\d{4}-\d{2}-\d{2}", value):
+        raise ValueError(f"{field_name} must use YYYY-MM-DD")
+
+    try:
+        parsed = datetime.strptime(value, "%Y-%m-%d").date()
+    except ValueError as exc:
+        raise ValueError(f"{field_name} must be a valid calendar date") from exc
+
+    return parsed
+
+
+def _validate_custom_date_range(start_value: Optional[str], end_value: Optional[str]):
+    start = _parse_date_param(start_value, "start_date")
+    end = _parse_date_param(end_value, "end_date")
+
+    if start > end:
+        raise ValueError("start_date must be before or equal to end_date")
+
+    days = (end - start).days + 1
+    if days > _MAX_CUSTOM_RANGE_DAYS:
+        raise ValueError("Custom analytics ranges can be up to 1 year")
+
+    return start, end, days
+
+
+def get_date_range(
+    period: str,
+    start_value: Optional[str] = None,
+    end_value: Optional[str] = None,
+) -> Tuple[str, str]:
+    """Return (start_iso, exclusive_end_iso) for a named or custom period."""
+    if start_value or end_value:
+        start, end, _ = _validate_custom_date_range(start_value, end_value)
+        return start.isoformat(), (end + timedelta(days=1)).isoformat()
+
     end_date = datetime.utcnow().date()
     days = _PERIOD_DAYS.get(period, 7)
     start_date = end_date if days == 0 else end_date - timedelta(days=days)
@@ -316,6 +356,39 @@ def get_revenue_date_config(range_type: str) -> Dict[str, Any]:
     return get_revenue_date_config("month")
 
 
+def get_custom_revenue_date_config(
+    start_value: Optional[str],
+    end_value: Optional[str],
+) -> Dict[str, Any]:
+    """Return bucketing config for an explicit inclusive date range."""
+    start_date, end_date, days = _validate_custom_date_range(start_value, end_value)
+    start = datetime.combine(start_date, datetime.min.time())
+    end = datetime.combine(end_date + timedelta(days=1), datetime.min.time())
+
+    if days <= 1:
+        bucket = "hour"
+        label_format = "%H:00"
+    elif days <= 45:
+        bucket = "day"
+        label_format = "%b %d"
+    else:
+        bucket = "month"
+        label_format = "%b"
+
+    previous_start = start - timedelta(days=days)
+    bucket_start = start.replace(day=1) if bucket == "month" else start
+
+    return {
+        "start": start,
+        "end": end,
+        "bucket_start": bucket_start,
+        "previous_start": previous_start,
+        "previous_end": start,
+        "bucket": bucket,
+        "format": label_format,
+    }
+
+
 # ══════════════════════════════════════════════════════════════════════════════
 # Blueprint
 # ══════════════════════════════════════════════════════════════════════════════
@@ -349,7 +422,15 @@ def get_overview():
         user_id     = g.user_id
         business_id = g.business_id
         period      = request.args.get("period", "7d")
-        start_date, end_date = get_date_range(period)
+        has_custom_range = bool(request.args.get("start_date") or request.args.get("end_date"))
+        try:
+            start_date, end_date = get_date_range(
+                period,
+                request.args.get("start_date"),
+                request.args.get("end_date"),
+            )
+        except ValueError as exc:
+            return api_error("INVALID_DATE_RANGE", str(exc), status=400)
         client = get_supabase_client()
 
         # ── Daily aggregates (pre-computed by cron) ──────────────────────────
@@ -426,7 +507,7 @@ def get_overview():
 
         return jsonify({
             "success": True,
-            "period":  period,
+            "period":  "custom" if has_custom_range else period,
             "messages": {
                 "sent":          sent,
                 "received":      _sum("messages_received"),
@@ -1207,14 +1288,24 @@ def get_revenue_analytics():
         range_type         = request.args.get("range", "month").lower()
         requested_currency = request.args.get("currency", "").upper()
 
-        valid_ranges = {"day", "week", "month", "6months", "year"}
+        valid_ranges = {"day", "week", "month", "6months", "year", "custom"}
         if range_type not in valid_ranges:
             return api_error(
                 "INVALID_RANGE",
                 f"range must be one of: {', '.join(sorted(valid_ranges))}",
             )
 
-        config = get_revenue_date_config(range_type)
+        try:
+            config = (
+                get_custom_revenue_date_config(
+                    request.args.get("start_date"),
+                    request.args.get("end_date"),
+                )
+                if range_type == "custom"
+                else get_revenue_date_config(range_type)
+            )
+        except ValueError as exc:
+            return api_error("INVALID_DATE_RANGE", str(exc), status=400)
         client = get_supabase_client()
         t0     = time.monotonic()
 
@@ -1341,7 +1432,7 @@ def get_revenue_analytics():
 
         all_buckets = []
         total_revenue = 0.0
-        cur = config["start"]
+        cur = config.get("bucket_start", config["start"])
         while cur < config["end"]:
             rev = rpc_map.get(cur.isoformat(), 0.0)
             total_revenue += rev
@@ -1410,6 +1501,8 @@ def get_revenue_analytics():
                 "multiple_currencies":   multi_curr,
                 "available_currencies":  currencies if multi_curr else None,
                 "elapsed_ms":            elapsed,
+                "start_date":            config["start"].date().isoformat(),
+                "end_date":              (config["end"].date() - timedelta(days=1)).isoformat(),
             },
         })
 

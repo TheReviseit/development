@@ -1,8 +1,10 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
+import type { RevenueAnalyticsRequest } from "@/lib/analytics/dateRange";
 
-export type TimeRange = "day" | "week" | "month" | "6months" | "year";
+export type TimeRange = "day" | "week" | "month" | "6months" | "year" | "custom";
+export type RevenueAnalyticsInput = TimeRange | RevenueAnalyticsRequest;
 
 export interface RevenueBucket {
   timestamp: string;
@@ -40,12 +42,39 @@ interface UseRevenueAnalyticsResult {
 
 // Cache for storing fetched data per range
 const revenueCache = new Map<
-  TimeRange,
+  string,
   { data: RevenueData; timestamp: number }
 >();
 const CACHE_TTL_MS = 60 * 1000; // 60 seconds — revenue data should be near-real-time
 const MAX_RETRIES = 2;
 const NON_RETRYABLE_STATUSES = new Set([401, 403, 503]);
+
+function normalizeRevenueInput(input: RevenueAnalyticsInput): RevenueAnalyticsRequest {
+  if (typeof input === "string") {
+    return { range: input };
+  }
+
+  return input;
+}
+
+function getRevenueCacheKey(request: RevenueAnalyticsRequest): string {
+  return `${request.range}:${request.startDate ?? ""}:${request.endDate ?? ""}`;
+}
+
+function getRevenueUrl(request: RevenueAnalyticsRequest): string {
+  const params = new URLSearchParams({ range: request.range });
+
+  if (request.startDate) params.set("start_date", request.startDate);
+  if (request.endDate) params.set("end_date", request.endDate);
+
+  return `/api/analytics/revenue?${params.toString()}`;
+}
+
+function getErrorMessage(payload: any, fallback: string): string {
+  if (typeof payload?.error === "string") return payload.error;
+  if (typeof payload?.error?.message === "string") return payload.error.message;
+  return fallback;
+}
 
 /**
  * Hook for fetching revenue analytics data.
@@ -55,9 +84,11 @@ const NON_RETRYABLE_STATUSES = new Set([401, 403, 503]);
  * error noise in the console.
  */
 export function useRevenueAnalytics(
-  range: TimeRange,
+  range: RevenueAnalyticsInput,
   enabled: boolean = true,
 ): UseRevenueAnalyticsResult {
+  const request = useMemo(() => normalizeRevenueInput(range), [range]);
+  const cacheKey = useMemo(() => getRevenueCacheKey(request), [request]);
   const [data, setData] = useState<RevenueData | null>(null);
   const [loading, setLoading] = useState(enabled);
   const [error, setError] = useState<string | null>(null);
@@ -69,7 +100,7 @@ export function useRevenueAnalytics(
 
   const fetchRevenue = useCallback(async () => {
     // Check cache first
-    const cached = revenueCache.get(range);
+    const cached = revenueCache.get(cacheKey);
     if (cached && Date.now() - cached.timestamp < CACHE_TTL_MS) {
       setData(cached.data);
       setLoading(false);
@@ -85,7 +116,7 @@ export function useRevenueAnalytics(
     setError(null);
 
     try {
-      const url = `/api/analytics/revenue?range=${range}`;
+      const url = getRevenueUrl(request);
 
       const response = await fetch(url, {
         headers: { "Cache-Control": "no-cache" },
@@ -99,25 +130,33 @@ export function useRevenueAnalytics(
         console.error("[Revenue Analytics] API Error:", {
           status: response.status,
           statusText: response.statusText,
-          error: errorData.error || "unknown",
+          error: getErrorMessage(errorData, "unknown"),
         });
 
         // Non-retryable — set error and stop
         if (NON_RETRYABLE_STATUSES.has(response.status)) {
-          setError(errorData.error || `Request failed with status ${response.status}`);
+          setError(
+            getErrorMessage(
+              errorData,
+              `Request failed with status ${response.status}`,
+            ),
+          );
           setLoading(false);
           return;
         }
 
         throw new Error(
-          errorData.error || `Failed to fetch revenue data: ${response.status}`,
+          getErrorMessage(
+            errorData,
+            `Failed to fetch revenue data: ${response.status}`,
+          ),
         );
       }
 
       const result = await response.json();
 
       if (!result.success) {
-        throw new Error(result.error || "Failed to fetch revenue data");
+        throw new Error(getErrorMessage(result, "Failed to fetch revenue data"));
       }
 
       // Normalize the data
@@ -131,7 +170,7 @@ export function useRevenueAnalytics(
       };
 
       // Cache the result
-      revenueCache.set(range, { data: normalizedData, timestamp: Date.now() });
+      revenueCache.set(cacheKey, { data: normalizedData, timestamp: Date.now() });
 
       setData(normalizedData);
       setError(null);
@@ -145,7 +184,7 @@ export function useRevenueAnalytics(
 
       console.error("[Revenue Analytics] Fetch error:", {
         message: errorMessage,
-        range,
+        range: request,
         retry: retryCountRef.current,
       });
 
@@ -162,7 +201,7 @@ export function useRevenueAnalytics(
     } finally {
       setLoading(false);
     }
-  }, [range]); // Only depends on `range` — no retryCount in deps
+  }, [cacheKey, request]);
 
   // Fetch on mount / range change — only when enabled
   useEffect(() => {
@@ -179,13 +218,13 @@ export function useRevenueAnalytics(
       abortRef.current?.abort();
       if (retryTimerRef.current) clearTimeout(retryTimerRef.current);
     };
-  }, [range, fetchRevenue, enabled]);
+  }, [cacheKey, fetchRevenue, enabled]);
 
   const refetch = useCallback(() => {
-    revenueCache.delete(range);
+    revenueCache.delete(cacheKey);
     retryCountRef.current = 0;
     fetchRevenue();
-  }, [range, fetchRevenue]);
+  }, [cacheKey, fetchRevenue]);
 
   return useMemo(
     () => ({
@@ -241,6 +280,8 @@ export function getTimeRangeLabel(range: TimeRange): string {
       return "6 Months";
     case "year":
       return "Year";
+    case "custom":
+      return "Custom";
     default:
       return "Monthly";
   }

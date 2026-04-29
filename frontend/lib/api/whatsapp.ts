@@ -3,6 +3,11 @@
  * Connects frontend components to backend APIs
  */
 
+import {
+  type AnalyticsDateRange,
+  toAnalyticsOverviewQuery,
+} from "@/lib/analytics/dateRange";
+
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
 
 // Types
@@ -312,10 +317,15 @@ export async function deleteContact(
 
 export async function fetchAnalyticsOverview(
   userId: string,
-  period: "7d" | "30d" | "90d" = "7d",
+  range: AnalyticsDateRange | "7d" | "30d" | "90d" = "7d",
 ): Promise<AnalyticsOverview | null> {
   // Let errors propagate so the caller (AnalyticsView) can show them in the UI.
-  return await apiRequest(`/api/analytics/overview?period=${period}`, userId);
+  const query =
+    typeof range === "string"
+      ? `period=${range}`
+      : toAnalyticsOverviewQuery(range);
+
+  return await apiRequest(`/api/analytics/overview?${query}`, userId);
 }
 
 export async function fetchMessageAnalytics(
