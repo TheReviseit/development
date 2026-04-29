@@ -38,8 +38,8 @@ let refreshTimer: NodeJS.Timeout | null = null;
  * Initialize context from server-provided data.
  * Call this on page load with the signed context from middleware.
  */
-export function initializeContext(signedContext: string): void {
-  const verified = domainResolver.verifyContext(signedContext);
+export async function initializeContext(signedContext: string): Promise<void> {
+  const verified = await domainResolver.verifyContext(signedContext);
   
   if (!verified) {
     console.error('[ContextRefresh] Failed to verify initial context');
@@ -108,7 +108,7 @@ async function refreshContext(): Promise<string | null> {
     }
     
     // Verify and store new context
-    const verified = domainResolver.verifyContext(data.signedContext);
+    const verified = await domainResolver.verifyContext(data.signedContext);
     if (!verified) {
       throw new Error('Refreshed context failed verification');
     }

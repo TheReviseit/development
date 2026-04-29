@@ -8,8 +8,8 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { domainResolver, DomainContext } from '@/lib/domain/resolver';
-import { verifySessionCookie } from '@/lib/firebase-admin';
+import { domainResolver } from '@/lib/domain/resolver';
+import { verifySessionCookieSafe } from '@/lib/firebase-admin';
 
 /**
  * Middleware handler that resolves domain and injects context.
@@ -43,15 +43,15 @@ export async function domainContextMiddleware(
     
     if (sessionCookie) {
       try {
-        const session = await verifySessionCookie(sessionCookie);
-        userId = session.uid;
+        const session = await verifySessionCookieSafe(sessionCookie);
+        userId = session.success ? session.data?.uid : undefined;
       } catch (e) {
         // No valid session, continue as anonymous
       }
     }
     
     // Sign context for backend verification
-    const signedContext = domainResolver.signContext(context, userId);
+    const signedContext = await domainResolver.signContext(context, userId);
     
     // Clone headers and inject context
     const headers = new Headers(request.headers);

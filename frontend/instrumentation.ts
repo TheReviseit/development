@@ -5,7 +5,13 @@ export async function register() {
   const endpoint = process.env.OTEL_EXPORTER_OTLP_ENDPOINT;
   if (!endpoint) return;
 
-  const [{ NodeSDK }, { getNodeAutoInstrumentations }, { OTLPTraceExporter }, { Resource }, semconv] =
+  const [
+    { NodeSDK },
+    { getNodeAutoInstrumentations },
+    { OTLPTraceExporter },
+    { resourceFromAttributes },
+    { ATTR_SERVICE_NAME },
+  ] =
     await Promise.all([
       import("@opentelemetry/sdk-node"),
       import("@opentelemetry/auto-instrumentations-node"),
@@ -23,8 +29,8 @@ export async function register() {
 
   const sdk = new NodeSDK({
     traceExporter: exporter,
-    resource: new Resource({
-      [semconv.SemanticResourceAttributes.SERVICE_NAME]: serviceName,
+    resource: resourceFromAttributes({
+      [ATTR_SERVICE_NAME]: serviceName,
     }),
     instrumentations: [
       getNodeAutoInstrumentations({
