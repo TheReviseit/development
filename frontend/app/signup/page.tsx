@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useState, useCallback, memo, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import dynamic from "next/dynamic";
+import Image from "next/image";
 import ButtonSpinner from "../components/ui/ButtonSpinner";
 import { handleFirebaseError } from "../utils/firebaseErrors";
 import {
@@ -14,6 +15,7 @@ import { auth } from "@/src/firebase/firebase";
 import styles from "./Signup.module.css";
 import { useDebounce } from "@/lib/hooks/useDebounce";
 import { getProductDomainFromBrowser } from "@/lib/domain/client";
+import { normalizeIndianPhoneInput } from "@/lib/validation/indianPhone";
 import {
   signInWithGoogleHybrid,
   checkRedirectResult,
@@ -86,6 +88,7 @@ async function syncWithRetry(
   idToken: string,
   allowCreate: boolean,
   retries = 1,
+  phoneNumber?: string,
 ): Promise<{ ok: boolean; status: number; code?: string; message?: string }> {
   for (let i = 0; i <= retries; i++) {
     try {
@@ -93,7 +96,11 @@ async function syncWithRetry(
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
-        body: JSON.stringify({ idToken, allowCreate }),
+        body: JSON.stringify({
+          idToken,
+          allowCreate,
+          ...(phoneNumber ? { phoneNumber } : {}),
+        }),
       });
 
       if (response.ok) return { ok: true, status: response.status };
@@ -365,11 +372,13 @@ export default function SignupPage() {
 
   // Real-time validation states
   const [emailError, setEmailError] = useState("");
+  const [phoneError, setPhoneError] = useState("");
   const [passwordError, setPasswordError] = useState("");
   const [passwordStrength, setPasswordStrength] = useState("");
 
   // Debounced values for validation
   const debouncedEmail = useDebounce(email, 500);
+  const debouncedPhone = useDebounce(phone, 300);
   const debouncedPassword = useDebounce(password, 300);
   const debouncedConfirmPassword = useDebounce(confirmPassword, 300);
 
@@ -474,6 +483,18 @@ export default function SignupPage() {
     }
   }, [debouncedEmail]);
 
+  // Real-time Indian mobile validation. The UI stores only the national
+  // 10-digit number and submits canonical E.164 (+91...) to the server.
+  useEffect(() => {
+    if (!debouncedPhone) {
+      setPhoneError("");
+      return;
+    }
+
+    const validation = normalizeIndianPhoneInput(debouncedPhone);
+    setPhoneError(validation.isValid ? "" : validation.message || "");
+  }, [debouncedPhone]);
+
   // Real-time password strength validation
   useEffect(() => {
     if (debouncedPassword) {
@@ -513,10 +534,29 @@ export default function SignupPage() {
 
   const clearError = useCallback(() => setError(""), []);
 
+  const handlePhoneChange = useCallback(
+    (event: React.ChangeEvent<HTMLInputElement>) => {
+      const { nationalNumber } = normalizeIndianPhoneInput(event.target.value);
+      setPhone(nationalNumber.slice(0, 10));
+      if (phoneError) setPhoneError("");
+    },
+    [phoneError],
+  );
+
   const handleSubmit = useCallback(
     async (e: React.FormEvent) => {
       e.preventDefault();
       setError("");
+
+      const phoneValidation = normalizeIndianPhoneInput(phone);
+      setPhone(phoneValidation.nationalNumber);
+
+      if (!phoneValidation.isValid || !phoneValidation.e164) {
+        const message = phoneValidation.message || "Please enter a valid phone number";
+        setPhoneError(message);
+        setError(message);
+        return;
+      }
 
       if (password !== confirmPassword) {
         setError("Passwords do not match");
@@ -537,7 +577,12 @@ export default function SignupPage() {
         const idToken = await userCredential.user.getIdToken();
 
         // Step 2: Provision user + set session cookie (canonical)
-const syncResult = await syncWithRetry(idToken, true);
+        const syncResult = await syncWithRetry(
+          idToken,
+          true,
+          1,
+          phoneValidation.e164,
+        );
         if (!syncResult.ok) {
           // Graceful degradation: if product provisioning fails
           // but user was created, redirect to onboarding instead of blocking
@@ -573,7 +618,7 @@ const syncResult = await syncWithRetry(idToken, true);
         }
       }
     },
-    [name, email, password, confirmPassword, phone, router],
+    [name, email, password, confirmPassword, phone, router, domain],
   );
 
   /**
@@ -799,7 +844,7 @@ const syncResult = await syncWithRetry(idToken, true);
 
       setError(errorMessage);
     }
-  }, [router]);
+  }, [router, domain]);
 
   // Dynamic left pane content
   const isBooking = domain === "booking";
@@ -919,7 +964,7 @@ const syncResult = await syncWithRetry(idToken, true);
         {/* Right Side - Form */}
         <div className={styles.authRight}>
           <div className={styles.brandTag}>
-            <img src="/logo.png" alt="Flowauxi Logo" width="24" height="24" />
+            <Image src="/logo.png" alt="Flowauxi Logo" width={24} height={24} />
             <span>Flowauxi</span>
           </div>
 
@@ -949,17 +994,32 @@ const syncResult = await syncWithRetry(idToken, true);
 
               <div className={styles.formGroup}>
                 <label htmlFor="phone">Phone Number</label>
-                <input
-                  type="tel"
-                  id="phone"
-                  placeholder="+91 XXXXX XXXXX"
-                  value={phone}
-                  onChange={(e) => setPhone(e.target.value)}
-                  required
-                  autoComplete="tel"
-                  pattern="[+]?[0-9]{10,15}"
-                  title="Please enter a valid phone number (10-15 digits)"
-                />
+                <div className={styles.phoneWrapper}>
+                  <span className={styles.countryCode} aria-hidden="true">
+                    +91
+                  </span>
+                  <input
+                    type="tel"
+                    id="phone"
+                    placeholder="98765 43210"
+                    value={phone}
+                    onChange={handlePhoneChange}
+                    required
+                    autoComplete="tel-national"
+                    inputMode="numeric"
+                    maxLength={10}
+                    pattern="[6-9][0-9]{9}"
+                    title="Enter a valid 10-digit Indian mobile number"
+                    aria-invalid={phoneError ? "true" : "false"}
+                    aria-describedby={phoneError ? "phone-error" : undefined}
+                    className={phoneError ? styles.inputError : ""}
+                  />
+                </div>
+                {phoneError && (
+                  <span id="phone-error" className={styles.validationError}>
+                    {phoneError}
+                  </span>
+                )}
               </div>
 
               <div className={styles.formGroup}>
@@ -1070,7 +1130,7 @@ const syncResult = await syncWithRetry(idToken, true);
               <button
                 type="submit"
                 className={styles.btnPrimary}
-                disabled={loading}
+                disabled={loading || Boolean(emailError || phoneError || passwordError)}
               >
                 {loading ? <ButtonSpinner size={20} /> : "Sign Up"}
               </button>

@@ -219,6 +219,32 @@
   color: var(--text-placeholder);
 }
 
+.phoneWrapper {
+  position: relative;
+}
+
+.phoneWrapper input {
+  width: 100%;
+  padding-left: 58px;
+}
+
+.countryCode {
+  position: absolute;
+  left: 13px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: flex;
+  align-items: center;
+  height: calc(100% - 14px);
+  padding-right: 10px;
+  border-right: 1px solid var(--border-light, #d1d5db);
+  color: var(--text-secondary);
+  font-family: var(--font-primary);
+  font-size: 14px;
+  font-weight: 600;
+  pointer-events: none;
+}
+
 .passwordWrapper {
   position: relative;
 }
@@ -406,6 +432,10 @@
     min-height: 44px;
   }
 
+  .phoneWrapper input {
+    padding-left: 60px;
+  }
+
   .btnPrimary,
   .btnGoogle {
     padding: 11px 16px;
@@ -436,6 +466,10 @@
   .formGroup input {
     padding: 12px 15px;
     min-height: 46px;
+  }
+
+  .phoneWrapper input {
+    padding-left: 62px;
   }
 
   .btnPrimary,

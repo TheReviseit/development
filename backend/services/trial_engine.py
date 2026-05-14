@@ -819,7 +819,7 @@ class TrialEngine:
         auth sync layer). Acceptable for atomicity. Long-term TODO: replace
         with event/webhook so auth-sync owns its own table writes.
         """
-        result = self._db.rpc('start_trial_with_access', {
+        rpc_payload = {
             'p_user_id': options.user_id,
             'p_org_id': options.org_id,
             'p_plan_id': options.plan_id,
@@ -832,11 +832,89 @@ class TrialEngine:
             'p_device_fingerprint': options.device_fingerprint,
             'p_user_agent': options.user_agent,
             'p_idempotency_key': idempotency_key,
-        }).execute()
+        }
+
+        try:
+            result = self._db.rpc('start_trial_with_access', rpc_payload).execute()
+        except Exception as exc:
+            if not self._is_start_trial_signature_mismatch(exc):
+                raise
+
+            self._logger.warning(
+                "start_trial_with_access_signature_mismatch "
+                "falling_back_to_direct_start_trial"
+            )
+            return await self._call_start_trial_compatibility_fallback(
+                options=options,
+                rpc_payload=rpc_payload,
+            )
 
         if result.data:
             return result.data[0]
         return {}
+
+    def _is_start_trial_signature_mismatch(self, exc: Exception) -> bool:
+        """Detect the known DB wrapper mismatch from migration 085 -> 082."""
+        message = str(exc).lower()
+        return (
+            "function start_trial(uuid" in message
+            and "does not exist" in message
+        )
+
+    async def _call_start_trial_compatibility_fallback(
+        self,
+        options: TrialStartOptions,
+        rpc_payload: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        """
+        Compatibility path for databases where start_trial_with_access still
+        calls start_trial(uuid, ...), while start_trial now expects TEXT.
+
+        The new migration fixes this in SQL. This fallback keeps the API usable
+        until that migration is applied everywhere.
+        """
+        fallback_payload = dict(rpc_payload)
+        fallback_payload['p_user_id'] = str(options.user_id)
+
+        result = self._db.rpc('start_trial', fallback_payload).execute()
+        trial_data = result.data[0] if result.data else {}
+
+        if not trial_data or trial_data.get('error_message'):
+            return {
+                **trial_data,
+                'access_granted': False,
+                'abuse_risk_score': 0,
+            }
+
+        self._db.table('user_products').upsert({
+            'user_id': options.user_id,
+            'product': options.domain,
+            'status': 'trial',
+            'activated_by': 'system',
+            'trial_ends_at': trial_data.get('expires_at'),
+            'trial_days': options.trial_days,
+        }, on_conflict='user_id,product').execute()
+
+        abuse_risk_score = 0
+        try:
+            risk_result = self._db.table('free_trials').select(
+                'abuse_risk_score'
+            ).eq(
+                'id', trial_data.get('trial_id')
+            ).maybe_single().execute()
+            risk_data = risk_result if isinstance(risk_result, dict) else risk_result.data
+            if risk_data:
+                abuse_risk_score = risk_data.get('abuse_risk_score') or 0
+        except Exception as risk_exc:
+            self._logger.warning(
+                f"trial_abuse_risk_lookup_failed_nonfatal error={risk_exc}"
+            )
+
+        return {
+            **trial_data,
+            'access_granted': True,
+            'abuse_risk_score': abuse_risk_score,
+        }
 
 
 # =============================================================================

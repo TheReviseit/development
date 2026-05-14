@@ -9,23 +9,36 @@ import {
 } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import Image from "next/image";
 import { auth } from "@/src/firebase/firebase";
 import { onAuthStateChanged } from "firebase/auth";
 import Toast from "../components/Toast/Toast";
 import ButtonSpinner from "../components/ui/ButtonSpinner";
 import "../login/login.css";
 
+const OTP_LENGTH = 6;
+const REDIRECT_DELAY_MS = 1500;
+const emptyCode = (): string[] => Array(OTP_LENGTH).fill("");
+const OTP_CODE_RE = new RegExp(`^\\d{${OTP_LENGTH}}$`);
+
 export default function VerifyEmailPage() {
   const router = useRouter();
-  const [code, setCode] = useState(["", "", "", "", "", ""]);
+  const [code, setCode] = useState<string[]>(emptyCode);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
   const [loading, setLoading] = useState(false);
+  const [isVerified, setIsVerified] = useState(false);
   const [resendLoading, setResendLoading] = useState(false);
   const [resendCooldown, setResendCooldown] = useState(0);
   const [userId, setUserId] = useState<string | null>(null);
   const [userEmail, setUserEmail] = useState<string | null>(null);
   const inputRefs = useRef<(HTMLInputElement | null)[]>([]);
+  const verifyInFlightRef = useRef(false);
+  const redirectTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const verificationCode = code.join("");
+  const isCodeComplete = OTP_CODE_RE.test(verificationCode);
+  const isVerificationLocked = loading || isVerified;
 
   // Get current user from Firebase auth
   useEffect(() => {
@@ -42,6 +55,14 @@ export default function VerifyEmailPage() {
     return () => unsubscribe();
   }, [router]);
 
+  useEffect(() => {
+    return () => {
+      if (redirectTimeoutRef.current) {
+        clearTimeout(redirectTimeoutRef.current);
+      }
+    };
+  }, []);
+
   // Cooldown timer for resend button
   useEffect(() => {
     if (resendCooldown > 0) {
@@ -53,61 +74,91 @@ export default function VerifyEmailPage() {
     }
   }, [resendCooldown]);
 
-  // Handle input change
-  const handleChange = (index: number, value: string) => {
-    // Only allow digits
-    if (value && !/^\d$/.test(value)) return;
+  const applyDigits = (startIndex: number, digits: string) => {
+    if (isVerificationLocked) return;
+
+    const nextDigits = digits
+      .replace(/\D/g, "")
+      .slice(0, OTP_LENGTH - startIndex);
+    if (!nextDigits) return;
 
     const newCode = [...code];
-    newCode[index] = value;
+    nextDigits.split("").forEach((digit, offset) => {
+      newCode[startIndex + offset] = digit;
+    });
+
     setCode(newCode);
+    setError("");
+
+    const nextFocusIndex = Math.min(
+      startIndex + nextDigits.length,
+      OTP_LENGTH - 1
+    );
+    inputRefs.current[nextFocusIndex]?.focus();
+  };
+
+  // Handle input change
+  const handleChange = (index: number, value: string) => {
+    if (isVerificationLocked) return;
+
+    const digits = value.replace(/\D/g, "");
+
+    if (digits.length > 1) {
+      applyDigits(index, digits);
+      return;
+    }
+
+    const newCode = [...code];
+    newCode[index] = digits;
+    setCode(newCode);
+    setError("");
 
     // Auto-focus next input
-    if (value && index < 5) {
+    if (digits && index < OTP_LENGTH - 1) {
       inputRefs.current[index + 1]?.focus();
     }
   };
 
   // Handle backspace
   const handleKeyDown = (index: number, e: KeyboardEvent<HTMLInputElement>) => {
+    if (isVerificationLocked) return;
+
     if (e.key === "Backspace" && !code[index] && index > 0) {
       inputRefs.current[index - 1]?.focus();
     }
   };
 
   // Handle paste
-  const handlePaste = (e: ClipboardEvent<HTMLInputElement>) => {
+  const handlePaste = (index: number, e: ClipboardEvent<HTMLInputElement>) => {
     e.preventDefault();
-    const pastedData = e.clipboardData
-      .getData("text")
-      .replace(/\D/g, "")
-      .slice(0, 6);
-
-    if (pastedData.length === 6) {
-      const newCode = pastedData.split("");
-      setCode(newCode);
-      inputRefs.current[5]?.focus();
-    }
+    applyDigits(index, e.clipboardData.getData("text"));
   };
 
   // Submit verification
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const verificationCode = code.join("");
 
-    if (verificationCode.length !== 6) {
-      setError("Please enter all 6 digits");
+    if (verifyInFlightRef.current || isVerified) {
+      return;
+    }
+
+    if (!isCodeComplete) {
+      setError("Kindly enter the complete 6-digit verification code.");
       return;
     }
 
     setError("");
     setLoading(true);
+    verifyInFlightRef.current = true;
 
     if (!userId) {
-      setError("Please log in to verify your email");
+      setError("Please log in again to verify your email.");
       setLoading(false);
+      verifyInFlightRef.current = false;
       return;
     }
+
+    let verificationSucceeded = false;
 
     try {
       const response = await fetch("/api/auth/verify-email", {
@@ -122,29 +173,38 @@ export default function VerifyEmailPage() {
         throw new Error(data.error || "Verification failed");
       }
 
+      verificationSucceeded = true;
+      setIsVerified(true);
       setSuccess("Email verified successfully! Redirecting...");
 
       // Redirect to onboarding after 1.5 seconds
-      setTimeout(() => {
+      redirectTimeoutRef.current = setTimeout(() => {
         router.push("/onboarding");
-      }, 1500);
+      }, REDIRECT_DELAY_MS);
     } catch (err: any) {
       console.error("Verification error:", err);
       setError(err.message || "Invalid verification code. Please try again.");
-      setCode(["", "", "", "", "", ""]);
+      setCode(emptyCode());
       inputRefs.current[0]?.focus();
     } finally {
-      setLoading(false);
+      if (!verificationSucceeded) {
+        setLoading(false);
+        verifyInFlightRef.current = false;
+      }
     }
   };
 
   // Resend code
   const handleResend = async () => {
+    if (resendLoading || resendCooldown > 0 || isVerificationLocked) {
+      return;
+    }
+
     setResendLoading(true);
     setError("");
 
     if (!userId || !userEmail) {
-      setError("User information not available. Please log in again.");
+      setError("User information is unavailable. Please log in again.");
       setResendLoading(false);
       return;
     }
@@ -190,7 +250,7 @@ export default function VerifyEmailPage() {
               Email
             </h1>
             <p className="sub-text">
-              We've sent a verification code to your email.
+              We&apos;ve sent a verification code to your email.
               <br />
               Enter the 6-digit code to continue.
             </p>
@@ -200,7 +260,7 @@ export default function VerifyEmailPage() {
         {/* Right Side - Form */}
         <div className="auth-right">
           <div className="brand-tag">
-            <img src="/logo.png" alt="Flowauxi Logo" width="24" height="24" />
+            <Image src="/logo.png" alt="Flowauxi Logo" width={24} height={24} />
             <span>Flowauxi</span>
           </div>
 
@@ -241,26 +301,42 @@ export default function VerifyEmailPage() {
                     value={digit}
                     onChange={(e) => handleChange(index, e.target.value)}
                     onKeyDown={(e) => handleKeyDown(index, e)}
-                    onPaste={index === 0 ? handlePaste : undefined}
+                    onPaste={(e) => handlePaste(index, e)}
                     className="verification-input"
-                    disabled={loading}
+                    disabled={isVerificationLocked}
+                    aria-label={`Verification code digit ${index + 1}`}
+                    aria-invalid={Boolean(error)}
                   />
                 ))}
               </div>
 
-              <button type="submit" className="btn-primary" disabled={loading}>
-                {loading ? <ButtonSpinner size={20} /> : "Verify Email"}
+              <button
+                type="submit"
+                className="btn-primary"
+                disabled={isVerificationLocked || !isCodeComplete}
+              >
+                {isVerified ? (
+                  "Verified"
+                ) : loading ? (
+                  <ButtonSpinner size={20} />
+                ) : (
+                  "Verify Email"
+                )}
               </button>
 
               <div className="auth-divider">
-                <span>DIDN'T RECEIVE CODE?</span>
+                <span>DIDN&apos;T RECEIVE CODE?</span>
               </div>
 
               <button
                 type="button"
                 className="btn-secondary"
                 onClick={handleResend}
-                disabled={resendLoading || resendCooldown > 0}
+                disabled={
+                  resendLoading ||
+                  resendCooldown > 0 ||
+                  isVerificationLocked
+                }
                 style={{ marginBottom: "16px" }}
               >
                 {resendLoading ? (

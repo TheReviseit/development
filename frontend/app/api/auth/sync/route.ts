@@ -26,6 +26,7 @@ import {
   type SyncUserRequest,
   type SyncUserResponse,
 } from "@/types/auth.types";
+import { normalizeIndianPhoneInput } from "@/lib/validation/indianPhone";
 import { trace as otelTrace } from "@opentelemetry/api";
 
 type SyncResult = {
@@ -94,6 +95,10 @@ export async function POST(request: NextRequest) {
     const body: SyncUserRequest = await request.json().catch(() => ({} as any));
     const idToken = body?.idToken;
     const allowCreate = body?.allowCreate === true;
+    const submittedPhone =
+      typeof body?.phoneNumber === "string" && body.phoneNumber.trim()
+        ? normalizeIndianPhoneInput(body.phoneNumber)
+        : null;
 
     const currentProduct: ProductDomain = detectProductFromRequest(request);
 
@@ -139,6 +144,19 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    if (submittedPhone && !submittedPhone.isValid) {
+      return NextResponse.json<SyncUserResponse>(
+        {
+          success: false,
+          error: submittedPhone.message || "Invalid phone number",
+          code: AuthErrorCode.INVALID_REQUEST,
+          requestId: requestContext.request_id,
+          traceId,
+        },
+        { status: 400 },
+      );
+    }
+
     // ----------------------------------------------------------------------
     // Verify Firebase token
     // ----------------------------------------------------------------------
@@ -164,7 +182,9 @@ export async function POST(request: NextRequest) {
     const decodedToken = verificationResult.data as any;
     const firebaseUid: string = decodedToken.uid;
     const email: string = decodedToken.email || "";
-    const phoneNumber: string | null = decodedToken.phone_number || null;
+    const tokenPhoneNumber: string | null = decodedToken.phone_number || null;
+    const phoneNumber: string | null =
+      tokenPhoneNumber || (allowCreate ? submittedPhone?.e164 ?? null : null);
     const fullName: string = decodedToken.name || email.split("@")[0] || "User";
     const tokenIat: number = typeof decodedToken.iat === "number" ? decodedToken.iat : 0;
 

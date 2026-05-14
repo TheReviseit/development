@@ -1,12 +1,15 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useFirebaseAuth } from "@/lib/hooks/useFirebaseAuth";
 
 interface PhoneAuthFormProps {
   onSuccess?: () => void;
   onError?: (error: string) => void;
 }
+
+const OTP_LENGTH = 6;
+const E164_PHONE_RE = /^\+[1-9]\d{7,14}$/;
 
 /**
  * Phone Authentication Form Component
@@ -22,6 +25,16 @@ export default function PhoneAuthForm({
   const [otpCode, setOtpCode] = useState("");
   const [step, setStep] = useState<"phone" | "otp">("phone");
   const [countdown, setCountdown] = useState(0);
+  const [localError, setLocalError] = useState("");
+  const [otpStatus, setOtpStatus] = useState<"idle" | "verifying" | "verified">(
+    "idle",
+  );
+  const verifyInFlightRef = useRef(false);
+
+  const isOtpLocked =
+    loading || otpStatus === "verifying" || otpStatus === "verified";
+  const isOtpComplete = otpCode.length === OTP_LENGTH;
+  const displayError = localError || error;
 
   // Countdown timer for resend OTP
   useEffect(() => {
@@ -31,42 +44,95 @@ export default function PhoneAuthForm({
     }
   }, [countdown]);
 
+  const reportError = (message: string) => {
+    setLocalError(message);
+    onError?.(message);
+  };
+
+  const normalizePhoneNumber = (value: string) => {
+    const withoutSeparators = value
+      .replace(/[^\d+]/g, "")
+      .replace(/(?!^)\+/g, "");
+
+    return withoutSeparators.startsWith("+")
+      ? withoutSeparators
+      : `+${withoutSeparators}`;
+  };
+
   const handleSendOTP = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (loading) return;
+
+    const formattedPhoneNumber = normalizePhoneNumber(phoneNumber);
+
+    if (!E164_PHONE_RE.test(formattedPhoneNumber)) {
+      reportError("Kindly enter a valid phone number with country code.");
+      return;
+    }
+
+    setLocalError("");
 
     try {
-      await sendPhoneOTP(phoneNumber);
+      await sendPhoneOTP(formattedPhoneNumber);
+      setPhoneNumber(formattedPhoneNumber);
       setStep("otp");
       setCountdown(60); // 60 second cooldown
     } catch (err: any) {
-      if (onError) onError(err.message);
+      reportError(err.message || "Unable to send the verification code.");
     }
   };
 
   const handleVerifyOTP = async (e: React.FormEvent) => {
     e.preventDefault();
 
+    if (verifyInFlightRef.current || isOtpLocked) return;
+
+    if (!isOtpComplete) {
+      reportError("Kindly enter the complete 6-digit verification code.");
+      return;
+    }
+
+    setLocalError("");
+    setOtpStatus("verifying");
+    verifyInFlightRef.current = true;
+
     try {
       await verifyPhoneOTP(otpCode);
-      if (onSuccess) onSuccess();
+      setOtpStatus("verified");
+      onSuccess?.();
     } catch (err: any) {
-      if (onError) onError(err.message);
+      setOtpStatus("idle");
+      verifyInFlightRef.current = false;
+      setOtpCode("");
+      reportError(
+        err.message || "The verification code is incorrect or expired.",
+      );
     }
   };
 
   const handleResendOTP = async () => {
+    if (loading || countdown > 0 || otpStatus === "verified") return;
+
+    setLocalError("");
+
     try {
       await sendPhoneOTP(phoneNumber);
       setCountdown(60);
       setOtpCode("");
+      setOtpStatus("idle");
     } catch (err: any) {
-      if (onError) onError(err.message);
+      reportError(err.message || "Unable to resend the verification code.");
     }
   };
 
   const handleBack = () => {
+    if (isOtpLocked) return;
+
     setStep("phone");
     setOtpCode("");
+    setLocalError("");
+    setOtpStatus("idle");
+    verifyInFlightRef.current = false;
   };
 
   return (
@@ -84,9 +150,13 @@ export default function PhoneAuthForm({
               id="phone"
               type="tel"
               value={phoneNumber}
-              onChange={(e) => setPhoneNumber(e.target.value)}
+              onChange={(e) => {
+                setPhoneNumber(e.target.value);
+                setLocalError("");
+              }}
               placeholder="+1234567890"
               required
+              autoComplete="tel"
               className="
                 w-full px-4 py-3 
                 border border-gray-300 rounded-lg
@@ -138,10 +208,19 @@ export default function PhoneAuthForm({
               id="otp"
               type="text"
               value={otpCode}
-              onChange={(e) => setOtpCode(e.target.value.replace(/\D/g, ""))}
+              onChange={(e) => {
+                setOtpCode(
+                  e.target.value.replace(/\D/g, "").slice(0, OTP_LENGTH),
+                );
+                setLocalError("");
+              }}
               placeholder="123456"
-              maxLength={6}
+              maxLength={OTP_LENGTH}
               required
+              disabled={isOtpLocked}
+              autoComplete="one-time-code"
+              inputMode="numeric"
+              aria-invalid={Boolean(displayError)}
               className="
                 w-full px-4 py-3 
                 border border-gray-300 rounded-lg
@@ -156,7 +235,7 @@ export default function PhoneAuthForm({
 
           <button
             type="submit"
-            disabled={loading || otpCode.length !== 6}
+            disabled={isOtpLocked || !isOtpComplete}
             className="
               w-full px-6 py-3
               bg-blue-600 text-white rounded-lg
@@ -167,7 +246,9 @@ export default function PhoneAuthForm({
               focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2
             "
           >
-            {loading ? (
+            {otpStatus === "verified" ? (
+              "Verified"
+            ) : isOtpLocked ? (
               <div className="flex items-center justify-center gap-2">
                 <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
                 <span>Verifying...</span>
@@ -181,7 +262,8 @@ export default function PhoneAuthForm({
             <button
               type="button"
               onClick={handleBack}
-              className="text-blue-600 hover:text-blue-700 font-medium"
+              disabled={isOtpLocked}
+              className="text-blue-600 hover:text-blue-700 font-medium disabled:opacity-50 disabled:cursor-not-allowed"
             >
               ← Change Number
             </button>
@@ -192,7 +274,7 @@ export default function PhoneAuthForm({
               <button
                 type="button"
                 onClick={handleResendOTP}
-                disabled={loading}
+                disabled={loading || otpStatus === "verified"}
                 className="text-blue-600 hover:text-blue-700 font-medium disabled:opacity-50"
               >
                 Resend OTP
@@ -202,9 +284,9 @@ export default function PhoneAuthForm({
         </form>
       )}
 
-      {error && (
+      {displayError && (
         <div className="mt-4 p-3 bg-red-50 border border-red-200 rounded-lg">
-          <p className="text-sm text-red-600">{error}</p>
+          <p className="text-sm text-red-600">{displayError}</p>
         </div>
       )}
     </div>

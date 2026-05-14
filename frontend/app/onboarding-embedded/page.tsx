@@ -9,23 +9,39 @@
 
 "use client";
 
-import { useEffect, useState, useRef } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import Image from "next/image";
 import { useRouter } from "next/navigation";
-import { onAuthStateChanged, User } from "firebase/auth";
+import { onAuthStateChanged, type User } from "firebase/auth";
+import {
+  ArrowUpRight,
+  Headphones,
+  Instagram,
+  Linkedin,
+  Mail,
+  Phone,
+  Send,
+  X,
+} from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 import { auth } from "@/src/firebase/firebase";
 import WhatsAppEmbeddedSignupForm from "../components/onboarding/WhatsAppEmbeddedSignupForm";
 import SpaceshipLoader from "../components/loading/SpaceshipLoader";
 import {
-  createSubscription,
+  clearPaymentRequestId,
   createSubscriptionWithRetry,
   openRazorpayCheckout,
   verifyPayment,
-  clearPaymentRequestId,
 } from "../../lib/api/razorpay";
 import { detectDomainFromWindow } from "@/lib/pricing/domain-detection";
 import { getPricingForDomain } from "@/lib/pricing/pricing-engine";
 import { getDomainVisibility } from "@/lib/domain/config";
 import type { ProductDomain } from "@/lib/pricing/pricing-config";
+import {
+  CONTACT_CONFIG,
+  getMailtoLink,
+  getTelLink,
+} from "@/config/contact";
 import "../onboarding/onboarding.css";
 import "./onboarding-embedded.css";
 import OnboardingPricingReplica, {
@@ -35,11 +51,255 @@ import OnboardingPricingReplica, {
 type Step = "whatsapp" | "pricing" | "complete";
 type PlanName = OnboardingPricingPlan["id"];
 
+interface SupportContactItem {
+  id: string;
+  title: string;
+  description: string;
+  href: string;
+  label: string;
+  Icon: LucideIcon;
+}
+
+function SupportContactList({
+  items,
+  className,
+  itemClassName = "",
+  linkTabIndex,
+}: {
+  items: SupportContactItem[];
+  className: string;
+  itemClassName?: string;
+  linkTabIndex?: number;
+}) {
+  return (
+    <div className={className}>
+      {items.map(({ id, Icon, title, description, href, label }) => (
+        <section
+          key={id}
+          className={`support-panel-section ${itemClassName}`.trim()}
+        >
+          <div className="support-section-icon" aria-hidden="true">
+            <Icon size={15} strokeWidth={2.4} />
+          </div>
+          <div>
+            <h2>{title}</h2>
+            <p>{description}</p>
+            <a href={href} tabIndex={linkTabIndex}>
+              {label}
+            </a>
+          </div>
+        </section>
+      ))}
+    </div>
+  );
+}
+
+function SupportSocialLinks({
+  className = "support-socials",
+  linkTabIndex,
+}: {
+  className?: string;
+  linkTabIndex?: number;
+}) {
+  return (
+    <div className={className} aria-label="Flowauxi links">
+      <a
+        href="https://www.flowauxi.com"
+        aria-label="Flowauxi website"
+        target="_blank"
+        rel="noopener noreferrer"
+        tabIndex={linkTabIndex}
+      >
+        <ArrowUpRight size={19} strokeWidth={2.35} />
+      </a>
+      <a
+        href="https://linkedin.com/company/flowauxi"
+        aria-label="Flowauxi LinkedIn"
+        target="_blank"
+        rel="noopener noreferrer"
+        tabIndex={linkTabIndex}
+      >
+        <Linkedin size={18} strokeWidth={2.3} />
+      </a>
+      <a
+        href="https://www.instagram.com/flowauxi/"
+        aria-label="Flowauxi Instagram"
+        target="_blank"
+        rel="noopener noreferrer"
+        tabIndex={linkTabIndex}
+      >
+        <Instagram size={18} strokeWidth={2.3} />
+      </a>
+    </div>
+  );
+}
+
+function OnboardingSupportPanel() {
+  const [isSupportOpen, setIsSupportOpen] = useState(false);
+  const salesEmail = CONTACT_CONFIG.salesEmail || "sales@flowauxi.com";
+  const supportEmail = CONTACT_CONFIG.supportEmail || CONTACT_CONFIG.email;
+  const phoneLabel = CONTACT_CONFIG.phoneFormatted;
+  const businessHours =
+    CONTACT_CONFIG.businessHours?.schedule || "Monday to Friday, 9 AM to 6 PM";
+  const supportItems: SupportContactItem[] = [
+    {
+      id: "sales",
+      title: "Chat to sales",
+      description: "Interested in switching? Speak to our team.",
+      href: getMailtoLink(salesEmail),
+      label: salesEmail,
+      Icon: Send,
+    },
+    {
+      id: "email",
+      title: "Email support",
+      description: "We'll get back to you within 24 hours.",
+      href: getMailtoLink(supportEmail),
+      label: supportEmail,
+      Icon: Mail,
+    },
+    {
+      id: "phone",
+      title: "Call us",
+      description: businessHours,
+      href: getTelLink(),
+      label: phoneLabel,
+      Icon: Phone,
+    },
+  ];
+
+  useEffect(() => {
+    if (!isSupportOpen) {
+      return;
+    }
+
+    const originalOverflow = document.body.style.overflow;
+    const originalOverflowPriority =
+      document.body.style.getPropertyPriority("overflow");
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setIsSupportOpen(false);
+      }
+    };
+
+    document.body.style.setProperty("overflow", "hidden", "important");
+    window.addEventListener("keydown", handleKeyDown);
+
+    return () => {
+      if (originalOverflow) {
+        document.body.style.setProperty(
+          "overflow",
+          originalOverflow,
+          originalOverflowPriority,
+        );
+      } else {
+        document.body.style.removeProperty("overflow");
+      }
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [isSupportOpen]);
+
+  return (
+    <>
+      <aside className="onboarding-support-panel" aria-label="Flowauxi support">
+        <div className="support-panel-header">
+          <div className="support-panel-brand">
+            <Image src="/logo.png" alt="Flowauxi Logo" width={26} height={26} />
+            <span>Flowauxi</span>
+          </div>
+
+          <button
+            type="button"
+            className="mobile-support-trigger"
+            aria-label="Open support"
+            aria-expanded={isSupportOpen}
+            onClick={() => setIsSupportOpen(true)}
+          >
+            <Headphones size={18} strokeWidth={2.25} />
+          </button>
+        </div>
+
+        <SupportContactList
+          items={supportItems}
+          className="support-panel-sections"
+        />
+
+        <div className="support-panel-footer">
+          <SupportSocialLinks />
+        </div>
+      </aside>
+
+      <div
+        className={`mobile-support-overlay ${isSupportOpen ? "open" : ""}`}
+        aria-hidden="true"
+        onClick={() => setIsSupportOpen(false)}
+      />
+
+      <aside
+        className={`mobile-support-drawer ${isSupportOpen ? "open" : ""}`}
+        role="dialog"
+        aria-modal="true"
+        aria-label="Flowauxi support menu"
+        aria-hidden={!isSupportOpen}
+      >
+        <div className="mobile-support-drawer-header">
+          <div className="support-panel-brand">
+            <Image src="/logo.png" alt="Flowauxi Logo" width={26} height={26} />
+            <span>Flowauxi</span>
+          </div>
+          <button
+            type="button"
+            className="mobile-support-close"
+            aria-label="Close support"
+            tabIndex={isSupportOpen ? 0 : -1}
+            onClick={() => setIsSupportOpen(false)}
+          >
+            <X size={18} strokeWidth={2.3} />
+          </button>
+        </div>
+
+        <div className="mobile-support-drawer-copy">
+          <p>Support</p>
+          <h2>Need help with setup?</h2>
+          <span>Reach the Flowauxi team from one clean place.</span>
+        </div>
+
+        <SupportContactList
+          items={supportItems}
+          className="mobile-support-sections"
+          itemClassName="mobile-support-section"
+          linkTabIndex={isSupportOpen ? undefined : -1}
+        />
+
+        <div className="mobile-support-footer">
+          <SupportSocialLinks
+            className="support-socials mobile-support-socials"
+            linkTabIndex={isSupportOpen ? undefined : -1}
+          />
+        </div>
+      </aside>
+    </>
+  );
+}
+
+function OnboardingProgress({ step }: { step: Step }) {
+  return (
+    <div className="onboarding-right-progress" aria-label="Onboarding progress">
+      <span className={step === "whatsapp" ? "active" : "complete"} />
+      <span
+        className={
+          step === "pricing" ? "active" : step === "complete" ? "complete" : ""
+        }
+      />
+      <span className={step === "complete" ? "active" : ""} />
+    </div>
+  );
+}
+
 export default function OnboardingPageEmbedded() {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
   const [step, setStep] = useState<Step>("whatsapp");
-  const [connectionError, setConnectionError] = useState<string | null>(null);
   const [paymentLoading, setPaymentLoading] = useState<PlanName | null>(null);
   const [paymentError, setPaymentError] = useState<string | null>(null);
   const [wabaData, setWabaData] = useState<{
@@ -47,77 +307,53 @@ export default function OnboardingPageEmbedded() {
     phoneNumberId: string;
   } | null>(null);
 
-  // Domain-based pricing
   const [currentDomain, setCurrentDomain] =
     useState<ProductDomain>("dashboard");
-  const [PLANS, setPLANS] = useState<OnboardingPricingPlan[]>([]);
-  // Whether the current domain requires WhatsApp connection
-  // Read from lib/domain/config.ts — single source of truth
-  const [whatsappRequired, setWhatsappRequired] = useState(true);
-  // Whether to show the WhatsApp connect step even if optional (shop)
+  const [plans, setPlans] = useState<OnboardingPricingPlan[]>([]);
   const [showWhatsappStep, setShowWhatsappStep] = useState(true);
 
-  // Guard: prevent concurrent/duplicate trial start API calls
   const trialStartInProgressRef = useRef(false);
-
   const router = useRouter();
 
-  // Detect domain and load pricing on mount
   useEffect(() => {
-    const domain = detectDomainFromWindow();
-    setCurrentDomain(domain);
+    const timeoutId = window.setTimeout(() => {
+      const domain = detectDomainFromWindow();
+      setCurrentDomain(domain);
 
-    // Read WhatsApp requirement from centralized config
-    const domainConfig = getDomainVisibility(domain as any);
-    const domainRequiresWhatsApp = domainConfig.requiresWhatsApp;
-    setWhatsappRequired(domainRequiresWhatsApp);
-    // Offer WhatsApp connect step for shop onboarding even if optional
-    setShowWhatsappStep(domainRequiresWhatsApp || domain === "shop");
+      const domainConfig = getDomainVisibility(domain as any);
+      const domainRequiresWhatsApp = domainConfig.requiresWhatsApp;
+      setShowWhatsappStep(domainRequiresWhatsApp || domain === "shop");
 
-    const domainPricing = getPricingForDomain(domain);
-    const plans: OnboardingPricingPlan[] = domainPricing.plans.map((plan) => ({
-      id: plan.id as PlanName,
-      name: plan.name,
-      priceDisplay: plan.priceDisplay,
-      description: plan.description,
-      popular: plan.popular,
-      features: plan.features as string[],
-      tagline: plan.tagline,
-    }));
-    setPLANS(plans);
+      const domainPricing = getPricingForDomain(domain);
+      setPlans(
+        domainPricing.plans.map((plan) => ({
+          id: plan.id as PlanName,
+          name: plan.name,
+          priceDisplay: plan.priceDisplay,
+          description: plan.description,
+          popular: plan.popular,
+          features: plan.features as string[],
+          tagline: plan.tagline,
+        })),
+      );
+    }, 0);
+
+    return () => window.clearTimeout(timeoutId);
   }, []);
 
-  useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
-      if (currentUser) {
-        setUser(currentUser);
-        // Check onboarding status before showing the page
-        const shouldRedirect = await checkOnboardingStatus();
-        // Only stop loading if we're not redirecting
-        if (!shouldRedirect) {
-          setLoading(false);
-        }
-      } else {
-        router.push("/login");
-      }
-    });
-
-    return () => unsubscribe();
-  }, [router]);
-
-  const checkOnboardingStatus = async (): Promise<boolean> => {
-    // CACHE BUST: v6-domain-aware-whatsapp — domain-aware WhatsApp check
+  const checkOnboardingStatus = useCallback(async (): Promise<boolean> => {
+    const runCheck = async (): Promise<boolean> => {
     console.log(
       "[onboarding-embedded] checkOnboardingStatus START - v6-domain-aware",
     );
+
     try {
       const onboardingResponse = await fetch("/api/onboarding/check");
 
-      // Handle 503 Service Unavailable - server can't verify, retry with backoff
       if (onboardingResponse.status === 503) {
         console.warn("[onboarding-embedded] Onboarding check 503, retrying...");
         await new Promise((resolve) => setTimeout(resolve, 1000));
-        return checkOnboardingStatus(); // Simple retry once
+        return runCheck();
       }
 
       if (!onboardingResponse.ok) {
@@ -125,12 +361,10 @@ export default function OnboardingPageEmbedded() {
           "[onboarding-embedded] Onboarding check failed:",
           onboardingResponse.status,
         );
-        return false; // Show onboarding page on error
+        return false;
       }
 
       const onboardingData = await onboardingResponse.json();
-
-      // Read domain config for WhatsApp requirement
       const domain = detectDomainFromWindow();
       const domainConfig = getDomainVisibility(domain as any);
       const domainRequiresWhatsApp = domainConfig.requiresWhatsApp;
@@ -145,7 +379,6 @@ export default function OnboardingPageEmbedded() {
         domainRequiresWhatsApp,
       });
 
-      // v4: Handle "error" as explicit third state
       const hasErrors =
         onboardingData.whatsappConnected === "error" ||
         onboardingData.hasActiveSubscription === "error" ||
@@ -161,13 +394,12 @@ export default function OnboardingPageEmbedded() {
         return false;
       }
 
-      // v4: Use trial as equivalent to subscription for dashboard access
       const hasProductAccess =
         onboardingData.hasActiveSubscription === true ||
         onboardingData.hasActiveTrial === true;
 
-      // Determine if WhatsApp requirement is satisfied
-      const whatsappSatisfied = !domainRequiresWhatsApp || onboardingData.whatsappConnected === true;
+      const whatsappSatisfied =
+        !domainRequiresWhatsApp || onboardingData.whatsappConnected === true;
 
       console.log("[onboarding-embedded] Decision values:", {
         hasProductAccess,
@@ -178,11 +410,9 @@ export default function OnboardingPageEmbedded() {
         whatsappSatisfied,
       });
 
-      // CRITICAL FIX (v6): For domains that DON'T require WhatsApp,
-      // redirect to dashboard if user has product access — don't check WhatsApp.
       if (hasProductAccess && whatsappSatisfied) {
         console.log(
-          "[onboarding-embedded] Has product access AND WhatsApp satisfied, redirecting to dashboard",
+          "[onboarding-embedded] Has product access and WhatsApp satisfied, redirecting",
         );
         router.push("/dashboard");
         return true;
@@ -190,10 +420,6 @@ export default function OnboardingPageEmbedded() {
 
       console.log("[onboarding-embedded] NOT redirecting - showing onboarding");
 
-      // Decide which step to show:
-      // - If WhatsApp step is not shown for this domain: pricing
-      // - If shown and already connected: pricing
-      // - If shown and not connected: WhatsApp connect (required or optional)
       if (!shouldShowWhatsappStep) {
         setStep("pricing");
       } else if (onboardingData.whatsappConnected === true) {
@@ -205,11 +431,29 @@ export default function OnboardingPageEmbedded() {
       return false;
     } catch (error) {
       console.error("[onboarding-embedded] Error:", error);
-      // Fail-safe: keep user on a deterministic step instead of blank UI
       setStep(showWhatsappStep ? "whatsapp" : "pricing");
       return false;
     }
   };
+
+    return runCheck();
+  }, [router, showWhatsappStep]);
+
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
+      if (currentUser) {
+        setUser(currentUser);
+        const shouldRedirect = await checkOnboardingStatus();
+        if (!shouldRedirect) {
+          setLoading(false);
+        }
+      } else {
+        router.push("/login");
+      }
+    });
+
+    return () => unsubscribe();
+  }, [router, checkOnboardingStatus]);
 
   const handleConnectionSuccess = async (data: {
     wabaId: string;
@@ -217,16 +461,13 @@ export default function OnboardingPageEmbedded() {
     displayPhoneNumber: string;
     wabaName: string;
   }) => {
-    console.log("✅ WhatsApp connected successfully:", data);
+    console.log("WhatsApp connected successfully:", data);
     setWabaData({ wabaId: data.wabaId, phoneNumberId: data.phoneNumberId });
-    setConnectionError(null);
-    // Move to pricing step instead of redirecting to dashboard
     setStep("pricing");
   };
 
   const handleConnectionError = (error: string) => {
-    console.error("❌ WhatsApp connection error:", error);
-    setConnectionError(error);
+    console.error("WhatsApp connection error:", error);
   };
 
   const handleSelectFreeTrial = async () => {
@@ -235,12 +476,8 @@ export default function OnboardingPageEmbedded() {
       return;
     }
 
-    // Guard: prevent concurrent/duplicate calls (e.g., double-click,
-    // React StrictMode double-invoke, or redirect-loop re-mount)
     if (trialStartInProgressRef.current) {
-      console.warn(
-        "[trial] Start already in progress, ignoring duplicate call",
-      );
+      console.warn("[trial] Start already in progress, ignoring duplicate call");
       return;
     }
     trialStartInProgressRef.current = true;
@@ -249,7 +486,6 @@ export default function OnboardingPageEmbedded() {
     setPaymentError(null);
 
     try {
-      // Start the free trial via internal API
       const response = await fetch("/api/trials/internal/start", {
         method: "POST",
         headers: {
@@ -268,11 +504,7 @@ export default function OnboardingPageEmbedded() {
 
       const result = await response.json();
 
-      // Both new trials AND existing trials (is_existing) are success cases.
-      // The backend returns is_existing: true when the trial already exists
-      // and access_granted: true when user_products was written atomically.
       if (result.success && (result.trial || result.is_existing)) {
-        // Store onboarding data
         sessionStorage.setItem(
           "pending_onboarding",
           JSON.stringify({
@@ -284,31 +516,25 @@ export default function OnboardingPageEmbedded() {
           }),
         );
 
-        // Redirect to dashboard with success message
         router.push("/dashboard?trial_started=true");
       } else if (result.error === "TRIAL_EXISTS") {
-        // Legacy fallback for older backend responses
-        // Still a success case — user has a trial, just go to dashboard
         router.push("/dashboard?trial_started=true");
       } else {
         setPaymentError(
           result.message || "Failed to start free trial. Please try again.",
         );
         setPaymentLoading(null);
-        // Allow retry on terminal failure
         trialStartInProgressRef.current = false;
       }
     } catch (err) {
       console.error("Free trial error:", err);
       setPaymentError("Something went wrong. Please try again.");
       setPaymentLoading(null);
-      // Allow retry on terminal failure
       trialStartInProgressRef.current = false;
     }
   };
 
   const handleSelectPlan = async (planId: PlanName) => {
-    // Handle free trial for Starter plan
     if (planId === "starter") {
       return handleSelectFreeTrial();
     }
@@ -318,29 +544,24 @@ export default function OnboardingPageEmbedded() {
       return;
     }
 
-    // Reset stale payment state so each plan selection gets fresh idempotency keys
     clearPaymentRequestId();
-
     setPaymentLoading(planId);
     setPaymentError(null);
 
     try {
-      // Create subscription order with automatic retry for transient errors
       const order = await createSubscriptionWithRetry(
         planId,
         user.email,
         user.displayName || undefined,
-        undefined, // customerPhone
+        undefined,
         user.uid,
-        2, // maxRetries - Max 2 retries (total 3 attempts)
+        2,
       );
 
       if (!order.success) {
-        // Provide user-friendly error messages based on error code
         const errorCode = order.error_code;
         let errorMessage = order.error || "Failed to create subscription";
 
-        // Customize message based on error type
         if (errorCode === "USER_NOT_FOUND") {
           errorMessage =
             "Your account setup is incomplete. Please sign out and sign in again to complete setup.";
@@ -371,7 +592,6 @@ export default function OnboardingPageEmbedded() {
         return;
       }
 
-      // Open Razorpay checkout
       await openRazorpayCheckout({
         subscriptionId: order.subscription_id,
         keyId: order.key_id,
@@ -380,7 +600,6 @@ export default function OnboardingPageEmbedded() {
         customerEmail: user.email,
         customerName: user.displayName || undefined,
         onSuccess: async (response) => {
-          // Verify payment (sets status to PROCESSING)
           const verification = await verifyPayment(
             {
               razorpay_subscription_id: response.razorpay_subscription_id,
@@ -391,7 +610,6 @@ export default function OnboardingPageEmbedded() {
           );
 
           if (verification.success) {
-            // Store onboarding data in sessionStorage for completion after payment confirmed
             sessionStorage.setItem(
               "pending_onboarding",
               JSON.stringify({
@@ -402,8 +620,6 @@ export default function OnboardingPageEmbedded() {
               }),
             );
 
-            // Redirect to payment status page (don't trust client-side success)
-            // Status page will poll until webhook confirms COMPLETED
             router.push(
               `/payment/status?subscription_id=${response.razorpay_subscription_id}`,
             );
@@ -429,8 +645,6 @@ export default function OnboardingPageEmbedded() {
           setPaymentLoading(null);
         },
         onClose: () => {
-          // User closed the modal without completing payment
-          // Clear payment state so they can select a different plan
           console.log(
             "Payment modal closed by user without completing payment",
           );
@@ -452,125 +666,50 @@ export default function OnboardingPageEmbedded() {
   const isPricingStep = step === "pricing";
 
   return (
-    <div className="onboarding-container onboarding-two-step">
-      {/* Left Sidebar */}
-      <div className="onboarding-sidebar">
-        <div className="sidebar-brand">
-          <img src="/logo.png" alt="Flowauxi Logo" />
-          <span>Flowauxi</span>
-        </div>
+    <main className={`onboarding-container onboarding-two-step onboarding-stage-${step}`}>
+      <div className="onboarding-shell">
+        <OnboardingSupportPanel />
 
-        <div className="sidebar-header">
-          <h1>
-            {step === "whatsapp" &&
-              showWhatsappStep &&
-              (whatsappRequired
-                ? "Connect WhatsApp Business"
-                : "Connect WhatsApp (Optional)")}
-            {step === "pricing" && "Choose Your Plan"}
-            {step === "complete" && "Setup Complete!"}
-          </h1>
-          <p className="sidebar-description">
-            {step === "whatsapp" && showWhatsappStep &&
-              "Connect your WhatsApp Business Account in one simple step using Meta's official Embedded Signup flow."}
-            {step === "pricing" &&
-              "Select a plan that fits your business needs. You can upgrade or downgrade anytime."}
-            {step === "complete" &&
-              "Your account is ready! Redirecting to your dashboard..."}
-          </p>
-        </div>
-
-        {/* Step Indicator — adapts dynamically based on domain */}
-        <div className="onboarding-steps">
-          {showWhatsappStep && (
-            <div
-              className={`step-item ${step === "whatsapp" ? "active" : "completed"}`}
-            >
-              <div className="step-number">{step === "whatsapp" ? "1" : "✓"}</div>
-              <span>
-                {whatsappRequired
-                  ? "Connect WhatsApp"
-                  : "Connect WhatsApp (Optional)"}
-              </span>
-            </div>
-          )}
-          <div
-            className={`step-item ${step === "pricing" ? "active" : step === "complete" ? "completed" : ""}`}
-          >
-            <div className="step-number">{step === "complete" ? "✓" : showWhatsappStep ? "2" : "1"}</div>
-            <span>Choose Plan</span>
-          </div>
-          <div className={`step-item ${step === "complete" ? "active" : ""}`}>
-            <div className="step-number">{showWhatsappStep ? "3" : "2"}</div>
-            <span>Start Using</span>
-          </div>
-        </div>
-
-        <div className="sidebar-note">
-          <svg
-            width="16"
-            height="16"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-          >
-            <circle cx="12" cy="12" r="10" />
-            <path d="M12 16v-4M12 8h.01" />
-          </svg>
-          <p>
-            {step === "whatsapp" && showWhatsappStep &&
-              "Your WhatsApp Business Account credentials remain with Meta. We only access what you explicitly authorize."}
-            {step === "pricing" &&
-              "Secure payments powered by Razorpay. All plans include WhatsApp API costs."}
-            {step === "complete" &&
-              "You can manage your subscription from the dashboard settings."}
-          </p>
-        </div>
-      </div>
-
-      {/* Right Panel - Dynamic Content Based on Step */}
-      <div
-        className={`onboarding-main onboarding-main-embedded ${isPricingStep ? "onboarding-main-embedded--pricing" : ""}`}
-      >
-        {/* Mobile Header */}
-        <div className="mobile-header">
-          <img src="/logo.png" alt="Flowauxi Logo" />
-          <span>Flowauxi</span>
-        </div>
-
-        {/* Main Content */}
-        <div
-          className={`embedded-content ${isPricingStep ? "embedded-content--pricing" : ""}`}
+        <section
+          className={`onboarding-main onboarding-main-embedded ${isPricingStep ? "onboarding-main-embedded--pricing" : ""}`}
+          aria-label="Onboarding setup"
         >
-          {step === "whatsapp" && (
-            <WhatsAppEmbeddedSignupForm
-              onSuccess={handleConnectionSuccess}
-              onError={handleConnectionError}
-            />
-          )}
+          <OnboardingProgress step={step} />
 
-          {step === "pricing" && (
-            <OnboardingPricingReplica
-              plans={PLANS}
-              paymentLoading={paymentLoading}
-              paymentError={paymentError}
-              onDismissError={() => setPaymentError(null)}
-              onSelectPlan={(planId) => handleSelectPlan(planId)}
-            />
-          )}
+          <div
+            className={`embedded-content ${isPricingStep ? "embedded-content--pricing" : ""}`}
+          >
+            {step === "whatsapp" && (
+              <WhatsAppEmbeddedSignupForm
+                onSuccess={handleConnectionSuccess}
+                onError={handleConnectionError}
+              />
+            )}
 
-          {step === "complete" && (
-            <div className="success-message">
-              <div className="success-icon">🎉</div>
-              <h2>You're All Set!</h2>
-              <p>
-                Your WhatsApp AI assistant is ready. Redirecting to dashboard...
-              </p>
-            </div>
-          )}
-        </div>
+            {step === "pricing" && (
+              <OnboardingPricingReplica
+                plans={plans}
+                paymentLoading={paymentLoading}
+                paymentError={paymentError}
+                onDismissError={() => setPaymentError(null)}
+                onSelectPlan={(planId) => handleSelectPlan(planId)}
+              />
+            )}
+
+            {step === "complete" && (
+              <div className="success-message">
+                <div className="success-icon" aria-hidden="true">
+                  OK
+                </div>
+                <h2>You&apos;re all set</h2>
+                <p>
+                  Your WhatsApp AI assistant is ready. Redirecting to dashboard...
+                </p>
+              </div>
+            )}
+          </div>
+        </section>
       </div>
-    </div>
+    </main>
   );
 }

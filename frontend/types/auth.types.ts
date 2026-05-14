@@ -41,6 +41,11 @@ export interface SyncUserRequest {
   idToken: string;
   /** If true, allows creating new user in DB. If false/undefined, returns 404 for missing users. */
   allowCreate?: boolean;
+  /**
+   * Optional signup phone in E.164 format. This is treated as unverified
+   * profile data unless it also exists on the trusted Firebase token.
+   */
+  phoneNumber?: string;
 }
 
 export interface SyncUserResponse {

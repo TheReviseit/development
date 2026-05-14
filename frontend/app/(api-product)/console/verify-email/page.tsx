@@ -11,6 +11,11 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import "../console.css";
 
+const OTP_LENGTH = 6;
+const REDIRECT_DELAY_MS = 1500;
+const emptyCode = (): string[] => Array(OTP_LENGTH).fill("");
+const OTP_CODE_RE = new RegExp(`^\\d{${OTP_LENGTH}}$`);
+
 /**
  * Console Email Verification Page
  *
@@ -25,8 +30,9 @@ export default function ConsoleVerifyEmailPage() {
 
   // State
   const [email, setEmail] = useState("");
-  const [code, setCode] = useState(["", "", "", "", "", ""]);
+  const [code, setCode] = useState<string[]>(emptyCode);
   const [loading, setLoading] = useState(false);
+  const [isVerified, setIsVerified] = useState(false);
   const [resendLoading, setResendLoading] = useState(false);
   const [resendCooldown, setResendCooldown] = useState(0);
   const [error, setError] = useState("");
@@ -37,6 +43,12 @@ export default function ConsoleVerifyEmailPage() {
 
   // Refs for OTP inputs
   const inputRefs = useRef<(HTMLInputElement | null)[]>([]);
+  const verifyInFlightRef = useRef(false);
+  const redirectTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const verificationCode = code.join("");
+  const isCodeComplete = OTP_CODE_RE.test(verificationCode);
+  const isVerificationLocked = loading || isVerified;
 
   // Load email from sessionStorage on mount
   useEffect(() => {
@@ -45,6 +57,14 @@ export default function ConsoleVerifyEmailPage() {
       setEmail(storedEmail);
     }
     // If no email in sessionStorage, show fallback UI (don't auto-redirect)
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (redirectTimeoutRef.current) {
+        clearTimeout(redirectTimeoutRef.current);
+      }
+    };
   }, []);
 
   // Cooldown timer for resend
@@ -58,56 +78,84 @@ export default function ConsoleVerifyEmailPage() {
     }
   }, [resendCooldown]);
 
-  // Handle OTP input change
-  const handleChange = (index: number, value: string) => {
-    // Only allow digits
-    if (value && !/^\d$/.test(value)) return;
+  const applyDigits = (startIndex: number, digits: string) => {
+    if (isVerificationLocked) return;
+
+    const nextDigits = digits
+      .replace(/\D/g, "")
+      .slice(0, OTP_LENGTH - startIndex);
+    if (!nextDigits) return;
 
     const newCode = [...code];
-    newCode[index] = value;
+    nextDigits.split("").forEach((digit, offset) => {
+      newCode[startIndex + offset] = digit;
+    });
+
+    setCode(newCode);
+    setError("");
+
+    const nextFocusIndex = Math.min(
+      startIndex + nextDigits.length,
+      OTP_LENGTH - 1
+    );
+    inputRefs.current[nextFocusIndex]?.focus();
+  };
+
+  // Handle OTP input change
+  const handleChange = (index: number, value: string) => {
+    if (isVerificationLocked) return;
+
+    const digits = value.replace(/\D/g, "");
+
+    if (digits.length > 1) {
+      applyDigits(index, digits);
+      return;
+    }
+
+    const newCode = [...code];
+    newCode[index] = digits;
     setCode(newCode);
     setError("");
 
     // Auto-focus next input
-    if (value && index < 5) {
+    if (digits && index < OTP_LENGTH - 1) {
       inputRefs.current[index + 1]?.focus();
     }
   };
 
   // Handle backspace navigation
   const handleKeyDown = (index: number, e: KeyboardEvent<HTMLInputElement>) => {
+    if (isVerificationLocked) return;
+
     if (e.key === "Backspace" && !code[index] && index > 0) {
       inputRefs.current[index - 1]?.focus();
     }
   };
 
   // Handle paste (paste full 6-digit code)
-  const handlePaste = (e: ClipboardEvent<HTMLInputElement>) => {
+  const handlePaste = (index: number, e: ClipboardEvent<HTMLInputElement>) => {
     e.preventDefault();
-    const pastedData = e.clipboardData
-      .getData("text")
-      .replace(/\D/g, "")
-      .slice(0, 6);
-
-    if (pastedData.length === 6) {
-      const newCode = pastedData.split("");
-      setCode(newCode);
-      inputRefs.current[5]?.focus();
-    }
+    applyDigits(index, e.clipboardData.getData("text"));
   };
 
   // Submit verification
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const verificationCode = code.join("");
 
-    if (verificationCode.length !== 6) {
-      setError("Please enter all 6 digits");
+    if (verifyInFlightRef.current || isVerified) {
+      return;
+    }
+
+    if (!isCodeComplete) {
+      setError("Kindly enter the complete 6-digit verification code.");
       return;
     }
 
     setError("");
     setLoading(true);
+    verifyInFlightRef.current = true;
+
+    let verificationSucceeded = false;
 
     try {
       const response = await fetch("/api/console/auth/verify-otp", {
@@ -128,28 +176,33 @@ export default function ConsoleVerifyEmailPage() {
         throw new Error(data.message || "Verification failed");
       }
 
+      verificationSucceeded = true;
+      setIsVerified(true);
       setSuccess("Email verified! Redirecting to console...");
 
       // Clear stored email
       sessionStorage.removeItem("console_verify_email");
 
       // Redirect to console
-      setTimeout(() => {
+      redirectTimeoutRef.current = setTimeout(() => {
         router.push("/console");
-      }, 1500);
+      }, REDIRECT_DELAY_MS);
     } catch (err: any) {
       console.error("Verification error:", err);
       setError(err.message || "Invalid verification code");
-      setCode(["", "", "", "", "", ""]);
+      setCode(emptyCode());
       inputRefs.current[0]?.focus();
     } finally {
-      setLoading(false);
+      if (!verificationSucceeded) {
+        setLoading(false);
+        verifyInFlightRef.current = false;
+      }
     }
   };
 
   // Resend verification code
   const handleResend = async () => {
-    if (resendCooldown > 0) return;
+    if (resendLoading || resendCooldown > 0 || isVerificationLocked) return;
 
     setResendLoading(true);
     setError("");
@@ -243,10 +296,12 @@ export default function ConsoleVerifyEmailPage() {
                     value={digit}
                     onChange={(e) => handleChange(index, e.target.value)}
                     onKeyDown={(e) => handleKeyDown(index, e)}
-                    onPaste={handlePaste}
+                    onPaste={(e) => handlePaste(index, e)}
                     className="console-otp-input"
                     autoFocus={index === 0}
                     aria-label={`Digit ${index + 1}`}
+                    aria-invalid={Boolean(error)}
+                    disabled={isVerificationLocked}
                   />
                 ))}
               </div>
@@ -276,9 +331,11 @@ export default function ConsoleVerifyEmailPage() {
               <button
                 type="submit"
                 className="console-btn console-btn-primary console-btn-full"
-                disabled={loading || code.join("").length !== 6}
+                disabled={isVerificationLocked || !isCodeComplete}
               >
-                {loading ? (
+                {isVerified ? (
+                  "Verified"
+                ) : loading ? (
                   <span className="console-btn-loading">
                     <span className="console-spinner"></span>
                     Verifying...
@@ -292,12 +349,16 @@ export default function ConsoleVerifyEmailPage() {
             {/* Resend Code */}
             <div className="console-auth-resend">
               <span className="console-auth-resend-text">
-                Didn't receive the code?
+                Didn&apos;t receive the code?
               </span>
               <button
                 type="button"
                 onClick={handleResend}
-                disabled={resendLoading || resendCooldown > 0}
+                disabled={
+                  resendLoading ||
+                  resendCooldown > 0 ||
+                  isVerificationLocked
+                }
                 className="console-btn-link"
               >
                 {resendLoading
