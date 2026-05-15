@@ -9,6 +9,12 @@ import WhatsAppEmbeddedSignupForm from "../components/onboarding/WhatsAppEmbedde
 import MessagingSettingsForm from "../components/onboarding/MessagingSettingsForm";
 import VerificationForm from "../components/onboarding/VerificationForm";
 import SpaceshipLoader from "../components/loading/SpaceshipLoader";
+import {
+  getOnboardingCheck,
+  invalidateOnboardingCheckCache,
+} from "@/lib/auth/onboarding-check-client";
+import { getProductDomainFromBrowser } from "@/lib/domain/client";
+import { requiresWhatsAppOnboarding } from "@/lib/domain/config";
 import "./onboarding.css";
 
 const STEPS = [
@@ -122,9 +128,14 @@ export default function OnboardingPage() {
       if (currentUser) {
         setUser(currentUser);
         // Check if user already completed onboarding
-        const response = await fetch("/api/onboarding/check");
-        const data = await response.json();
-        if (data.onboardingCompleted) {
+        const data = await getOnboardingCheck();
+        const product = getProductDomainFromBrowser();
+        const hasProductAccess =
+          data.hasActiveSubscription === true || data.hasActiveTrial === true;
+        const whatsappRequired = requiresWhatsAppOnboarding(product);
+        const whatsappSatisfied =
+          !whatsappRequired || data.whatsappConnected === true;
+        if (hasProductAccess && whatsappSatisfied) {
           router.push("/dashboard");
           return;
         }
@@ -265,6 +276,7 @@ export default function OnboardingPage() {
           "Content-Type": "application/json",
         },
       });
+      invalidateOnboardingCheckCache();
 
       // Redirect to dashboard
       router.push("/dashboard");

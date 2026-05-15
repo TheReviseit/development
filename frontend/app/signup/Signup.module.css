@@ -2,31 +2,82 @@
 /* Optimized: Reduced from 632 lines to ~280 lines (56% smaller) */
 
 .authContainer {
+  --auth-viewport-height: 100vh;
+  --auth-shell-padding: 16px;
+  --auth-shell-gap: 32px;
   position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  width: 100vw;
-  height: 100vh;
+  inset: 0;
+  width: 100%;
+  min-height: var(--auth-viewport-height);
+  height: var(--auth-viewport-height);
   display: flex;
   align-items: center;
   justify-content: center;
   background: var(--auth-bg);
-  padding: 16px;
+  padding:
+    max(var(--auth-shell-padding), env(safe-area-inset-top))
+    max(var(--auth-shell-padding), env(safe-area-inset-right))
+    max(var(--auth-shell-padding), env(safe-area-inset-bottom))
+    max(var(--auth-shell-padding), env(safe-area-inset-left));
   overflow: hidden;
   z-index: 9999;
+}
+
+@supports (height: 100svh) {
+  .authContainer {
+    --auth-viewport-height: 100svh;
+  }
 }
 
 .authSplit {
   display: flex;
   max-width: 1300px;
   width: 100%;
-  max-height: 90vh;
+  max-height: min(900px, calc(var(--auth-viewport-height) - var(--auth-shell-gap)));
   background: var(--card-bg);
   border-radius: 24px;
   overflow: hidden;
   box-shadow: 0 20px 60px rgba(0, 0, 0, 0.1);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .authSplit {
+    animation: authShellIn 640ms cubic-bezier(0.16, 1, 0.3, 1) both;
+    transform-origin: center;
+  }
+
+  .gradientOverlay {
+    animation: authImageIn 820ms cubic-bezier(0.16, 1, 0.3, 1) both;
+    transform-origin: center;
+  }
+
+  .quoteSection {
+    animation: authFadeUp 620ms cubic-bezier(0.16, 1, 0.3, 1) 100ms both;
+  }
+
+  .marketingContentPanel {
+    animation: authFadeUp 700ms cubic-bezier(0.16, 1, 0.3, 1) 180ms both;
+  }
+
+  .authRight {
+    animation: authPanelIn 680ms cubic-bezier(0.16, 1, 0.3, 1) 120ms both;
+  }
+
+  .brandTag {
+    animation: authFadeUp 560ms cubic-bezier(0.16, 1, 0.3, 1) 220ms both;
+  }
+
+  .formHeader {
+    animation: authFadeUp 620ms cubic-bezier(0.16, 1, 0.3, 1) 280ms both;
+  }
+
+  .authForm {
+    animation: authFadeUp 660ms cubic-bezier(0.16, 1, 0.3, 1) 340ms both;
+  }
+
+  .authFooter {
+    animation: authFadeUp 620ms cubic-bezier(0.16, 1, 0.3, 1) 420ms both;
+  }
 }
 
 /* Left Side - Gradient */
@@ -36,7 +87,8 @@
   background: var(--card-bg);
   display: flex;
   flex-direction: column;
-  justify-content: space-between;
+  justify-content: flex-start;
+  align-items: flex-start;
   padding: 20px;
   overflow: hidden;
 }
@@ -53,66 +105,107 @@
   background-image: url("/gradient-waves.png");
   background-size: cover;
   background-position: center;
-  opacity: 0.9;
+  opacity: 1;
   pointer-events: none;
   border-radius: 12px;
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+  overflow: hidden;
+  filter: saturate(1.22) contrast(1.08) brightness(1.04);
+}
+
+.gradientOverlay::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background:
+    linear-gradient(180deg, rgba(8, 9, 18, 0.02) 0%, rgba(8, 9, 18, 0.12) 42%, rgba(8, 9, 18, 0.5) 100%),
+    linear-gradient(90deg, rgba(8, 9, 18, 0.42) 0%, rgba(8, 9, 18, 0.16) 58%, rgba(8, 9, 18, 0.04) 100%);
+}
+
+.marketingContentPanel {
+  position: relative;
+  z-index: 2;
+  width: min(700px, calc(100% - 48px));
+  margin: auto 24px clamp(44px, 6vh, 72px);
+  padding: 0;
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
 }
 
 .quoteSection {
   position: relative;
   z-index: 2;
-  padding: 20px 20px 0;
+  padding: 0;
+  margin: 28px 24px 0;
 }
 
 .quoteLabel {
-  color: var(--white-70);
+  display: inline-flex;
+  align-items: center;
+  color: rgba(255, 255, 255, 0.78);
   font-family: var(--font-primary);
-  font-size: 11px;
-  letter-spacing: 2px;
-  font-weight: 500;
+  font-size: 12px;
+  line-height: 1;
+  letter-spacing: 0;
+  font-weight: 700;
   text-transform: uppercase;
+  margin: 0;
+  text-shadow: 0 1px 18px rgba(0, 0, 0, 0.28);
 }
 
 .contentSection {
   position: relative;
   z-index: 2;
-  margin-bottom: 20px;
-  padding: 0 20px 20px;
+  padding: 0;
 }
 
 .mainHeading {
   font-family: var(--font-secondary);
-  font-size: clamp(36px, 5vw, 52px);
-  font-weight: 600;
+  font-size: 54px;
+  font-weight: 700;
   color: white;
-  line-height: 1;
-  margin: 0 0 16px;
-  letter-spacing: -2px;
+  line-height: 0.96;
+  margin: 0 0 24px;
+  letter-spacing: 0;
+  text-wrap: balance;
+  text-shadow: 0 10px 38px rgba(0, 0, 0, 0.34);
 }
 
 .subText {
   font-family: var(--font-primary);
-  font-size: 14px;
-  color: white;
+  font-size: 15px;
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.88);
   line-height: 1.5;
   margin: 0;
+  max-width: 640px;
+  text-wrap: pretty;
+  text-shadow: 0 6px 24px rgba(0, 0, 0, 0.3);
 }
 
 .benefitsList {
-  display: flex;
-  flex-direction: column;
+  display: grid;
   gap: 10px;
-  margin-top: 24px;
+  margin: 30px 0 0;
+  padding: 0;
+  list-style: none;
 }
 
 .benefitItem {
   font-family: var(--font-primary);
-  font-size: 14px;
-  color: white;
-  display: flex;
-  align-items: center;
-  gap: 8px;
+  font-size: 15px;
+  font-weight: 650;
+  line-height: 1.35;
+  color: rgba(255, 255, 255, 0.92);
+  padding: 0;
+  background: transparent;
+  box-shadow: none;
+  backdrop-filter: none;
+  text-shadow: 0 6px 22px rgba(0, 0, 0, 0.34);
 }
 
 /* Right Side - Form */
@@ -121,11 +214,10 @@
   background: var(--card-bg);
   display: flex;
   flex-direction: column;
-  padding: 20px 40px;
+  padding: 16px 40px 12px;
   position: relative;
-  overflow-y: auto;
-  overflow-x: hidden;
-  max-height: 90vh;
+  overflow: hidden;
+  max-height: 100%;
 }
 
 .brandTag {
@@ -136,7 +228,7 @@
   font-size: 15px;
   font-weight: 600;
   color: var(--text-secondary);
-  margin-bottom: 12px;
+  margin-bottom: 6px;
 }
 
 .brandTag img {
@@ -148,9 +240,9 @@
   flex: 1;
   display: flex;
   flex-direction: column;
-  justify-content: center;
-  padding-top: 4px;
-  padding-bottom: 16px;
+  justify-content: flex-start;
+  padding-top: 6px;
+  padding-bottom: 0;
   max-width: 420px;
   margin: 0 auto;
   width: 100%;
@@ -158,21 +250,22 @@
 
 .formHeader {
   text-align: center;
-  margin-bottom: 14px;
+  margin-bottom: 10px;
 }
 
 .formHeader h2 {
   font-family: var(--font-secondary);
-  font-size: clamp(26px, 3vw, 30px);
+  font-size: 28px;
+  line-height: 1.12;
   font-weight: 600;
   color: var(--text-primary);
   margin: 0 0 4px;
-  letter-spacing: -1px;
+  letter-spacing: 0;
 }
 
 .formHeader p {
   font-family: var(--font-primary);
-  font-size: 13px;
+  font-size: 12px;
   color: var(--text-muted);
   margin: 0;
 }
@@ -180,25 +273,27 @@
 .authForm {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 7px;
 }
 
 .formGroup {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 3px;
 }
 
 .formGroup label {
   font-family: var(--font-primary);
-  font-size: 13px;
+  font-size: 12px;
+  line-height: 1.25;
   font-weight: 500;
   color: var(--text-secondary);
 }
 
 .formGroup input {
   font-family: var(--font-primary);
-  padding: 8px 13px;
+  min-height: 40px;
+  padding: 7px 13px;
   border: 1px solid black;
   border-radius: 8px;
   font-size: 14px;
@@ -235,12 +330,12 @@
   transform: translateY(-50%);
   display: flex;
   align-items: center;
-  height: calc(100% - 14px);
+  height: calc(100% - 10px);
   padding-right: 10px;
   border-right: 1px solid var(--border-light, #d1d5db);
   color: var(--text-secondary);
   font-family: var(--font-primary);
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 600;
   pointer-events: none;
 }
@@ -278,7 +373,7 @@
   display: flex;
   justify-content: flex-start;
   align-items: center;
-  margin-top: 4px;
+  margin-top: 0;
 }
 
 .checkboxLabel {
@@ -286,26 +381,27 @@
   align-items: center;
   gap: 6px;
   font-family: var(--font-primary);
-  font-size: 12px;
+  font-size: 11.5px;
   color: var(--text-muted);
   cursor: pointer;
   user-select: none;
-  line-height: 1.4;
+  line-height: 1.28;
 }
 
 .checkboxLabel input[type="checkbox"] {
   cursor: pointer;
-  width: 15px;
-  height: 15px;
+  width: 14px;
+  height: 14px;
   flex-shrink: 0;
 }
 
 .btnPrimary {
   font-family: var(--font-primary);
-  padding: 9px;
+  min-height: 40px;
+  padding: 8px;
   background: var(--primary-color);
   color: var(--card-bg);
-  border: 1.5 solid black;
+  border: 1.5px solid black;
   border-radius: 8px;
   font-size: 14px;
   font-weight: 600;
@@ -313,7 +409,7 @@
   transition:
     background 0.2s,
     transform 0.2s;
-  margin-top: 2px;
+  margin-top: 0;
 }
 
 .btnPrimary:hover:not(:disabled) {
@@ -328,6 +424,7 @@
 
 .btnGoogle {
   font-family: var(--font-primary);
+  min-height: 40px;
   padding: 8px 10px;
   background: var(--card-bg);
   color: var(--text-secondary);
@@ -358,7 +455,7 @@
 .authFooter {
   font-family: var(--font-primary);
   text-align: center;
-  margin-top: 10px;
+  margin-top: 8px;
   font-size: 13px;
   color: var(--text-muted);
 }
@@ -374,20 +471,87 @@
   opacity: 0.7;
 }
 
+@media (max-width: 1100px) {
+  .authRight {
+    padding: 20px 32px;
+  }
+
+  .marketingContentPanel {
+    width: calc(100% - 32px);
+    margin: auto 16px clamp(32px, 5vh, 52px);
+  }
+
+  .quoteSection {
+    padding: 0;
+    margin: 24px 16px 0;
+  }
+
+  .contentSection {
+    padding: 0;
+  }
+
+  .mainHeading {
+    font-size: 44px;
+  }
+
+  .subText {
+    font-size: 15px;
+  }
+
+  .benefitItem {
+    font-size: 14px;
+  }
+}
+
+@media (hover: none) and (pointer: coarse) {
+  .authContainer {
+    position: relative;
+    min-height: 100vh;
+    min-height: 100svh;
+    height: auto;
+    overflow: visible;
+  }
+
+  .authSplit {
+    max-height: none;
+  }
+
+  .authRight {
+    max-height: none;
+    overflow: visible;
+  }
+}
+
+@media (min-width: 769px) and (max-height: 680px) {
+  .authRight {
+    overflow-y: auto;
+    overflow-x: hidden;
+  }
+}
+
 /* Mobile Responsive - Single optimized breakpoint */
 @media (max-width: 768px) {
   .authContainer {
+    --auth-shell-padding: 0px;
+    position: relative;
     padding: 0;
-    height: 100vh;
+    min-height: 100vh;
+    min-height: 100svh;
+    height: 100svh;
+    align-items: stretch;
+    justify-content: flex-start;
     overflow: hidden;
   }
 
   .authSplit {
     border-radius: 0;
-    height: 100vh;
-    max-height: 100vh;
+    min-height: 100vh;
+    min-height: 100svh;
+    height: 100svh;
+    max-height: none;
     flex-direction: column;
     overflow: hidden;
+    box-shadow: none;
   }
 
   .authLeft {
@@ -396,38 +560,58 @@
 
   .authRight {
     flex: 1;
-    padding: 24px 28px;
+    padding:
+      max(18px, env(safe-area-inset-top))
+      max(26px, env(safe-area-inset-right))
+      max(18px, env(safe-area-inset-bottom))
+      max(26px, env(safe-area-inset-left));
     justify-content: flex-start;
     min-height: 0;
-    height: 100vh;
-    max-height: 100vh;
-    overflow-y: auto;
-    overflow-x: hidden;
-    -webkit-overflow-scrolling: touch;
+    height: 100svh;
+    max-height: none;
+    overflow: hidden;
   }
 
   .brandTag {
-    margin-bottom: 16px;
+    margin-bottom: 10px;
     margin-top: 0;
   }
 
   .formContainer {
-    padding: 8px 0 24px;
+    padding: 0;
     justify-content: flex-start;
     max-width: 100%;
   }
 
   .formHeader {
-    margin-bottom: 20px;
+    margin-bottom: 14px;
+  }
+
+  .formHeader h2 {
+    font-size: 28px;
+    line-height: 1.12;
+    margin-bottom: 4px;
+  }
+
+  .formHeader p {
+    font-size: 12px;
   }
 
   .authForm {
-    gap: 12px;
+    gap: 8px;
+  }
+
+  .formGroup {
+    gap: 4px;
+  }
+
+  .formGroup label {
+    font-size: 12px;
   }
 
   .formGroup input {
-    padding: 11px 14px;
-    font-size: 15px;
+    padding: 9px 14px;
+    font-size: 14px;
     border-radius: 10px;
     min-height: 44px;
   }
@@ -438,44 +622,66 @@
 
   .btnPrimary,
   .btnGoogle {
-    padding: 11px 16px;
+    padding: 10px 16px;
     border-radius: 10px;
     min-height: 44px;
   }
 
   .authFooter {
-    margin-top: 16px;
-    padding-bottom: 8px;
+    margin-top: 10px;
+    padding-bottom: 0;
+  }
+}
+
+@media (max-width: 768px) and (max-height: 700px) {
+  .authContainer {
+    height: auto;
+    overflow: visible;
+  }
+
+  .authSplit {
+    height: auto;
+    overflow: visible;
+  }
+
+  .authRight {
+    min-height: 100svh;
+    height: auto;
+    overflow: visible;
   }
 }
 
 /* Small Mobile */
 @media (max-width: 480px) {
   .authRight {
-    padding: 28px 24px;
+    padding:
+      max(16px, env(safe-area-inset-top))
+      max(22px, env(safe-area-inset-right))
+      max(16px, env(safe-area-inset-bottom))
+      max(22px, env(safe-area-inset-left));
   }
 
   .formHeader h2 {
-    font-size: 28px;
+    font-size: 26px;
   }
 
   .authForm {
-    gap: 14px;
+    gap: 8px;
   }
 
   .formGroup input {
-    padding: 12px 15px;
-    min-height: 46px;
+    padding: 9px 14px;
+    min-height: 44px;
   }
 
   .phoneWrapper input {
-    padding-left: 62px;
+    padding-left: 60px;
   }
 
   .btnPrimary,
   .btnGoogle {
-    padding: 13px 16px;
-    min-height: 46px;
+    padding: 10px 16px;
+    min-height: 44px;
   }
 }
 
@@ -487,22 +693,22 @@
 
 .validationError {
   font-family: var(--font-primary);
-  font-size: 12px;
+  font-size: 11px;
   color: #ef4444;
-  margin-top: 4px;
+  margin-top: 2px;
   display: block;
 }
 
 /* Password Strength Indicator */
 .passwordStrength {
-  margin-top: 8px;
+  margin-top: 4px;
 }
 
 .strengthBar {
-  height: 4px;
+  height: 3px;
   border-radius: 2px;
   transition: all 0.3s ease;
-  margin-bottom: 4px;
+  margin-bottom: 2px;
 }
 
 .strengthBar.weak {
@@ -528,6 +734,50 @@
 }
 
 /* Spinner Animation */
+@keyframes authShellIn {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 10px, 0) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+}
+
+@keyframes authImageIn {
+  from {
+    opacity: 0;
+    transform: scale(1.018);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes authPanelIn {
+  from {
+    opacity: 0;
+    transform: translate3d(12px, 0, 0);
+  }
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+  }
+}
+
+@keyframes authFadeUp {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 14px, 0);
+  }
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+  }
+}
+
 @keyframes spin {
   from {
     transform: rotate(0deg);

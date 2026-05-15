@@ -14,6 +14,12 @@ import { auth } from "@/src/firebase/firebase";
 import { onAuthStateChanged } from "firebase/auth";
 import Toast from "../components/Toast/Toast";
 import ButtonSpinner from "../components/ui/ButtonSpinner";
+import { getProductDomainFromBrowser } from "@/lib/domain/client";
+import {
+  getOnboardingCheck,
+  getOnboardingDestination,
+  recordOnboardingRedirect,
+} from "@/lib/auth/onboarding-check-client";
 import "../login/login.css";
 
 const OTP_LENGTH = 6;
@@ -40,6 +46,20 @@ export default function VerifyEmailPage() {
   const isCodeComplete = OTP_CODE_RE.test(verificationCode);
   const isVerificationLocked = loading || isVerified;
 
+  const routeAfterVerification = async () => {
+    const product = getProductDomainFromBrowser();
+
+    try {
+      const status = await getOnboardingCheck({ product, force: true });
+      const destination = getOnboardingDestination(status, product);
+      recordOnboardingRedirect(destination);
+      router.replace(destination);
+    } catch (error) {
+      console.error("[VerifyEmail] Failed to resolve onboarding destination:", error);
+      router.replace(`/onboarding-embedded?domain=${product}`);
+    }
+  };
+
   // Get current user from Firebase auth
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (user) => {
@@ -48,7 +68,7 @@ export default function VerifyEmailPage() {
         setUserEmail(user.email);
       } else {
         // No user logged in, redirect to signup
-        router.push("/signup");
+        router.replace("/signup");
       }
     });
 
@@ -177,9 +197,8 @@ export default function VerifyEmailPage() {
       setIsVerified(true);
       setSuccess("Email verified successfully! Redirecting...");
 
-      // Redirect to onboarding after 1.5 seconds
       redirectTimeoutRef.current = setTimeout(() => {
-        router.push("/onboarding");
+        void routeAfterVerification();
       }, REDIRECT_DELAY_MS);
     } catch (err: any) {
       console.error("Verification error:", err);

@@ -23,6 +23,11 @@ import {
   getRecommendedConfig,
   shouldCheckRedirectResult,
 } from "@/lib/auth/firebase-auth";
+import {
+  getOnboardingCheck,
+  getOnboardingDestination,
+} from "@/lib/auth/onboarding-check-client";
+import type { AuthDecision } from "@/types/auth.types";
 
 // Lazy load Toast component
 const Toast = dynamic(() => import("../components/Toast/Toast"), {
@@ -89,7 +94,13 @@ async function syncWithRetry(
   allowCreate: boolean,
   retries = 1,
   phoneNumber?: string,
-): Promise<{ ok: boolean; status: number; code?: string; message?: string }> {
+): Promise<{
+  ok: boolean;
+  status: number;
+  code?: string;
+  message?: string;
+  authDecision?: AuthDecision;
+}> {
   for (let i = 0; i <= retries; i++) {
     try {
       const response = await fetch("/api/auth/sync", {
@@ -103,9 +114,17 @@ async function syncWithRetry(
         }),
       });
 
-      if (response.ok) return { ok: true, status: response.status };
+      const responseData = await response.json().catch(() => ({}));
 
-      const errorData = await response.json().catch(() => ({}));
+      if (response.ok) {
+        return {
+          ok: true,
+          status: response.status,
+          authDecision: responseData.authDecision,
+        };
+      }
+
+      const errorData = responseData;
       const code = errorData.code || errorData.error;
       const message = errorData.message || errorData.error;
 
@@ -124,19 +143,21 @@ async function syncWithRetry(
 // Helper function to check if user has completed WhatsApp onboarding
 async function checkOnboardingStatus(): Promise<boolean> {
   try {
-    const response = await fetch("/api/onboarding/check");
-    if (!response.ok) {
-      console.log("[checkOnboardingStatus] API returned non-ok status:", response.status);
-      return false;
-    }
-    const data = await response.json();
+    const data = await getOnboardingCheck({ force: true });
     console.log("[checkOnboardingStatus] API response:", {
       onboardingCompleted: data.onboardingCompleted,
       whatsappConnected: data.whatsappConnected,
       hasActiveTrial: data.hasActiveTrial,
       hasActiveSubscription: data.hasActiveSubscription,
+      canEnterDashboard: data.canEnterDashboard,
+      nextPath: data.nextPath,
+      reason: data.reason,
     });
-    const isOnboardingComplete = data.whatsappConnected === true;
+    const product = getProductDomainFromBrowser();
+    const isOnboardingComplete = getOnboardingDestination(
+      data,
+      product,
+    ).startsWith("/dashboard");
     console.log("[checkOnboardingStatus] Returning:", isOnboardingComplete);
     return isOnboardingComplete;
   } catch (error) {
@@ -145,85 +166,27 @@ async function checkOnboardingStatus(): Promise<boolean> {
   }
 }
 
+function getPostAuthPath(
+  syncResult: { authDecision?: AuthDecision },
+  fallbackOnboardingCompleted?: boolean,
+) {
+  if (syncResult.authDecision?.nextPath) {
+    return syncResult.authDecision.nextPath;
+  }
+
+  if (typeof fallbackOnboardingCompleted === "boolean") {
+    return fallbackOnboardingCompleted
+      ? "/dashboard"
+      : `/onboarding-embedded?domain=${getProductDomainFromBrowser()}`;
+  }
+
+  return `/onboarding-embedded?domain=${getProductDomainFromBrowser()}`;
+}
+
 // ═════════════════════════════════════════════════════════════════════════════
 // PRODUCTION-GRADE AUTH UTILITIES
 // FAANG-Level Session Management with Circuit Breakers and Observability
 // ═════════════════════════════════════════════════════════════════════════════
-
-/**
- * Configuration for session confirmation polling.
- *
- * Why these values:
- * - maxAttempts: 5 attempts provides ~1.5s total wait time worst case
- * - baseIntervalMs: 150ms is enough for cookie propagation in 95% of cases
- * - backoffMultiplier: Exponential prevents thundering herd on slow clients
- */
-const SESSION_CONFIRMATION_CONFIG = {
-  maxAttempts: 5,
-  baseIntervalMs: 150,
-  backoffMultiplier: 1.0, // Linear backoff: 150, 300, 450, 600, 750ms
-};
-
-/**
- * Verify session cookie is readable server-side with exponential backoff polling.
- *
- * This eliminates the auth-to-navigation race condition by confirming the
- * session cookie has propagated before allowing navigation to proceed.
- *
- * @param maxAttempts - Maximum polling attempts (default: 5)
- * @param baseIntervalMs - Base interval between attempts (default: 150ms)
- * @returns Promise<boolean> - True if session confirmed, false if exhausted
- */
-async function waitForSessionConfirmation(
-  maxAttempts: number = SESSION_CONFIRMATION_CONFIG.maxAttempts,
-  baseIntervalMs: number = SESSION_CONFIRMATION_CONFIG.baseIntervalMs
-): Promise<boolean> {
-  console.log(
-    `[Auth] Starting session confirmation polling (max ${maxAttempts} attempts)`
-  );
-
-  for (let attempt = 0; attempt < maxAttempts; attempt++) {
-    try {
-      const response = await fetch("/api/auth/verify-session", {
-        method: "GET",
-        credentials: "include", // CRITICAL: Must send cookies
-        cache: "no-store", // Never cache this verification
-        headers: {
-          "X-Request-Source": "signup-flow",
-        },
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        console.log(
-          `[Auth] Session confirmed on attempt ${attempt + 1}/${maxAttempts}`,
-          { userId: data.userId }
-        );
-        return true;
-      }
-
-      // Session not ready yet, log and retry
-      const errorData = await response.json().catch(() => ({}));
-      console.log(
-        `[Auth] Session not ready (attempt ${attempt + 1}/${maxAttempts}):`,
-        errorData.error || `HTTP ${response.status}`
-      );
-    } catch (error) {
-      console.warn(
-        `[Auth] Session verification error (attempt ${attempt + 1}/${maxAttempts}):`,
-        error
-      );
-    }
-
-    // Calculate delay with linear backoff
-    const delay = baseIntervalMs * (attempt + 1);
-    console.log(`[Auth] Waiting ${delay}ms before retry...`);
-    await new Promise((resolve) => setTimeout(resolve, delay));
-  }
-
-  console.error(`[Auth] Session confirmation failed after ${maxAttempts} attempts`);
-  return false;
-}
 
 /**
  * Circuit breaker for Firebase ID token retrieval.
@@ -338,7 +301,7 @@ function logPerformanceMetric(measureName: string, targetMs: number): void {
  */
 function clearAuthPerformanceMarks(): void {
   const marks = ["auth-start", "auth-success", "navigation-start", "navigation-complete"];
-  const measures = ["auth-to-nav", "nav-latency", "session-confirmation"];
+  const measures = ["auth-to-nav", "nav-latency"];
 
   marks.forEach((mark) => {
     try {
@@ -443,9 +406,12 @@ export default function SignupPage() {
             return;
           }
 
-          // Check onboarding and redirect
-          const onboardingCompleted = await checkOnboardingStatus();
-          router.push(onboardingCompleted ? "/dashboard" : "/onboarding");
+          const fallbackCompleted = syncResult.authDecision
+            ? undefined
+            : await checkOnboardingStatus();
+          router.replace(
+            getPostAuthPath(syncResult, fallbackCompleted) || "/onboarding",
+          );
         } else if (result.error) {
           // Handle redirect error
           const errorAnalysis = classifyAuthError(result.error);
@@ -590,7 +556,7 @@ export default function SignupPage() {
             console.warn(
               "[Signup] Product not auto-provisioned, redirecting to onboarding",
             );
-            router.push(`/onboarding-embedded?domain=${domain}`);
+            router.replace(`/onboarding-embedded?domain=${domain}`);
             return;
           }
           throw new Error(syncResult.code || "AUTH_SYNC_FAILED");
@@ -709,7 +675,7 @@ const syncResult = await syncWithRetry(idToken, true);
             console.warn(
               "[Signup] Product not auto-provisioned, redirecting to onboarding",
             );
-            router.push(`/onboarding-embedded?domain=${domain}`);
+            router.replace(`/onboarding-embedded?domain=${domain}`);
             return;
           }
           setError("Failed to complete signup. Please try again.");
@@ -727,45 +693,22 @@ const syncResult = await syncWithRetry(idToken, true);
         // STEP 5: Session Confirmation with Exponential Backoff
         // CRITICAL: Confirms cookie propagation before navigation
         // ════════════════════════════════════════════════════════════════════
-        console.log("[Auth] Session created, confirming propagation...");
-        performance.mark("session-confirmation-start");
-
-        const sessionConfirmed = await waitForSessionConfirmation(
-          5, // maxAttempts
-          150 // baseIntervalMs
-        );
-
-        performance.mark("session-confirmation-end");
-        performance.measure(
-          "session-confirmation",
-          "session-confirmation-start",
-          "session-confirmation-end"
-        );
-
-        if (!sessionConfirmed) {
-          console.error("[Auth] Session confirmation failed after all attempts");
-          setError(
-            "Session verification timed out. Please refresh the page and try again."
-          );
-          setGoogleLoading(false);
-          await auth.signOut();
-          return;
-        }
-
         performance.mark("auth-success");
 
         // ════════════════════════════════════════════════════════════════════
         // STEP 6: Check Onboarding Status and Navigate
         // ════════════════════════════════════════════════════════════════════
-        const onboardingCompleted = await checkOnboardingStatus();
+        const fallbackCompleted = syncResult.authDecision
+          ? undefined
+          : await checkOnboardingStatus();
 
         performance.mark("navigation-start");
 
-        // Navigate to appropriate destination
-        const destination = onboardingCompleted ? "/dashboard" : "/onboarding";
+        const destination =
+          getPostAuthPath(syncResult, fallbackCompleted) || "/onboarding";
         console.log(`[Auth] Navigating to ${destination}`);
 
-        router.push(destination);
+        router.replace(destination);
 
         // ════════════════════════════════════════════════════════════════════
         // STEP 7: Performance Observability
@@ -791,7 +734,6 @@ const syncResult = await syncWithRetry(idToken, true);
           // Log all metrics
           logPerformanceMetric("auth-to-nav", 750); // 750ms target
           logPerformanceMetric("nav-latency", 400); // 400ms target
-          logPerformanceMetric("session-confirmation", 750); // 750ms target
 
           // Overall success log
           const totalMeasure = performance.getEntriesByName(
@@ -853,11 +795,11 @@ const syncResult = await syncWithRetry(idToken, true);
     quoteLabel: isBooking ? "WHY FLOWAUXI BOOKINGS" : "WHY FLOWAUXI",
     heading: isBooking ? (
       <>
-        Provide
+        Bookings
         <br />
-        Lovely
+        that run on
         <br />
-        Services
+        autopilot
       </>
     ) : (
       <>
@@ -868,33 +810,51 @@ const syncResult = await syncWithRetry(idToken, true);
         Business
       </>
     ),
-    subText: isBooking ? (
-      <>
-        List your offerings. Get booked instantly
-        <br />
-        and grow your community without the hassle.
-      </>
-    ) : (
-      <>
-        Join businesses across India automating customer conversations
-        <br />
-        and scaling sales without hiring extra staff.
-      </>
-    ),
-    benefits: isBooking ? (
-      <div className={styles.benefitsList}>
-        <div className={styles.benefitItem}>✓ Instant booking confirmation</div>
-        <div className={styles.benefitItem}>✓ Automated smart reminders</div>
-        <div className={styles.benefitItem}>✓ Real-time calendar sync</div>
-      </div>
-    ) : (
-      <div className={styles.benefitsList}>
-        <div className={styles.benefitItem}>✓ AI-powered WhatsApp automation</div>
-        <div className={styles.benefitItem}>✓ Automated orders & invoicing</div>
-        <div className={styles.benefitItem}>✓ Broadcast campaigns & analytics</div>
-      </div>
-    )
+    subText: isBooking
+      ? "Let customers discover services, pick an available slot, and confirm appointments without back-and-forth messages."
+      : "Join businesses across India automating customer conversations and scaling sales without hiring extra staff.",
+    benefits: isBooking
+      ? [
+          "Instant booking confirmations",
+          "Smart reminders and calendar sync",
+          "Staff availability and payments",
+        ]
+      : [
+          "AI-powered WhatsApp automation",
+          "Automated orders and invoicing",
+          "Broadcast campaigns and analytics",
+        ],
   };
+
+  const marketingBenefits = (
+    <ul className={styles.benefitsList} aria-label="Product benefits">
+      {marketingContent.benefits.map((benefit) => (
+        <li className={styles.benefitItem} key={benefit}>
+          {benefit}
+        </li>
+      ))}
+    </ul>
+  );
+
+  const marketingEyebrow = (
+    <div className={styles.quoteSection}>
+      <p className={styles.quoteLabel}>{marketingContent.quoteLabel}</p>
+    </div>
+  );
+
+  const marketingPanel = (
+    <div className={styles.marketingContentPanel}>
+      <div className={styles.contentSection}>
+        <h1 className={styles.mainHeading}>
+          {marketingContent.heading}
+        </h1>
+        <p className={styles.subText}>
+          {marketingContent.subText}
+        </p>
+        {marketingBenefits}
+      </div>
+    </div>
+  );
 
   // Show loading state if redirect is pending
   if (isRedirectPending) {
@@ -902,19 +862,9 @@ const syncResult = await syncWithRetry(idToken, true);
       <div className={styles.authContainer}>
         <div className={styles.authSplit}>
           <div className={styles.authLeft}>
-            <div className={styles.quoteSection}>
-              <p className={styles.quoteLabel}>{marketingContent.quoteLabel}</p>
-            </div>
             <div className={styles.gradientOverlay}></div>
-            <div className={styles.contentSection}>
-              <h1 className={styles.mainHeading}>
-                {marketingContent.heading}
-              </h1>
-              <p className={styles.subText}>
-                {marketingContent.subText}
-              </p>
-              {marketingContent.benefits}
-            </div>
+            {marketingEyebrow}
+            {marketingPanel}
           </div>
           <div className={styles.authRight}>
             <div className={styles.formContainer}>
@@ -946,19 +896,9 @@ const syncResult = await syncWithRetry(idToken, true);
       <div className={styles.authSplit}>
         {/* Left Side - Gradient */}
         <div className={styles.authLeft}>
-          <div className={styles.quoteSection}>
-            <p className={styles.quoteLabel}>{marketingContent.quoteLabel}</p>
-          </div>
           <div className={styles.gradientOverlay}></div>
-          <div className={styles.contentSection}>
-            <h1 className={styles.mainHeading}>
-              {marketingContent.heading}
-            </h1>
-            <p className={styles.subText}>
-              {marketingContent.subText}
-            </p>
-            {marketingContent.benefits}
-          </div>
+          {marketingEyebrow}
+          {marketingPanel}
         </div>
 
         {/* Right Side - Form */}

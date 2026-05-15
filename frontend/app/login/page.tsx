@@ -18,6 +18,11 @@ import {
   getRecommendedConfig,
   shouldCheckRedirectResult,
 } from "@/lib/auth/firebase-auth";
+import {
+  getOnboardingCheck,
+  getOnboardingDestination,
+} from "@/lib/auth/onboarding-check-client";
+import type { AuthDecision } from "@/types/auth.types";
 
 // Lazy load Toast component - only loaded when needed
 const Toast = dynamic(() => import("../components/Toast/Toast"), {
@@ -83,7 +88,13 @@ async function syncWithRetry(
   idToken: string,
   allowCreate: boolean,
   retries = 1,
-): Promise<{ ok: boolean; status: number; code?: string; message?: string }> {
+): Promise<{
+  ok: boolean;
+  status: number;
+  code?: string;
+  message?: string;
+  authDecision?: AuthDecision;
+}> {
   for (let i = 0; i <= retries; i++) {
     try {
       const response = await fetch("/api/auth/sync", {
@@ -93,9 +104,17 @@ async function syncWithRetry(
         body: JSON.stringify({ idToken, allowCreate }),
       });
 
-      if (response.ok) return { ok: true, status: response.status };
+      const responseData = await response.json().catch(() => ({}));
 
-      const errorData = await response.json().catch(() => ({}));
+      if (response.ok) {
+        return {
+          ok: true,
+          status: response.status,
+          authDecision: responseData.authDecision,
+        };
+      }
+
+      const errorData = responseData;
       const code = errorData.code || errorData.error;
       const message = errorData.message || errorData.error;
 
@@ -123,79 +142,34 @@ async function syncLoginWithAutoHeal(idToken: string) {
 // Helper function to check onboarding status with fallback
 async function checkOnboardingStatus(): Promise<boolean> {
   try {
-    const response = await fetch("/api/onboarding/check");
-    if (!response.ok) return false;
-    const data = await response.json();
-    return data.onboardingCompleted ?? false;
+    const data = await getOnboardingCheck({ force: true });
+    const product = getProductDomainFromBrowser();
+    return getOnboardingDestination(data, product).startsWith("/dashboard");
   } catch {
     return false;
   }
 }
 
+function getPostAuthPath(
+  syncResult: { authDecision?: AuthDecision },
+  fallbackOnboardingCompleted?: boolean,
+) {
+  if (syncResult.authDecision?.nextPath) {
+    return syncResult.authDecision.nextPath;
+  }
+
+  if (typeof fallbackOnboardingCompleted === "boolean") {
+    return fallbackOnboardingCompleted
+      ? "/dashboard"
+      : `/onboarding-embedded?domain=${getProductDomainFromBrowser()}`;
+  }
+
+  return `/onboarding-embedded?domain=${getProductDomainFromBrowser()}`;
+}
+
 // ═════════════════════════════════════════════════════════════════════════════
 // PRODUCTION-GRADE AUTH UTILITIES (Shared with signup flow)
 // ═════════════════════════════════════════════════════════════════════════════
-
-/**
- * Configuration for session confirmation polling.
- */
-const SESSION_CONFIRMATION_CONFIG = {
-  maxAttempts: 5,
-  baseIntervalMs: 150,
-  backoffMultiplier: 1.0,
-};
-
-/**
- * Verify session cookie is readable server-side with exponential backoff polling.
- */
-async function waitForSessionConfirmation(
-  maxAttempts: number = SESSION_CONFIRMATION_CONFIG.maxAttempts,
-  baseIntervalMs: number = SESSION_CONFIRMATION_CONFIG.baseIntervalMs
-): Promise<boolean> {
-  console.log(
-    `[Auth] Starting session confirmation polling (max ${maxAttempts} attempts)`
-  );
-
-  for (let attempt = 0; attempt < maxAttempts; attempt++) {
-    try {
-      const response = await fetch("/api/auth/verify-session", {
-        method: "GET",
-        credentials: "include",
-        cache: "no-store",
-        headers: {
-          "X-Request-Source": "login-flow",
-        },
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        console.log(
-          `[Auth] Session confirmed on attempt ${attempt + 1}/${maxAttempts}`,
-          { userId: data.userId }
-        );
-        return true;
-      }
-
-      const errorData = await response.json().catch(() => ({}));
-      console.log(
-        `[Auth] Session not ready (attempt ${attempt + 1}/${maxAttempts}):`,
-        errorData.error || `HTTP ${response.status}`
-      );
-    } catch (error) {
-      console.warn(
-        `[Auth] Session verification error (attempt ${attempt + 1}/${maxAttempts}):`,
-        error
-      );
-    }
-
-    const delay = baseIntervalMs * (attempt + 1);
-    console.log(`[Auth] Waiting ${delay}ms before retry...`);
-    await new Promise((resolve) => setTimeout(resolve, delay));
-  }
-
-  console.error(`[Auth] Session confirmation failed after ${maxAttempts} attempts`);
-  return false;
-}
 
 /**
  * Circuit breaker for Firebase ID token retrieval.
@@ -283,7 +257,7 @@ function logPerformanceMetric(measureName: string, targetMs: number): void {
  */
 function clearAuthPerformanceMarks(): void {
   const marks = ["auth-start", "auth-success", "navigation-start", "navigation-complete"];
-  const measures = ["auth-to-nav", "nav-latency", "session-confirmation"];
+  const measures = ["auth-to-nav", "nav-latency"];
 
   marks.forEach((mark) => {
     try {
@@ -345,9 +319,12 @@ export default function LoginPage() {
             throw new Error(syncResult.code || "AUTH_SYNC_FAILED");
           }
 
-          // Check onboarding and redirect
-          const onboardingCompleted = await checkOnboardingStatus();
-          router.push(onboardingCompleted ? "/dashboard" : "/onboarding");
+          const fallbackCompleted = syncResult.authDecision
+            ? undefined
+            : await checkOnboardingStatus();
+          router.replace(
+            getPostAuthPath(syncResult, fallbackCompleted) || "/onboarding",
+          );
         } else if (result.error) {
           // Handle redirect error
           const errorAnalysis = classifyAuthError(result.error);
@@ -400,9 +377,13 @@ export default function LoginPage() {
             const syncResult = await syncLoginWithAutoHeal(idToken);
 
             if (syncResult.ok) {
-              const onboardingDone = await checkOnboardingStatus();
+              const fallbackCompleted = syncResult.authDecision
+                ? undefined
+                : await checkOnboardingStatus();
               if (isMounted) {
-                router.replace(onboardingDone ? "/dashboard" : "/onboarding");
+                router.replace(
+                  getPostAuthPath(syncResult, fallbackCompleted) || "/onboarding",
+                );
               }
               return;
             }
@@ -470,8 +451,12 @@ export default function LoginPage() {
           throw new Error(syncResult.code || "AUTH_SYNC_FAILED");
         }
 
-        const onboardingCompleted = await checkOnboardingStatus();
-        router.push(onboardingCompleted ? "/dashboard" : "/onboarding");
+        const fallbackCompleted = syncResult.authDecision
+          ? undefined
+          : await checkOnboardingStatus();
+        router.replace(
+          getPostAuthPath(syncResult, fallbackCompleted) || "/onboarding",
+        );
       } catch (err: any) {
         console.error("Login error:", err);
         setError(handleFirebaseError(err));
@@ -527,30 +512,16 @@ export default function LoginPage() {
           throw new Error(syncResult.code || "AUTH_SYNC_FAILED");
         }
 
-        // STEP 3: Session confirmation with polling
-        performance.mark("session-confirmation-start");
-        const sessionConfirmed = await waitForSessionConfirmation(5, 150);
-        performance.mark("session-confirmation-end");
-        performance.measure(
-          "session-confirmation",
-          "session-confirmation-start",
-          "session-confirmation-end"
-        );
-
-        if (!sessionConfirmed) {
-          setError("Session verification timed out. Please refresh and try again.");
-          setGoogleLoading(false);
-          await auth.signOut();
-          return;
-        }
-
         performance.mark("auth-success");
 
-        // STEP 5: Check onboarding and navigate
-        const onboardingCompleted = await checkOnboardingStatus();
+        const fallbackCompleted = syncResult.authDecision
+          ? undefined
+          : await checkOnboardingStatus();
         performance.mark("navigation-start");
 
-        router.push(onboardingCompleted ? "/dashboard" : "/onboarding");
+        router.replace(
+          getPostAuthPath(syncResult, fallbackCompleted) || "/onboarding",
+        );
 
         // STEP 6: Performance logging
         setTimeout(() => {
@@ -560,8 +531,6 @@ export default function LoginPage() {
 
           logPerformanceMetric("auth-to-nav", 750);
           logPerformanceMetric("nav-latency", 400);
-          logPerformanceMetric("session-confirmation", 750);
-
           const totalMeasure = performance.getEntriesByName("auth-to-nav")[0] as PerformanceMeasure;
           if (totalMeasure) {
             const status = totalMeasure.duration <= 750 ? "SUCCESS" : "SLOW";
@@ -608,11 +577,11 @@ export default function LoginPage() {
     quoteLabel: isBooking ? "WHY FLOWAUXI BOOKINGS" : "WHY FLOWAUXI",
     heading: isBooking ? (
       <>
-        Provide
+        Bookings
         <br />
-        Lovely
+        that run on
         <br />
-        Services
+        autopilot
       </>
     ) : (
       <>
@@ -623,33 +592,51 @@ export default function LoginPage() {
         Business
       </>
     ),
-    subText: isBooking ? (
-      <>
-        List your offerings. Get booked instantly
-        <br />
-        and grow your community without the hassle.
-      </>
-    ) : (
-      <>
-        Join businesses across India automating customer conversations
-        <br />
-        and scaling sales without hiring extra staff.
-      </>
-    ),
-    benefits: isBooking ? (
-      <div className={styles.benefitsList}>
-        <div className={styles.benefitItem}>✓ Instant booking confirmation</div>
-        <div className={styles.benefitItem}>✓ Automated smart reminders</div>
-        <div className={styles.benefitItem}>✓ Real-time calendar sync</div>
-      </div>
-    ) : (
-      <div className={styles.benefitsList}>
-        <div className={styles.benefitItem}>✓ AI-powered WhatsApp automation</div>
-        <div className={styles.benefitItem}>✓ Automated orders & invoicing</div>
-        <div className={styles.benefitItem}>✓ Broadcast campaigns & analytics</div>
-      </div>
-    )
+    subText: isBooking
+      ? "Let customers discover services, pick an available slot, and confirm appointments without back-and-forth messages."
+      : "Join businesses across India automating customer conversations and scaling sales without hiring extra staff.",
+    benefits: isBooking
+      ? [
+          "Instant booking confirmations",
+          "Smart reminders and calendar sync",
+          "Staff availability and payments",
+        ]
+      : [
+          "AI-powered WhatsApp automation",
+          "Automated orders and invoicing",
+          "Broadcast campaigns and analytics",
+        ],
   };
+
+  const marketingBenefits = (
+    <ul className={styles.benefitsList} aria-label="Product benefits">
+      {marketingContent.benefits.map((benefit) => (
+        <li className={styles.benefitItem} key={benefit}>
+          {benefit}
+        </li>
+      ))}
+    </ul>
+  );
+
+  const marketingEyebrow = (
+    <div className={styles.quoteSection}>
+      <p className={styles.quoteLabel}>{marketingContent.quoteLabel}</p>
+    </div>
+  );
+
+  const marketingPanel = (
+    <div className={styles.marketingContentPanel}>
+      <div className={styles.contentSection}>
+        <h1 className={styles.mainHeading}>
+          {marketingContent.heading}
+        </h1>
+        <p className={styles.subText}>
+          {marketingContent.subText}
+        </p>
+        {marketingBenefits}
+      </div>
+    </div>
+  );
 
   // Show loading state if redirect is pending
   if (isRedirectPending) {
@@ -657,19 +644,9 @@ export default function LoginPage() {
       <div className={styles.authContainer}>
         <div className={styles.authSplit}>
           <div className={styles.authLeft}>
-            <div className={styles.quoteSection}>
-              <p className={styles.quoteLabel}>{marketingContent.quoteLabel}</p>
-            </div>
             <div className={styles.gradientOverlay}></div>
-            <div className={styles.contentSection}>
-              <h1 className={styles.mainHeading}>
-                {marketingContent.heading}
-              </h1>
-              <p className={styles.subText}>
-                {marketingContent.subText}
-              </p>
-              {marketingContent.benefits}
-            </div>
+            {marketingEyebrow}
+            {marketingPanel}
           </div>
           <div className={styles.authRight}>
             <div className={styles.formContainer}>
@@ -701,19 +678,9 @@ export default function LoginPage() {
       <div className={styles.authSplit}>
         {/* Left Side - Gradient */}
         <div className={styles.authLeft}>
-          <div className={styles.quoteSection}>
-            <p className={styles.quoteLabel}>{marketingContent.quoteLabel}</p>
-          </div>
           <div className={styles.gradientOverlay}></div>
-          <div className={styles.contentSection}>
-            <h1 className={styles.mainHeading}>
-              {marketingContent.heading}
-            </h1>
-            <p className={styles.subText}>
-              {marketingContent.subText}
-            </p>
-            {marketingContent.benefits}
-          </div>
+          {marketingEyebrow}
+          {marketingPanel}
         </div>
 
         {/* Right Side - Form */}

@@ -5,6 +5,12 @@ import { useRouter } from "next/navigation";
 import { onAuthStateChanged } from "firebase/auth";
 import { auth } from "@/src/firebase/firebase";
 import { usePredictivePreload } from "@/app/utils/authPerformance";
+import {
+  getOnboardingCheck,
+  getOnboardingDestination,
+  invalidateOnboardingCheckCache,
+} from "@/lib/auth/onboarding-check-client";
+import { getProductDomainFromBrowser } from "@/lib/domain/client";
 
 /**
  * Production-grade authentication state and redirect hook
@@ -18,41 +24,14 @@ interface AuthState {
   userId: string | null;
 }
 
-// In-memory cache for onboarding status to prevent redundant API calls
-const onboardingCache = new Map<
-  string,
-  { status: boolean; timestamp: number }
->();
-const CACHE_TTL = 5 * 60 * 1000; // 5 minutes cache
-
 /**
  * Check onboarding status with intelligent caching
  */
-async function checkOnboardingStatus(userId: string): Promise<boolean> {
-  // Check cache first
-  const cached = onboardingCache.get(userId);
-  if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
-    return cached.status;
-  }
-
+async function checkOnboardingStatus(): Promise<boolean> {
   try {
-    const response = await fetch("/api/onboarding/check", {
-      method: "GET",
-      headers: { "Cache-Control": "no-cache" },
-    });
-
-    if (!response.ok) {
-      console.warn("Onboarding check failed, defaulting to false");
-      return false;
-    }
-
-    const data = await response.json();
-    const status = data.onboardingCompleted ?? false;
-
-    // Update cache
-    onboardingCache.set(userId, { status, timestamp: Date.now() });
-
-    return status;
+    const data = await getOnboardingCheck();
+    const product = getProductDomainFromBrowser();
+    return getOnboardingDestination(data, product).startsWith("/dashboard");
   } catch (error) {
     console.error("Error checking onboarding status:", error);
     return false; // Default to onboarding required on error
@@ -108,7 +87,7 @@ export function useAuthRedirect() {
           }
 
           // User exists - check onboarding status
-          const onboardingCompleted = await checkOnboardingStatus(user.uid);
+          const onboardingCompleted = await checkOnboardingStatus();
 
           setAuthState({
             isAuthenticated: true,
@@ -162,7 +141,9 @@ export function useAuthRedirect() {
         if (authState.onboardingCompleted) {
           router.push("/dashboard");
         } else {
-          router.push("/onboarding");
+          router.push(
+            `/onboarding-embedded?domain=${getProductDomainFromBrowser()}`,
+          );
         }
       } else {
         // User is not logged in
@@ -191,7 +172,9 @@ export function useAuthRedirect() {
         if (authState.onboardingCompleted) {
           router.push("/dashboard");
         } else {
-          router.push("/onboarding");
+          router.push(
+            `/onboarding-embedded?domain=${getProductDomainFromBrowser()}`,
+          );
         }
       } else {
         // User is not logged in
@@ -206,10 +189,8 @@ export function useAuthRedirect() {
    * Useful after completing onboarding
    */
   const invalidateOnboardingCache = useCallback(() => {
-    if (authState.userId) {
-      onboardingCache.delete(authState.userId);
-    }
-  }, [authState.userId]);
+    invalidateOnboardingCheckCache();
+  }, []);
 
   return {
     ...authState,

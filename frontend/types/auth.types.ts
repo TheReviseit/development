@@ -33,6 +33,25 @@ export interface ProductMembership {
   updated_at: string;
 }
 
+export interface AuthDecision {
+  product: ProductDomain;
+  onboardingCompleted: boolean;
+  whatsappConnected: boolean;
+  hasActiveSubscription: boolean;
+  hasActiveTrial: boolean;
+  isTrialExpired: boolean;
+  hasProductAccess: boolean;
+  requiresWhatsApp: boolean;
+  whatsappSatisfied: boolean;
+  canEnterDashboard: boolean;
+  nextPath: string;
+  reason:
+    | "ready"
+    | "whatsapp_required"
+    | "product_access_required"
+    | "trial_expired";
+}
+
 // ============================================================================
 // AUTH REQUEST/RESPONSE TYPES
 // ============================================================================
@@ -51,6 +70,7 @@ export interface SyncUserRequest {
 export interface SyncUserResponse {
   success: boolean;
   user?: SupabaseUser;
+  authDecision?: AuthDecision;
   error?: string;
   code?: AuthErrorCode;
 
@@ -114,6 +134,7 @@ export interface SupabaseUser {
   provider?: string;
   role?: string;
   onboarding_completed?: boolean;
+  onboarding_completed_at?: string | null;
   last_sign_in_at?: string;
   created_at?: string;
   updated_at?: string;

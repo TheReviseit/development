@@ -5,7 +5,7 @@ import {
   createSupabaseServiceClientOrThrow,
   ensureSupabaseUserAndMembership,
 } from "@/lib/auth/provisioning.server";
-import { detectProductFromRequest, getRequestContext, isProductAvailableForActivation } from "@/lib/auth-helpers";
+import { detectProductFromRequest, getRequestContext } from "@/lib/auth-helpers";
 import type { AuthErrorCode, ProductDomain } from "@/types/auth.types";
 import { getUserCache } from "@/app/utils/userCache";
 
@@ -85,27 +85,11 @@ export async function POST(request: NextRequest) {
       // Cache is a performance optimization only.
     }
 
-    // Auto-start free trial for self-service products (best-effort, idempotent)
-    let trial = null;
-    if (isProductAvailableForActivation(currentProduct)) {
-      try {
-        const { auto_start_trial_on_signup } = await import("@/lib/trial");
-        trial = await auto_start_trial_on_signup(
-          user.id,
-          user.id,
-          email,
-          currentProduct,
-        );
-      } catch (trialErr) {
-        console.error("[create-user] Trial start error:", trialErr);
-      }
-    }
-
     return NextResponse.json({
       success: true,
       user,
       created,
-      trial,
+      trial: null,
       deprecated: true,
     });
   } catch (error: any) {
@@ -138,4 +122,3 @@ export async function POST(request: NextRequest) {
     );
   }
 }
-

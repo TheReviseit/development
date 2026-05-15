@@ -104,8 +104,18 @@ def receive_webhook():
     signature = request.headers.get('X-Hub-Signature-256', '')
     raw_body = request.get_data(as_text=False)
 
-    # TODO(security): Re-enable once user finds the correct Global App Secret
-    # if APP_SECRET and not _verify_signature(signature, raw_body, APP_SECRET):
+    if APP_SECRET:
+        if not _verify_signature(signature, raw_body, APP_SECRET):
+            logger.warning("webhook_signature_invalid")
+            return jsonify({'error': 'Invalid signature'}), 401
+    elif os.getenv('FLASK_ENV') == 'production' or os.getenv('ENV') == 'production':
+        logger.error("webhook_signature_secret_missing")
+        return jsonify({'error': 'Webhook signature secret missing'}), 500
+    else:
+        logger.warning("webhook_signature_verification_skipped_no_secret")
+
+    # Signature verification is enforced above when APP_SECRET is configured.
+    # Legacy commented implementation retained only for migration history.
     #     logger.warning("webhook_signature_invalid ❌")
     #     return jsonify({'error': 'Invalid signature'}), 401
 

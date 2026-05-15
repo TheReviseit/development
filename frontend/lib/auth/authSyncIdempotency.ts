@@ -9,7 +9,7 @@ export function generateAuthSyncIdempotencyKey(params: {
 }): string {
   const { firebaseUid, product, allowCreate, tokenIat } = params;
 
-  const components = [firebaseUid, product, allowCreate ? "1" : "0", String(tokenIat)].join(
+  const components = ["v3", firebaseUid, product, allowCreate ? "1" : "0", String(tokenIat)].join(
     ":",
   );
 
@@ -91,6 +91,31 @@ export async function completeAuthSyncIdempotency(params: {
   return Boolean(data);
 }
 
+export async function releaseAuthSyncIdempotency(params: {
+  supabase: SupabaseClient;
+  idempotencyKey: string;
+  lockedBy: string;
+}): Promise<boolean> {
+  const { supabase, idempotencyKey, lockedBy } = params;
+
+  const { data, error } = await supabase.rpc("auth_sync_release", {
+    p_idempotency_key: idempotencyKey,
+    p_locked_by: lockedBy,
+  });
+  if (error) {
+    const { count, error: deleteError } = await supabase
+      .from("auth_sync_idempotency")
+      .delete({ count: "exact" })
+      .eq("idempotency_key", idempotencyKey)
+      .eq("locked_by", lockedBy)
+      .eq("status", "processing");
+
+    if (deleteError) throw error;
+    return (count ?? 0) > 0;
+  }
+  return Boolean(data);
+}
+
 export async function waitForAuthSyncCompletion(params: {
   supabase: SupabaseClient;
   idempotencyKey: string;
@@ -121,4 +146,3 @@ export async function waitForAuthSyncCompletion(params: {
 
   return { done: false };
 }
-

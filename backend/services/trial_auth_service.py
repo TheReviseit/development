@@ -89,30 +89,10 @@ class TrialConsoleAuthService(ConsoleAuthService):
         org_id = result['org']['id']
         user_email = result['user']['email']
 
-        # Auto-start trial for eligible domains
-        trial_context = None
-        if signup_domain in self.TRIAL_DOMAINS:
-            trial_context = await self._start_shop_trial(
-                user_id=user_id,
-                org_id=org_id,
-                email=user_email,
-                ip_address=ip_address,
-                device_fingerprint=device_fingerprint,
-                user_agent=user_agent,
-            )
-
-            if trial_context:
-                result['trial'] = trial_context
-                logger.info(
-                    f"shop_trial_started user_id={user_id} org_id={org_id} "
-                    f"trial_id={trial_context.get('trial_id')}"
-                )
-            else:
-                # Trial start failed, but signup succeeded
-                logger.warning(
-                    f"shop_trial_start_failed user_id={user_id} "
-                    f"- continuing without trial"
-                )
+        logger.info(
+            "signup_completed_without_trial "
+            f"user_id={user_id} org_id={org_id} signup_domain={signup_domain}"
+        )
 
         return result
 
@@ -139,51 +119,10 @@ class TrialConsoleAuthService(ConsoleAuthService):
         Returns:
             Trial context dict or None if failed
         """
-        try:
-            from services.trial_engine import (
-                TrialEngine,
-                TrialStartOptions,
-                TrialSource,
-            )
-            from services.pricing_service import get_pricing_service
-
-            # Get Starter Plan ID
-            pricing = get_pricing_service()
-            try:
-                plan = pricing.get_plan('shop', 'starter', 'monthly')
-                plan_id = plan['id']
-            except Exception as e:
-                logger.error(f"Failed to get starter plan: {e}")
-                return None
-
-            # Extract email domain
-            email_domain = email.split('@')[1] if '@' in email else None
-
-            # Create trial engine
-            engine = TrialEngine(supabase_client=self.db)
-
-            # Start options
-            options = TrialStartOptions(
-                user_id=user_id,
-                org_id=org_id,
-                plan_slug='starter',
-                plan_id=plan_id,
-                domain='shop',
-                trial_days=7,
-                source=TrialSource.SHOP,
-                ip_address=ip_address,
-                email_domain=email_domain,
-                device_fingerprint=device_fingerprint,
-                user_agent=user_agent,
-            )
-
-            # Start trial
-            trial_context = await engine.start_trial(options)
-            return trial_context.to_dict()
-
-        except Exception as e:
-            logger.error(f"_start_shop_trial error: {e}", exc_info=True)
-            return None
+        logger.warning(
+            "_start_shop_trial disabled; trials require explicit Starter plan selection"
+        )
+        return None
 
     async def get_trial_status_for_user(
         self,
@@ -252,39 +191,7 @@ async def auto_start_trial_on_signup(
     Returns:
         Trial context dict or None
     """
-    if domain not in {'shop'}:
-        return None
-
-    try:
-        from services.trial_engine import (
-            get_trial_engine,
-            TrialStartOptions,
-            TrialSource,
-        )
-        from services.pricing_service import get_pricing_service
-
-        pricing = get_pricing_service()
-        plan = pricing.get_plan('shop', 'starter', 'monthly')
-
-        engine = get_trial_engine()
-
-        options = TrialStartOptions(
-            user_id=user_id,
-            org_id=org_id,
-            plan_slug='starter',
-            plan_id=plan['id'],
-            domain='shop',
-            trial_days=7,
-            source=TrialSource.ORGANIC if domain != 'shop' else TrialSource.SHOP,
-            ip_address=ip_address,
-            email_domain=email.split('@')[1] if '@' in email else None,
-            device_fingerprint=device_fingerprint,
-            user_agent=user_agent,
-        )
-
-        trial_context = await engine.start_trial(options)
-        return trial_context.to_dict()
-
-    except Exception as e:
-        logger.error(f"auto_start_trial_on_signup error: {e}", exc_info=True)
-        return None
+    logger.warning(
+        "auto_start_trial_on_signup disabled; trials require explicit Starter plan selection"
+    )
+    return None

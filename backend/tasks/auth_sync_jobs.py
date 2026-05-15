@@ -134,6 +134,22 @@ def _start_trial(payload: Dict[str, Any]) -> None:
     if not user_id or not org_id:
         raise ValueError("Missing user_id/org_id")
 
+    normalized_plan = str(plan_slug).strip().lower()
+    normalized_domain = str(domain).strip().lower()
+    if source != "onboarding_plan_selection":
+        logger.warning(
+            "start_trial_job_ignored_non_onboarding_source "
+            f"user={str(user_id)[:8]} domain={domain} source={source}"
+        )
+        return
+
+    if normalized_plan not in {"starter", f"{normalized_domain}_starter"}:
+        logger.warning(
+            "start_trial_job_ignored_non_starter_plan "
+            f"user={str(user_id)[:8]} domain={domain} plan={plan_slug}"
+        )
+        return
+
     # Pricing plan lookup (same logic as /api/trials/start)
     try:
         from services.pricing_service import get_pricing_service
@@ -350,4 +366,3 @@ def process_background_jobs(self) -> Dict[str, Any]:
         "failed": failed,
         "dead_lettered": dead_lettered,
     }
-

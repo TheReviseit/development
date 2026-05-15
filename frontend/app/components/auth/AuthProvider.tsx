@@ -12,6 +12,10 @@ import type { User as FirebaseUserType } from "firebase/auth";
 import { onAuthStateChanged, User as FirebaseUser } from "firebase/auth";
 import { auth } from "@/src/firebase/firebase";
 import { getProductDomainFromBrowser } from "@/lib/domain/client";
+import {
+  clearOnboardingRedirectLoop,
+  invalidateOnboardingCheckCache,
+} from "@/lib/auth/onboarding-check-client";
 import type {
   AuthContextType,
   AuthState,
@@ -23,6 +27,104 @@ import type {
 } from "@/types/auth.types";
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
+const AUTH_SYNC_COOLDOWN_MS = 1_500;
+
+type AuthSyncRequest = {
+  idToken: string;
+  allowCreate?: boolean;
+};
+
+type AuthSyncFetchResult = {
+  ok: boolean;
+  status: number;
+  data: Record<string, any>;
+};
+
+let authSyncInFlight: Promise<AuthSyncFetchResult> | null = null;
+let authSyncInFlightKey: string | null = null;
+let lastAuthSyncResult: AuthSyncFetchResult | null = null;
+let lastAuthSyncKey: string | null = null;
+let lastAuthSyncAt = 0;
+
+function decodeJwtSubject(idToken: string): string {
+  try {
+    const payload = idToken.split(".")[1];
+    if (!payload || typeof window === "undefined") return idToken.slice(0, 24);
+    const normalized = payload.replace(/-/g, "+").replace(/_/g, "/");
+    const padded = normalized.padEnd(
+      normalized.length + ((4 - (normalized.length % 4)) % 4),
+      "=",
+    );
+    const parsed = JSON.parse(window.atob(padded));
+    return parsed.sub || parsed.user_id || idToken.slice(0, 24);
+  } catch {
+    return idToken.slice(0, 24);
+  }
+}
+
+function getAuthSyncKey(request: AuthSyncRequest) {
+  return [
+    decodeJwtSubject(request.idToken),
+    request.allowCreate === true ? "create" : "sync",
+    getProductDomainFromBrowser(),
+  ].join(":");
+}
+
+async function postAuthSync(
+  request: AuthSyncRequest,
+): Promise<AuthSyncFetchResult> {
+  const key = getAuthSyncKey(request);
+  const now = Date.now();
+  const canReuse = request.allowCreate !== true;
+
+  if (canReuse && authSyncInFlight && authSyncInFlightKey === key) {
+    return authSyncInFlight;
+  }
+
+  if (
+    canReuse &&
+    lastAuthSyncResult &&
+    lastAuthSyncKey === key &&
+    now - lastAuthSyncAt < AUTH_SYNC_COOLDOWN_MS
+  ) {
+    return lastAuthSyncResult;
+  }
+
+  const syncPromise = fetch("/api/auth/sync", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(request),
+  })
+    .then(async (response) => {
+      const data = await response.json().catch(() => ({}));
+      const result = {
+        ok: response.ok,
+        status: response.status,
+        data,
+      };
+
+      if (canReuse) {
+        lastAuthSyncResult = result;
+        lastAuthSyncKey = key;
+        lastAuthSyncAt = Date.now();
+      }
+
+      return result;
+    })
+    .finally(() => {
+      if (authSyncInFlight === syncPromise) {
+        authSyncInFlight = null;
+        authSyncInFlightKey = null;
+      }
+    });
+
+  if (canReuse) {
+    authSyncInFlight = syncPromise;
+    authSyncInFlightKey = key;
+  }
+
+  return syncPromise;
+}
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   // ========================================================================
@@ -105,6 +207,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     );
     try {
       // Clear server-side session cookie
+      invalidateOnboardingCheckCache();
+      clearOnboardingRedirectLoop();
       try {
         const response = await fetch("/api/auth/logout", { method: "POST" });
         if (!response.ok) {
@@ -176,18 +280,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       try {
         updateAuthState("SYNCING_TO_DB" as AuthState, "SYNC_INITIATED");
 
-        const response = await fetch("/api/auth/sync", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ idToken }),
-        });
+        const syncResponse = await postAuthSync({ idToken });
+        const response = {
+          ok: syncResponse.ok,
+          status: syncResponse.status,
+        };
 
         if (!response.ok) {
           let errorMessage = `Sync failed with status ${response.status}`;
           let errorCode: AuthErrorCode = "SYNC_FAILED" as AuthErrorCode;
 
           try {
-            const errorData = await response.json();
+            const errorData = syncResponse.data;
             console.error("[AUTH] Sync error response:", errorData);
             errorMessage = errorData.error || errorData.message || errorMessage;
             errorCode = errorData.code || errorCode;
@@ -227,7 +331,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           throw new Error(errorMessage);
         }
 
-        const data: SyncUserResponse = await response.json();
+        const data = syncResponse.data as SyncUserResponse;
 
         if (data.success && data.user) {
           setUser(data.user);
@@ -275,17 +379,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       try {
         updateAuthState("SYNCING_TO_DB" as AuthState, "SIGNUP_SYNC_INITIATED");
 
-        const response = await fetch("/api/auth/sync", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ idToken, allowCreate: true }),
-        });
+        const syncResponse = await postAuthSync({ idToken, allowCreate: true });
+        const response = {
+          ok: syncResponse.ok,
+          status: syncResponse.status,
+        };
 
         if (!response.ok) {
           let errorMessage = `Signup sync failed with status ${response.status}`;
 
           try {
-            const errorData = await response.json();
+            const errorData = syncResponse.data;
             errorMessage = errorData.error || errorData.message || errorMessage;
 
             if (errorData.details) {
@@ -301,7 +405,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           throw new Error(errorMessage);
         }
 
-        const data: SyncUserResponse = await response.json();
+        const data = syncResponse.data as SyncUserResponse;
 
         if (data.success && data.user) {
           setUser(data.user);
@@ -343,6 +447,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
         if (response.ok && data.success) {
           console.log(`[AUTH] Product activated successfully: ${product}`);
+          invalidateOnboardingCheckCache(product);
 
           // Re-sync to update auth state (will now pass membership check)
           if (firebaseUser) {

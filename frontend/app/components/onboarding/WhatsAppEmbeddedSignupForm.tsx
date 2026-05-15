@@ -12,7 +12,6 @@ import {
   LockKeyhole,
   RefreshCw,
   ShieldCheck,
-  XCircle,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import gsap from "gsap";
@@ -319,30 +318,12 @@ export default function WhatsAppEmbeddedSignupForm({
 
   const renderConnecting = () => (
     <div ref={contentRef} className="connecting-state">
-      <div className="connecting-spinner-wrapper" aria-hidden="true">
-        <LoaderCircle className="connecting-spinner" size={58} />
+      <div className="connecting-loader-shell" aria-hidden="true">
+        <LoaderCircle className="connecting-loader-icon" size={48} strokeWidth={1.75} />
       </div>
       <div className="connecting-text">
         <h3>Authorizing</h3>
         <p>Please complete the setup in the popup window.</p>
-      </div>
-
-      <div className="processing-info">
-        <p className="processing-title">Processing</p>
-        <ul className="processing-list">
-          <li>
-            <span className="processing-dot"></span>
-            Verifying your account
-          </li>
-          <li>
-            <span className="processing-dot"></span>
-            Setting up WhatsApp connection
-          </li>
-          <li>
-            <span className="processing-dot"></span>
-            Configuring webhooks
-          </li>
-        </ul>
       </div>
     </div>
   );
@@ -435,10 +416,10 @@ export default function WhatsAppEmbeddedSignupForm({
   const renderError = () => (
     <div ref={contentRef} className="error-state">
       <div className="error-icon-wrapper">
-        <XCircle size={34} strokeWidth={2.3} aria-hidden="true" />
+        <AlertTriangle size={30} strokeWidth={2.2} aria-hidden="true" />
       </div>
       <div className="error-content">
-        <h3>Something went wrong</h3>
+        <h3>Connection could not be completed</h3>
         <p>{errorInfo?.message}</p>
       </div>
       {errorInfo?.action === "RESTART_FLOW" && (

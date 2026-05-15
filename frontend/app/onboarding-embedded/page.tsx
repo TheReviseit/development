@@ -35,8 +35,18 @@ import {
 } from "../../lib/api/razorpay";
 import { detectDomainFromWindow } from "@/lib/pricing/domain-detection";
 import { getPricingForDomain } from "@/lib/pricing/pricing-engine";
-import { getDomainVisibility } from "@/lib/domain/config";
+import {
+  getDomainVisibility,
+  requiresWhatsAppOnboarding,
+} from "@/lib/domain/config";
 import type { ProductDomain } from "@/lib/pricing/pricing-config";
+import {
+  getOnboardingCheck,
+  getOnboardingDestination,
+  invalidateOnboardingCheckCache,
+  OnboardingCheckError,
+  recordOnboardingRedirect,
+} from "@/lib/auth/onboarding-check-client";
 import {
   CONTACT_CONFIG,
   getMailtoLink,
@@ -320,9 +330,7 @@ export default function OnboardingPageEmbedded() {
       const domain = detectDomainFromWindow();
       setCurrentDomain(domain);
 
-      const domainConfig = getDomainVisibility(domain as any);
-      const domainRequiresWhatsApp = domainConfig.requiresWhatsApp;
-      setShowWhatsappStep(domainRequiresWhatsApp || domain === "shop");
+      setShowWhatsappStep(requiresWhatsAppOnboarding(domain as any));
 
       const domainPricing = getPricingForDomain(domain);
       setPlans(
@@ -343,32 +351,32 @@ export default function OnboardingPageEmbedded() {
 
   const checkOnboardingStatus = useCallback(async (): Promise<boolean> => {
     const runCheck = async (): Promise<boolean> => {
-    console.log(
-      "[onboarding-embedded] checkOnboardingStatus START - v6-domain-aware",
-    );
+      console.log(
+        "[onboarding-embedded] checkOnboardingStatus START - v6-domain-aware",
+      );
 
-    try {
-      const onboardingResponse = await fetch("/api/onboarding/check");
+      try {
+        let onboardingData;
+        try {
+          onboardingData = await getOnboardingCheck();
+        } catch (error) {
+          if (error instanceof OnboardingCheckError && error.status === 503) {
+            console.warn("[onboarding-embedded] Onboarding check 503, retrying...");
+            await new Promise((resolve) => setTimeout(resolve, 1000));
+            return runCheck();
+          }
 
-      if (onboardingResponse.status === 503) {
-        console.warn("[onboarding-embedded] Onboarding check 503, retrying...");
-        await new Promise((resolve) => setTimeout(resolve, 1000));
-        return runCheck();
-      }
+          console.error(
+            "[onboarding-embedded] Onboarding check failed:",
+            error instanceof OnboardingCheckError ? error.status : error,
+          );
+          return false;
+        }
 
-      if (!onboardingResponse.ok) {
-        console.error(
-          "[onboarding-embedded] Onboarding check failed:",
-          onboardingResponse.status,
-        );
-        return false;
-      }
-
-      const onboardingData = await onboardingResponse.json();
       const domain = detectDomainFromWindow();
       const domainConfig = getDomainVisibility(domain as any);
       const domainRequiresWhatsApp = domainConfig.requiresWhatsApp;
-      const shouldShowWhatsappStep = domainRequiresWhatsApp || domain === "shop";
+      const shouldShowWhatsappStep = requiresWhatsAppOnboarding(domain as any);
 
       console.log("[onboarding-embedded] Received data:", {
         onboardingCompleted: onboardingData.onboardingCompleted,
@@ -394,33 +402,57 @@ export default function OnboardingPageEmbedded() {
         return false;
       }
 
-      const hasProductAccess =
-        onboardingData.hasActiveSubscription === true ||
-        onboardingData.hasActiveTrial === true;
-
-      const whatsappSatisfied =
-        !domainRequiresWhatsApp || onboardingData.whatsappConnected === true;
+      const destination = getOnboardingDestination(onboardingData, domain);
 
       console.log("[onboarding-embedded] Decision values:", {
-        hasProductAccess,
+        hasProductAccess: onboardingData.hasProductAccess,
         hasActiveSubscription: onboardingData.hasActiveSubscription,
         hasActiveTrial: onboardingData.hasActiveTrial,
         whatsappConnected: onboardingData.whatsappConnected,
         domainRequiresWhatsApp,
-        whatsappSatisfied,
+        shouldShowWhatsappStep,
+        whatsappSatisfied: onboardingData.whatsappSatisfied,
+        canEnterDashboard: onboardingData.canEnterDashboard,
+        nextPath: destination,
+        reason: onboardingData.reason,
       });
 
-      if (hasProductAccess && whatsappSatisfied) {
+      if (destination.startsWith("/dashboard")) {
+        const loop = recordOnboardingRedirect(destination);
+        if (loop.suppress) {
+          console.warn(
+            "[onboarding-embedded] Redirect loop detected; refreshing onboarding state and holding setup screen",
+          );
+          invalidateOnboardingCheckCache(domain);
+          const refreshed = await getOnboardingCheck({
+            product: domain,
+            force: true,
+          });
+          const refreshedDestination = getOnboardingDestination(refreshed, domain);
+
+          if (!refreshedDestination.startsWith("/dashboard")) {
+            setStep(
+              refreshed.requiresWhatsApp && refreshed.whatsappConnected !== true
+                ? "whatsapp"
+                : "pricing",
+            );
+            return false;
+          }
+
+          setStep("whatsapp");
+          return false;
+        }
+
         console.log(
-          "[onboarding-embedded] Has product access and WhatsApp satisfied, redirecting",
+          "[onboarding-embedded] Server decision allows dashboard, redirecting",
         );
-        router.push("/dashboard");
+        router.replace(destination);
         return true;
       }
 
       console.log("[onboarding-embedded] NOT redirecting - showing onboarding");
 
-      if (!shouldShowWhatsappStep) {
+      if (!onboardingData.requiresWhatsApp) {
         setStep("pricing");
       } else if (onboardingData.whatsappConnected === true) {
         setStep("pricing");
@@ -462,6 +494,7 @@ export default function OnboardingPageEmbedded() {
     wabaName: string;
   }) => {
     console.log("WhatsApp connected successfully:", data);
+    invalidateOnboardingCheckCache(currentDomain);
     setWabaData({ wabaId: data.wabaId, phoneNumberId: data.phoneNumberId });
     setStep("pricing");
   };
@@ -469,6 +502,30 @@ export default function OnboardingPageEmbedded() {
   const handleConnectionError = (error: string) => {
     console.error("WhatsApp connection error:", error);
   };
+
+  const routeToCanonicalDestination = useCallback(async () => {
+    invalidateOnboardingCheckCache(currentDomain);
+    const data = await getOnboardingCheck({
+      product: currentDomain,
+      force: true,
+    });
+    const destination = getOnboardingDestination(data, currentDomain);
+
+    if (destination.startsWith("/dashboard")) {
+      const loop = recordOnboardingRedirect(destination);
+      if (!loop.suppress) {
+        router.replace(destination);
+        return true;
+      }
+    }
+
+    setStep(
+      data.requiresWhatsApp && data.whatsappConnected !== true
+        ? "whatsapp"
+        : "pricing",
+    );
+    return false;
+  }, [currentDomain, router]);
 
   const handleSelectFreeTrial = async () => {
     if (!user?.email) {
@@ -498,27 +555,21 @@ export default function OnboardingPageEmbedded() {
           email: user.email,
           plan_slug: "starter",
           domain: currentDomain,
-          source: "shop",
+          source: "onboarding_plan_selection",
+          selected_plan_id: "starter",
         }),
       });
 
       const result = await response.json();
 
       if (result.success && (result.trial || result.is_existing)) {
-        sessionStorage.setItem(
-          "pending_onboarding",
-          JSON.stringify({
-            whatsappConnected: true,
-            wabaId: wabaData?.wabaId,
-            phoneNumberId: wabaData?.phoneNumberId,
-            subscriptionPlan: "starter",
-            trialStarted: true,
-          }),
-        );
-
-        router.push("/dashboard?trial_started=true");
+        await routeToCanonicalDestination();
+        setPaymentLoading(null);
+        trialStartInProgressRef.current = false;
       } else if (result.error === "TRIAL_EXISTS") {
-        router.push("/dashboard?trial_started=true");
+        await routeToCanonicalDestination();
+        setPaymentLoading(null);
+        trialStartInProgressRef.current = false;
       } else {
         setPaymentError(
           result.message || "Failed to start free trial. Please try again.",
@@ -610,6 +661,7 @@ export default function OnboardingPageEmbedded() {
           );
 
           if (verification.success) {
+            invalidateOnboardingCheckCache(currentDomain);
             sessionStorage.setItem(
               "pending_onboarding",
               JSON.stringify({

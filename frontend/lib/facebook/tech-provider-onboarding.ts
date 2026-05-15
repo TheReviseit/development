@@ -13,6 +13,7 @@ import {
   createGraphAPIClient,
   MetaGraphAPIClient,
 } from "@/lib/facebook/graph-api-client";
+import crypto from "crypto";
 
 interface OnboardCustomerParams {
   code: string; // Authorization code from Embedded Signup
@@ -304,6 +305,6 @@ export class TechProviderOnboardingService {
    * Generate a random 6-digit PIN for phone number registration
    */
   private static generateRandomPin(): string {
-    return Math.floor(100000 + Math.random() * 900000).toString();
+    return crypto.randomInt(100000, 1000000).toString();
   }
 }

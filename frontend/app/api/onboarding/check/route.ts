@@ -1,17 +1,15 @@
 /**
- * Onboarding Check API - v4 FAANG-Grade Implementation
- * 
- * Architecture:
- * - Parallel queries for performance (Promise.allSettled)
- * - Explicit "error" as third state (not just false)
- * - 503 on partial data (fail-closed for reliability)
- * - No auto-heal (DB trigger is source of truth)
- * - Structured logging for drift detection
+ * Onboarding Check API
+ *
+ * Hot-path access-state endpoint used by login redirects, dashboard guards, and
+ * onboarding flows. The fast path reads one DB-computed state document and keeps
+ * the legacy multi-query implementation as a safe fallback.
  */
 
 import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { verifySessionCookieSafe } from "@/lib/firebase-admin";
+import { detectProductFromRequest } from "@/lib/auth-helpers";
 import {
   getUserByFirebaseUID,
   getSubscriptionByUserId,
@@ -19,147 +17,48 @@ import {
 import { getWhatsAppAccountsByUserId } from "@/lib/supabase/facebook-whatsapp-queries";
 import { createSupabaseServiceClientOrThrow } from "@/lib/auth/provisioning.server";
 import { withTimeout } from "@/lib/server/fetchWithTimeout";
+import {
+  buildOnboardingPayload,
+  isFastOnboardingCheckEnabled,
+  readOnboardingAccessStateFast,
+  type TrialDetails,
+} from "@/lib/auth/onboarding-state.server";
+import type { ProductDomain } from "@/lib/domain/config";
 
-/**
- * Result type for onboarding check.
- * Note: "error" is an explicit third state, not just false.
- */
 interface OnboardingCheckResult {
   onboardingCompleted?: boolean;
   whatsappConnected?: boolean | "error";
   hasActiveSubscription?: boolean | "error";
   hasActiveTrial?: boolean | "error";
   isTrialExpired?: boolean;
-  trialDetails?: {
-    startedAt: string;
-    expiresAt: string;
-    planSlug: string;
-  };
+  hasProductAccess?: boolean;
+  requiresWhatsApp?: boolean;
+  whatsappSatisfied?: boolean;
+  canEnterDashboard?: boolean;
+  nextPath?: string;
+  reason?: string;
+  trialDetails?: TrialDetails;
   error?: string;
+  code?: string;
   message?: string;
   errors?: string[];
-  _meta: {
+  userExists?: boolean;
+  _meta?: {
     durationMs: number;
     timestamp: string;
     partialData: boolean;
+    source?: "fast_path" | "legacy";
+    fallback?: boolean;
   };
 }
 
-/**
- * Check trial status for user (bypasses any caching for accuracy)
- * 
- * CRITICAL: Must check BOTH status AND expires_at.
- * A trial with status='active' but expires_at in the past is EXPPIRED.
- * The backend feature gate correctly blocks access, but the frontend
- * was only checking status, causing redirect loops.
- */
-async function checkTrialStatus(userId: string): Promise<{
-  hasActiveTrial: boolean;
-  isExpired: boolean;
-  trialDetails?: {
-    startedAt: string;
-    expiresAt: string;
-    planSlug: string;
-  };
-}> {
-  try {
-    let supabase;
-    try {
-      supabase = createSupabaseServiceClientOrThrow({ timeoutMs: 5000 });
-    } catch {
-      console.error("[onboarding/check] Missing Supabase env vars");
-      return { hasActiveTrial: false, isExpired: false };
-    }
+const DEBUG_ONBOARDING_CHECK =
+  process.env.DEBUG_ONBOARDING_CHECK === "true";
 
-    // Optimized: Index-only scan, check BOTH status AND expires_at
-    // Only trials with status IN ('active', 'expiring_soon') AND expires_at > NOW() are valid
-    const { data, error, count } = await supabase
-      .from("free_trials")
-      .select("id, started_at, expires_at, plan_slug", { count: "exact", head: true })
-      .eq("user_id", userId)
-      .in("status", ["active", "expiring_soon"])
-      .gt("expires_at", new Date().toISOString())  // CRITICAL: expires_at must be in future
-      .limit(1);
-
-    if (error) {
-      console.error("[onboarding/check] Trial check error:", error);
-      throw error;
-    }
-
-    // Debug logging
-    console.log("[onboarding/check] Trial check result:", {
-      userId: userId.slice(0, 8),
-      data: data ? `Array(${data.length})` : 'null',
-      count,
-      hasTrial: (count ?? 0) > 0 || (data && data.length > 0),
-    });
-
-    const hasActiveTrial = (count !== null && count > 0) || (data !== null && data.length > 0);
-
-    console.log("[onboarding/check] Trial check intermediate:", {
-      hasActiveTrial,
-      dataLength: data?.length,
-      count,
-    });
-
-    // If we have data, extract trial details for expired state handling
-    if (data && data.length > 0) {
-      return {
-        hasActiveTrial,
-        isExpired: false,
-        trialDetails: {
-          startedAt: data[0].started_at,
-          expiresAt: data[0].expires_at,
-          planSlug: data[0].plan_slug,
-        },
-      };
-    }
-
-    // Check if user has a trial but it's expired (for proper messaging)
-    // This separate query helps us distinguish "no trial" from "trial expired"
-    // Check for:
-    // 1. status='active' or 'expiring_soon' but expires_at has passed (real-time expiry)
-    // 2. status='expired' (already marked as expired)
-    const { data: expiredTrialData } = await supabase
-      .from("free_trials")
-      .select("id, started_at, expires_at, plan_slug, status")
-      .eq("user_id", userId)
-      .or('status.eq.expired,status.eq.active,status.eq.expiring_soon')
-      .limit(1);
-
-    const hasExpiredTrial = !!(expiredTrialData && expiredTrialData.length > 0);
-
-    const result = {
-      hasActiveTrial,
-      isExpired: hasExpiredTrial && !hasActiveTrial,  // Has trial record but expires_at passed
-      trialDetails: (hasExpiredTrial && expiredTrialData) ? {
-        startedAt: expiredTrialData[0].started_at,
-        expiresAt: expiredTrialData[0].expires_at,
-        planSlug: expiredTrialData[0].plan_slug,
-      } : undefined,
-    };
-
-    console.log("[onboarding/check] Trial check final result:", {
-      hasActiveTrial: result.hasActiveTrial,
-      isExpired: result.isExpired,
-      hasTrialDetails: !!result.trialDetails,
-      expiredTrialDataLength: expiredTrialData?.length,
-    });
-
-    return result;
-  } catch (error) {
-    console.error("[onboarding/check] Trial check failed:", error);
-    throw error;
-  }
-}
-
-/**
- * Structured logging helper for observability
- */
 function logStructured(
   level: "info" | "warn" | "error",
   event: string,
-  data: Record<string, unknown>
+  data: Record<string, unknown>,
 ) {
   const logEntry = {
     timestamp: new Date().toISOString(),
@@ -170,22 +69,462 @@ function logStructured(
   console.log(`[onboarding/check:${level}] ${JSON.stringify(logEntry)}`);
 }
 
+function debugLog(message: string, data?: Record<string, unknown>) {
+  if (!DEBUG_ONBOARDING_CHECK) return;
+  if (data) {
+    console.log(message, data);
+  } else {
+    console.log(message);
+  }
+}
+
+function withServerTiming(
+  response: NextResponse,
+  startTime: number,
+  source: "fast_path" | "legacy" | "error",
+) {
+  const durationMs = Date.now() - startTime;
+  response.headers.set(
+    "Server-Timing",
+    `onboarding_check;dur=${durationMs};desc="${source}"`,
+  );
+  response.headers.set("Cache-Control", "no-store, no-cache, must-revalidate");
+  return response;
+}
+
+async function checkTrialStatus(
+  userId: string,
+  firebaseUID: string,
+  product: ProductDomain,
+): Promise<{
+  hasActiveTrial: boolean;
+  isExpired: boolean;
+  trialDetails?: TrialDetails;
+}> {
+  const supabase = createSupabaseServiceClientOrThrow({ timeoutMs: 5000 });
+  const nowIso = new Date().toISOString();
+  const trialIdentityKeys = Array.from(new Set([userId, firebaseUID]));
+
+  let activeTrialQuery = supabase
+    .from("free_trials")
+    .select("id, started_at, expires_at, plan_slug")
+    .in("user_id", trialIdentityKeys)
+    .in("status", ["active", "expiring_soon"])
+    .gt("expires_at", nowIso)
+    .limit(1);
+
+  if (product !== "dashboard") {
+    activeTrialQuery = activeTrialQuery.eq("domain", product);
+  }
+
+  const { data: activeTrialData, error: activeTrialError } =
+    await activeTrialQuery;
+
+  if (activeTrialError) {
+    console.error("[onboarding/check] Trial check error:", activeTrialError);
+    throw activeTrialError;
+  }
+
+  if (activeTrialData && activeTrialData.length > 0) {
+    const trial = activeTrialData[0];
+    return {
+      hasActiveTrial: true,
+      isExpired: false,
+      trialDetails: {
+        startedAt: trial.started_at,
+        expiresAt: trial.expires_at,
+        planSlug: trial.plan_slug,
+      },
+    };
+  }
+
+  let expiredTrialQuery = supabase
+    .from("free_trials")
+    .select("id, started_at, expires_at, plan_slug, status")
+    .in("user_id", trialIdentityKeys)
+    .or("status.eq.expired,status.eq.active,status.eq.expiring_soon")
+    .limit(1);
+
+  if (product !== "dashboard") {
+    expiredTrialQuery = expiredTrialQuery.eq("domain", product);
+  }
+
+  const { data: expiredTrialData, error: expiredTrialError } =
+    await expiredTrialQuery;
+
+  if (expiredTrialError) {
+    console.error("[onboarding/check] Expired trial check error:", expiredTrialError);
+    throw expiredTrialError;
+  }
+
+  const expiredTrial = expiredTrialData?.[0];
+  const hasExpiredTrial = Boolean(expiredTrial);
+
+  return {
+    hasActiveTrial: false,
+    isExpired: hasExpiredTrial,
+    trialDetails: expiredTrial
+      ? {
+          startedAt: expiredTrial.started_at,
+          expiresAt: expiredTrial.expires_at,
+          planSlug: expiredTrial.plan_slug,
+        }
+      : undefined,
+  };
+}
+
+async function checkProductMembershipStatus(
+  userId: string,
+  product: ProductDomain,
+): Promise<{
+  hasActiveSubscription: boolean;
+  hasActiveTrial: boolean;
+  isExpired: boolean;
+  trialDetails?: TrialDetails;
+}> {
+  if (product === "dashboard") {
+    return {
+      hasActiveSubscription: false,
+      hasActiveTrial: false,
+      isExpired: false,
+    };
+  }
+
+  const supabase = createSupabaseServiceClientOrThrow({ timeoutMs: 5000 });
+  const { data: membership, error } = await supabase
+    .from("user_products")
+    .select("id, status, activated_at, trial_ends_at")
+    .eq("user_id", userId)
+    .eq("product", product)
+    .maybeSingle();
+
+  if (error) {
+    console.error("[onboarding/check] Membership check error:", error);
+    throw error;
+  }
+
+  const status = (membership?.status as string | undefined)?.toLowerCase();
+
+  if (!membership || !status) {
+    return {
+      hasActiveSubscription: false,
+      hasActiveTrial: false,
+      isExpired: false,
+    };
+  }
+
+  if (status === "active") {
+    return {
+      hasActiveSubscription: true,
+      hasActiveTrial: false,
+      isExpired: false,
+    };
+  }
+
+  if (status !== "trial") {
+    return {
+      hasActiveSubscription: false,
+      hasActiveTrial: false,
+      isExpired: false,
+    };
+  }
+
+  const trialEndsAt = membership.trial_ends_at
+    ? new Date(membership.trial_ends_at)
+    : null;
+  const trialDetails: TrialDetails | undefined = membership.trial_ends_at
+    ? {
+        startedAt: membership.activated_at,
+        expiresAt: membership.trial_ends_at,
+        planSlug: `${product}_starter`,
+      }
+    : undefined;
+
+  if (!trialEndsAt || trialEndsAt > new Date()) {
+    return {
+      hasActiveSubscription: false,
+      hasActiveTrial: true,
+      isExpired: false,
+      trialDetails,
+    };
+  }
+
+  return {
+    hasActiveSubscription: false,
+    hasActiveTrial: false,
+    isExpired: true,
+    trialDetails,
+  };
+}
+
+async function runLegacyOnboardingCheck(params: {
+  firebaseUID: string;
+  product: ProductDomain;
+  startTime: number;
+  fallback: boolean;
+}) {
+  const { firebaseUID, product, startTime, fallback } = params;
+  const errors: string[] = [];
+  const user = await getUserByFirebaseUID(firebaseUID);
+
+  if (!user) {
+    logStructured("error", "user_not_found", { firebaseUID });
+
+    const response = NextResponse.json(
+      {
+        error: "USER_NOT_FOUND",
+        code: "USER_NOT_FOUND",
+        userExists: false,
+        message: "User account not found in database",
+      } satisfies OnboardingCheckResult,
+      { status: 404 },
+    );
+    response.cookies.delete("session");
+    return withServerTiming(response, startTime, "legacy");
+  }
+
+  const [whatsappResult, subscriptionResult, trialResult, membershipResult] =
+    await Promise.allSettled([
+      getWhatsAppAccountsByUserId(user.id)
+        .then((accounts) => ({
+          status: "success" as const,
+          connected: accounts.length > 0,
+        }))
+        .catch((error) => {
+          errors.push(`whatsapp_check_failed: ${error.message}`);
+          return {
+            status: "error" as const,
+            connected: "error" as const,
+          };
+        }),
+
+      getSubscriptionByUserId(user.id)
+        .then((sub) => ({
+          status: "success" as const,
+          hasSubscription: Boolean(sub),
+        }))
+        .catch((error) => {
+          errors.push(`subscription_check_failed: ${error.message}`);
+          return {
+            status: "error" as const,
+            hasSubscription: "error" as const,
+          };
+        }),
+
+      checkTrialStatus(user.id, firebaseUID, product)
+        .then((trialCheck) => ({
+          status: "success" as const,
+          hasActiveTrial: trialCheck.hasActiveTrial,
+          isTrialExpired: trialCheck.isExpired,
+          trialDetails: trialCheck.trialDetails,
+        }))
+        .catch((error) => {
+          errors.push(`trial_check_failed: ${error.message}`);
+          return {
+            status: "error" as const,
+            hasActiveTrial: "error" as const,
+            isTrialExpired: false,
+            trialDetails: undefined,
+          };
+        }),
+
+      checkProductMembershipStatus(user.id, product)
+        .then((membershipCheck) => ({
+          status: "success" as const,
+          hasActiveSubscription: membershipCheck.hasActiveSubscription,
+          hasActiveTrial: membershipCheck.hasActiveTrial,
+          isTrialExpired: membershipCheck.isExpired,
+          trialDetails: membershipCheck.trialDetails,
+        }))
+        .catch((error) => {
+          errors.push(`membership_check_failed: ${error.message}`);
+          return {
+            status: "error" as const,
+            hasActiveSubscription: "error" as const,
+            hasActiveTrial: "error" as const,
+            isTrialExpired: false,
+            trialDetails: undefined,
+          };
+        }),
+    ]);
+
+  const whatsappConnected =
+    whatsappResult.status === "fulfilled"
+      ? whatsappResult.value.connected
+      : "error";
+  const subscriptionActive =
+    subscriptionResult.status === "fulfilled"
+      ? subscriptionResult.value.hasSubscription
+      : "error";
+  const freeTrialActive =
+    trialResult.status === "fulfilled"
+      ? trialResult.value.hasActiveTrial
+      : "error";
+  const freeTrialExpired =
+    trialResult.status === "fulfilled"
+      ? trialResult.value.isTrialExpired
+      : false;
+  const freeTrialDetails =
+    trialResult.status === "fulfilled"
+      ? trialResult.value.trialDetails
+      : undefined;
+  const membershipActiveSubscription =
+    membershipResult.status === "fulfilled"
+      ? membershipResult.value.hasActiveSubscription
+      : "error";
+  const membershipActiveTrial =
+    membershipResult.status === "fulfilled"
+      ? membershipResult.value.hasActiveTrial
+      : "error";
+  const membershipTrialExpired =
+    membershipResult.status === "fulfilled"
+      ? membershipResult.value.isTrialExpired
+      : false;
+  const membershipTrialDetails =
+    membershipResult.status === "fulfilled"
+      ? membershipResult.value.trialDetails
+      : undefined;
+
+  const hasActiveSubscription =
+    subscriptionActive === "error" || membershipActiveSubscription === "error"
+      ? "error"
+      : subscriptionActive === true || membershipActiveSubscription === true;
+  const hasActiveTrial =
+    freeTrialActive === "error" || membershipActiveTrial === "error"
+      ? "error"
+      : freeTrialActive === true || membershipActiveTrial === true;
+  const isTrialExpired =
+    (freeTrialExpired === true || membershipTrialExpired === true) &&
+    hasActiveTrial !== true;
+  const trialDetails = freeTrialDetails ?? membershipTrialDetails;
+
+  const hasPartialData =
+    whatsappConnected === "error" ||
+    hasActiveSubscription === "error" ||
+    hasActiveTrial === "error";
+
+  if (hasPartialData) {
+    logStructured("warn", "partial_data", {
+      userId: user.id.slice(0, 8),
+      errors,
+      fallback,
+      partialData: true,
+    });
+
+    return withServerTiming(
+      NextResponse.json(
+        {
+          error: "SERVICE_UNAVAILABLE",
+          message:
+            "Unable to verify onboarding status due to partial service outage",
+          errors,
+          _meta: {
+            durationMs: Date.now() - startTime,
+            timestamp: new Date().toISOString(),
+            partialData: true,
+            source: "legacy",
+            fallback,
+          },
+        } satisfies OnboardingCheckResult,
+        { status: 503 },
+      ),
+      startTime,
+      "legacy",
+    );
+  }
+
+  const safeWhatsappConnected = whatsappConnected === true;
+  const safeHasActiveSubscription = hasActiveSubscription === true;
+  const safeHasActiveTrial = hasActiveTrial === true;
+  const rawOnboardingCompleted = user.onboarding_completed_at != null;
+  const payload = buildOnboardingPayload(
+    {
+      userExists: true,
+      userId: user.id,
+      onboardingCompleted: rawOnboardingCompleted,
+      whatsappConnected: safeWhatsappConnected,
+      hasActiveSubscription: safeHasActiveSubscription,
+      hasActiveTrial: safeHasActiveTrial,
+      isTrialExpired,
+      trialDetails,
+    },
+    product,
+  );
+  const durationMs = Date.now() - startTime;
+
+  debugLog("[onboarding/check] Legacy decision values:", {
+    userId: user.id.slice(0, 8),
+    rawOnboardingCompleted,
+    product,
+    hasActiveSubscription: safeHasActiveSubscription,
+    hasActiveTrial: safeHasActiveTrial,
+    whatsappConnected: safeWhatsappConnected,
+    onboardingCompleted: payload.onboardingCompleted,
+  });
+
+  if (payload.onboardingCompleted && !rawOnboardingCompleted) {
+    logStructured("error", "onboarding_drift_detected", {
+      userId: user.id.slice(0, 8),
+      reason:
+        safeHasActiveTrial
+          ? "trial_active"
+          : safeHasActiveSubscription
+            ? "subscription_active"
+            : "whatsapp_connected",
+      expectedOnboardingAt: user.onboarding_completed_at,
+      alert: true,
+    });
+  }
+
+  logStructured("info", "onboarding_check_completed", {
+    userId: user.id.slice(0, 8),
+    product,
+    onboardingCompleted: payload.onboardingCompleted,
+    whatsappConnected: payload.whatsappConnected,
+    hasActiveSubscription: payload.hasActiveSubscription,
+    hasActiveTrial: payload.hasActiveTrial,
+    isTrialExpired: payload.isTrialExpired,
+    hasTrialDetails: Boolean(payload.trialDetails),
+    durationMs,
+    source: "legacy",
+    fallback,
+    partialData: false,
+  });
+
+  return withServerTiming(
+    NextResponse.json({
+      ...payload,
+      _meta: {
+        durationMs,
+        timestamp: new Date().toISOString(),
+        partialData: false,
+        source: "legacy",
+        fallback,
+      },
+    } satisfies OnboardingCheckResult),
+    startTime,
+    "legacy",
+  );
+}
+
 export async function GET(request: NextRequest) {
   const startTime = Date.now();
-  const errors: string[] = [];
 
   try {
     const cookieStore = await cookies();
     const sessionCookie = cookieStore.get("session")?.value;
 
     if (!sessionCookie) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return withServerTiming(
+        NextResponse.json({ error: "Unauthorized" }, { status: 401 }),
+        startTime,
+        "error",
+      );
     }
 
-    // Verify the session cookie with safe error handling
     const authResult = await withTimeout(
-      verifySessionCookieSafe(sessionCookie, true),
-      5000,
+      verifySessionCookieSafe(sessionCookie, false),
+      3000,
       "FIREBASE_SESSION_VERIFY_TIMEOUT",
     );
 
@@ -197,222 +536,82 @@ export async function GET(request: NextRequest) {
       if (authResult.shouldClearSession) {
         response.cookies.delete("session");
       }
-      return response;
+      return withServerTiming(response, startTime, "error");
     }
 
     const firebaseUID = authResult.data!.uid;
-    const user = await getUserByFirebaseUID(firebaseUID);
+    const product = detectProductFromRequest(request);
 
-    // Return 404 when user not found (distinguish from incomplete onboarding)
-    if (!user) {
-      logStructured("error", "user_not_found", { firebaseUID });
+    if (isFastOnboardingCheckEnabled()) {
+      try {
+        const supabase = createSupabaseServiceClientOrThrow({ timeoutMs: 2500 });
+        const state = await readOnboardingAccessStateFast({
+          supabase,
+          firebaseUid: firebaseUID,
+          product,
+        });
 
-      const response = NextResponse.json(
-        {
-          error: "USER_NOT_FOUND",
-          code: "USER_NOT_FOUND",
-          userExists: false,
-          message: "User account not found in database",
-        },
-        { status: 404 },
-      );
-      response.cookies.delete("session");
-      return response;
+        if (!state.userExists) {
+          logStructured("error", "user_not_found", { firebaseUID });
+
+          const response = NextResponse.json(
+            {
+              error: "USER_NOT_FOUND",
+              code: "USER_NOT_FOUND",
+              userExists: false,
+              message: "User account not found in database",
+            } satisfies OnboardingCheckResult,
+            { status: 404 },
+          );
+          response.cookies.delete("session");
+          return withServerTiming(response, startTime, "fast_path");
+        }
+
+        const payload = buildOnboardingPayload(state, product);
+        const durationMs = Date.now() - startTime;
+
+        logStructured("info", "onboarding_check_completed", {
+          userId: state.userId?.slice(0, 8),
+          product,
+          onboardingCompleted: payload.onboardingCompleted,
+          whatsappConnected: payload.whatsappConnected,
+          hasActiveSubscription: payload.hasActiveSubscription,
+          hasActiveTrial: payload.hasActiveTrial,
+          isTrialExpired: payload.isTrialExpired,
+          durationMs,
+          source: "fast_path",
+          partialData: false,
+        });
+
+        return withServerTiming(
+          NextResponse.json({
+            ...payload,
+            _meta: {
+              durationMs,
+              timestamp: new Date().toISOString(),
+              partialData: false,
+              source: "fast_path",
+              fallback: false,
+            },
+          } satisfies OnboardingCheckResult),
+          startTime,
+          "fast_path",
+        );
+      } catch (error: any) {
+        logStructured("warn", "fast_path_fallback", {
+          product,
+          error: error?.message || String(error),
+          durationMs: Date.now() - startTime,
+        });
+      }
     }
 
-    // =====================================================================
-    // PARALLEL QUERIES: All independent checks run simultaneously
-    // Target: < 100ms total (vs current 1500ms+)
-    // =====================================================================
-    const [whatsappResult, subscriptionResult, trialResult] =
-      await Promise.allSettled([
-        // Check 1: WhatsApp connection
-        getWhatsAppAccountsByUserId(user.id)
-          .then((accounts) => ({
-            status: "success" as const,
-            connected: accounts.length > 0,
-            count: accounts.length,
-          }))
-          .catch((error) => {
-            errors.push(`whatsapp_check_failed: ${error.message}`);
-            return {
-              status: "error" as const,
-              error: error.message,
-              connected: "error" as const,
-            };
-          }),
-
-        // Check 2: Active subscription
-        getSubscriptionByUserId(user.id)
-          .then((sub) => ({
-            status: "success" as const,
-            hasSubscription: !!sub,
-          }))
-          .catch((error) => {
-            errors.push(`subscription_check_failed: ${error.message}`);
-            return {
-              status: "error" as const,
-              error: error.message,
-              hasSubscription: "error" as const,
-            };
-          }),
-
-        // Check 3: Active trial (with expiry detection)
-        checkTrialStatus(user.id)
-          .then((trialCheck) => ({
-            status: "success" as const,
-            hasActiveTrial: trialCheck.hasActiveTrial,
-            isTrialExpired: trialCheck.isExpired,
-            trialDetails: trialCheck.trialDetails,
-          }))
-          .catch((error) => {
-            errors.push(`trial_check_failed: ${error.message}`);
-            return {
-              status: "error" as const,
-              error: error.message,
-              hasActiveTrial: "error" as const,
-              isTrialExpired: false,
-            };
-          }),
-      ]);
-
-    // Extract results - "error" is a distinct third state
-    const whatsappConnected =
-      whatsappResult.status === "fulfilled"
-        ? whatsappResult.value.connected
-        : "error";
-
-    const hasActiveSubscription =
-      subscriptionResult.status === "fulfilled"
-        ? subscriptionResult.value.hasSubscription
-        : "error";
-
-    const hasActiveTrial =
-      trialResult.status === "fulfilled"
-        ? trialResult.value.hasActiveTrial
-        : "error";
-
-    const isTrialExpired =
-      trialResult.status === "fulfilled"
-        ? trialResult.value.isTrialExpired
-        : false;
-
-    const trialDetails =
-      trialResult.status === "fulfilled" && "trialDetails" in trialResult.value
-        ? trialResult.value.trialDetails
-        : undefined;
-
-    // Check for any partial data (some checks failed)
-    const hasPartialData =
-      whatsappConnected === "error" ||
-      hasActiveSubscription === "error" ||
-      hasActiveTrial === "error";
-
-    // =====================================================================
-    // DECISION LOGIC: Be conservative with partial data
-    // =====================================================================
-    if (hasPartialData) {
-      logStructured("warn", "partial_data", {
-        userId: user.id.slice(0, 8),
-        errors,
-        whatsappStatus: whatsappResult.status,
-        subscriptionStatus: subscriptionResult.status,
-        trialStatus: trialResult.status,
-        partialData: true,
-      });
-
-      // Return 503 Service Unavailable - don't make decision with incomplete data
-      return NextResponse.json(
-        {
-          error: "SERVICE_UNAVAILABLE",
-          message:
-            "Unable to verify onboarding status due to partial service outage",
-          errors,
-          _meta: {
-            durationMs: Date.now() - startTime,
-            timestamp: new Date().toISOString(),
-            partialData: true,
-          },
-        } satisfies OnboardingCheckResult,
-        { status: 503 }
-      );
-    }
-
-    // All checks succeeded - make decision
-    // v2: Use timestamp-based check for onboarding completion
-    const isActuallyOnboarded = user.onboarding_completed_at != null;
-    const shouldBeOnboarded =
-      hasActiveSubscription === true ||
-      hasActiveTrial === true ||
-      whatsappConnected === true;
-
-    // Debug logging
-    console.log("[onboarding/check] Decision values:", {
-      userId: user.id.slice(0, 8),
-      isActuallyOnboarded,
-      shouldBeOnboarded,
-      hasActiveSubscription,
-      hasActiveTrial,
-      whatsappConnected,
-      onboarding_completed_at: user.onboarding_completed_at,
+    return await runLegacyOnboardingCheck({
+      firebaseUID,
+      product,
+      startTime,
+      fallback: isFastOnboardingCheckEnabled(),
     });
-
-    // =====================================================================
-    // DRIFT DETECTION: Alert if trigger didn't fire (don't auto-heal)
-    // =====================================================================
-    if (shouldBeOnboarded && !isActuallyOnboarded) {
-      logStructured("error", "onboarding_drift_detected", {
-        userId: user.id.slice(0, 8),
-        reason: hasActiveTrial === true
-          ? "trial_active"
-          : hasActiveSubscription === true
-            ? "subscription_active"
-            : "whatsapp_connected",
-        expectedOnboardingAt: user.onboarding_completed_at,
-        alert: true, // Page on-call
-      });
-
-      // Still return success to user, but flag for investigation
-      // The trigger will eventually catch up or needs fixing
-    }
-
-    const durationMs = Date.now() - startTime;
-
-    logStructured("info", "onboarding_check_completed", {
-      userId: user.id.slice(0, 8),
-      onboardingCompleted: isActuallyOnboarded || shouldBeOnboarded,
-      whatsappConnected,
-      hasActiveSubscription,
-      hasActiveTrial,
-      isTrialExpired,
-      hasTrialDetails: !!trialDetails,
-      durationMs,
-      partialData: false,
-    });
-
-    // DEBUG: Log full response
-    console.log("[onboarding/check] Final response:", {
-      onboardingCompleted: isActuallyOnboarded || shouldBeOnboarded,
-      whatsappConnected,
-      hasActiveSubscription,
-      hasActiveTrial,
-      isTrialExpired,
-      hasTrialDetails: !!trialDetails,
-    });
-
-    return NextResponse.json({
-      onboardingCompleted: isActuallyOnboarded || shouldBeOnboarded,
-      whatsappConnected,
-      hasActiveSubscription,
-      hasActiveTrial,
-      isTrialExpired,
-      trialDetails,
-      _meta: {
-        durationMs,
-        timestamp: new Date().toISOString(),
-        partialData: false,
-      },
-    } satisfies OnboardingCheckResult);
   } catch (error: any) {
     console.error("[onboarding/check] Fatal error:", error);
 
@@ -422,17 +621,21 @@ export async function GET(request: NextRequest) {
       durationMs: Date.now() - startTime,
     });
 
-    return NextResponse.json(
-      {
-        error: "Internal server error",
-        message: error.message || "Unknown error",
-        _meta: {
-          durationMs: Date.now() - startTime,
-          timestamp: new Date().toISOString(),
-          partialData: false,
-        },
-      },
-      { status: 500 }
+    return withServerTiming(
+      NextResponse.json(
+        {
+          error: "Internal server error",
+          message: error.message || "Unknown error",
+          _meta: {
+            durationMs: Date.now() - startTime,
+            timestamp: new Date().toISOString(),
+            partialData: false,
+          },
+        } satisfies OnboardingCheckResult,
+        { status: 500 },
+      ),
+      startTime,
+      "error",
     );
   }
 }

@@ -9,6 +9,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import FacebookLoginButton from './FacebookLoginButton';
+import { invalidateOnboardingCheckCache } from '@/lib/auth/onboarding-check-client';
 import {
   MetaBusinessManager,
   MetaWhatsAppBusinessAccount,
@@ -221,6 +222,7 @@ export default function WhatsAppConnectionFlow() {
       if (result.success) {
         // Complete onboarding
         await fetch('/api/onboarding/complete', { method: 'POST' });
+        invalidateOnboardingCheckCache();
         
         // Redirect to dashboard
         router.push('/dashboard?connection=success');

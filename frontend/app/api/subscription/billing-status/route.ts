@@ -112,6 +112,7 @@ export async function GET(request: NextRequest) {
     const [
       { data: entitledSub },
       { data: blockedSub },
+      { data: membership },
       { data: trialRecord },
     ] = await Promise.all([
       // Prefer an entitled/warned subscription if it exists (domain-agnostic).
@@ -132,11 +133,18 @@ export async function GET(request: NextRequest) {
         .order("created_at", { ascending: false })
         .limit(1)
         .maybeSingle(),
+      // Canonical product membership written by auth sync / product activation.
+      supabase
+        .from("user_products")
+        .select("id, status, product, trial_ends_at, activated_at")
+        .eq("user_id", user.id)
+        .eq("product", domain)
+        .maybeSingle(),
       // Trials are domain-specific.
       supabase
         .from("free_trials")
         .select("id, status, expires_at, plan_slug, domain, started_at")
-        .eq("user_id", user.id)
+        .in("user_id", Array.from(new Set([user.id, firebaseUid])))
         .eq("domain", domain)
         .order("created_at", { ascending: false })
         .limit(1)
@@ -158,7 +166,19 @@ export async function GET(request: NextRequest) {
       }
     }
     
-    console.log(`[BILLING_STATUS] User ${user.id} on domain ${domain}: subscription=${subscription ? subscription.status : 'none'}, trial=${trial ? trial.status : (expiredTrial ? 'expired' : 'none')}`);
+    const membershipStatus = (membership?.status as string | undefined)?.toLowerCase();
+    const membershipTrialEndsAt = membership?.trial_ends_at
+      ? new Date(membership.trial_ends_at)
+      : null;
+    const membershipTrialActive =
+      membershipStatus === "trial" &&
+      (!membershipTrialEndsAt || membershipTrialEndsAt > new Date());
+    const membershipTrialExpired =
+      membershipStatus === "trial" &&
+      !!membershipTrialEndsAt &&
+      membershipTrialEndsAt <= new Date();
+
+    console.log(`[BILLING_STATUS] User ${user.id} on domain ${domain}: subscription=${subscription ? subscription.status : 'none'}, membership=${membershipStatus || 'none'}, trial=${trial ? trial.status : (expiredTrial ? 'expired' : 'none')}`);
 
     // ──────────────────────────────────────────────────────────────────────────
     // 5. Determine lock state
@@ -175,9 +195,9 @@ export async function GET(request: NextRequest) {
     // ── PRIORITY 1: Active trial → unlock ────────────────────────────────────
     if (trial) {
       console.log(`[BILLING_STATUS] User ${user.id} has active trial, granting access`);
-      return NextResponse.json({ 
-        locked: false, 
-        reason: null, 
+      return NextResponse.json({
+        locked: false,
+        reason: null,
         status: "trial",
         trial: {
           id: trial.id,
@@ -185,7 +205,27 @@ export async function GET(request: NextRequest) {
           expires_at: trial.expires_at,
           started_at: trial.started_at,
           plan: trial.plan_slug,
-        }
+        },
+      });
+    }
+
+    if (membership && (membershipStatus === "active" || membershipTrialActive)) {
+      const status = membershipStatus === "active" ? "active" : "trial";
+      console.log(`[BILLING_STATUS] User ${user.id} has active user_products membership (${status}), granting access`);
+      return NextResponse.json({
+        locked: false,
+        reason: null,
+        status,
+        trial: membershipTrialActive
+          ? {
+              id: membership.id,
+              status: "active",
+              expires_at: membership.trial_ends_at,
+              started_at: membership.activated_at,
+              plan: `${domain}_starter`,
+              source: "user_products",
+            }
+          : undefined,
       });
     }
 
@@ -244,7 +284,7 @@ export async function GET(request: NextRequest) {
     }
 
     // ── PRIORITY 3: Expired trial (no active subscription) → lock ────────────
-    if (expiredTrial) {
+    if (expiredTrial || (membership && membershipTrialExpired)) {
       const durationMs = Date.now() - startTime;
       console.info(`[BILLING_STATUS] trial_expired user=${user.id.slice(0, 8)} duration=${durationMs}ms`);
       console.log(`[BILLING_STATUS] User ${user.id} has EXPIRED trial (no active subscription), showing expired lock`);
@@ -253,11 +293,11 @@ export async function GET(request: NextRequest) {
         reason: "trial_expired",
         status: "expired",
         trial: {
-          id: expiredTrial.id,
+          id: expiredTrial?.id || membership?.id,
           status: "expired",
-          expires_at: expiredTrial.expires_at,
-          started_at: expiredTrial.started_at,
-          plan: expiredTrial.plan_slug,
+          expires_at: expiredTrial?.expires_at || membership?.trial_ends_at,
+          started_at: expiredTrial?.started_at || membership?.activated_at,
+          plan: expiredTrial?.plan_slug || `${domain}_starter`,
         },
         _meta: {
           durationMs,

@@ -20,6 +20,7 @@ import {
   getWhatsAppAccountsByUserId,
 } from "@/lib/supabase/facebook-whatsapp-queries";
 import { decryptToken } from "@/lib/encryption/crypto";
+import crypto from "crypto";
 
 export async function POST(request: NextRequest) {
   try {
@@ -142,7 +143,9 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // STEP 3: Deregister first (clears stale registration), then re-register
+    // STEP 3: Register idempotently. The old deregister-first path is gated
+    // because deregistering can break an already-working production number.
+    if (process.env.WA_CONNECTION_ALLOW_DEREGISTER_BEFORE_REGISTER === "true") {
     console.log(
       `🔄 [Register Phone] Step 3a: Deregistering ${phoneNumberId} first...`,
     );
@@ -170,15 +173,14 @@ export async function POST(request: NextRequest) {
 
     // Wait 3 seconds for Meta to process deregistration
     await new Promise((resolve) => setTimeout(resolve, 3000));
+    }
 
     // STEP 3b: Now register
     console.log(
       `🔄 [Register Phone] Step 3b: Registering ${phoneNumberId}...`,
     );
 
-    const registrationPin = String(
-      Math.floor(100000 + Math.random() * 900000),
-    );
+    const registrationPin = crypto.randomInt(100000, 1000000).toString();
 
     const registerResponse = await fetch(
       `https://graph.facebook.com/v24.0/${phoneNumberId}/register`,

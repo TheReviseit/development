@@ -15,10 +15,11 @@
 
 "use client";
 
-import { useEffect, useState, useCallback, useRef } from "react";
+import { Suspense, useCallback, useEffect, useId, useRef, useState } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { onAuthStateChanged, User } from "firebase/auth";
 import { auth } from "@/src/firebase/firebase";
+import { invalidateOnboardingCheckCache } from "@/lib/auth/onboarding-check-client";
 import "./payment-status.css";
 
 type PaymentStatus =
@@ -59,8 +60,6 @@ const PHASE_2_INTERVAL = 5000; // 5 seconds
 const PHASE_2_DURATION = 120000; // 2 minutes total
 const MAX_POLL_TIME = PHASE_2_DURATION;
 
-import { Suspense } from "react";
-
 // Move all logic to a content component
 function PaymentStatusContent() {
   const [user, setUser] = useState<User | null>(null);
@@ -75,13 +74,10 @@ function PaymentStatusContent() {
 
   const searchParams = useSearchParams();
   const router = useRouter();
-  const pollStartTime = useRef<number>(Date.now());
+  const pollStartTime = useRef<number>(0);
   const pollIntervalRef = useRef<NodeJS.Timeout | null>(null);
-
-  // Generate stable request ID for frontend tracing
-  const requestId = useRef<string>(
-    `req_${Math.random().toString(36).substring(2, 10)}`,
-  );
+  const reactRequestId = useId();
+  const requestId = `req_${reactRequestId.replace(/:/g, "")}`;
 
   const subscriptionId = searchParams.get("subscription_id");
   const authTokenRef = useRef<string | null>(null);
@@ -109,7 +105,7 @@ function PaymentStatusContent() {
           ...(authTokenRef.current
             ? { Authorization: `Bearer ${authTokenRef.current}` }
             : {}),
-          "X-Request-Id": requestId.current,
+          "X-Request-Id": requestId,
         },
       });
 
@@ -129,6 +125,7 @@ function PaymentStatusContent() {
           status === "grace_period"
         ) {
           setLoading(false);
+          invalidateOnboardingCheckCache();
 
           // Explicitly mark onboarding as complete
           fetch("/api/onboarding/complete", { method: "POST" }).catch((err) =>
@@ -169,7 +166,7 @@ function PaymentStatusContent() {
       // Don't stop polling on network errors
       return false;
     }
-  }, [user, router, elapsedTime]);
+  }, [user, router, elapsedTime, requestId]);
 
   /**
    * Progressive polling with backoff
@@ -423,7 +420,7 @@ function PaymentStatusContent() {
         {process.env.NODE_ENV === "development" && (
           <div className="debug-info">
             <small>
-              Request ID: {requestId.current} | Polls: {pollCount} |
+              Request ID: {requestId} | Polls: {pollCount} |
               Subscription ID: {subscriptionId || "N/A"}
             </small>
           </div>

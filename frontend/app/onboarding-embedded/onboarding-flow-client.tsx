@@ -12,7 +12,7 @@
 
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { onAuthStateChanged, User } from "firebase/auth";
 import { auth } from "@/src/firebase/firebase";
@@ -25,6 +25,12 @@ import {
   clearPaymentRequestId,
 } from "@/lib/api/razorpay";
 import type { ProductDomain } from "@/lib/product/types";
+import {
+  getOnboardingCheck,
+  getOnboardingDestination,
+  invalidateOnboardingCheckCache,
+  recordOnboardingRedirect,
+} from "@/lib/auth/onboarding-check-client";
 
 // =============================================================================
 // TYPES
@@ -82,6 +88,35 @@ export function OnboardingFlowClient({
   // AUTHENTICATION
   // =========================================================================
 
+  const checkOnboardingStatus = useCallback(async (): Promise<boolean> => {
+    try {
+      const data = await getOnboardingCheck({ product: productInfo.id });
+      const destination = getOnboardingDestination(data, productInfo.id);
+
+      if (destination.startsWith("/dashboard")) {
+        const loop = recordOnboardingRedirect(destination);
+        if (loop.suppress) {
+          invalidateOnboardingCheckCache(productInfo.id);
+          const refreshed = await getOnboardingCheck({
+            product: productInfo.id,
+            force: true,
+          });
+          if (!getOnboardingDestination(refreshed, productInfo.id).startsWith("/dashboard")) {
+            return false;
+          }
+        }
+
+        router.replace(destination);
+        return true;
+      }
+
+      return false;
+    } catch (error) {
+      console.error("Error checking onboarding status:", error);
+      return false;
+    }
+  }, [productInfo.id, router]);
+
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
       if (currentUser) {
@@ -97,24 +132,7 @@ export function OnboardingFlowClient({
     });
 
     return () => unsubscribe();
-  }, [router]);
-
-  const checkOnboardingStatus = async (): Promise<boolean> => {
-    try {
-      const onboardingResponse = await fetch("/api/onboarding/check");
-      if (onboardingResponse.ok) {
-        const data = await onboardingResponse.json();
-        if (data.onboarding_complete) {
-          router.push("/dashboard");
-          return true;
-        }
-      }
-      return false;
-    } catch (error) {
-      console.error("Error checking onboarding status:", error);
-      return false;
-    }
-  };
+  }, [checkOnboardingStatus, router]);
 
   // =========================================================================
   // WHATSAPP CONNECTION HANDLERS
@@ -127,6 +145,7 @@ export function OnboardingFlowClient({
     wabaName: string;
   }) => {
     console.log("✅ WhatsApp connected successfully:", data);
+    invalidateOnboardingCheckCache(productInfo.id);
     setWabaData({ wabaId: data.wabaId, phoneNumberId: data.phoneNumberId });
     setConnectionError(null);
     setStep("pricing");
@@ -226,6 +245,7 @@ export function OnboardingFlowClient({
             );
 
             if (verification.success) {
+              invalidateOnboardingCheckCache(productInfo.id);
               // Store onboarding data
               sessionStorage.setItem(
                 "pending_onboarding",

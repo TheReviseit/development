@@ -38,6 +38,17 @@ html:has(.onboarding-container.onboarding-two-step) {
   background: #f2f2f1;
   color: #0f172a;
   box-sizing: border-box;
+  animation: onboarding-page-fade-in 520ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@keyframes onboarding-page-fade-in {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
 }
 
 @supports (height: 100dvh) {
@@ -315,6 +326,8 @@ html:has(.onboarding-container.onboarding-two-step) {
 }
 
 .signup-content {
+  --signup-copy-cta-gap: clamp(28px, 4.5vh, 42px);
+  --signup-main-stack-lift: clamp(36px, 6vh, 64px);
   width: 100%;
   height: 100%;
   min-height: 0;
@@ -325,6 +338,11 @@ html:has(.onboarding-container.onboarding-two-step) {
   text-align: center;
 }
 
+.signup-form-header,
+.signup-form-actions {
+  transform: translateY(calc(-1 * var(--signup-main-stack-lift)));
+}
+
 .signup-form-header {
   width: min(100%, 660px);
   min-height: 0;
@@ -333,8 +351,8 @@ html:has(.onboarding-container.onboarding-two-step) {
   flex: 1 1 auto;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
-  padding-bottom: 30px;
+  justify-content: flex-end;
+  padding-bottom: var(--signup-copy-cta-gap);
   text-align: center;
 }
 
@@ -429,7 +447,7 @@ html:has(.onboarding-container.onboarding-two-step) {
   flex-direction: column;
   align-items: center;
   gap: 0;
-  padding-top: clamp(22px, 4vh, 34px);
+  padding-top: 0;
   box-sizing: border-box;
 }
 
@@ -563,6 +581,7 @@ html:has(.onboarding-container.onboarding-two-step) {
   text-align: center;
   font-size: 12px;
   line-height: 1.55;
+  transform: translateY(var(--signup-main-stack-lift));
 }
 
 .privacy-notice a {
@@ -590,23 +609,24 @@ html:has(.onboarding-container.onboarding-two-step) {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 22px;
+  gap: 20px;
   text-align: center;
 }
 
-.connecting-spinner-wrapper {
-  width: 70px;
-  height: 70px;
+.connecting-loader-shell {
+  width: 56px;
+  height: 56px;
   display: flex;
   align-items: center;
   justify-content: center;
-  border: 1px solid #dcfce7;
-  border-radius: 8px;
-  background: #f0fdf4;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
 }
 
-.connecting-spinner {
-  color: #16a34a;
+.connecting-loader-icon {
+  color: #000000;
+  stroke: #000000;
   animation: spin 1s linear infinite;
 }
 
@@ -618,11 +638,12 @@ html:has(.onboarding-container.onboarding-two-step) {
 
 .connecting-text h3,
 .error-content h3 {
-  margin: 0 0 8px;
-  color: #0b1120;
-  font-size: 22px;
-  font-weight: 800;
-  line-height: 1.15;
+  margin: 0 0 9px;
+  color: #111111;
+  font-family: var(--font-outfit), var(--font-inter), system-ui, sans-serif;
+  font-size: clamp(21px, 2.2vw, 26px);
+  font-weight: 850;
+  line-height: 1.08;
   letter-spacing: 0;
 }
 
@@ -630,54 +651,10 @@ html:has(.onboarding-container.onboarding-two-step) {
 .error-content p {
   max-width: 360px;
   margin: 0;
-  color: #64748b;
+  color: #737373;
   font-size: 14px;
-  line-height: 1.55;
-}
-
-.processing-info {
-  width: min(100%, 330px);
-  padding: 18px;
-  border: 1px solid #dbeafe;
-  border-radius: 8px;
-  background: #f8fafc;
-  text-align: left;
-}
-
-.processing-title {
-  margin: 0 0 12px;
-  color: #1e3a8a;
-  font-size: 12px;
-  font-weight: 850;
-  line-height: 1;
-  letter-spacing: 0;
-  text-transform: uppercase;
-}
-
-.processing-list {
-  margin: 0;
-  padding: 0;
-  list-style: none;
-  display: flex;
-  flex-direction: column;
-  gap: 9px;
-}
-
-.processing-list li {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  color: #334155;
-  font-size: 13px;
-  font-weight: 650;
-}
-
-.processing-dot {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: #2563eb;
-  flex: 0 0 auto;
+  font-weight: 500;
+  line-height: 1.5;
 }
 
 .success-state {
@@ -853,43 +830,69 @@ html:has(.onboarding-container.onboarding-two-step) {
 }
 
 .error-icon-wrapper {
-  width: 68px;
-  height: 68px;
+  position: relative;
+  width: 72px;
+  height: 72px;
   display: flex;
   align-items: center;
   justify-content: center;
-  border: 1px solid #fecaca;
-  border-radius: 8px;
-  background: #fef2f2;
+  border: 1px solid rgba(220, 38, 38, 0.14);
+  border-radius: 999px;
+  background:
+    radial-gradient(circle at 35% 25%, rgba(255, 255, 255, 0.96), rgba(255, 255, 255, 0) 46%),
+    linear-gradient(145deg, #fff7f7 0%, #fff1f1 100%);
   color: #dc2626;
+  box-shadow:
+    0 18px 44px rgba(220, 38, 38, 0.12),
+    inset 0 1px 0 rgba(255, 255, 255, 0.95);
+}
+
+.error-icon-wrapper::after {
+  content: "";
+  position: absolute;
+  inset: 11px;
+  border: 1px solid rgba(220, 38, 38, 0.16);
+  border-radius: inherit;
+  pointer-events: none;
 }
 
 .error-retry-btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 8px;
-  min-height: 44px;
-  padding: 0 18px;
-  border: 1px solid #cbd5e1;
-  border-radius: 8px;
-  background: #ffffff;
-  color: #0f172a;
+  gap: 9px;
+  min-height: 50px;
+  min-width: 248px;
+  padding: 0 24px;
+  border: 1px solid #1f1f1f;
+  border-radius: 999px;
+  background: #1f1f1f;
+  color: #ffffff;
   cursor: pointer;
   font-family: inherit;
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 800;
   letter-spacing: 0;
+  box-shadow:
+    0 12px 28px rgba(15, 23, 42, 0.14),
+    inset 0 1px 0 rgba(255, 255, 255, 0.12);
   transition:
     transform 160ms ease,
-    border-color 160ms ease,
-    box-shadow 160ms ease;
+    background 160ms ease,
+    box-shadow 160ms ease,
+    opacity 160ms ease;
 }
 
 .error-retry-btn:hover {
-  border-color: #0f172a;
-  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.08);
+  background: #111111;
+  box-shadow:
+    0 14px 32px rgba(15, 23, 42, 0.18),
+    inset 0 1px 0 rgba(255, 255, 255, 0.14);
   transform: translateY(-1px);
+}
+
+.error-retry-btn:active {
+  transform: translateY(0);
 }
 
 .success-message {
@@ -923,12 +926,16 @@ html:has(.onboarding-container.onboarding-two-step) {
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .onboarding-container.onboarding-two-step {
+    animation: none;
+  }
+
   .whatsapp-connect-btn,
   .error-retry-btn {
     transition: none;
   }
 
-  .connecting-spinner {
+  .connecting-loader-icon {
     animation: none;
   }
 
@@ -1280,6 +1287,8 @@ html:has(.onboarding-container.onboarding-two-step) {
   }
 
   .signup-content {
+    --signup-copy-cta-gap: clamp(16px, 3svh, 24px);
+    --signup-main-stack-lift: clamp(14px, 4svh, 28px);
     justify-content: stretch;
   }
 
@@ -1288,8 +1297,7 @@ html:has(.onboarding-container.onboarding-two-step) {
     max-width: 100%;
     min-width: 0;
     margin-bottom: 0;
-    padding-bottom: clamp(16px, 3vh, 24px);
-    padding-bottom: clamp(16px, 3svh, 24px);
+    padding-bottom: var(--signup-copy-cta-gap);
   }
 
   .signup-form-icon {
@@ -1315,8 +1323,7 @@ html:has(.onboarding-container.onboarding-two-step) {
     flex: 0 0 auto;
     min-height: 0;
     margin-top: auto;
-    padding-top: clamp(14px, 2.8vh, 22px);
-    padding-top: clamp(14px, 2.8svh, 22px);
+    padding-top: 0;
     overflow-x: hidden;
     overflow-y: visible;
   }
@@ -1415,8 +1422,7 @@ html:has(.onboarding-container.onboarding-two-step) {
   }
 
   .signup-form-actions {
-    padding-top: clamp(12px, 2.6vh, 20px);
-    padding-top: clamp(12px, 2.6svh, 20px);
+    padding-top: 0;
   }
 
   .security-badges-marquee {
@@ -1480,8 +1486,13 @@ html:has(.onboarding-container.onboarding-two-step) {
     margin-bottom: 18px;
   }
 
+  .signup-content {
+    --signup-copy-cta-gap: 14px;
+    --signup-main-stack-lift: 12px;
+  }
+
   .signup-form-header {
-    padding-bottom: 14px;
+    padding-bottom: var(--signup-copy-cta-gap);
   }
 
   .signup-form-icon {
@@ -1524,7 +1535,7 @@ html:has(.onboarding-container.onboarding-two-step) {
   }
 
   .signup-form-actions {
-    padding-top: 12px;
+    padding-top: 0;
   }
 
   .whatsapp-connect-btn {
@@ -1545,23 +1556,19 @@ html:has(.onboarding-container.onboarding-two-step) {
 
   .connecting-state,
   .error-state {
-    gap: 16px;
+    gap: 14px;
     padding: 16px 0;
   }
 
-  .connecting-spinner-wrapper,
+  .connecting-loader-shell,
   .error-icon-wrapper {
     width: 56px;
     height: 56px;
   }
 
-  .connecting-spinner {
-    width: 44px;
-    height: 44px;
-  }
-
-  .processing-info {
-    padding: 14px;
+  .connecting-loader-icon {
+    width: 42px;
+    height: 42px;
   }
 }
 
@@ -1589,8 +1596,13 @@ html:has(.onboarding-container.onboarding-two-step) {
     margin-bottom: 12px;
   }
 
+  .signup-content {
+    --signup-copy-cta-gap: 8px;
+    --signup-main-stack-lift: 0px;
+  }
+
   .signup-form-header {
-    padding-bottom: 10px;
+    padding-bottom: var(--signup-copy-cta-gap);
   }
 
   .signup-form-icon {

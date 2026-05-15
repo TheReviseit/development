@@ -221,6 +221,10 @@ export default function DashboardLayout({
   useEffect(() => {
     setDomainAccessLoaded(false);
 
+    if (loading || !user) {
+      return;
+    }
+
     if (currentDomain === "dashboard") {
       setSubscribedDomains((prev) =>
         prev.includes("dashboard") ? prev : [...prev, "dashboard"],
@@ -257,13 +261,17 @@ export default function DashboardLayout({
     };
 
     checkDomainAccess();
-  }, [currentDomain]);
+  }, [currentDomain, loading, user]);
 
   // Get visibility rules for current domain (re-computed when domain is resolved)
   const visibility = getDomainVisibility(currentDomain);
 
   // Fetch AI capabilities for mobile menu
   useEffect(() => {
+    if (loading || !user) {
+      return;
+    }
+
     const fetchCapabilities = async () => {
       try {
         const response = await fetch("/api/ai-capabilities");
@@ -315,7 +323,7 @@ export default function DashboardLayout({
         "ai-capabilities-updated",
         handleUpdate as EventListener,
       );
-  }, []);
+  }, [loading, user]);
 
   // Detect mobile screen
   // Detect mobile screen
@@ -432,6 +440,19 @@ export default function DashboardLayout({
   // RETURN with only the gate page. The entire dashboard (sidebar,
   // mobile menu, children, API calls) is never mounted in the DOM.
   // This cannot be bypassed via DevTools — there's nothing to delete.
+  if (loading || !user) {
+    return (
+      <AuthProvider>
+        <DashboardAuthGuard
+          setUser={setUser}
+          setLoading={setLoading}
+          user={user}
+        />
+        <SpaceshipLoader text="Loading dashboard..." />
+      </AuthProvider>
+    );
+  }
+
   const isDomainGated =
     domainAccessLoaded &&
     currentDomain !== "dashboard" &&

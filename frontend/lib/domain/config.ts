@@ -267,6 +267,16 @@ export function getDomainVisibility(
 }
 
 /**
+ * Some product dashboards can technically render without WhatsApp, but their
+ * first-run onboarding still requires a connected WhatsApp account before
+ * we should drop a new user into the dashboard. Keep this separate from
+ * feature visibility so product pages do not accidentally change signup flow.
+ */
+export function requiresWhatsAppOnboarding(domain: ProductDomain): boolean {
+  return domain === "shop" || getDomainVisibility(domain).requiresWhatsApp;
+}
+
+/**
  * Check if a specific feature is visible on a product domain.
  */
 export function isFeatureVisible(

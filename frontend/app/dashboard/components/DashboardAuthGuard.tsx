@@ -4,8 +4,13 @@ import { useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/app/components/auth/AuthProvider";
 import { getProductDomainFromBrowser } from "@/lib/domain/client";
-import { getDomainVisibility } from "@/lib/domain/config";
 import { getSelfServiceProducts } from "@/lib/auth-helpers";
+import {
+  getOnboardingCheck,
+  getOnboardingDestination,
+  OnboardingCheckError,
+  recordOnboardingRedirect,
+} from "@/lib/auth/onboarding-check-client";
 
 interface DashboardAuthGuardProps {
   setUser: (user: any) => void;
@@ -175,58 +180,7 @@ export function DashboardAuthGuard({
         // Bounded retry with exponential backoff for 503 Service Unavailable
         const checkOnboarding = async (retries = 3, attempt = 0) => {
           try {
-            const response = await fetch("/api/onboarding/check");
-
-            // Handle 503 Service Unavailable with bounded retry
-            // This happens when some checks fail (partial data scenario)
-            if (response.status === 503) {
-              if (retries === 0) {
-                console.error(
-                  "[DASHBOARD] Onboarding check exhausted retries (503), redirecting to login",
-                );
-                hardRedirect("/login?error=service_unavailable");
-                return;
-              }
-
-              // Exponential backoff: 1s, 2s, 4s
-              const backoffMs = 1000 * Math.pow(2, attempt);
-              console.warn(
-                `[DASHBOARD] Onboarding check 503, retrying in ${backoffMs}ms (${retries} retries left)`,
-              );
-
-              setTimeout(
-                () => checkOnboarding(retries - 1, attempt + 1),
-                backoffMs,
-              );
-              return;
-            }
-
-            if (response.status === 401) {
-              hardRedirect("/login");
-              return;
-            }
-
-            if (response.status === 404) {
-              // User not found in DB despite AUTHENTICATED state
-              console.error(
-                "[DASHBOARD] User not found despite AUTHENTICATED state",
-              );
-              await clearSession();
-              hardRedirect(
-                "/signup?error=account_not_found&message=Your account was not fully created. Please sign up again to complete setup.",
-              );
-              return;
-            }
-
-            if (!response.ok) {
-              console.error(
-                `[DASHBOARD] Onboarding check failed with status ${response.status}`,
-              );
-              hardRedirect("/login?error=onboarding_check_failed");
-              return;
-            }
-
-            const data = await response.json();
+            const data = await getOnboardingCheck({ force: attempt > 0 });
 
             // DEBUG: Log full response
             console.log("[DASHBOARD] Onboarding check response:", {
@@ -265,85 +219,31 @@ export function DashboardAuthGuard({
             // NEVER redirect expired trials to onboarding. This was the
             // root cause of the infinite redirect loop.
             // ═══════════════════════════════════════════════════════════════
-            if (data.isTrialExpired === true) {
-              console.info(
-                "[DASHBOARD] ✅ Trial expired — allowing dashboard load " +
-                  "(BillingLockScreen will handle paywall)",
-              );
-              setUser(authUser);
-              setLoading(false);
-              return;
-            }
-
-            // Use trial status as equivalent to subscription for dashboard access
-            // v4: Explicit boolean checks now that "error" is separate
-            const hasProductAccess =
-              data.hasActiveSubscription === true ||
-              data.hasActiveTrial === true;
-
-            // ═══════════════════════════════════════════════════════════════
-            // DOMAIN-AWARE WhatsApp REQUIREMENT (v6)
-            // ═══════════════════════════════════════════════════════════════
-            // WhatsApp connection is ONLY required for the `dashboard` domain
-            // (core WhatsApp chatbot product). Shop, booking, showcase, and
-            // marketing are independent products that work without WhatsApp.
-            //
-            // The requirement is read from lib/domain/config.ts — the single
-            // source of truth for all domain-specific behaviour.
-            // ═══════════════════════════════════════════════════════════════
             const currentDomain = getProductDomainFromBrowser();
-            const domainConfig = getDomainVisibility(currentDomain);
-            const whatsappRequired = domainConfig.requiresWhatsApp;
-            const whatsappSatisfied =
-              !whatsappRequired || data.whatsappConnected === true;
+            const destination = getOnboardingDestination(data, currentDomain);
 
-            // DEBUG: Log decision values
             console.log("[DASHBOARD] Access check values:", {
-              hasProductAccess,
+              hasProductAccess: data.hasProductAccess,
               hasActiveSubscription: data.hasActiveSubscription,
               hasActiveTrial: data.hasActiveTrial,
               isTrialExpired: data.isTrialExpired,
               whatsappConnected: data.whatsappConnected,
               currentDomain,
-              whatsappRequired,
-              whatsappSatisfied,
+              requiresWhatsApp: data.requiresWhatsApp,
+              whatsappSatisfied: data.whatsappSatisfied,
+              canEnterDashboard: data.canEnterDashboard,
+              nextPath: destination,
+              reason: data.reason,
             });
 
-            // Redirect to onboarding only if:
-            // - No subscription AND no trial AND trial is NOT expired (needs to select plan)
-            // OR
-            // - WhatsApp is REQUIRED for this domain AND not connected
-            //
-            // CRITICAL SAFETY NET: If onboarding IS completed and WhatsApp IS
-            // satisfied but there's no product access, it means the trial/sub
-            // expired. DO NOT redirect — let BillingLockScreen handle it.
-            if (
-              !hasProductAccess &&
-              data.onboardingCompleted === true &&
-              whatsappSatisfied
-            ) {
-              console.info(
-                "[DASHBOARD] ✅ Onboarding complete, WhatsApp satisfied, but no product access " +
-                  "— trial/sub likely expired. Allowing dashboard load (BillingLockScreen will handle paywall)",
-              );
-              setUser(authUser);
-              setLoading(false);
-              return;
-            }
-
-            const needsOnboarding = !hasProductAccess || !whatsappSatisfied;
-
-            if (needsOnboarding) {
-              console.log("[DASHBOARD] User needs onboarding:", {
-                hasProductAccess,
-                whatsappConnected: data.whatsappConnected,
-                whatsappRequired,
-                whatsappSatisfied,
-                hasActiveSubscription: data.hasActiveSubscription,
-                hasActiveTrial: data.hasActiveTrial,
+            if (!destination.startsWith("/dashboard")) {
+              recordOnboardingRedirect(destination);
+              console.log("[DASHBOARD] Server decision requires onboarding:", {
                 currentDomain,
+                destination,
+                reason: data.reason,
               });
-              router.push(`/onboarding-embedded?domain=${currentDomain}`);
+              router.replace(destination);
               return;
             }
 
@@ -353,6 +253,51 @@ export function DashboardAuthGuard({
             setUser(authUser);
             setLoading(false);
           } catch (error) {
+            if (error instanceof OnboardingCheckError) {
+              if (error.status === 503) {
+                if (retries === 0) {
+                  console.error(
+                    "[DASHBOARD] Onboarding check exhausted retries (503), redirecting to login",
+                  );
+                  hardRedirect("/login?error=service_unavailable");
+                  return;
+                }
+
+                const backoffMs = 1000 * Math.pow(2, attempt);
+                console.warn(
+                  `[DASHBOARD] Onboarding check 503, retrying in ${backoffMs}ms (${retries} retries left)`,
+                );
+
+                setTimeout(
+                  () => checkOnboarding(retries - 1, attempt + 1),
+                  backoffMs,
+                );
+                return;
+              }
+
+              if (error.status === 401) {
+                hardRedirect("/login");
+                return;
+              }
+
+              if (error.status === 404) {
+                console.error(
+                  "[DASHBOARD] User not found despite AUTHENTICATED state",
+                );
+                await clearSession();
+                hardRedirect(
+                  "/signup?error=account_not_found&message=Your account was not fully created. Please sign up again to complete setup.",
+                );
+                return;
+              }
+
+              console.error(
+                `[DASHBOARD] Onboarding check failed with status ${error.status}`,
+              );
+              hardRedirect("/login?error=onboarding_check_failed");
+              return;
+            }
+
             console.error("[DASHBOARD] Error checking onboarding:", error);
             // Network/server error — hard redirect to login
             hardRedirect("/login?error=onboarding_check_failed");

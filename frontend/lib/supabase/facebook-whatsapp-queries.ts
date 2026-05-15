@@ -200,6 +200,39 @@ export async function getWhatsAppAccountByWabaId(
   return data;
 }
 
+export async function getActiveWhatsAppAccountByWabaId(
+  wabaId: string,
+): Promise<Pick<
+  ConnectedWhatsAppAccount,
+  "id" | "user_id" | "waba_id" | "waba_name" | "is_active" | "deleted_at"
+> | null> {
+  const { data, error } = await supabaseAdmin
+    .from("connected_whatsapp_accounts")
+    .select("id, user_id, waba_id, waba_name, is_active, deleted_at")
+    .eq("waba_id", wabaId)
+    .eq("is_active", true)
+    .is("deleted_at", null)
+    .maybeSingle();
+
+  if (error) throw error;
+  return data;
+}
+
+export async function updateWhatsAppAccount(
+  id: string,
+  updates: Partial<ConnectedWhatsAppAccount>,
+): Promise<ConnectedWhatsAppAccount> {
+  const { data, error } = await supabaseAdmin
+    .from("connected_whatsapp_accounts")
+    .update(updates)
+    .eq("id", id)
+    .select()
+    .single();
+
+  if (error) throw error;
+  return data;
+}
+
 // =====================================================
 // PHONE NUMBERS
 // =====================================================
@@ -290,6 +323,29 @@ export async function getPhoneNumberByPhoneNumberId(
     .single();
 
   if (error && error.code !== "PGRST116") throw error;
+  return data;
+}
+
+export async function getActivePhoneNumberByPhoneNumberId(
+  phoneNumberId: string,
+): Promise<Pick<
+  ConnectedPhoneNumber,
+  | "id"
+  | "user_id"
+  | "phone_number_id"
+  | "display_phone_number"
+  | "is_active"
+  | "deleted_at"
+> | null> {
+  const { data, error } = await supabaseAdmin
+    .from("connected_phone_numbers")
+    .select("id, user_id, phone_number_id, display_phone_number, is_active, deleted_at")
+    .eq("phone_number_id", phoneNumberId)
+    .eq("is_active", true)
+    .is("deleted_at", null)
+    .maybeSingle();
+
+  if (error) throw error;
   return data;
 }
 

@@ -4,7 +4,7 @@ import type {
   ProductDomain,
   SupabaseUser,
 } from "@/types/auth.types";
-import { calculateTrialEndDate, isProductAvailableForActivation } from "@/lib/auth-helpers";
+import { calculateTrialEndDate } from "@/lib/auth-helpers";
 
 export type ProvisioningRequestContext = {
   request_id?: string;
@@ -69,8 +69,6 @@ export async function ensureSupabaseUserAndMembershipFull(
     requestContext,
   } = params;
 
-  const isSelfService = isProductAvailableForActivation(currentProduct);
-
   try {
     const { data, error } = await supabase.rpc("provision_user_with_membership", {
       p_firebase_uid: firebaseUid,
@@ -79,8 +77,10 @@ export async function ensureSupabaseUserAndMembershipFull(
       p_phone: phoneNumber,
       p_product: currentProduct,
       p_allow_create: allowCreate,
-      p_is_self_service: isSelfService,
-      p_trial_days: 14,
+      // Auth sync is identity provisioning only. Product trials are created
+      // exclusively by explicit onboarding plan selection.
+      p_is_self_service: false,
+      p_trial_days: 0,
       p_request_id: requestContext.request_id ?? null,
       p_ip_address: requestContext.ip_address ?? null,
       p_user_agent: requestContext.user_agent ?? null,
@@ -104,8 +104,7 @@ export async function ensureSupabaseUserAndMembershipFull(
 
     if (!looksLikeMissingFn) throw e;
 
-    const legacy = await legacyEnsureSupabaseUserAndMembership(params);
-    return { ...legacy, membership: null, hasAccess: true };
+    return await legacyEnsureSupabaseUserAndMembership(params);
   }
 }
 
@@ -211,29 +210,27 @@ async function ensureCurrentProductMembership(params: {
   supabase: SupabaseClient;
   userId: string;
   currentProduct: ProductDomain;
-  allowCreate: boolean;
   requestContext: ProvisioningRequestContext;
   allowLegacyMigration: boolean;
-}) {
+}): Promise<any | null> {
   const {
     supabase,
     userId,
     currentProduct,
-    allowCreate,
     requestContext,
     allowLegacyMigration,
   } = params;
 
-  if (currentProduct === "dashboard") return;
+  if (currentProduct === "dashboard") return null;
 
   const { data: membership } = await supabase
     .from("user_products")
-    .select("id,status")
+    .select("*")
     .eq("user_id", userId)
     .eq("product", currentProduct)
     .maybeSingle();
 
-  if (membership) return;
+  if (membership) return membership;
 
   // If legacy records exist (previous architecture), backfill membership.
   if (allowLegacyMigration) {
@@ -243,37 +240,18 @@ async function ensureCurrentProductMembership(params: {
       product: currentProduct,
       requestContext,
     });
-    if (healed) return;
+    if (healed) {
+      const { data: healedMembership } = await supabase
+        .from("user_products")
+        .select("*")
+        .eq("user_id", userId)
+        .eq("product", currentProduct)
+        .maybeSingle();
+      return healedMembership ?? null;
+    }
   }
 
-  // Only create a new membership proactively during eligible flows.
-  if (!allowCreate) return;
-  if (!isProductAvailableForActivation(currentProduct)) return;
-
-  const trialEndsAt = calculateTrialEndDate(14);
-
-  const { error } = await supabase.from("user_products").insert({
-    user_id: userId,
-    product: currentProduct,
-    status: "trial",
-    activated_by: "signup",
-    trial_ends_at: trialEndsAt.toISOString(),
-    trial_days: 14,
-  });
-
-  if (!error) {
-    await supabase.from("product_activation_logs").insert({
-      user_id: userId,
-      product: currentProduct,
-      action: "trial_started",
-      new_status: "trial",
-      initiated_by: "signup",
-      request_id: requestContext.request_id,
-      ip_address: requestContext.ip_address,
-      user_agent: requestContext.user_agent,
-      metadata: { heal_reason: "missing_current_product_membership" },
-    });
-  }
+  return null;
 }
 
 export async function ensureSupabaseUserAndMembership(
@@ -285,7 +263,7 @@ export async function ensureSupabaseUserAndMembership(
 
 async function legacyEnsureSupabaseUserAndMembership(
   params: EnsureUserAndMembershipParams,
-): Promise<{ user: SupabaseUser; created: boolean }> {
+): Promise<EnsureUserAndMembershipFullResult> {
   const {
     supabase,
     firebaseUid,
@@ -373,15 +351,24 @@ async function legacyEnsureSupabaseUserAndMembership(
   // 4) Always ensure baseline membership
   await ensureDashboardMembership(supabase, user.id, requestContext);
 
-  // 5) Ensure membership for current product (trial/active), with safe rules
-  await ensureCurrentProductMembership({
+  // 5) Backfill existing paid/trial access from legacy records only.
+  // New trials are created only after explicit onboarding plan selection.
+  const membership = await ensureCurrentProductMembership({
     supabase,
     userId: user.id,
     currentProduct,
-    allowCreate,
     requestContext,
     allowLegacyMigration,
   });
 
-  return { user, created };
+  const trialEndsAt = membership?.trial_ends_at
+    ? new Date(membership.trial_ends_at)
+    : null;
+  const hasAccess =
+    currentProduct === "dashboard" ||
+    membership?.status === "active" ||
+    (membership?.status === "trial" &&
+      (!trialEndsAt || Number.isNaN(trialEndsAt.getTime()) || trialEndsAt > new Date()));
+
+  return { user, created, membership, hasAccess };
 }

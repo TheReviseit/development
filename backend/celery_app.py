@@ -49,6 +49,7 @@ try:
             "tasks.usage_events",  # Feature usage event processing
             "tasks.messaging_tasks",  # Instagram/WhatsApp omni-channel messaging
             "tasks.auth_sync_jobs",  # Auth sync durable background jobs
+            "tasks.whatsapp_connection",  # WhatsApp connection v2 cleanup/sync
         ]
     )
     
@@ -152,6 +153,10 @@ celery_app.conf.task_routes = {
     "messaging.refresh_tokens": {"queue": "low"},
     "messaging.cleanup_idempotency": {"queue": "low"},
     "messaging.cleanup_outbox": {"queue": "low"},
+
+    # WhatsApp connection v2 lifecycle tasks
+    "whatsapp_connection.cleanup": {"queue": "low"},
+    "whatsapp_connection.sync_account": {"queue": "default"},
 }
 
 # =============================================================================
@@ -357,6 +362,13 @@ celery_app.conf.beat_schedule = {
         "task": "messaging.check_flow_timeouts",
         "schedule": 60.0,
         "options": {"queue": "default"},
+    },
+
+    # WhatsApp connection engine v2 cleanup: expire stale attempts and DB locks.
+    "whatsapp-connection-cleanup": {
+        "task": "whatsapp_connection.cleanup",
+        "schedule": 300.0,
+        "options": {"queue": "low"},
     },
 }
 

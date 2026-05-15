@@ -43,6 +43,28 @@ def get_user_agent():
     return request.user_agent.string if request.user_agent else None
 
 
+def is_starter_trial_plan(plan_slug: str, domain: str) -> bool:
+    """Only the Starter tier is eligible for a no-card free trial."""
+    normalized_plan = (plan_slug or '').strip().lower()
+    normalized_domain = (domain or '').strip().lower()
+    return normalized_plan in {'starter', f'{normalized_domain}_starter'}
+
+
+def reject_non_starter_trial(plan_slug: str, domain: str):
+    if is_starter_trial_plan(plan_slug, domain):
+        return None
+
+    logger.warning(
+        "[trial] rejected_non_starter_trial "
+        f"domain={domain} plan_slug={plan_slug}"
+    )
+    return jsonify({
+        'success': False,
+        'error': 'PLAN_NOT_TRIAL_ELIGIBLE',
+        'message': 'Free trial is available only for the Starter plan.'
+    }), 422
+
+
 # =============================================================================
 # START TRIAL
 # =============================================================================
@@ -90,9 +112,20 @@ def start_trial():
 
     data = request.get_json() or {}
 
-    plan_slug = data.get('plan_slug', 'starter')
+    plan_slug = data.get('plan_slug')
     domain = data.get('domain', 'shop')
     source = data.get('source', 'organic')
+
+    if not plan_slug:
+        return jsonify({
+            'success': False,
+            'error': 'MISSING_FIELDS',
+            'message': 'plan_slug is required'
+        }), 400
+
+    trial_rejection = reject_non_starter_trial(plan_slug, domain)
+    if trial_rejection:
+        return trial_rejection
 
     # Get pricing plan ID
     try:
@@ -224,7 +257,7 @@ def internal_start_trial():
     user_id = data.get('user_id')
     org_id = data.get('org_id')
     email = data.get('email')
-    plan_slug = data.get('plan_slug', 'starter')
+    plan_slug = data.get('plan_slug')
     domain = data.get('domain', 'shop')
     source = data.get('source', 'organic')
     ip_address = data.get('ip_address')
@@ -237,6 +270,28 @@ def internal_start_trial():
             'error': 'MISSING_FIELDS',
             'message': 'user_id and org_id required'
         }), 400
+
+    if not plan_slug:
+        return jsonify({
+            'success': False,
+            'error': 'MISSING_FIELDS',
+            'message': 'plan_slug is required'
+        }), 400
+
+    if source != 'onboarding_plan_selection':
+        logger.warning(
+            "[trial] rejected_internal_trial_source "
+            f"domain={domain} source={source}"
+        )
+        return jsonify({
+            'success': False,
+            'error': 'INVALID_TRIAL_SOURCE',
+            'message': 'Trials must be started from onboarding plan selection.'
+        }), 403
+
+    trial_rejection = reject_non_starter_trial(plan_slug, domain)
+    if trial_rejection:
+        return trial_rejection
 
     # Convert Firebase UID to Supabase UUID if needed
     # The frontend sends Firebase UID but the database expects Supabase UUID

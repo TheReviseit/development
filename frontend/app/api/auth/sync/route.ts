@@ -4,19 +4,23 @@ import { verifyIdToken, adminAuth } from "@/lib/firebase-admin";
 import {
   detectProductFromRequest,
   getRequestContext,
-  getSelfServiceProducts,
-  getStarterPlanSlug,
 } from "@/lib/auth-helpers";
 import {
   createSupabaseServiceClientOrThrow,
   ensureSupabaseUserAndMembershipFull,
 } from "@/lib/auth/provisioning.server";
+import {
+  buildAuthDecision,
+  isFastOnboardingCheckEnabled,
+  readOnboardingAccessStateFast,
+} from "@/lib/auth/onboarding-state.server";
 import { withTimeout } from "@/lib/server/fetchWithTimeout";
 import { checkRateLimit } from "@/lib/server/rateLimit";
 import {
   claimAuthSyncIdempotency,
   completeAuthSyncIdempotency,
   generateAuthSyncIdempotencyKey,
+  releaseAuthSyncIdempotency,
   waitForAuthSyncCompletion,
 } from "@/lib/auth/authSyncIdempotency";
 import {
@@ -85,6 +89,17 @@ export async function POST(request: NextRequest) {
         });
       } catch (cookieError) {
         console.error(`[AUTH_SYNC] Failed to create session cookie:`, cookieError);
+        return NextResponse.json<SyncUserResponse>(
+          {
+            success: false,
+            error: "Failed to create authenticated session",
+            code: AuthErrorCode.SERVER_ERROR,
+            requestId: requestContext.request_id,
+            idempotencyKey,
+            traceId,
+          },
+          { status: 500 },
+        );
       }
     }
 
@@ -382,8 +397,6 @@ export async function POST(request: NextRequest) {
       });
 
       const user = provisioned.user as SupabaseUser;
-      const selfServiceProducts = getSelfServiceProducts();
-      const isSelfService = selfServiceProducts.includes(currentProduct);
 
       // Durable async jobs (best-effort, owner only)
       if (provisioned.created) {
@@ -398,23 +411,6 @@ export async function POST(request: NextRequest) {
                 email,
                 full_name: fullName,
                 product: currentProduct,
-              },
-            });
-          }
-
-          if (allowCreate && isSelfService) {
-            jobs.push({
-              type: "START_TRIAL",
-              payload: {
-                user_id: user.id,
-                org_id: user.id,
-                email,
-                domain: currentProduct,
-                product: currentProduct,
-                plan_slug: getStarterPlanSlug(currentProduct),
-                idempotency_key: idempotencyKey,
-                ip_address: requestContext.ip_address,
-                user_agent: requestContext.user_agent,
               },
             });
           }
@@ -442,37 +438,35 @@ export async function POST(request: NextRequest) {
         }
       }
 
-      if (!provisioned.hasAccess) {
-        const { data: userMemberships } = await supabase
-          .from("user_products")
-          .select("product")
-          .eq("user_id", user.id)
-          .in("status", ["trial", "active"]);
+      {
+        let authDecision: SyncUserResponse["authDecision"] | undefined;
 
-        const availableProducts: ProductDomain[] = getSelfServiceProducts().filter(
-          (p) => !userMemberships?.some((m: any) => m.product === p),
-        ) as ProductDomain[];
+        if (isFastOnboardingCheckEnabled()) {
+          try {
+            const onboardingState = await readOnboardingAccessStateFast({
+              supabase,
+              firebaseUid,
+              product: currentProduct,
+            });
 
-        result = {
-          status: 403,
-          body: {
-            success: false,
-            code: AuthErrorCode.PRODUCT_NOT_ENABLED,
-            message: `Activate ${currentProduct} to continue`,
-            currentProduct,
-            availableProducts,
-            action: allowCreate ? "AUTO_PROVISION_AVAILABLE" : "ACTIVATION_REQUIRED",
-            requestId: requestContext.request_id,
-            idempotencyKey,
-            traceId,
-          },
-        };
-      } else {
+            if (onboardingState.userExists) {
+              authDecision = buildAuthDecision(onboardingState, currentProduct);
+            }
+          } catch (decisionError: any) {
+            console.warn("[AUTH_SYNC] authDecision fast path unavailable:", {
+              product: currentProduct,
+              error: decisionError?.message || String(decisionError),
+            });
+          }
+        }
+
         result = {
           status: 200,
           body: {
             success: true,
             user,
+            authDecision,
+            currentProduct,
             requestId: requestContext.request_id,
             idempotencyKey,
             traceId,
@@ -529,17 +523,27 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Complete idempotency cache (owner only)
+    // Complete idempotency cache (owner only). Transient server/database
+    // failures are released so the same Firebase token can retry after the
+    // underlying dependency recovers or a migration is applied.
     try {
-      await completeAuthSyncIdempotency({
-        supabase,
-        idempotencyKey,
-        lockedBy: lockOwnerId,
-        status: "completed",
-        statusCode: result.status,
-        responseBody: result.body,
-        errorCode: (result.body.code as any) ?? null,
-      });
+      if (result.status >= 500) {
+        await releaseAuthSyncIdempotency({
+          supabase,
+          idempotencyKey,
+          lockedBy: lockOwnerId,
+        });
+      } else {
+        await completeAuthSyncIdempotency({
+          supabase,
+          idempotencyKey,
+          lockedBy: lockOwnerId,
+          status: "completed",
+          statusCode: result.status,
+          responseBody: result.body,
+          errorCode: (result.body.code as any) ?? null,
+        });
+      }
     } catch (cacheErr) {
       console.warn("[AUTH_SYNC] Failed to finalize idempotency (non-fatal):", cacheErr);
     }

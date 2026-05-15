@@ -815,9 +815,15 @@ async function processRequest(
   const requiredType = getRequiredUserType(pathname);
   const isPublic = isPublicRoute(pathname);
 
+  function redirectToOnboardingGate() {
+    const url = new URL("/onboarding-embedded", request.url);
+    url.searchParams.set("domain", String(resolvedDomain));
+    return NextResponse.redirect(url);
+  }
+
   if (isPublic) {
     if (pathname === "/login" && userType === "normal") {
-      return NextResponse.redirect(new URL("/dashboard", request.url));
+      return redirectToOnboardingGate();
     }
     if (pathname === "/console/login" && userType === "console") {
       return NextResponse.redirect(new URL("/console", request.url));
@@ -826,7 +832,7 @@ async function processRequest(
       return NextResponse.redirect(new URL("/console", request.url));
     }
     if (pathname === "/console/login" && userType === "normal") {
-      return NextResponse.redirect(new URL("/dashboard", request.url));
+      return redirectToOnboardingGate();
     }
 
     return addProductHeaders(

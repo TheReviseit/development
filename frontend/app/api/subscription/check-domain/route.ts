@@ -110,8 +110,7 @@ export async function GET(request: NextRequest) {
     const hasActiveMembership = membershipStatus === "active";
     const hasValidTrialMembership =
       membershipStatus === "trial" &&
-      !!membership?.trial_ends_at &&
-      new Date(membership.trial_ends_at) > now;
+      (!membership?.trial_ends_at || new Date(membership.trial_ends_at) > now);
 
     const hasMembership = hasActiveMembership || hasValidTrialMembership;
 
@@ -182,9 +181,10 @@ export async function GET(request: NextRequest) {
     const { data: trial } = await supabase
       .from("free_trials")
       .select("id, status, plan_slug, domain, expires_at")
-      .eq("user_id", user.id)
+      .in("user_id", Array.from(new Set([user.id, firebaseUid])))
       .eq("domain", domain)
       .in("status", ["active", "expiring_soon"])
+      .gt("expires_at", now.toISOString())
       .order("created_at", { ascending: false })
       .limit(1)
       .maybeSingle();
