@@ -51,6 +51,18 @@ services:
         sync: false # Razorpay Dashboard > Webhooks > Secret
       - key: ADMIN_API_KEY
         sync: false # For /api/admin/billing/* endpoints
+      - key: FILES_TOOLS_ENABLED
+        value: true
+      - key: FILES_TEXT_TO_PDF_ENABLED
+        value: true
+      - key: CLOUDFLARE_R2_ACCOUNT_ID
+        sync: false
+      - key: CLOUDFLARE_R2_ACCESS_KEY_ID
+        sync: false
+      - key: CLOUDFLARE_R2_SECRET_ACCESS_KEY
+        sync: false
+      - key: CLOUDFLARE_R2_BUCKET_NAME
+        sync: false
 
   # Celery Worker for Background Tasks (Google Sheets sync, notifications, etc.)
   # Also runs beat scheduler (--beat flag) for periodic billing monitor tasks

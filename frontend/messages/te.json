@@ -344,6 +344,7 @@
   "errors": {
     "pdfGenerationFailed": "PDF సృష్టి విఫలమైంది.",
     "emptyTextPdfDocument": "PDF సృష్టించే ముందు టెక్స్ట్ జోడించండి.",
+    "pdfBackendUnavailable": "PDF ప్రాసెసింగ్ సేవ తాత్కాలికంగా అందుబాటులో లేదు. దయచేసి కొద్దిసేపటి తర్వాత మళ్లీ ప్రయత్నించండి.",
     "pdfShapingUnavailable": "భారతీయ లిపి పాఠ్యాన్ని render చేయడానికి PDF సేవ ఇంకా సిద్ధంగా లేదు. సేవ refresh అయిన తర్వాత మళ్లీ ప్రయత్నించండి.",
     "pdfGlyphPreflightUnavailable": "సర్వర్‌లో PDF ఫాంట్ తనిఖీ అందుబాటులో లేదు.",
     "fontNotRegistered": "అవసరమైన PDF ఫాంట్ సర్వర్‌లో అందుబాటులో లేదు.",

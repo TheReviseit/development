@@ -44,6 +44,7 @@ ALLOWED_HOSTS: dict[str, str] = {
     'api.flowauxi.com': 'api',
     'booking.flowauxi.com': 'booking',
     'files.flowauxi.com': 'files',
+    'tools.flowauxi.com': 'files',
 
     # Development (localhost with port-based routing)
     'localhost:3000': 'dashboard',

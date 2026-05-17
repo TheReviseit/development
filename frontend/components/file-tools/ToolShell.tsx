@@ -62,6 +62,10 @@ const PDF_GENERATION_ERROR_KEYS: Record<string, string> = {
   PDF_GLYPH_PREFLIGHT_UNAVAILABLE: "pdfGlyphPreflightUnavailable",
   FONT_NOT_REGISTERED: "fontNotRegistered",
   UNSUPPORTED_GLYPH: "unsupportedGlyph",
+  FILE_TOOLS_BACKEND_BAD_URL: "pdfBackendUnavailable",
+  FILE_TOOLS_BACKEND_NOT_DEPLOYED: "pdfBackendUnavailable",
+  FILE_TOOLS_BACKEND_TIMEOUT: "pdfBackendUnavailable",
+  FILE_TOOLS_PROXY_ERROR: "pdfBackendUnavailable",
 };
 
 export default function ToolShell({ mode = "public", basePath = "/tools" }: ToolShellProps) {

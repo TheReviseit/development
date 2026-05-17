@@ -344,6 +344,7 @@
   "errors": {
     "pdfGenerationFailed": "PDF generation failed.",
     "emptyTextPdfDocument": "Add text before generating a PDF.",
+    "pdfBackendUnavailable": "The PDF processing service is temporarily unavailable. Please try again shortly.",
     "pdfShapingUnavailable": "The PDF service is not ready to render Indian-script text. Please retry after the service refreshes.",
     "pdfGlyphPreflightUnavailable": "PDF font validation is not available on the server.",
     "fontNotRegistered": "A required PDF font is not available on the server.",

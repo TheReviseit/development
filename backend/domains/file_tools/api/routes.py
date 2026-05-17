@@ -57,6 +57,33 @@ def list_tools():
     return response
 
 
+@file_tools_bp.route("/health", methods=["GET"])
+def file_tools_health():
+    """Route-level health check used by frontend proxy and deploy gates."""
+    deep = request.args.get("deep") in {"1", "true", "yes"}
+    checks = {
+        "routes": True,
+        "tools_registered": bool(_tool_registry.list_public()),
+        "files_tools_enabled": _feature_enabled("FILES_TOOLS_ENABLED"),
+        "text_to_pdf_enabled": _feature_enabled("FILES_TEXT_TO_PDF_ENABLED"),
+    }
+
+    if deep:
+        checks["pdf_shaping_stack"] = _pdf_shaping_stack_ready()
+        checks["pdf_glyph_preflight"] = _pdf_glyph_preflight_ready()
+
+    ready = all(checks.values())
+    return success_response(
+        {
+            "success": True,
+            "status": "ready" if ready else "not_ready",
+            "service": "file_tools",
+            "checks": checks,
+        },
+        200 if ready else 503,
+    )
+
+
 @file_tools_bp.route("/text-to-pdf/generate", methods=["POST"])
 def generate_text_to_pdf():
     context = _request_context()
@@ -230,5 +257,29 @@ def _assert_owner(resource_owner: FileToolOwner, request_owner: FileToolOwner) -
 
 
 def _assert_feature_enabled(env_key: str, message: str) -> None:
-    if os.getenv(env_key, "true").lower() in {"0", "false", "off", "disabled"}:
+    if not _feature_enabled(env_key):
         raise FeatureDisabledError(message)
+
+
+def _feature_enabled(env_key: str) -> bool:
+    return os.getenv(env_key, "true").lower() not in {"0", "false", "off", "disabled"}
+
+
+def _pdf_shaping_stack_ready() -> bool:
+    try:
+        from lib.fonts.pdf_font_engine import assert_shaping_stack_available
+
+        assert_shaping_stack_available()
+        return True
+    except Exception:
+        return False
+
+
+def _pdf_glyph_preflight_ready() -> bool:
+    try:
+        from lib.fonts.pdf_font_engine import preflight_texts
+
+        preflight_texts("Auto", ["Flowauxi", "தமிழ்", "हिन्दी", "മലയാളം", "ಕನ್ನಡ", "తెలుగు"])
+        return True
+    except Exception:
+        return False
