@@ -1,0 +1,366 @@
+{
+  "common": {
+    "download": "Download",
+    "filesTools": "Tools",
+    "generatePdf": "Generate PDF",
+    "history": "History",
+    "language": "Language",
+    "login": "Login",
+    "settings": "Settings",
+    "signUp": "Sign up"
+  },
+  "navbar": {
+    "filesHome": "Flowauxi Tools home",
+    "quickTools": "Quick tools",
+    "tools": "Tools",
+    "openSearch": "Open tools search",
+    "closeSearch": "Close tools search",
+    "openNavigation": "Open tools navigation",
+    "closeNavigation": "Close tools navigation",
+    "searchButtonAria": "Browse and search tools",
+    "nav": {
+      "mergePdf": "Merge PDF",
+      "splitPdf": "Split PDF",
+      "compressPdf": "Compress PDF",
+      "convertPdf": "Convert PDF",
+      "allTools": "All PDF Tools",
+      "allToolsShort": "All tools"
+    },
+    "mega": {
+      "eyebrow": "Flowauxi Tools",
+      "title": "PDF tools built for fast document work.",
+      "copy": "Convert, organize, secure, and optimize files from one clean workspace.",
+      "viewAllTools": "View all tools",
+      "sections": {
+        "organizePdf": "Organize PDF",
+        "optimizePdf": "Optimize PDF",
+        "convertToPdf": "Convert to PDF",
+        "convertFromPdf": "Convert from PDF",
+        "editPdf": "Edit PDF",
+        "pdfSecurity": "PDF Security",
+        "pdfIntelligence": "PDF Intelligence"
+      },
+      "tools": {
+        "mergePdf": "Merge PDF",
+        "splitPdf": "Split PDF",
+        "compressPdf": "Compress PDF",
+        "convertPdf": "Convert PDF",
+        "allTools": "All PDF Tools",
+        "allToolsShort": "All tools",
+        "organizePdf": "Organize PDF",
+        "optimizePdf": "Optimize PDF",
+        "convertToPdf": "Convert to PDF",
+        "convertFromPdf": "Convert from PDF",
+        "editPdf": "Edit PDF",
+        "pdfSecurity": "PDF Security",
+        "pdfIntelligence": "PDF Intelligence",
+        "removePages": "Remove pages",
+        "extractPages": "Extract pages",
+        "scanToPdf": "Scan to PDF",
+        "repairPdf": "Repair PDF",
+        "ocrPdf": "OCR PDF",
+        "textToPdf": "Text to PDF",
+        "jpgToPdf": "JPG to PDF",
+        "wordToPdf": "Word to PDF",
+        "powerPointToPdf": "PowerPoint to PDF",
+        "excelToPdf": "Excel to PDF",
+        "htmlToPdf": "HTML to PDF",
+        "pdfToJpg": "PDF to JPG",
+        "pdfToWord": "PDF to Word",
+        "pdfToPowerPoint": "PDF to PowerPoint",
+        "pdfToExcel": "PDF to Excel",
+        "pdfToPdfA": "PDF to PDF/A",
+        "rotatePdf": "Rotate PDF",
+        "addPageNumbers": "Add page numbers",
+        "addWatermark": "Add watermark",
+        "cropPdf": "Crop PDF",
+        "pdfForms": "PDF Forms",
+        "unlockPdf": "Unlock PDF",
+        "protectPdf": "Protect PDF",
+        "signPdf": "Sign PDF",
+        "redactPdf": "Redact PDF",
+        "comparePdf": "Compare PDF",
+        "aiSummarizer": "AI Summarizer",
+        "translatePdf": "Translate PDF"
+      }
+    },
+    "mobile": {
+      "filesNavigation": "Tools navigation",
+      "searchTools": "Search tools",
+      "searchPlaceholder": "Search tools",
+      "searchPdfTools": "Search PDF tools",
+      "searchResults": "Tools search results",
+      "popular": "Popular",
+      "noMatchingTools": "No matching tools yet."
+    }
+  },
+  "files": {
+    "hub": {
+      "title": "Every tool you need to work with PDFs in one place",
+      "description": "Every tool you need to use PDFs, at your fingertips. Merge, split, compress, convert, protect, sign, and organize PDFs with just a few clicks.",
+      "actions": {
+        "history": "History",
+        "settings": "Settings"
+      },
+      "aria": {
+        "categories": "Tool categories",
+        "tools": "Tools",
+        "openTool": "Open {name}"
+      },
+      "categories": {
+        "all": "All",
+        "workflows": "Workflows",
+        "organizePdf": "Organize PDF",
+        "optimizePdf": "Optimize PDF",
+        "convertPdf": "Convert PDF",
+        "editPdf": "Edit PDF",
+        "pdfSecurity": "PDF Security",
+        "pdfIntelligence": "PDF Intelligence"
+      },
+      "categoriesShort": {
+        "all": "All",
+        "workflows": "Flows",
+        "organizePdf": "Organize",
+        "optimizePdf": "Optimize",
+        "convertPdf": "Convert",
+        "editPdf": "Edit",
+        "pdfSecurity": "Security",
+        "pdfIntelligence": "AI PDF"
+      }
+    },
+    "comingSoon": {
+      "back": "Tools",
+      "eyebrow": "Coming soon",
+      "planned": "Planned",
+      "openTextToPdf": "Open Text to PDF"
+    },
+    "textToPdf": {
+      "toolbar": {
+        "currentLocation": "Current location",
+        "dashboard": "Dashboard",
+        "files": "Tools",
+        "title": "Text to PDF",
+        "authenticated": "Autosave, history, and secure downloads are active.",
+        "guest": "Guest exports are private and expire automatically."
+      },
+      "editor": {
+        "panel": "Editor",
+        "formatting": "Text formatting",
+        "paragraphAlignment": "Paragraph alignment",
+        "documentTitle": "Document title",
+        "untitled": "Untitled document",
+        "textareaAria": "Text to convert into PDF",
+        "placeholder": "Type something...",
+        "bold": "Bold",
+        "italic": "Italic",
+        "underline": "Underline",
+        "heading1": "Heading 1",
+        "heading2": "Heading 2",
+        "bulletList": "Bullet list",
+        "numberedList": "Numbered list",
+        "alignLeft": "Align left",
+        "alignCenter": "Align center",
+        "alignRight": "Align right",
+        "justify": "Justify",
+        "pageBreak": "Page break",
+        "headingPlaceholder": "Heading",
+        "listItemPlaceholder": "List item"
+      },
+      "settings": {
+        "panel": "Settings",
+        "pageSize": "Page size",
+        "orientation": "Orientation",
+        "font": "Font",
+        "fontSize": "Font size",
+        "margins": "Margins",
+        "lineHeight": "Line height",
+        "header": "Header",
+        "headerText": "Header text",
+        "footer": "Footer",
+        "footerText": "Footer text",
+        "pageNumbers": "Page numbers",
+        "portrait": "Portrait",
+        "landscape": "Landscape",
+        "autoFont": "Auto (Noto + HarfBuzz)",
+        "marginPresets": {
+          "compact": "Compact",
+          "standard": "Standard",
+          "spacious": "Spacious"
+        },
+        "marginSides": {
+          "top": "Top",
+          "right": "Right",
+          "bottom": "Bottom",
+          "left": "Left"
+        }
+      },
+      "export": {
+        "aria": "Export PDF",
+        "chars": "{count} / {limit} chars",
+        "pages": "{count, plural, one {# page} other {# pages}}",
+        "saving": "Saving",
+        "saved": "Saved",
+        "draftOffline": "Draft offline",
+        "draftReady": "Draft ready",
+        "generate": "Generate PDF",
+        "download": "Download {size}",
+        "share": "Share",
+        "shareText": "PDF exported from Flowauxi Tools.",
+        "shareCopied": "Share link copied",
+        "shareUnavailable": "Sharing is not available on this browser.",
+        "shareFailed": "Couldn't share this PDF.",
+        "emptyDocument": "Add text before generating a PDF.",
+        "characterLimitExceeded": "Character limit exceeded",
+        "readyUntil": "PDF ready until {date}"
+      },
+      "preview": {
+        "panel": "Preview",
+        "pageCount": "{count, plural, one {# page} other {# pages}}",
+        "blockCount": "{count, plural, one {# block} other {# blocks}}",
+        "preparing": "Preparing preview",
+        "pageAria": "PDF preview page {number}",
+        "pageNumber": "Page {number}"
+      },
+      "mobileTabs": {
+        "aria": "Text to PDF panels",
+        "edit": "Edit",
+        "preview": "Preview",
+        "settings": "Settings",
+        "history": "History"
+      },
+      "history": {
+        "panel": "History",
+        "signInPrompt": "Sign in to keep document history across sessions.",
+        "loading": "Loading history",
+        "empty": "No exported documents yet.",
+        "meta": "{size} - {date} - {count} downloads",
+        "download": "Download"
+      }
+    },
+    "footer": {
+      "brandAria": "Flowauxi Tools home",
+      "description": "Flowauxi Tools is a modern all-in-one workspace for PDFs, documents, images, and AI-powered file tools. Designed for speed, simplicity, and productivity, it helps users convert, compress, edit, organize, and optimize files effortlessly for everyday work.",
+      "columns": {
+        "tools": "Tools",
+        "pdf": "PDF",
+        "workspace": "Workspace"
+      },
+      "links": {
+        "dashboard": "Dashboard",
+        "history": "History",
+        "settings": "Settings"
+      },
+      "trust": {
+        "privateExports": "Private guest exports",
+        "moreTools": "More tools rolling out"
+      }
+    }
+  },
+  "tools": {
+    "catalog": {
+      "text_to_pdf": {
+        "name": "Text to PDF",
+        "description": "Create polished PDF documents from rich text, lists, symbols, and formatted content."
+      },
+      "pdf_to_docx": {
+        "name": "PDF to Word",
+        "description": "Convert PDF files into editable DOC and DOCX documents with clean structure."
+      },
+      "docx_to_pdf": {
+        "name": "Word to PDF",
+        "description": "Turn DOC and DOCX files into crisp PDF documents ready to share."
+      },
+      "merge_pdf": {
+        "name": "Merge PDF",
+        "description": "Combine PDFs in the order you want with an easy document merger."
+      },
+      "split_pdf": {
+        "name": "Split PDF",
+        "description": "Separate one page or a full page range into independent PDF files."
+      },
+      "compress_pdf": {
+        "name": "Compress PDF",
+        "description": "Reduce file size while preserving sharp, share-ready PDF quality."
+      },
+      "pdf_to_ppt": {
+        "name": "PDF to PowerPoint",
+        "description": "Turn PDF files into editable PPT and PPTX slide decks for presentations."
+      },
+      "pdf_to_excel": {
+        "name": "PDF to Excel",
+        "description": "Pull tables and data from PDFs into editable spreadsheets."
+      },
+      "ppt_to_pdf": {
+        "name": "PowerPoint to PDF",
+        "description": "Convert presentation slides into polished PDF files for sharing."
+      },
+      "excel_to_pdf": {
+        "name": "Excel to PDF",
+        "description": "Export spreadsheets as clean PDFs while preserving layout and readability."
+      },
+      "edit_pdf": {
+        "name": "Edit PDF",
+        "description": "Add text, images, shapes, highlights, and annotations to PDF files."
+      },
+      "image_to_pdf": {
+        "name": "Image to PDF",
+        "description": "Turn JPG, PNG, and image scans into organized PDF documents."
+      },
+      "pdf_to_image": {
+        "name": "PDF to Image",
+        "description": "Export PDF pages as high-quality images for sharing or archiving."
+      },
+      "rotate_pdf": {
+        "name": "Rotate PDF",
+        "description": "Rotate one page or every page in a PDF and save the corrected file."
+      },
+      "unlock_pdf": {
+        "name": "Unlock PDF",
+        "description": "Remove document restrictions from files you own and need to edit."
+      },
+      "watermark_pdf": {
+        "name": "Watermark PDF",
+        "description": "Apply text or image watermarks across PDF pages with consistent placement."
+      },
+      "ocr": {
+        "name": "OCR",
+        "description": "Recognize text from scanned documents and make content searchable."
+      },
+      "protect_pdf": {
+        "name": "Protect PDF",
+        "description": "Add password protection and access controls to sensitive PDF files."
+      },
+      "sign_pdf": {
+        "name": "Sign PDF",
+        "description": "Prepare documents for signatures and everyday approval workflows."
+      },
+      "html_to_pdf": {
+        "name": "HTML to PDF",
+        "description": "Render web pages, invoices, and HTML content as reliable PDF files."
+      }
+    }
+  },
+  "forms": {},
+  "errors": {
+    "pdfGenerationFailed": "PDF generation failed.",
+    "emptyTextPdfDocument": "Add text before generating a PDF.",
+    "pdfShapingUnavailable": "The PDF service is not ready to render Indian-script text. Please retry after the service refreshes.",
+    "pdfGlyphPreflightUnavailable": "PDF font validation is not available on the server.",
+    "fontNotRegistered": "A required PDF font is not available on the server.",
+    "unsupportedGlyph": "Some characters in this document are not supported by the selected PDF font."
+  },
+  "validation": {},
+  "dashboard": {},
+  "metadata": {
+    "files": {
+      "title": "Tools | Flowauxi",
+      "description": "Choose a PDF or document tool in Flowauxi Tools."
+    },
+    "textToPdf": {
+      "title": "Text to PDF | Flowauxi Tools",
+      "description": "Create secure PDFs from text with Flowauxi Tools."
+    },
+    "siteName": "Flowauxi Tools"
+  },
+  "seo": {}
+}

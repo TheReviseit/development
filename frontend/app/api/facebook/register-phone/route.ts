@@ -18,9 +18,26 @@ import {
   getFacebookAccountByUserId,
   getPhoneNumberByPhoneNumberId,
   getWhatsAppAccountsByUserId,
+  updatePhoneNumber,
+  updateWhatsAppAccount,
 } from "@/lib/supabase/facebook-whatsapp-queries";
 import { decryptToken } from "@/lib/encryption/crypto";
 import crypto from "crypto";
+
+const META_TWO_STEP_PIN_MISMATCH_CODE = 133005;
+
+async function markPhoneRegistered(phoneRecord: any) {
+  await updatePhoneNumber(phoneRecord.id, {
+    is_active: true,
+    can_send_messages: true,
+    code_verification_status: "VERIFIED",
+  } as any);
+
+  await updateWhatsAppAccount(phoneRecord.whatsapp_account_id, {
+    is_active: true,
+    connection_error: null,
+  } as any);
+}
 
 export async function POST(request: NextRequest) {
   try {
@@ -207,6 +224,8 @@ export async function POST(request: NextRequest) {
         registerResult,
       );
 
+      await markPhoneRegistered(phoneRecord);
+
       return NextResponse.json({
         success: true,
         registered: true,
@@ -227,6 +246,8 @@ export async function POST(request: NextRequest) {
     // Error code 33 means already registered
     const metaErrorCode = registerResult?.error?.code;
     if (metaErrorCode === 33) {
+      await markPhoneRegistered(phoneRecord);
+
       return NextResponse.json({
         success: true,
         registered: true,
@@ -237,6 +258,31 @@ export async function POST(request: NextRequest) {
         message:
           "Phone number was already registered — incoming messages should work",
       });
+    }
+
+    await updatePhoneNumber(phoneRecord.id, {
+      is_active: false,
+      can_send_messages: false,
+      code_verification_status: "PIN_REQUIRED",
+    } as any).catch(() => null);
+
+    if (metaErrorCode === META_TWO_STEP_PIN_MISMATCH_CODE) {
+      return NextResponse.json(
+        {
+          success: false,
+          code: "TWO_STEP_PIN_REQUIRED",
+          status: "needs_user_action",
+          action: "RESTART_FLOW",
+          error: "WhatsApp two-step verification PIN required",
+          message:
+            "Meta requires two-step verification action for this WhatsApp number. For security, FlowAuxi does not collect Meta security PINs. Complete the action in Meta Business settings, then launch setup again.",
+          metaError: registerResult?.error,
+          phoneNumberId,
+          phoneStatus,
+          wabaSubscriptions: wabaStatus,
+        },
+        { status: 422 },
+      );
     }
 
     return NextResponse.json(

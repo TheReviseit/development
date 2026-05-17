@@ -572,6 +572,18 @@ const BOOKING_PRICING: DomainPricingConfig = {
   ],
 };
 
+const FILES_PRICING: DomainPricingConfig = {
+  domain: "files",
+  displayName: "Tools",
+  enabledFeatures: ["files", "textToPdf"],
+  highlightedFeatures: [
+    "Text to PDF",
+    "Secure Downloads",
+    "Document History",
+  ],
+  plans: [],
+};
+
 // =============================================================================
 // PRICING REGISTRY
 // =============================================================================
@@ -583,6 +595,7 @@ export const DOMAIN_PRICING: Record<ProductDomain, DomainPricingConfig> = {
   showcase: SHOWCASE_PRICING,
   api: API_PRICING,
   booking: BOOKING_PRICING,
+  files: FILES_PRICING,
 };
 
 // =============================================================================
@@ -596,4 +609,5 @@ export {
   SHOWCASE_PRICING,
   API_PRICING,
   BOOKING_PRICING,
+  FILES_PRICING,
 };

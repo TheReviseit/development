@@ -398,44 +398,15 @@ export async function POST(request: NextRequest) {
 
       const user = provisioned.user as SupabaseUser;
 
-      // Durable async jobs (best-effort, owner only)
       if (provisioned.created) {
-        try {
-          const jobs: Array<{ type: string; payload: Record<string, unknown> }> = [];
-          const isWelcomeEmailEnabled = process.env.ENABLE_WELCOME_EMAIL !== "false";
-
-          if (isWelcomeEmailEnabled && email) {
-            jobs.push({
-              type: "SEND_WELCOME_EMAIL",
-              payload: {
-                email,
-                full_name: fullName,
-                product: currentProduct,
-              },
-            });
-          }
-
-          if (jobs.length > 0) {
-            const rows = jobs.map((j) => ({
-              type: j.type,
-              payload: j.payload,
-              status: "pending",
-              attempts: 0,
-              max_attempts: 3,
-              next_attempt_at: new Date().toISOString(),
-              traceparent,
-              request_id: requestContext.request_id,
-            }));
-            const { error: jobError } = await supabase
-              .from("background_jobs")
-              .insert(rows as any);
-            if (jobError) {
-              console.warn("[AUTH_SYNC] Failed to enqueue background jobs (non-fatal):", jobError);
-            }
-          }
-        } catch (jobErr) {
-          console.warn("[AUTH_SYNC] Background job enqueue failed (non-fatal):", jobErr);
-        }
+        console.info(
+          "[AUTH_SYNC] User provisioned; welcome email is deferred until product access activation",
+          {
+            firebaseUid,
+            product: currentProduct,
+            requestId: requestContext.request_id,
+          },
+        );
       }
 
       {

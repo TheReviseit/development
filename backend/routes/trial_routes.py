@@ -20,6 +20,11 @@ import logging
 import os
 import secrets
 from flask import Blueprint, request, jsonify, g
+from services.trial_sources import (
+    INTERNAL_ONBOARDING_TRIAL_SOURCE,
+    get_persisted_trial_source,
+)
+from services.welcome_email_jobs import enqueue_welcome_email_after_activation
 
 logger = logging.getLogger('reviseit.trial_routes')
 
@@ -114,7 +119,8 @@ def start_trial():
 
     plan_slug = data.get('plan_slug')
     domain = data.get('domain', 'shop')
-    source = data.get('source', 'organic')
+    request_source = data.get('source', 'organic')
+    source = request_source
 
     if not plan_slug:
         return jsonify({
@@ -178,6 +184,19 @@ def start_trial():
         engine = asyncio.run(_get_trial_engine())
         trial_context = loop.run_until_complete(
             engine.start_trial(options)
+        )
+        from supabase_client import get_supabase_client
+        enqueue_welcome_email_after_activation(
+            get_supabase_client(),
+            user_id=user_id,
+            product=domain,
+            activation_event='trial_started',
+            activation_id=trial_context.trial_id,
+            email=email,
+            request_id=getattr(g, 'request_id', None),
+            traceparent=request.headers.get('traceparent'),
+            send_immediately=True,
+            logger=logger,
         )
 
         return jsonify({
@@ -259,7 +278,7 @@ def internal_start_trial():
     email = data.get('email')
     plan_slug = data.get('plan_slug')
     domain = data.get('domain', 'shop')
-    source = data.get('source', 'organic')
+    request_source = data.get('source', 'organic')
     ip_address = data.get('ip_address')
     device_fingerprint = data.get('device_fingerprint')
     user_agent = data.get('user_agent')
@@ -278,16 +297,18 @@ def internal_start_trial():
             'message': 'plan_slug is required'
         }), 400
 
-    if source != 'onboarding_plan_selection':
+    if request_source != INTERNAL_ONBOARDING_TRIAL_SOURCE:
         logger.warning(
             "[trial] rejected_internal_trial_source "
-            f"domain={domain} source={source}"
+            f"domain={domain} source={request_source}"
         )
         return jsonify({
             'success': False,
             'error': 'INVALID_TRIAL_SOURCE',
             'message': 'Trials must be started from onboarding plan selection.'
         }), 403
+
+    source = get_persisted_trial_source(request_source, domain)
 
     trial_rejection = reject_non_starter_trial(plan_slug, domain)
     if trial_rejection:
@@ -394,6 +415,18 @@ def internal_start_trial():
                     'trial_ends_at': trial_data.get('expires_at'),
                     'trial_days': 7,
                 }, on_conflict='user_id,product').execute()
+                enqueue_welcome_email_after_activation(
+                    db,
+                    user_id=user_id,
+                    product=domain,
+                    activation_event='trial_started',
+                    activation_id=trial_data.get('id'),
+                    email=email,
+                    request_id=getattr(g, 'request_id', None),
+                    traceparent=request.headers.get('traceparent'),
+                    send_immediately=True,
+                    logger=logger,
+                )
 
                 return jsonify({
                     'success': True,
@@ -453,6 +486,19 @@ def internal_start_trial():
 
             # Onboarding completion is now handled atomically by DB trigger
             # Return success - onboarding_completed is guaranteed by trigger
+            from supabase_client import get_supabase_client
+            enqueue_welcome_email_after_activation(
+                get_supabase_client(),
+                user_id=user_id,
+                product=domain,
+                activation_event='trial_started',
+                activation_id=trial_context.trial_id,
+                email=email,
+                request_id=getattr(g, 'request_id', None),
+                traceparent=request.headers.get('traceparent'),
+                send_immediately=True,
+                logger=logger,
+            )
 
             return jsonify({
                 'success': True,
@@ -481,6 +527,19 @@ def internal_start_trial():
                         f"user_id={user_id[:8]}... | "
                         f"trial_id={existing.trial_id} | "
                         f"domain={domain}"
+                    )
+                    from supabase_client import get_supabase_client
+                    enqueue_welcome_email_after_activation(
+                        get_supabase_client(),
+                        user_id=user_id,
+                        product=domain,
+                        activation_event='trial_started',
+                        activation_id=existing.trial_id,
+                        email=email,
+                        request_id=getattr(g, 'request_id', None),
+                        traceparent=request.headers.get('traceparent'),
+                        send_immediately=True,
+                        logger=logger,
                     )
                     return jsonify({
                         'success': True,

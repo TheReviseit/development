@@ -1,4 +1,5 @@
 import type { NextConfig } from "next";
+import createNextIntlPlugin from "next-intl/plugin";
 
 const nextConfig: NextConfig = {
   /* config options here */
@@ -9,6 +10,24 @@ const nextConfig: NextConfig = {
       // Immutable caching for Next.js static assets (hashed filenames)
       {
         source: "/_next/static/:path*",
+        headers: [
+          {
+            key: "Cache-Control",
+            value: "public, max-age=31536000, immutable",
+          },
+        ],
+      },
+      {
+        source: "/auth-gradient-v1.avif",
+        headers: [
+          {
+            key: "Cache-Control",
+            value: "public, max-age=31536000, immutable",
+          },
+        ],
+      },
+      {
+        source: "/auth-gradient-v1.webp",
         headers: [
           {
             key: "Cache-Control",
@@ -263,4 +282,6 @@ const nextConfig: NextConfig = {
   },
 };
 
-export default nextConfig;
+const withNextIntl = createNextIntlPlugin("./lib/i18n/request.ts");
+
+export default withNextIntl(nextConfig);

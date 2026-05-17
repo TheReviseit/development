@@ -1,0 +1,535 @@
+.redesignScope :global([class*="files-product-chrome-module"][class*="navbar"]) {
+  background: #ffffff;
+}
+
+.redesignScope :global([class*="files-product-chrome-module"][class*="brandName"]) {
+  font-size: 18px;
+  font-weight: 800;
+}
+
+.redesignScope :global([class*="files-product-chrome-module"][class*="navLinks"]) {
+  gap: 22px;
+  background: #ffffff;
+}
+
+.redesignScope :global([class*="files-product-chrome-module"][class*="navLink"]) {
+  gap: 7px;
+  min-height: 40px;
+  padding: 0 12px;
+  border-radius: 12px;
+  background: #ffffff;
+  color: #080a12;
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.redesignScope :global([class*="files-product-chrome-module"][class*="actions"]) {
+  align-items: center;
+}
+
+.redesignScope :global([class*="files-product-chrome-module"][class*="secondaryAction"]) {
+  padding: 0 8px;
+  border: 0;
+  background: #ffffff;
+  color: #080a12;
+  font-size: 14px;
+}
+
+.redesignScope :global([class*="files-product-chrome-module"][class*="primaryAction"]) {
+  min-height: 44px;
+  padding: 0 18px;
+  border-color: rgb(240, 49, 46);
+  background: rgb(240, 49, 46);
+  color: #ffffff;
+  font-size: 14px;
+}
+
+.redesignScope :global([class*="files-product-chrome-module"][class*="iconAction"]) {
+  width: 44px;
+  min-height: 38px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 12px;
+  color: #30313a;
+  text-decoration: none;
+}
+
+.redesignScope :global(main[class*="files-hub-module"][class*="page"]) {
+  max-width: 100%;
+  min-width: 0;
+  overflow-x: clip;
+  background: rgb(245, 245, 250);
+}
+
+.redesignScope :global([class*="files-hub-module"][class*="shell"]) {
+  width: min(1880px, 100%);
+  max-width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+  overflow-x: clip;
+  padding: 44px 42px 76px;
+}
+
+.redesignScope :global([class*="files-hub-module"][class*="header"]) {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 24px;
+  min-width: 0;
+  margin: 0 auto 28px;
+  text-align: center;
+}
+
+.redesignScope :global([class*="files-hub-module"][class*="header"] > div) {
+  min-width: 0;
+}
+
+.redesignScope :global([class*="files-hub-module"][class*="title"]) {
+  max-width: 1160px;
+  margin: 0 auto 14px;
+  color: #33343e;
+  font-size: 54px;
+  line-height: 1.08;
+  font-weight: 800;
+  text-align: center;
+  overflow-wrap: break-word;
+  text-wrap: balance;
+  word-break: normal;
+}
+
+.redesignScope :global([class*="files-hub-module"][class*="copy"]) {
+  max-width: 1000px;
+  margin: 0 auto;
+  color: #565965;
+  font-size: 28px;
+  line-height: 1.45;
+  font-weight: 450;
+  text-align: center;
+  overflow-wrap: break-word;
+  text-wrap: pretty;
+  word-break: normal;
+}
+
+.redesignScope :global([class*="files-hub-module"][class*="categoryPills"]) {
+  --category-pill-gap: 14px;
+  --category-rail-padding: clamp(18px, 2.5vw, 32px);
+  position: relative;
+  isolation: isolate;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  inline-size: 100%;
+  max-inline-size: 100%;
+  min-inline-size: 0;
+  box-sizing: border-box;
+  display: flex;
+  flex-wrap: nowrap;
+  justify-content: flex-start;
+  justify-content: safe center;
+  gap: var(--category-pill-gap);
+  margin: 34px auto 38px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  overscroll-behavior-x: contain;
+  padding-inline: var(--category-rail-padding);
+  scrollbar-width: none;
+  scroll-padding-inline: var(--category-rail-padding);
+  -webkit-mask-image: linear-gradient(to right, transparent 0, #000 14px, #000 calc(100% - 14px), transparent 100%);
+  mask-image: linear-gradient(to right, transparent 0, #000 14px, #000 calc(100% - 14px), transparent 100%);
+  contain: inline-size layout;
+  -webkit-overflow-scrolling: touch;
+}
+
+.redesignScope :global([class*="files-hub-module"][class*="categoryPills"])::-webkit-scrollbar {
+  display: none;
+}
+
+.redesignScope :global([data-files-category-pill]) {
+  flex: 0 0 auto;
+  min-width: 0;
+  inline-size: clamp(112px, 10vw, 176px);
+  max-inline-size: 176px;
+  box-sizing: border-box;
+  min-height: 44px;
+  padding: 0 16px;
+  border: 1px solid #d5d9e3;
+  border-radius: 999px;
+  background: #ffffff;
+  color: #474a55;
+  font-size: 16px;
+  font-weight: 750;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
+.redesignScope :global([data-files-category-pill-text]) {
+  display: block;
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.redesignScope :global([class*="files-hub-module"][class*="categoryPillActive"]) {
+  border-color: #2b2d37;
+  background: #2b2d37;
+  color: #ffffff;
+}
+
+.redesignScope :global([class*="files-hub-module"][class*="grid"]) {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 24px;
+  min-width: 0;
+}
+
+.redesignScope :global([class*="files-hub-module"][class*="toolCard"]) {
+  display: block;
+  min-width: 0;
+  min-height: 240px;
+  padding: 30px;
+  border-color: #d6dbe6;
+  border-radius: 18px;
+  background: #ffffff;
+  box-shadow: none;
+  transform: none;
+}
+
+.redesignScope :global([class*="files-hub-module"][class*="iconWrap"]) {
+  width: 48px;
+  height: 48px;
+  margin-bottom: 20px;
+  border: 0;
+  border-radius: 10px;
+  color: #ffffff;
+}
+
+.redesignScope :global([class*="files-hub-module"][class*="toolName"]) {
+  margin: 0 0 12px;
+  color: #30313a;
+  font-size: 22px;
+  line-height: 1.2;
+  font-weight: 800;
+  overflow-wrap: break-word;
+  word-break: normal;
+}
+
+.redesignScope :global([class*="files-hub-module"][class*="toolDescription"]) {
+  color: #747783;
+  font-size: 15px;
+  line-height: 1.38;
+  overflow-wrap: break-word;
+  word-break: normal;
+}
+
+.redesignScope :global([class*="files-hub-module"][class*="shell"][data-script="Malayalam"] [class*="title"]),
+.redesignScope :global([class*="files-hub-module"][class*="shell"][data-script="Kannada"] [class*="title"]),
+.redesignScope :global([class*="files-hub-module"][class*="shell"][data-script="Telugu"] [class*="title"]) {
+  line-height: 1.14;
+}
+
+.redesignScope :global([class*="files-hub-module"][class*="shell"][data-script="Malayalam"] [class*="copy"]),
+.redesignScope :global([class*="files-hub-module"][class*="shell"][data-script="Kannada"] [class*="copy"]),
+.redesignScope :global([class*="files-hub-module"][class*="shell"][data-script="Telugu"] [class*="copy"]) {
+  line-height: 1.55;
+}
+
+.redesignScope :global([class*="files-hub-module"][class*="shell"][data-script="Malayalam"] [data-files-category-pill]),
+.redesignScope :global([class*="files-hub-module"][class*="shell"][data-script="Kannada"] [data-files-category-pill]),
+.redesignScope :global([class*="files-hub-module"][class*="shell"][data-script="Telugu"] [data-files-category-pill]) {
+  font-size: 15px;
+}
+
+.redesignScope :global([class*="files-hub-module"][class*="toneCoral"]) {
+  background: linear-gradient(135deg, #f26145, #ff7a4f);
+}
+
+.redesignScope :global([class*="files-hub-module"][class*="toneGreen"]) {
+  background: linear-gradient(135deg, #85b94f, #4c9a55);
+}
+
+.redesignScope :global([class*="files-hub-module"][class*="toneBlue"]) {
+  background: linear-gradient(135deg, #dbe8ff, #4c74c8);
+  color: #27579e;
+}
+
+.redesignScope :global([class*="files-hub-module"][class*="toneAmber"]) {
+  background: linear-gradient(135deg, #f4d8ca, #ff744e);
+  color: #f05a38;
+}
+
+.redesignScope :global([class*="files-hub-module"][class*="toneOrange"]) {
+  background: linear-gradient(135deg, #f7d9c8, #ff6b4a);
+  color: #e85d3b;
+}
+
+.redesignScope :global([class*="files-hub-module"][class*="toneEmerald"]) {
+  background: linear-gradient(135deg, #c8ecd0, #54a060);
+  color: #25733a;
+}
+
+.redesignScope :global([class*="files-hub-module"][class*="tonePurple"]) {
+  background: linear-gradient(135deg, #b6659b, #8f5fd0);
+}
+
+.redesignScope :global([class*="files-hub-module"][class*="toneRose"]) {
+  background: linear-gradient(135deg, #b96a9e, #a8558f);
+}
+
+.redesignScope :global([class*="files-hub-module"][class*="toneIndigo"]) {
+  background: linear-gradient(135deg, #7c8de8, #635bff);
+}
+
+.redesignScope :global([class*="files-hub-module"][class*="toneRed"]) {
+  background: linear-gradient(135deg, #f15a45, #e63946);
+}
+
+.redesignScope :global([class*="files-hub-module"][class*="letterIcon"]) {
+  font-size: 22px;
+  line-height: 1;
+  font-weight: 900;
+}
+
+@media (max-width: 1480px) {
+  .redesignScope :global([class*="files-hub-module"][class*="shell"]) {
+    padding-right: 42px;
+    padding-left: 42px;
+  }
+
+  .redesignScope :global([class*="files-hub-module"][class*="title"]) {
+    font-size: 46px;
+  }
+
+  .redesignScope :global([class*="files-hub-module"][class*="copy"]) {
+    font-size: 23px;
+  }
+
+  .redesignScope :global([class*="files-hub-module"][class*="grid"]) {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 1180px) {
+  .redesignScope :global([class*="files-hub-module"][class*="grid"]) {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 980px) {
+  .redesignScope :global([class*="files-hub-module"][class*="shell"]) {
+    padding: 34px 24px 54px;
+  }
+
+  .redesignScope :global([class*="files-hub-module"][class*="header"]) {
+    grid-template-columns: 1fr;
+  }
+
+  .redesignScope :global([class*="files-hub-module"][class*="title"]) {
+    font-size: 38px;
+  }
+
+  .redesignScope :global([class*="files-hub-module"][class*="copy"]) {
+    font-size: 19px;
+  }
+
+  .redesignScope :global([class*="files-hub-module"][class*="categoryPills"]) {
+    justify-content: flex-start;
+    gap: 10px;
+    margin: 26px 0 30px;
+    overflow-x: auto;
+    padding-block-end: 2px;
+    padding-inline: 14px;
+    scroll-padding-inline: 14px;
+    scroll-snap-type: x proximity;
+  }
+
+  .redesignScope :global([data-files-category-pill]) {
+    inline-size: clamp(96px, 26vw, 144px);
+    max-inline-size: 144px;
+    min-height: 40px;
+    padding: 0 14px;
+    font-size: 14px;
+    scroll-snap-align: start;
+  }
+
+  .redesignScope :global([class*="files-hub-module"][class*="grid"]) {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .redesignScope :global([class*="files-hub-module"][class*="toolCard"]) {
+    min-height: 230px;
+    padding: 24px;
+  }
+}
+
+@media (max-width: 640px) {
+  .redesignScope :global([class*="files-hub-module"][class*="shell"]) {
+    padding: 28px 14px 42px;
+  }
+
+  .redesignScope :global([class*="files-hub-module"][class*="header"]) {
+    text-align: left;
+  }
+
+  .redesignScope :global([class*="files-hub-module"][class*="title"]),
+  .redesignScope :global([class*="files-hub-module"][class*="copy"]) {
+    text-align: left;
+  }
+
+  .redesignScope :global([class*="files-hub-module"][class*="title"]) {
+    font-size: 32px;
+  }
+
+  .redesignScope :global([class*="files-hub-module"][class*="copy"]) {
+    font-size: 17px;
+  }
+
+  .redesignScope :global([class*="files-hub-module"][class*="grid"]) {
+    grid-template-columns: 1fr;
+  }
+
+  .redesignScope :global([class*="files-hub-module"][class*="toolCard"]) {
+    display: grid;
+    grid-template-columns: 48px minmax(0, 1fr);
+    grid-template-rows: auto auto;
+    align-items: center;
+    column-gap: 14px;
+    row-gap: 12px;
+    min-height: 164px;
+    padding: 24px;
+  }
+
+  .redesignScope :global([class*="files-hub-module"][class*="iconWrap"]) {
+    grid-column: 1;
+    grid-row: 1;
+    align-self: center;
+    margin-bottom: 0;
+  }
+
+  .redesignScope :global([class*="files-hub-module"][class*="toolName"]) {
+    grid-column: 2;
+    grid-row: 1;
+    align-self: center;
+    margin-bottom: 0;
+    font-size: 21px;
+  }
+
+  .redesignScope :global([class*="files-hub-module"][class*="toolDescription"]) {
+    grid-column: 1 / -1;
+    grid-row: 2;
+  }
+}
+
+@media (max-width: 380px) {
+  .redesignScope :global([class*="files-hub-module"][class*="shell"]) {
+    padding: 26px 12px 38px;
+  }
+
+  .redesignScope :global([class*="files-hub-module"][class*="header"]) {
+    margin-bottom: 22px;
+  }
+
+  .redesignScope :global([class*="files-hub-module"][class*="title"]) {
+    font-size: 30px;
+    line-height: 1.05;
+  }
+
+  .redesignScope :global([class*="files-hub-module"][class*="copy"]) {
+    font-size: 16px;
+    line-height: 1.45;
+  }
+
+  .redesignScope :global([class*="files-hub-module"][class*="categoryPills"]) {
+    gap: 8px;
+    margin: 22px -2px 28px;
+    padding-inline: 12px;
+    scroll-padding-inline: 12px;
+  }
+
+  .redesignScope :global([data-files-category-pill]) {
+    inline-size: clamp(78px, 24vw, 88px);
+    max-inline-size: 88px;
+    min-height: 38px;
+    padding: 0 10px;
+    font-size: 13px;
+  }
+
+  .redesignScope :global([class*="files-hub-module"][class*="shell"][data-script="Malayalam"] [data-files-category-pill]),
+  .redesignScope :global([class*="files-hub-module"][class*="shell"][data-script="Kannada"] [data-files-category-pill]),
+  .redesignScope :global([class*="files-hub-module"][class*="shell"][data-script="Telugu"] [data-files-category-pill]) {
+    font-size: 13px;
+    line-height: 1.15;
+  }
+
+  .redesignScope :global([class*="files-hub-module"][class*="toolCard"]) {
+    grid-template-columns: 44px minmax(0, 1fr);
+    column-gap: 13px;
+    row-gap: 11px;
+    min-height: 154px;
+    padding: 20px;
+    border-radius: 14px;
+  }
+
+  .redesignScope :global([class*="files-hub-module"][class*="iconWrap"]) {
+    width: 44px;
+    height: 44px;
+  }
+
+  .redesignScope :global([class*="files-hub-module"][class*="toolName"]) {
+    font-size: 20px;
+  }
+
+  .redesignScope :global([class*="files-hub-module"][class*="toolDescription"]) {
+    font-size: 14px;
+    line-height: 1.42;
+  }
+}
+
+@media (max-width: 330px) {
+  .redesignScope :global([class*="files-hub-module"][class*="shell"]) {
+    padding-right: 10px;
+    padding-left: 10px;
+  }
+
+  .redesignScope :global([class*="files-hub-module"][class*="title"]) {
+    font-size: 28px;
+  }
+
+  .redesignScope :global([class*="files-hub-module"][class*="copy"]) {
+    font-size: 15.5px;
+  }
+
+  .redesignScope :global([class*="files-hub-module"][class*="categoryPills"]) {
+    margin-inline: -1px;
+    padding-inline: 10px;
+    scroll-padding-inline: 10px;
+  }
+
+  .redesignScope :global([data-files-category-pill]) {
+    inline-size: clamp(76px, 24vw, 82px);
+    max-inline-size: 82px;
+    min-height: 36px;
+    padding: 0 8px;
+    font-size: 12.5px;
+  }
+
+  .redesignScope :global([class*="files-hub-module"][class*="shell"][data-script="Malayalam"] [data-files-category-pill]),
+  .redesignScope :global([class*="files-hub-module"][class*="shell"][data-script="Kannada"] [data-files-category-pill]),
+  .redesignScope :global([class*="files-hub-module"][class*="shell"][data-script="Telugu"] [data-files-category-pill]) {
+    font-size: 12.5px;
+  }
+
+  .redesignScope :global([class*="files-hub-module"][class*="toolCard"]) {
+    grid-template-columns: 42px minmax(0, 1fr);
+    column-gap: 12px;
+    row-gap: 10px;
+    min-height: 148px;
+    padding: 18px;
+  }
+
+  .redesignScope :global([class*="files-hub-module"][class*="iconWrap"]) {
+    width: 42px;
+    height: 42px;
+  }
+}

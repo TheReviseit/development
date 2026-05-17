@@ -1,0 +1,590 @@
+.page {
+  max-width: 100%;
+  min-width: 0;
+  min-height: 100vh;
+  overflow-x: clip;
+  background: rgb(245, 245, 250);
+  color: #111827;
+}
+
+.shell {
+  width: min(1880px, 100%);
+  max-width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+  margin: 0 auto;
+  padding: 44px 42px 76px;
+  overflow-x: clip;
+}
+
+.header {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 24px;
+  min-width: 0;
+  margin: 0 auto 28px;
+  text-align: center;
+}
+
+.header > div {
+  min-width: 0;
+}
+
+.eyebrow {
+  color: #64748b;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.title {
+  max-width: 1160px;
+  margin: 0 auto 14px;
+  color: #33343e;
+  font-size: 54px;
+  line-height: 1.08;
+  font-weight: 800;
+  overflow-wrap: break-word;
+  text-wrap: balance;
+  word-break: normal;
+}
+
+.copy {
+  max-width: 1000px;
+  margin: 0 auto;
+  color: #565965;
+  font-size: 28px;
+  line-height: 1.45;
+  font-weight: 450;
+  overflow-wrap: break-word;
+  text-wrap: pretty;
+  word-break: normal;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.actionLink {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 38px;
+  padding: 0 12px;
+  border: 1px solid #dbe3ee;
+  border-radius: 12px;
+  background: #ffffff;
+  color: #111827;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.categoryPills {
+  --category-pill-gap: 14px;
+  --category-rail-padding: clamp(18px, 2.5vw, 32px);
+  position: relative;
+  isolation: isolate;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  inline-size: 100%;
+  max-inline-size: 100%;
+  min-inline-size: 0;
+  box-sizing: border-box;
+  display: flex;
+  flex-wrap: nowrap;
+  justify-content: flex-start;
+  justify-content: safe center;
+  gap: var(--category-pill-gap);
+  margin: 34px auto 38px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  overscroll-behavior-x: contain;
+  padding-inline: var(--category-rail-padding);
+  scrollbar-width: none;
+  scroll-padding-inline: var(--category-rail-padding);
+  -webkit-mask-image: linear-gradient(to right, transparent 0, #000 14px, #000 calc(100% - 14px), transparent 100%);
+  mask-image: linear-gradient(to right, transparent 0, #000 14px, #000 calc(100% - 14px), transparent 100%);
+  contain: inline-size layout;
+  -webkit-overflow-scrolling: touch;
+}
+
+.categoryPills::-webkit-scrollbar {
+  display: none;
+}
+
+.categoryPill {
+  flex: 0 0 auto;
+  min-width: 0;
+  inline-size: clamp(112px, 10vw, 176px);
+  max-inline-size: 176px;
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+  padding: 0 16px;
+  border: 1px solid #d5d9e3;
+  border-radius: 999px;
+  background: #ffffff;
+  color: #474a55;
+  font-size: 16px;
+  font-weight: 750;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
+.categoryPillText {
+  display: block;
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.categoryPillActive {
+  border-color: #2b2d37;
+  background: #2b2d37;
+  color: #ffffff;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 24px;
+  min-width: 0;
+}
+
+.toolCard {
+  display: block;
+  position: relative;
+  isolation: isolate;
+  min-width: 0;
+  min-height: 240px;
+  padding: 30px;
+  border: 1px solid #d6dbe6;
+  border-radius: 18px;
+  background: #ffffff;
+  color: #111827;
+  text-decoration: none;
+  overflow: hidden;
+  transition:
+    border-color 160ms ease,
+    background 160ms ease;
+}
+
+.toolCard::before {
+  content: "";
+  position: absolute;
+  inset: -1px;
+  z-index: -1;
+  border-radius: inherit;
+  padding: 1px;
+  background: linear-gradient(120deg, #ef4444, #2563eb, #16a34a, #111827, #ef4444);
+  background-size: 320% 100%;
+  opacity: 0;
+  transition: opacity 180ms ease;
+  -webkit-mask:
+    linear-gradient(#ffffff 0 0) content-box,
+    linear-gradient(#ffffff 0 0);
+  -webkit-mask-composite: xor;
+  mask:
+    linear-gradient(#ffffff 0 0) content-box,
+    linear-gradient(#ffffff 0 0);
+  mask-composite: exclude;
+}
+
+.toolCard:hover {
+  border-color: #111827;
+  background: #ffffff;
+}
+
+.toolCard:hover::before {
+  opacity: 0;
+  animation: none;
+}
+
+.toolCard:focus-visible,
+.actionLink:focus-visible {
+  outline: 3px solid rgba(37, 99, 235, 0.28);
+  outline-offset: 2px;
+}
+
+.iconWrap {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 48px;
+  height: 48px;
+  margin-bottom: 20px;
+  border: 0;
+  border-radius: 10px;
+  color: #ffffff;
+}
+
+.toolName {
+  margin: 0 0 12px;
+  color: #30313a;
+  font-size: 22px;
+  line-height: 1.2;
+  font-weight: 800;
+  overflow-wrap: break-word;
+  word-break: normal;
+}
+
+.toolDescription {
+  margin: 0;
+  color: #747783;
+  font-size: 15px;
+  line-height: 1.38;
+  letter-spacing: 0;
+  overflow-wrap: break-word;
+  word-break: normal;
+}
+
+.shell[data-script="Malayalam"] .title,
+.shell[data-script="Kannada"] .title,
+.shell[data-script="Telugu"] .title {
+  line-height: 1.14;
+}
+
+.shell[data-script="Malayalam"] .copy,
+.shell[data-script="Kannada"] .copy,
+.shell[data-script="Telugu"] .copy {
+  line-height: 1.55;
+}
+
+.shell[data-script="Malayalam"] .categoryPill,
+.shell[data-script="Kannada"] .categoryPill,
+.shell[data-script="Telugu"] .categoryPill {
+  font-size: 15px;
+}
+
+.placeholder {
+  display: grid;
+  gap: 16px;
+  min-height: 70vh;
+  align-content: center;
+  justify-items: start;
+}
+
+.placeholderPanel {
+  width: min(620px, 100%);
+  display: grid;
+  gap: 12px;
+  padding: 22px;
+  border: 1px solid #dbe3ee;
+  border-radius: 16px;
+  background: #ffffff;
+  box-shadow: 0 18px 48px rgba(15, 23, 42, 0.08);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .toolCard,
+  .toolCard::before {
+    transition: none;
+    animation: none;
+  }
+}
+
+@keyframes cardBorderFlow {
+  from {
+    background-position: 0% 50%;
+  }
+
+  to {
+    background-position: 320% 50%;
+  }
+}
+
+@media (max-width: 1480px) {
+  .shell {
+    padding-right: 42px;
+    padding-left: 42px;
+  }
+
+  .title {
+    font-size: 46px;
+  }
+
+  .copy {
+    font-size: 23px;
+  }
+
+  .grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 1180px) {
+  .grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 980px) {
+  .shell {
+    padding: 34px 24px 54px;
+  }
+
+  .header {
+    grid-template-columns: 1fr;
+  }
+
+  .title {
+    font-size: 38px;
+  }
+
+  .copy {
+    font-size: 19px;
+  }
+
+  .categoryPills {
+    justify-content: flex-start;
+    gap: 10px;
+    margin: 26px 0 30px;
+    padding-block-end: 2px;
+    padding-inline: 14px;
+    scroll-padding-inline: 14px;
+    scroll-snap-type: x proximity;
+  }
+
+  .categoryPill {
+    inline-size: clamp(96px, 26vw, 144px);
+    max-inline-size: 144px;
+    min-height: 40px;
+    padding: 0 14px;
+    font-size: 14px;
+    scroll-snap-align: start;
+  }
+
+  .grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .toolCard {
+    min-height: 230px;
+    padding: 24px;
+  }
+}
+
+@media (max-width: 640px) {
+  .shell {
+    padding: 28px 14px 42px;
+  }
+
+  .header {
+    align-items: flex-start;
+    text-align: left;
+  }
+
+  .title {
+    font-size: 32px;
+  }
+
+  .copy {
+    font-size: 17px;
+  }
+
+  .grid {
+    grid-template-columns: 1fr;
+  }
+
+  .toolCard {
+    display: grid;
+    grid-template-columns: 48px minmax(0, 1fr);
+    grid-template-rows: auto auto;
+    align-items: center;
+    column-gap: 14px;
+    row-gap: 12px;
+    min-height: 164px;
+    padding: 24px;
+  }
+
+  .iconWrap {
+    grid-column: 1;
+    grid-row: 1;
+    align-self: center;
+    margin-bottom: 0;
+  }
+
+  .toolName {
+    grid-column: 2;
+    grid-row: 1;
+    align-self: center;
+    margin-bottom: 0;
+    font-size: 21px;
+  }
+
+  .toolDescription {
+    grid-column: 1 / -1;
+    grid-row: 2;
+  }
+}
+
+@media (max-width: 380px) {
+  .shell {
+    padding: 26px 12px 38px;
+  }
+
+  .header {
+    margin-bottom: 22px;
+  }
+
+  .title {
+    font-size: 30px;
+    line-height: 1.05;
+  }
+
+  .copy {
+    font-size: 16px;
+    line-height: 1.45;
+  }
+
+  .categoryPills {
+    gap: 8px;
+    margin: 22px -2px 28px;
+    padding-inline: 12px;
+    scroll-padding-inline: 12px;
+  }
+
+  .categoryPill {
+    inline-size: clamp(78px, 24vw, 88px);
+    max-inline-size: 88px;
+    min-height: 38px;
+    padding: 0 10px;
+    font-size: 13px;
+  }
+
+  .shell[data-script="Malayalam"] .categoryPill,
+  .shell[data-script="Kannada"] .categoryPill,
+  .shell[data-script="Telugu"] .categoryPill {
+    font-size: 13px;
+    line-height: 1.15;
+  }
+
+  .toolCard {
+    grid-template-columns: 44px minmax(0, 1fr);
+    column-gap: 13px;
+    row-gap: 11px;
+    min-height: 154px;
+    padding: 20px;
+    border-radius: 14px;
+  }
+
+  .iconWrap {
+    width: 44px;
+    height: 44px;
+  }
+
+  .toolName {
+    font-size: 20px;
+  }
+
+  .toolDescription {
+    font-size: 14px;
+    line-height: 1.42;
+  }
+}
+
+@media (max-width: 330px) {
+  .shell {
+    padding-right: 10px;
+    padding-left: 10px;
+  }
+
+  .title {
+    font-size: 28px;
+  }
+
+  .copy {
+    font-size: 15.5px;
+  }
+
+  .categoryPills {
+    margin-inline: -1px;
+    padding-inline: 10px;
+    scroll-padding-inline: 10px;
+  }
+
+  .categoryPill {
+    inline-size: clamp(76px, 24vw, 82px);
+    max-inline-size: 82px;
+    min-height: 36px;
+    padding: 0 8px;
+    font-size: 12.5px;
+  }
+
+  .shell[data-script="Malayalam"] .categoryPill,
+  .shell[data-script="Kannada"] .categoryPill,
+  .shell[data-script="Telugu"] .categoryPill {
+    font-size: 12.5px;
+  }
+
+  .toolCard {
+    grid-template-columns: 42px minmax(0, 1fr);
+    column-gap: 12px;
+    row-gap: 10px;
+    min-height: 148px;
+    padding: 18px;
+  }
+
+  .iconWrap {
+    width: 42px;
+    height: 42px;
+  }
+}
+
+.toneCoral {
+  background: linear-gradient(135deg, #f26145, #ff7a4f);
+}
+
+.toneGreen {
+  background: linear-gradient(135deg, #85b94f, #4c9a55);
+}
+
+.toneBlue {
+  background: linear-gradient(135deg, #dbe8ff, #4c74c8);
+  color: #27579e;
+}
+
+.toneAmber {
+  background: linear-gradient(135deg, #f4d8ca, #ff744e);
+  color: #f05a38;
+}
+
+.toneOrange {
+  background: linear-gradient(135deg, #f7d9c8, #ff6b4a);
+  color: #e85d3b;
+}
+
+.toneEmerald {
+  background: linear-gradient(135deg, #c8ecd0, #54a060);
+  color: #25733a;
+}
+
+.tonePurple {
+  background: linear-gradient(135deg, #b6659b, #8f5fd0);
+}
+
+.toneRose {
+  background: linear-gradient(135deg, #b96a9e, #a8558f);
+}
+
+.toneIndigo {
+  background: linear-gradient(135deg, #7c8de8, #635bff);
+}
+
+.toneRed {
+  background: linear-gradient(135deg, #f15a45, #e63946);
+}
+
+.letterIcon {
+  font-size: 22px;
+  line-height: 1;
+  font-weight: 900;
+}

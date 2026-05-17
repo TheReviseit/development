@@ -26,8 +26,7 @@ html:has(.onboarding-container.onboarding-two-step) {
   --onboarding-safe-left: env(safe-area-inset-left, 0px);
   height: var(--onboarding-viewport-height);
   min-height: var(--onboarding-viewport-height);
-  padding:
-    max(var(--onboarding-page-padding), var(--onboarding-safe-top))
+  padding: max(var(--onboarding-page-padding), var(--onboarding-safe-top))
     max(var(--onboarding-page-padding), var(--onboarding-safe-right))
     max(var(--onboarding-page-padding), var(--onboarding-safe-bottom))
     max(var(--onboarding-page-padding), var(--onboarding-safe-left));
@@ -658,61 +657,126 @@ html:has(.onboarding-container.onboarding-two-step) {
 }
 
 .success-state {
+  width: min(100%, 540px);
+  margin: auto;
+  padding: 0;
   display: flex;
   flex-direction: column;
+  gap: 18px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  animation: success-card-enter 520ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  transform-origin: center;
+}
+
+.success-hero,
+.success-header {
+  display: flex;
+  align-items: flex-start;
   gap: 16px;
 }
 
-.success-header {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  padding: 16px;
-  border: 1px solid #bbf7d0;
-  border-radius: 8px;
-  background: #f0fdf4;
+.success-state .success-hero {
+  animation: success-content-rise 520ms cubic-bezier(0.16, 1, 0.3, 1) 120ms
+    both;
 }
 
 .success-icon {
-  width: 44px;
-  height: 44px;
+  position: relative;
+  width: 46px;
+  height: 46px;
   display: flex;
   align-items: center;
   justify-content: center;
-  border-radius: 8px;
-  background: #16a34a;
+  border-radius: 14px;
+  background: #129b52;
   color: #ffffff;
   flex: 0 0 auto;
   font-size: 12px;
   font-weight: 850;
+  box-shadow:
+    0 14px 28px rgba(18, 155, 82, 0.22),
+    inset 0 1px 0 rgba(255, 255, 255, 0.28);
+  isolation: isolate;
+  animation: success-icon-pop 680ms cubic-bezier(0.16, 1, 0.3, 1) 160ms both;
+}
+
+.success-icon::after {
+  content: "";
+  position: absolute;
+  inset: -10px;
+  border: 1px solid rgba(18, 155, 82, 0.26);
+  border-radius: inherit;
+  opacity: 0;
+  pointer-events: none;
+  z-index: -1;
+  animation: success-ring-pulse 900ms ease-out 220ms both;
+}
+
+.success-icon svg {
+  animation: success-check-pop 420ms cubic-bezier(0.16, 1, 0.3, 1) 320ms both;
+}
+
+.success-icon-large {
+  width: 58px;
+  height: 58px;
+  border-radius: 18px;
+}
+
+.success-info .success-eyebrow {
+  margin: 0 0 6px;
+  color: #166534;
+  font-size: 11px;
+  font-weight: 900;
+  line-height: 1;
+  letter-spacing: 0;
+  text-transform: uppercase;
 }
 
 .success-info h3 {
-  margin: 0 0 4px;
-  color: #14532d;
-  font-size: 16px;
-  font-weight: 800;
+  margin: 0;
+  color: #0b1120;
+  font-family: var(--font-outfit), var(--font-inter), system-ui, sans-serif;
+  font-size: clamp(25px, 2.6vw, 32px);
+  font-weight: 900;
+  line-height: 1.04;
   letter-spacing: 0;
 }
 
 .success-info p {
-  margin: 0;
-  color: #166534;
-  font-size: 13px;
-  line-height: 1.4;
+  max-width: 390px;
+  margin: 9px 0 0;
+  color: #64748b;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.55;
 }
 
 .success-details-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 12px;
+  animation: success-content-rise 520ms cubic-bezier(0.16, 1, 0.3, 1) 210ms
+    both;
 }
 
 .success-detail-item {
-  padding: 14px;
-  border: 1px solid #e2e8f0;
-  border-radius: 8px;
-  background: #ffffff;
+  min-height: 86px;
+  padding: 15px 16px;
+  border: 1px solid #e4e8ef;
+  border-radius: 12px;
+  background: #f8fafc;
+  animation: success-content-rise 520ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.success-detail-item:nth-child(1) {
+  animation-delay: 260ms;
+}
+
+.success-detail-item:nth-child(2) {
+  animation-delay: 330ms;
 }
 
 .detail-label {
@@ -727,9 +791,9 @@ html:has(.onboarding-container.onboarding-two-step) {
 
 .detail-value {
   display: block;
-  color: #0f172a;
+  color: #020617;
   font-size: 13px;
-  font-weight: 750;
+  font-weight: 850;
   line-height: 1.35;
   word-break: break-word;
 }
@@ -808,25 +872,21 @@ html:has(.onboarding-container.onboarding-two-step) {
 .next-step-item {
   display: flex;
   align-items: center;
-  gap: 12px;
-  color: #475569;
+  gap: 10px;
+  color: #1f2937;
   font-size: 13px;
-  font-weight: 650;
+  font-weight: 700;
   line-height: 1.4;
 }
 
 .next-step-number {
-  width: 24px;
-  height: 24px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 50%;
-  background: #dcfce7;
-  color: #166534;
-  font-size: 12px;
-  font-weight: 850;
+  min-width: 24px;
+  color: #020617;
+  font-size: 13px;
+  font-weight: 900;
+  line-height: 1.4;
   flex: 0 0 auto;
+  text-align: left;
 }
 
 .error-icon-wrapper {
@@ -839,7 +899,11 @@ html:has(.onboarding-container.onboarding-two-step) {
   border: 1px solid rgba(220, 38, 38, 0.14);
   border-radius: 999px;
   background:
-    radial-gradient(circle at 35% 25%, rgba(255, 255, 255, 0.96), rgba(255, 255, 255, 0) 46%),
+    radial-gradient(
+      circle at 35% 25%,
+      rgba(255, 255, 255, 0.96),
+      rgba(255, 255, 255, 0) 46%
+    ),
     linear-gradient(145deg, #fff7f7 0%, #fff1f1 100%);
   color: #dc2626;
   box-shadow:
@@ -895,33 +959,179 @@ html:has(.onboarding-container.onboarding-two-step) {
   transform: translateY(0);
 }
 
+.error-retry-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.52;
+  transform: none;
+}
+
 .success-message {
-  width: min(100%, 520px);
+  width: min(100%, 590px);
+  margin: auto;
   padding: 0;
+  display: block;
+  gap: 0;
+  border-radius: 0;
+  background: transparent;
+  color: inherit;
+  text-align: center;
+  animation: success-content-rise 520ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.success-message-shell {
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 28px;
   border: 0;
   border-radius: 0;
   background: transparent;
   box-shadow: none;
-  text-align: left;
 }
 
-.success-message .success-icon {
-  margin: 0 0 18px;
+.success-message-icon {
+  width: 86px;
+  height: 86px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  background: transparent;
+  color: #000000;
+  box-shadow: none;
+  animation: success-icon-pop 620ms cubic-bezier(0.16, 1, 0.3, 1) 120ms both;
+}
+
+.success-message-icon svg {
+  animation: success-check-pop 420ms cubic-bezier(0.16, 1, 0.3, 1) 260ms both;
+}
+
+.success-message-copy {
+  max-width: 430px;
 }
 
 .success-message h2 {
   margin: 0;
   color: #0b1120;
-  font-size: 28px;
-  font-weight: 850;
-  line-height: 1.15;
+  font-family: var(--font-outfit), var(--font-inter), system-ui, sans-serif;
+  font-size: clamp(36px, 4.8vw, 54px);
+  font-weight: 900;
+  line-height: 0.98;
   letter-spacing: 0;
 }
 
 .success-message p {
   margin: 12px 0 0;
   color: #64748b;
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.6;
+}
+
+@keyframes success-card-enter {
+  0% {
+    opacity: 0;
+    transform: translateY(18px) scale(0.98);
+  }
+
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes success-content-rise {
+  0% {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes success-icon-pop {
+  0% {
+    opacity: 0;
+    transform: scale(0.64);
+  }
+
+  58% {
+    opacity: 1;
+    transform: scale(1.08);
+  }
+
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes success-check-pop {
+  0% {
+    opacity: 0;
+    transform: scale(0.72);
+  }
+
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes success-ring-pulse {
+  0% {
+    opacity: 0.42;
+    transform: scale(0.72);
+  }
+
+  100% {
+    opacity: 0;
+    transform: scale(1.38);
+  }
+}
+
+@media (max-width: 640px) {
+  .success-state {
+    padding: 20px;
+  }
+
+  .success-message-shell {
+    padding: 0;
+  }
+
+  .success-message-icon {
+    width: 74px;
+    height: 74px;
+  }
+}
+
+.pricing-config-state {
+  width: min(100%, 520px);
+  margin: auto;
+  padding: 0;
+  text-align: center;
+}
+
+.pricing-config-state h2 {
+  margin: 0;
+  color: #0b1120;
+  font-family: var(--font-outfit), var(--font-inter), system-ui, sans-serif;
+  font-size: clamp(24px, 4vw, 34px);
+  font-weight: 850;
+  line-height: 1.08;
+  letter-spacing: 0;
+}
+
+.pricing-config-state p {
+  margin: 12px auto 0;
+  max-width: 420px;
+  color: #64748b;
   font-size: 14px;
+  font-weight: 600;
   line-height: 1.55;
 }
 
@@ -941,6 +1151,21 @@ html:has(.onboarding-container.onboarding-two-step) {
 
   .security-badges-track {
     animation: none;
+    transform: none;
+  }
+
+  .success-state,
+  .success-state .success-hero,
+  .success-details-grid,
+  .success-detail-item,
+  .success-icon,
+  .success-icon::after,
+  .success-icon svg,
+  .success-message,
+  .success-message-icon,
+  .success-message-icon svg {
+    animation: none;
+    opacity: 1;
     transform: none;
   }
 }
@@ -1000,7 +1225,7 @@ html:has(.onboarding-container.onboarding-two-step) {
   .onboarding-shell {
     width: 100%;
     max-width: 100%;
-    height: min(100%, var(--onboarding-mobile-shell-max-height));
+    height: 100%;
     max-height: 100%;
     min-height: 0;
     min-width: 0;
@@ -1099,11 +1324,9 @@ html:has(.onboarding-container.onboarding-two-step) {
     height: 100vh;
     height: 100dvh;
     max-height: 100dvh;
-    padding:
-      max(18px, env(safe-area-inset-top, 0px))
+    padding: max(18px, env(safe-area-inset-top, 0px))
       max(18px, env(safe-area-inset-right, 0px))
-      max(18px, env(safe-area-inset-bottom, 0px))
-      18px;
+      max(18px, env(safe-area-inset-bottom, 0px)) 18px;
     display: flex;
     flex-direction: column;
     border-radius: 24px 0 0 24px;
@@ -1215,7 +1438,7 @@ html:has(.onboarding-container.onboarding-two-step) {
     min-width: 0;
     flex: 1 1 auto;
     align-self: stretch;
-    padding: 18px 16px 28px;
+    padding: 16px 16px 18px;
     flex-direction: column;
     align-items: stretch;
     justify-content: flex-start;
@@ -1231,6 +1454,23 @@ html:has(.onboarding-container.onboarding-two-step) {
     display: none;
   }
 
+  .onboarding-stage-whatsapp,
+  .onboarding-stage-whatsapp *,
+  .onboarding-stage-whatsapp .onboarding-main.onboarding-main-embedded,
+  .onboarding-stage-whatsapp .embedded-content,
+  .onboarding-stage-whatsapp .whatsapp-setup-card,
+  .onboarding-stage-whatsapp .signup-content {
+    scrollbar-width: none !important;
+    -ms-overflow-style: none !important;
+  }
+
+  .onboarding-stage-whatsapp::-webkit-scrollbar,
+  .onboarding-stage-whatsapp *::-webkit-scrollbar {
+    width: 0 !important;
+    height: 0 !important;
+    display: none !important;
+  }
+
   .onboarding-right-progress {
     position: relative;
     top: auto;
@@ -1241,7 +1481,7 @@ html:has(.onboarding-container.onboarding-two-step) {
     min-width: 0;
     display: flex;
     gap: 8px;
-    margin: 0 0 30px;
+    margin: 0 0 clamp(14px, 3svh, 22px);
     overflow: hidden;
     box-sizing: border-box;
   }
@@ -1270,6 +1510,10 @@ html:has(.onboarding-container.onboarding-two-step) {
     overflow: visible;
   }
 
+  .onboarding-stage-whatsapp .embedded-content {
+    overflow: hidden;
+  }
+
   .embedded-content--pricing {
     width: 100%;
     max-width: none;
@@ -1283,13 +1527,24 @@ html:has(.onboarding-container.onboarding-two-step) {
     min-height: 0;
     min-width: 0;
     flex: 1 1 auto;
-    overflow: visible;
+    overflow: hidden;
   }
 
   .signup-content {
-    --signup-copy-cta-gap: clamp(16px, 3svh, 24px);
-    --signup-main-stack-lift: clamp(14px, 4svh, 28px);
-    justify-content: stretch;
+    --signup-copy-cta-gap: 0px;
+    --signup-main-stack-lift: 0px;
+    /* Explicit mobile rows keep the CTA near the copy and the legal copy pinned. */
+    display: grid;
+    grid-template-rows: minmax(min-content, 1fr) auto minmax(18px, 0.55fr) auto;
+    align-content: stretch;
+    align-items: center;
+    justify-items: center;
+    gap: 0;
+  }
+
+  .signup-form-header,
+  .signup-form-actions {
+    transform: none;
   }
 
   .signup-form-header {
@@ -1297,41 +1552,67 @@ html:has(.onboarding-container.onboarding-two-step) {
     max-width: 100%;
     min-width: 0;
     margin-bottom: 0;
-    padding-bottom: var(--signup-copy-cta-gap);
+    grid-row: 1;
+    align-self: end;
+    flex: none;
+    padding-bottom: clamp(14px, 3svh, 24px);
+    justify-content: flex-end;
   }
 
   .signup-form-icon {
-    margin-bottom: 20px;
+    min-height: 36px;
+    margin-bottom: 12px;
+    gap: 9px;
+  }
+
+  .signup-form-icon .meta-mark {
+    width: 32px;
+    height: 32px;
+  }
+
+  .signup-form-icon .brand-sync-mark {
+    width: 15px;
+    height: 15px;
+  }
+
+  .signup-form-icon .flowauxi-mark,
+  .signup-form-icon .flowauxi-mark img {
+    width: 34px;
+    height: 34px;
   }
 
   .signup-form-header h2 {
-    font-size: clamp(30px, 8.5vw, 40px);
-    line-height: 1.08;
+    font-size: clamp(28px, 7.7vw, 34px);
+    line-height: 1.04;
     overflow-wrap: anywhere;
   }
 
   .signup-form-header p:not(.signup-eyebrow) {
-    max-width: 360px;
-    font-size: 14px;
-    line-height: 1.55;
+    max-width: 330px;
+    margin-top: 10px;
+    font-size: 12.5px;
+    line-height: 1.48;
+  }
+
+  .signup-eyebrow {
+    margin-bottom: 8px;
+    font-size: 11px;
   }
 
   .signup-form-actions {
     width: 100%;
     max-width: 100%;
     min-width: 0;
-    flex: 0 0 auto;
-    min-height: 0;
-    margin-top: auto;
+    display: contents;
+    margin-top: 0;
     padding-top: 0;
-    overflow-x: hidden;
-    overflow-y: visible;
   }
 
   .whatsapp-connect-btn {
     width: min(100%, 360px);
     max-width: 100%;
-    min-height: 58px;
+    min-height: 52px;
+    grid-row: 2;
     align-self: center;
   }
 
@@ -1339,7 +1620,9 @@ html:has(.onboarding-container.onboarding-two-step) {
     width: 100%;
     max-width: 100%;
     min-width: 0;
-    margin-top: 42px;
+    grid-row: 3;
+    align-self: start;
+    margin-top: clamp(14px, 2.8svh, 20px);
   }
 
   .security-badge-item {
@@ -1349,9 +1632,14 @@ html:has(.onboarding-container.onboarding-two-step) {
 
   .privacy-notice {
     max-width: 340px;
-    margin: 24px auto 0;
-    padding: 0 0 6px;
+    grid-row: 4;
+    align-self: end;
+    justify-self: center;
+    margin: 0 auto;
+    padding: 0 0 max(6px, env(safe-area-inset-bottom, 0px));
     font-size: 11.5px;
+    line-height: 1.45;
+    transform: none;
     overflow-wrap: anywhere;
   }
 }
@@ -1365,7 +1653,7 @@ html:has(.onboarding-container.onboarding-two-step) {
   .onboarding-shell {
     width: 100%;
     max-width: 100%;
-    height: min(100%, var(--onboarding-mobile-shell-max-height));
+    height: 100%;
     min-height: 0;
     border-radius: 22px;
   }
@@ -1389,36 +1677,36 @@ html:has(.onboarding-container.onboarding-two-step) {
 
   .onboarding-right-progress {
     gap: 7px;
-    margin-bottom: 28px;
+    margin-bottom: 18px;
   }
 
   .signup-form-icon {
     width: max-content;
-    min-height: 40px;
+    min-height: 34px;
   }
 
   .signup-form-icon .meta-mark {
+    width: 32px;
+    height: 32px;
+  }
+
+  .signup-form-icon .brand-sync-mark {
+    width: 15px;
+    height: 15px;
+  }
+
+  .signup-form-icon .flowauxi-mark {
     width: 34px;
     height: 34px;
   }
 
-  .signup-form-icon .brand-sync-mark {
-    width: 18px;
-    height: 18px;
-  }
-
-  .signup-form-icon .flowauxi-mark {
-    width: 36px;
-    height: 36px;
-  }
-
   .signup-form-icon .flowauxi-mark img {
-    width: 36px;
-    height: 36px;
+    width: 34px;
+    height: 34px;
   }
 
   .signup-form-header h2 {
-    font-size: clamp(29px, 9.5vw, 36px);
+    font-size: clamp(28px, 8.8vw, 34px);
   }
 
   .signup-form-actions {
@@ -1427,8 +1715,7 @@ html:has(.onboarding-container.onboarding-two-step) {
 
   .security-badges-marquee {
     width: 100%;
-    margin-top: clamp(20px, 5vh, 34px);
-    margin-top: clamp(20px, 5svh, 34px);
+    margin-top: clamp(14px, 3svh, 20px);
   }
 
   .security-badge-item {
@@ -1436,8 +1723,9 @@ html:has(.onboarding-container.onboarding-two-step) {
   }
 
   .privacy-notice {
-    margin: 22px auto 0;
+    margin: 0 auto;
     padding-top: 0;
+    padding-bottom: max(4px, env(safe-area-inset-bottom, 0px));
   }
 
   .success-details-grid {
@@ -1487,12 +1775,13 @@ html:has(.onboarding-container.onboarding-two-step) {
   }
 
   .signup-content {
-    --signup-copy-cta-gap: 14px;
-    --signup-main-stack-lift: 12px;
+    --signup-copy-cta-gap: 0px;
+    --signup-main-stack-lift: 0px;
+    grid-template-rows: minmax(min-content, 1fr) auto minmax(12px, 0.38fr) auto;
   }
 
   .signup-form-header {
-    padding-bottom: var(--signup-copy-cta-gap);
+    padding-bottom: clamp(14px, 2.8svh, 22px);
   }
 
   .signup-form-icon {
@@ -1518,8 +1807,8 @@ html:has(.onboarding-container.onboarding-two-step) {
   }
 
   .signup-eyebrow {
-    margin-bottom: 8px;
-    font-size: 12px;
+    margin-bottom: 7px;
+    font-size: 10.5px;
   }
 
   .signup-form-header h2 {
@@ -1530,7 +1819,7 @@ html:has(.onboarding-container.onboarding-two-step) {
   .signup-form-header p:not(.signup-eyebrow) {
     max-width: 330px;
     margin-top: 10px;
-    font-size: 13px;
+    font-size: 12px;
     line-height: 1.45;
   }
 
@@ -1543,12 +1832,12 @@ html:has(.onboarding-container.onboarding-two-step) {
   }
 
   .security-badges-marquee {
-    margin-top: 18px;
+    display: none;
   }
 
   .privacy-notice {
     max-width: 320px;
-    margin-top: 14px;
+    margin: 0 auto;
     padding-bottom: 0;
     font-size: 10.5px;
     line-height: 1.45;
@@ -1597,12 +1886,13 @@ html:has(.onboarding-container.onboarding-two-step) {
   }
 
   .signup-content {
-    --signup-copy-cta-gap: 8px;
+    --signup-copy-cta-gap: 0px;
     --signup-main-stack-lift: 0px;
+    grid-template-rows: minmax(min-content, 1fr) auto minmax(8px, 0.28fr) auto;
   }
 
   .signup-form-header {
-    padding-bottom: var(--signup-copy-cta-gap);
+    padding-bottom: 12px;
   }
 
   .signup-form-icon {
@@ -1642,7 +1932,221 @@ html:has(.onboarding-container.onboarding-two-step) {
 
   .privacy-notice {
     max-width: 300px;
-    margin-top: 12px;
+    margin: 0 auto;
     font-size: 10px;
+  }
+}
+
+/* ============================================================================
+   Pricing Step Scroll Contract
+   ----------------------------------------------------------------------------
+   The WhatsApp step is intentionally viewport-locked to avoid mobile browser
+   chrome jumping. Pricing is content-heavy, so the fixed shell stays stable
+   while only the right pricing pane owns vertical scrolling.
+   ============================================================================ */
+
+html:has(.onboarding-container.onboarding-stage-pricing),
+body:has(.onboarding-container.onboarding-stage-pricing) {
+  overflow-x: hidden !important;
+  overflow-y: hidden !important;
+  overscroll-behavior: none;
+  scrollbar-width: none !important;
+  scrollbar-color: transparent transparent !important;
+  -ms-overflow-style: none !important;
+}
+
+html:has(.onboarding-container.onboarding-stage-pricing)::-webkit-scrollbar,
+body:has(.onboarding-container.onboarding-stage-pricing)::-webkit-scrollbar,
+html:has(.onboarding-container.onboarding-stage-pricing) *::-webkit-scrollbar,
+body:has(.onboarding-container.onboarding-stage-pricing) *::-webkit-scrollbar {
+  width: 0 !important;
+  height: 0 !important;
+  display: none !important;
+  background: transparent !important;
+}
+
+html:has(
+    .onboarding-container.onboarding-stage-pricing
+  )::-webkit-scrollbar-track,
+body:has(
+    .onboarding-container.onboarding-stage-pricing
+  )::-webkit-scrollbar-track,
+html:has(.onboarding-container.onboarding-stage-pricing)
+  *::-webkit-scrollbar-track,
+body:has(.onboarding-container.onboarding-stage-pricing)
+  *::-webkit-scrollbar-track {
+  display: none !important;
+  background: transparent !important;
+}
+
+html:has(
+    .onboarding-container.onboarding-stage-pricing
+  )::-webkit-scrollbar-thumb,
+body:has(
+    .onboarding-container.onboarding-stage-pricing
+  )::-webkit-scrollbar-thumb,
+html:has(.onboarding-container.onboarding-stage-pricing)
+  *::-webkit-scrollbar-thumb,
+body:has(.onboarding-container.onboarding-stage-pricing)
+  *::-webkit-scrollbar-thumb {
+  display: none !important;
+  background: transparent !important;
+}
+
+.onboarding-container.onboarding-two-step.onboarding-stage-pricing {
+  height: var(--onboarding-viewport-height);
+  min-height: var(--onboarding-viewport-height);
+  max-height: var(--onboarding-viewport-height);
+  align-items: center;
+  overflow: hidden;
+  scrollbar-width: none !important;
+  scrollbar-color: transparent transparent !important;
+  -ms-overflow-style: none !important;
+}
+
+.onboarding-stage-pricing .onboarding-shell {
+  height: calc(
+    var(--onboarding-viewport-height) -
+      max(var(--onboarding-page-padding), var(--onboarding-safe-top)) -
+      max(var(--onboarding-page-padding), var(--onboarding-safe-bottom))
+  );
+  min-height: 0;
+  max-height: 860px;
+  overflow: hidden;
+}
+
+.onboarding-stage-pricing .onboarding-support-panel {
+  position: relative;
+  top: auto;
+  height: calc(100% - 24px);
+  max-height: none;
+  flex-shrink: 0;
+  overflow: hidden;
+}
+
+.onboarding-stage-pricing .onboarding-main.onboarding-main-embedded {
+  height: 100%;
+  min-height: 0;
+  max-height: 100%;
+  padding: 0;
+  align-items: stretch;
+  justify-content: flex-start;
+  overflow: hidden;
+  overscroll-behavior: contain;
+}
+
+.onboarding-stage-pricing .onboarding-main-embedded--pricing {
+  padding: 0;
+}
+
+.onboarding-stage-pricing .embedded-content,
+.onboarding-stage-pricing .embedded-content--pricing {
+  height: 100%;
+  min-height: 0;
+  flex: 1 1 auto;
+  overflow: hidden;
+}
+
+.onboarding-stage-pricing .embedded-content--pricing {
+  width: 100%;
+  max-width: none;
+  padding: clamp(76px, 7vh, 96px) clamp(42px, 5.5vw, 78px)
+    max(56px, calc(env(safe-area-inset-bottom, 0px) + 32px));
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: auto;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+  box-sizing: border-box;
+  -webkit-overflow-scrolling: touch;
+}
+
+.onboarding-stage-pricing,
+.onboarding-stage-pricing *,
+.onboarding-stage-pricing .onboarding-shell,
+.onboarding-stage-pricing .onboarding-main.onboarding-main-embedded,
+.onboarding-stage-pricing .onboarding-main-embedded--pricing,
+.onboarding-stage-pricing .embedded-content,
+.onboarding-stage-pricing .embedded-content--pricing {
+  scrollbar-width: none !important;
+  scrollbar-color: transparent transparent !important;
+  -ms-overflow-style: none !important;
+}
+
+.onboarding-stage-pricing::-webkit-scrollbar,
+.onboarding-stage-pricing *::-webkit-scrollbar,
+.onboarding-stage-pricing .onboarding-shell::-webkit-scrollbar,
+.onboarding-stage-pricing
+  .onboarding-main.onboarding-main-embedded::-webkit-scrollbar,
+.onboarding-stage-pricing .onboarding-main-embedded--pricing::-webkit-scrollbar,
+.onboarding-stage-pricing .embedded-content::-webkit-scrollbar,
+.onboarding-stage-pricing .embedded-content--pricing::-webkit-scrollbar {
+  width: 0 !important;
+  height: 0 !important;
+  display: none !important;
+  background: transparent !important;
+}
+
+.onboarding-stage-pricing::-webkit-scrollbar-track,
+.onboarding-stage-pricing *::-webkit-scrollbar-track,
+.onboarding-stage-pricing::-webkit-scrollbar-thumb,
+.onboarding-stage-pricing *::-webkit-scrollbar-thumb {
+  display: none !important;
+  background: transparent !important;
+}
+
+.onboarding-stage-pricing .onboarding-right-progress {
+  z-index: 5;
+  pointer-events: none;
+}
+
+@media (max-width: 768px) {
+  .onboarding-container.onboarding-two-step.onboarding-stage-pricing {
+    height: var(--onboarding-viewport-height) !important;
+    min-height: var(--onboarding-viewport-height);
+    max-height: var(--onboarding-viewport-height) !important;
+    overflow: hidden;
+  }
+
+  .onboarding-stage-pricing .onboarding-shell {
+    height: calc(
+      var(--onboarding-viewport-height) -
+        max(var(--onboarding-page-padding), var(--onboarding-safe-top)) -
+        max(var(--onboarding-page-padding), var(--onboarding-safe-bottom))
+    );
+    min-height: 0;
+    max-height: 100%;
+    grid-template-rows: auto minmax(0, 1fr);
+    overflow: hidden;
+  }
+
+  .onboarding-stage-pricing .onboarding-support-panel {
+    position: static;
+    height: auto;
+    max-height: none;
+  }
+
+  .onboarding-stage-pricing .onboarding-main.onboarding-main-embedded {
+    height: 100%;
+    min-height: 0;
+    max-height: 100%;
+    padding: 18px 16px 0;
+    overflow: hidden;
+    scrollbar-width: none;
+  }
+
+  .onboarding-stage-pricing .embedded-content--pricing {
+    height: auto;
+    flex: 1 1 auto;
+    padding: 0 0 max(42px, calc(env(safe-area-inset-bottom, 0px) + 28px));
+    overflow-x: hidden;
+    overflow-y: auto;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+
+  .onboarding-stage-pricing .onboarding-main-embedded--pricing {
+    padding: 18px 16px 0;
   }
 }

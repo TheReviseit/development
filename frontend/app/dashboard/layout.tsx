@@ -33,6 +33,7 @@ type Section =
   | "products"
   | "showcase"
   | "forms"
+  | "files"
   | "bot-settings"
   | "preview-bot"
   | "settings"
@@ -51,6 +52,7 @@ const sectionLabels: Record<Section, string> = {
   products: "Products",
   showcase: "Showcase", // ✅ Added showcase
   forms: "Forms", // ✅ Added forms
+  files: "Tools",
   "bot-settings": "AI Settings",
   "preview-bot": "Preview Bot",
   settings: "Settings",
@@ -73,6 +75,7 @@ const getActiveSection = (pathname: string): Section => {
   if (pathname.includes("/orders")) return "orders";
   if (pathname.includes("/products")) return "products";
   if (pathname.includes("/showcase")) return "showcase";
+  if (pathname.includes("/files")) return "files";
   if (pathname.includes("/bot-settings")) return "bot-settings";
   if (pathname.includes("/preview-bot")) return "preview-bot";
   if (pathname.includes("/settings")) return "settings";
@@ -115,6 +118,7 @@ export default function DashboardLayout({
   // ── Domain Subscription Gate ──────────────────────────────────────
   const [subscribedDomains, setSubscribedDomains] = useState<string[]>([
     "dashboard",
+    "files",
   ]);
   const [domainAccessLoaded, setDomainAccessLoaded] = useState(false);
   // ── Billing Status Gate ───────────────────────────────────────────
@@ -225,9 +229,9 @@ export default function DashboardLayout({
       return;
     }
 
-    if (currentDomain === "dashboard") {
+    if (currentDomain === "dashboard" || currentDomain === "files") {
       setSubscribedDomains((prev) =>
-        prev.includes("dashboard") ? prev : [...prev, "dashboard"],
+        prev.includes(currentDomain) ? prev : [...prev, currentDomain],
       );
       setDomainAccessLoaded(true);
       return;
@@ -456,6 +460,7 @@ export default function DashboardLayout({
   const isDomainGated =
     domainAccessLoaded &&
     currentDomain !== "dashboard" &&
+    currentDomain !== "files" &&
     !subscribedDomains.includes(currentDomain);
 
   if (isDomainGated) {

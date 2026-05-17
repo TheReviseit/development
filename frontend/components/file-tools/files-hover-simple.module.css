@@ -1,0 +1,15 @@
+.hoverSimpleScope :global([class*="files-hub-module"][class*="toolCard"]) {
+  box-shadow: none !important;
+  transform: none !important;
+}
+
+.hoverSimpleScope :global([class*="files-hub-module"][class*="toolCard"]:hover) {
+  border-color: #111827 !important;
+  box-shadow: none !important;
+  transform: none !important;
+}
+
+.hoverSimpleScope :global([class*="files-hub-module"][class*="toolCard"]:hover)::before {
+  opacity: 0 !important;
+  animation: none !important;
+}

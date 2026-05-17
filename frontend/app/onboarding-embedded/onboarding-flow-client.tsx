@@ -29,8 +29,15 @@ import {
   getOnboardingCheck,
   getOnboardingDestination,
   invalidateOnboardingCheckCache,
+  OnboardingCheckError,
   recordOnboardingRedirect,
 } from "@/lib/auth/onboarding-check-client";
+import {
+  clearInvalidClientSession,
+  hardRedirectToLogin,
+  isInvalidSessionError,
+  isMissingDbUserError,
+} from "@/lib/auth/client-session-recovery";
 
 // =============================================================================
 // TYPES
@@ -89,32 +96,71 @@ export function OnboardingFlowClient({
   // =========================================================================
 
   const checkOnboardingStatus = useCallback(async (): Promise<boolean> => {
-    try {
-      const data = await getOnboardingCheck({ product: productInfo.id });
-      const destination = getOnboardingDestination(data, productInfo.id);
+    const runCheck = async (attempt = 0): Promise<boolean> => {
+      try {
+        const data = await getOnboardingCheck({
+          product: productInfo.id,
+          force: attempt > 0,
+        });
+        const destination = getOnboardingDestination(data, productInfo.id);
 
-      if (destination.startsWith("/dashboard")) {
-        const loop = recordOnboardingRedirect(destination);
-        if (loop.suppress) {
-          invalidateOnboardingCheckCache(productInfo.id);
-          const refreshed = await getOnboardingCheck({
-            product: productInfo.id,
-            force: true,
-          });
-          if (!getOnboardingDestination(refreshed, productInfo.id).startsWith("/dashboard")) {
-            return false;
+        if (destination.startsWith("/dashboard")) {
+          const loop = recordOnboardingRedirect(destination);
+          if (loop.suppress) {
+            invalidateOnboardingCheckCache(productInfo.id);
+            const refreshed = await getOnboardingCheck({
+              product: productInfo.id,
+              force: true,
+            });
+            if (
+              !getOnboardingDestination(refreshed, productInfo.id).startsWith(
+                "/dashboard",
+              )
+            ) {
+              return false;
+            }
           }
+
+          router.replace(destination);
+          return true;
         }
 
-        router.replace(destination);
-        return true;
-      }
+        return false;
+      } catch (error) {
+        if (isMissingDbUserError(error)) {
+          await clearInvalidClientSession("ONBOARDING_FLOW_USER_NOT_FOUND");
+          hardRedirectToLogin("account_not_found");
+          return true;
+        }
 
-      return false;
-    } catch (error) {
-      console.error("Error checking onboarding status:", error);
-      return false;
-    }
+        if (isInvalidSessionError(error)) {
+          await clearInvalidClientSession("ONBOARDING_FLOW_INVALID_SESSION");
+          hardRedirectToLogin("session_expired");
+          return true;
+        }
+
+        if (
+          error instanceof OnboardingCheckError &&
+          error.status === 503 &&
+          attempt < 2
+        ) {
+          const backoffMs = 700 * Math.pow(2, attempt);
+          await new Promise((resolve) => setTimeout(resolve, backoffMs));
+          return runCheck(attempt + 1);
+        }
+
+        if (error instanceof OnboardingCheckError && error.status === 503) {
+          await clearInvalidClientSession("ONBOARDING_FLOW_CHECK_UNAVAILABLE");
+          hardRedirectToLogin("auth_error");
+          return true;
+        }
+
+        console.error("Error checking onboarding status:", error);
+        return false;
+      }
+    };
+
+    return runCheck();
   }, [productInfo.id, router]);
 
   useEffect(() => {

@@ -37,7 +37,7 @@
  *   - MINOR: new events added
  *   - PATCH: optional param additions
  */
-export const ANALYTICS_SCHEMA_VERSION = "1.0.0";
+export const ANALYTICS_SCHEMA_VERSION = "1.1.0";
 
 // =============================================================================
 // SHARED TYPES
@@ -173,6 +173,16 @@ export type AnalyticsEvent =
       params: {
         domain: string;
         source?: string;
+        pricing_mode?: "paid" | "trial";
+      };
+    }
+  | {
+      name: "pricing_mode_changed";
+      params: {
+        domain: string;
+        from_mode: "paid" | "trial";
+        to_mode: "paid" | "trial";
+        source?: string;
       };
     }
   | {
@@ -182,6 +192,7 @@ export type AnalyticsEvent =
         plan: string;
         price?: number;
         currency?: string;
+        pricing_mode?: "paid" | "trial";
       };
     }
   | {
@@ -190,6 +201,7 @@ export type AnalyticsEvent =
         domain: string;
         plan: string;
         billing_cycle?: "monthly" | "yearly";
+        pricing_mode?: "paid" | "trial";
       };
     }
   | {
@@ -200,6 +212,7 @@ export type AnalyticsEvent =
         value: number;
         currency: string;
         payment_method?: string;
+        pricing_mode?: "paid" | "trial";
       };
     }
   | {
@@ -210,6 +223,7 @@ export type AnalyticsEvent =
         transaction_id: string;
         value: number;
         currency: string;
+        pricing_mode?: "paid" | "trial";
       };
     }
   | {
@@ -219,6 +233,26 @@ export type AnalyticsEvent =
         plan: string;
         error_message?: string;
         error_code?: string;
+        pricing_mode?: "paid" | "trial";
+      };
+    }
+  | {
+      name: "trial_started";
+      params: {
+        domain: string;
+        plan: "starter";
+        pricing_mode: "trial";
+        is_existing?: boolean;
+      };
+    }
+  | {
+      name: "trial_start_failed";
+      params: {
+        domain: string;
+        plan: "starter";
+        pricing_mode: "trial";
+        error_code?: string;
+        error_message?: string;
       };
     }
   | {
@@ -369,11 +403,14 @@ export function isValidEventName(name: string): name is AnalyticsEventName {
     "view_item",
     "view_item_list",
     "pricing_viewed",
+    "pricing_mode_changed",
     "pricing_card_clicked",
     "plan_selected",
     "payment_initiated",
     "payment_success",
     "payment_failed",
+    "trial_started",
+    "trial_start_failed",
     "subscription_activated",
     "whatsapp_connection_started",
     "whatsapp_connected",

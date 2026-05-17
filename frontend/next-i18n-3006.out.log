@@ -1,0 +1,78 @@
+▲ Next.js 16.1.6 (Turbopack)
+- Local:         http://localhost:3006
+- Network:       http://192.168.1.2:3006
+- Environments: .env
+
+✓ Starting...
+✓ Ready in 3.5s
+[DomainResolver] Resolving: host=localhost:3006, port=3006
+[DomainResolver] Resolved: localhost:3006 → files (development)
+[Proxy Global] /hi/files → domain=files, user=anon...
+[DomainResolver] Resolving: host=localhost:3006, port=3006
+[DomainResolver] Resolved: localhost:3006 → files (development)
+[Proxy Global] /ta/files → domain=files, user=anon...
+ GET /ta/files 200 in 3.8s (compile: 1187ms, proxy.ts: 277ms, render: 2.3s)
+[DomainResolver] Resolving: host=localhost:3006, port=3006
+[DomainResolver] Resolved: localhost:3006 → files (development)
+[Proxy Global] / → domain=files, user=anon...
+ GET / 200 in 811ms (compile: 158ms, proxy.ts: 52ms, render: 601ms)
+[DomainResolver] Resolving: host=localhost:3006, port=3006
+[DomainResolver] Resolved: localhost:3006 → files (development)
+[Proxy Global] /ta/files → domain=files, user=anon...
+ GET /ta/files 200 in 338ms (compile: 17ms, proxy.ts: 21ms, render: 300ms)
+[DomainResolver] Resolving: host=localhost:3006, port=3006
+[DomainResolver] Resolved: localhost:3006 → files (development)
+[Proxy Global] /files → domain=files, user=anon...
+[DomainResolver] Resolving: host=localhost:3006, port=3006
+[DomainResolver] Resolved: localhost:3006 → files (development)
+[Proxy Global] /en/files → domain=files, user=anon...
+[DomainResolver] Resolving: host=localhost:3006, port=3006
+[DomainResolver] Resolved: localhost:3006 → files (development)
+[Proxy Global] /en/files → domain=files, user=anon...
+ GET /en/files 200 in 1778ms (compile: 49ms, proxy.ts: 239ms, render: 1490ms)
+ GET /en/files 200 in 4.4s (compile: 2.3s, proxy.ts: 20ms, render: 2.2s)
+[DomainResolver] Resolving: host=localhost:3006, port=3006
+[DomainResolver] Resolved: localhost:3006 → files (development)
+[Proxy Global] /ta/files → domain=files, user=anon...
+ GET /ta/files 200 in 293ms (compile: 12ms, proxy.ts: 24ms, render: 256ms)
+[DomainResolver] Resolving: host=localhost:3006, port=3006
+[DomainResolver] Resolved: localhost:3006 → files (development)
+[Proxy Global] /en/files → domain=files, user=anon...
+ GET /en/files 200 in 158ms (compile: 10ms, proxy.ts: 24ms, render: 124ms)
+[DomainResolver] Resolving: host=localhost:3006, port=3006
+[DomainResolver] Resolved: localhost:3006 → files (development)
+[Proxy Global] / → domain=files, user=anon...
+ GET / 200 in 471ms (compile: 9ms, proxy.ts: 19ms, render: 442ms)
+[DomainResolver] Resolving: host=localhost:3006, port=3006
+[DomainResolver] Resolved: localhost:3006 → files (development)
+[Proxy Global] /ta/files → domain=files, user=anon...
+ GET /ta/files 200 in 248ms (compile: 14ms, proxy.ts: 19ms, render: 215ms)
+[DomainResolver] Resolving: host=localhost:3006, port=3006
+[DomainResolver] Resolved: localhost:3006 → files (development)
+[Proxy Global] /ml/files → domain=files, user=anon...
+ GET /ml/files 200 in 2.0s (compile: 1562ms, proxy.ts: 27ms, render: 424ms)
+[DomainResolver] Resolving: host=localhost:3006, port=3006
+[DomainResolver] Resolved: localhost:3006 → files (development)
+[Proxy Global] /ml/files → domain=files, user=anon...
+ GET /ml/files 200 in 110ms (compile: 8ms, proxy.ts: 12ms, render: 90ms)
+[DomainResolver] Resolving: host=localhost:3006, port=3006
+[DomainResolver] Resolved: localhost:3006 → files (development)
+[Proxy Global] /ml/files/text-to-pdf → domain=files, user=anon...
+ GET /ml/files/text-to-pdf 200 in 1465ms (compile: 1301ms, proxy.ts: 13ms, render: 151ms)
+[DomainResolver] Resolving: host=localhost:3006, port=3006
+[DomainResolver] Resolved: localhost:3006 → files (development)
+[Proxy Global] /ml/files → domain=files, user=anon...
+ GET /ml/files 200 in 93ms (compile: 7ms, proxy.ts: 10ms, render: 76ms)
+[DomainResolver] Resolving: host=localhost:3006, port=3006
+[DomainResolver] Resolved: localhost:3006 → files (development)
+[Proxy Global] /ml/files → domain=files, user=anon...
+ GET /ml/files 200 in 93ms (compile: 7ms, proxy.ts: 12ms, render: 74ms)
+[DomainResolver] Resolving: host=localhost:3006, port=3006
+[DomainResolver] Resolved: localhost:3006 → files (development)
+[Proxy Global] /ml/files → domain=files, user=anon...
+ GET /ml/files 200 in 98ms (compile: 10ms, proxy.ts: 13ms, render: 75ms)
+[DomainResolver] Resolving: host=localhost:3006, port=3006
+[DomainResolver] Resolved: localhost:3006 → files (development)
+[Proxy Global] /en/files → domain=files, user=anon...
+ GET /en/files 200 in 266ms (compile: 12ms, proxy.ts: 15ms, render: 240ms)
+[?25h

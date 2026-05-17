@@ -28,8 +28,6 @@ import {
   getPhoneNumberByPhoneNumberId,
   updatePhoneNumber,
   updateWhatsAppAccount,
-  getActiveWhatsAppAccountByWabaId,
-  getActivePhoneNumberByPhoneNumberId,
 } from "@/lib/supabase/facebook-whatsapp-queries";
 import {
   createGraphAPIClient,
@@ -42,28 +40,38 @@ import {
 } from "@/lib/whatsapp-connection/application/legacy-embedded-signup-adapter";
 import crypto from "crypto";
 
-async function getActiveConnectionConflict(params: {
+async function getConnectionConflictOrResumeAction(params: {
   currentUserId: string;
   wabaId?: string | null;
   phoneNumberId?: string | null;
 }) {
   const [phone, waba] = await Promise.all([
     params.phoneNumberId
-      ? getActivePhoneNumberByPhoneNumberId(params.phoneNumberId)
+      ? getPhoneNumberByPhoneNumberId(params.phoneNumberId)
       : Promise.resolve(null),
-    params.wabaId ? getActiveWhatsAppAccountByWabaId(params.wabaId) : Promise.resolve(null),
+    params.wabaId
+      ? getWhatsAppAccountByWabaId(params.wabaId)
+      : Promise.resolve(null),
   ]);
 
-  const conflict = phone || waba;
-  if (!conflict) return null;
+  const existingPhone = phone && !phone.deleted_at ? phone : null;
+  const existingWaba = waba && !waba.deleted_at ? waba : null;
+  const existing = existingPhone || existingWaba;
+  if (!existing) return null;
 
-  const sameWorkspace = conflict.user_id === params.currentUserId;
-  const isPhoneConflict = Boolean(phone);
+  const sameWorkspace = existing.user_id === params.currentUserId;
+  const isPhoneConflict = Boolean(existingPhone);
+
+  // Same-workspace reconnects are idempotent. Let the route refresh the token
+  // and re-activate the local records instead of blocking the user.
+  if (sameWorkspace) return null;
 
   return NextResponse.json(
     {
       success: false,
-      code: sameWorkspace ? "ALREADY_CONNECTED" : "WHATSAPP_NUMBER_ALREADY_CONNECTED",
+      code: sameWorkspace
+        ? "ALREADY_CONNECTED"
+        : "WHATSAPP_NUMBER_ALREADY_CONNECTED",
       status: "conflict",
       error: sameWorkspace
         ? "This WhatsApp number is already connected to your workspace."
@@ -116,7 +124,7 @@ export async function POST(request: NextRequest) {
     }
 
     const requestedSetupData = body.setupData || {};
-    const preflightConflict = await getActiveConnectionConflict({
+    const preflightConflict = await getConnectionConflictOrResumeAction({
       currentUserId: user.id,
       wabaId: requestedSetupData.wabaId || requestedSetupData.waba_id || null,
       phoneNumberId:
@@ -609,7 +617,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const resolvedConflict = await getActiveConnectionConflict({
+    const resolvedConflict = await getConnectionConflictOrResumeAction({
       currentUserId: user.id,
       wabaId,
       phoneNumberId: phoneNumberId || null,
@@ -685,7 +693,8 @@ export async function POST(request: NextRequest) {
               success: false,
               code: "WHATSAPP_NUMBER_ALREADY_CONNECTED",
               status: "conflict",
-              error: "This WhatsApp Business account is already connected to another workspace.",
+              error:
+                "This WhatsApp Business account is already connected to another workspace.",
             },
             { status: 409 },
           );
@@ -696,7 +705,8 @@ export async function POST(request: NextRequest) {
             business_manager_id: businessManagerId,
             waba_name: wabaDetails.name || existingWABA.waba_name,
             account_review_status:
-              wabaDetails.account_review_status || existingWABA.account_review_status,
+              wabaDetails.account_review_status ||
+              existingWABA.account_review_status,
             business_verification_status:
               wabaDetails.business_verification_status ||
               existingWABA.business_verification_status,
@@ -815,7 +825,8 @@ export async function POST(request: NextRequest) {
           error.message?.includes("duplicate") ||
           error.code?.includes("23505")
         ) {
-          const existingPhone = await getPhoneNumberByPhoneNumberId(phoneNumberId);
+          const existingPhone =
+            await getPhoneNumberByPhoneNumberId(phoneNumberId);
 
           if (existingPhone && existingPhone.user_id !== user.id) {
             return NextResponse.json(
@@ -823,7 +834,8 @@ export async function POST(request: NextRequest) {
                 success: false,
                 code: "WHATSAPP_NUMBER_ALREADY_CONNECTED",
                 status: "conflict",
-                error: "This WhatsApp phone number is already connected to another workspace.",
+                error:
+                  "This WhatsApp phone number is already connected to another workspace.",
               },
               { status: 409 },
             );
@@ -832,7 +844,8 @@ export async function POST(request: NextRequest) {
           if (existingPhone) {
             const updatedPhone = await updatePhoneNumber(existingPhone.id, {
               whatsapp_account_id: storedWABA.id,
-              is_active: false,
+              is_active: true,
+              can_send_messages: true,
               is_primary: true,
             });
             allPhoneNumbers.push(updatedPhone);
@@ -873,7 +886,9 @@ export async function POST(request: NextRequest) {
               error.message?.includes("duplicate") ||
               error.code?.includes("23505")
             ) {
-              const existingPhone = await getPhoneNumberByPhoneNumberId(phone.id);
+              const existingPhone = await getPhoneNumberByPhoneNumberId(
+                phone.id,
+              );
 
               if (existingPhone && existingPhone.user_id !== user.id) {
                 return NextResponse.json(
@@ -881,7 +896,8 @@ export async function POST(request: NextRequest) {
                     success: false,
                     code: "WHATSAPP_NUMBER_ALREADY_CONNECTED",
                     status: "conflict",
-                    error: "This WhatsApp phone number is already connected to another workspace.",
+                    error:
+                      "This WhatsApp phone number is already connected to another workspace.",
                   },
                   { status: 409 },
                 );
@@ -890,7 +906,8 @@ export async function POST(request: NextRequest) {
               if (existingPhone) {
                 const updatedPhone = await updatePhoneNumber(existingPhone.id, {
                   whatsapp_account_id: storedWABA.id,
-                  is_active: false,
+                  is_active: true,
+                  can_send_messages: true,
                   is_primary: allPhoneNumbers.length === 0,
                 });
                 allPhoneNumbers.push(updatedPhone);
@@ -913,104 +930,129 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Register phone numbers with WhatsApp Cloud API
-    // Without this step, the phone number can't receive incoming messages via webhooks.
-    // Meta requires POST /{phone_number_id}/register to activate Cloud API messaging.
+    // Embedded Signup is the connection boundary. Meta has already authorized
+    // the WABA and returned the phone number, so Cloud API phone registration
+    // must not block onboarding.
     let phoneRegistrationResults: {
       phoneNumberId: string;
       registered: boolean;
+      skipped?: boolean;
       errorCode?: number | string;
       errorMessage?: string;
     }[] = [];
-    for (const phone of allPhoneNumbers) {
-      const pnId = phone.phone_number_id;
-      try {
-        console.log(`🔄 [Embedded Signup API] Registering phone ${pnId} with Cloud API...`);
+    const shouldRegisterPhoneOnConnect =
+      process.env.WA_EMBEDDED_SIGNUP_REGISTER_PHONE_ON_CONNECT === "true";
 
-        // Generate a cryptographically strong 6-digit PIN for registration.
-        const registrationPin = String(crypto.randomInt(100000, 1000000));
+    if (shouldRegisterPhoneOnConnect) {
+      for (const phone of allPhoneNumbers) {
+        const pnId = phone.phone_number_id;
+        try {
+          console.log(
+            `🔄 [Embedded Signup API] Registering phone ${pnId} with Cloud API...`,
+          );
 
-        const registerResponse = await fetch(
-          `https://graph.facebook.com/v24.0/${pnId}/register`,
-          {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              Authorization: `Bearer ${longLivedToken}`,
+          // Generate a cryptographically strong 6-digit PIN for registration.
+          const registrationPin = String(crypto.randomInt(100000, 1000000));
+
+          const registerResponse = await fetch(
+            `https://graph.facebook.com/v24.0/${pnId}/register`,
+            {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                Authorization: `Bearer ${longLivedToken}`,
+              },
+              body: JSON.stringify({
+                messaging_product: "whatsapp",
+                pin: registrationPin,
+              }),
             },
-            body: JSON.stringify({
-              messaging_product: "whatsapp",
-              pin: registrationPin,
-            }),
-          },
-        );
+          );
 
-        if (registerResponse.ok) {
-          const registerData = await registerResponse.json();
-          console.log(`✅ [Embedded Signup API] Phone ${pnId} registered:`, registerData);
-          phoneRegistrationResults.push({ phoneNumberId: pnId, registered: true });
-        } else {
-          const errorData = await registerResponse.json().catch(() => ({}));
-          // Error code 33 means already registered — that's fine
-          if (errorData?.error?.code === 33) {
-            console.log(`ℹ️ [Embedded Signup API] Phone ${pnId} already registered`);
-            phoneRegistrationResults.push({ phoneNumberId: pnId, registered: true });
-          } else {
-            console.warn(`⚠️ [Embedded Signup API] Phone ${pnId} registration failed:`, errorData);
+          if (registerResponse.ok) {
+            const registerData = await registerResponse.json();
+            console.log(
+              `✅ [Embedded Signup API] Phone ${pnId} registered:`,
+              registerData,
+            );
             phoneRegistrationResults.push({
               phoneNumberId: pnId,
-              registered: false,
-              errorCode: errorData?.error?.code,
-              errorMessage: errorData?.error?.message || "Meta phone registration failed",
+              registered: true,
             });
+          } else {
+            const errorData = await registerResponse.json().catch(() => ({}));
+            // Error code 33 means already registered — that's fine
+            if (errorData?.error?.code === 33) {
+              console.log(
+                `ℹ️ [Embedded Signup API] Phone ${pnId} already registered`,
+              );
+              phoneRegistrationResults.push({
+                phoneNumberId: pnId,
+                registered: true,
+              });
+            } else {
+              console.warn(
+                `⚠️ [Embedded Signup API] Phone ${pnId} registration failed:`,
+                errorData,
+              );
+              phoneRegistrationResults.push({
+                phoneNumberId: pnId,
+                registered: false,
+                errorCode: errorData?.error?.code,
+                errorMessage:
+                  errorData?.error?.message || "Meta phone registration failed",
+              });
+            }
           }
+        } catch (regError) {
+          console.warn(
+            `⚠️ [Embedded Signup API] Phone ${pnId} registration error:`,
+            regError,
+          );
+          phoneRegistrationResults.push({
+            phoneNumberId: pnId,
+            registered: false,
+            errorMessage:
+              regError instanceof Error
+                ? regError.message
+                : "Meta phone registration failed",
+          });
         }
-      } catch (regError) {
-        console.warn(`⚠️ [Embedded Signup API] Phone ${pnId} registration error:`, regError);
-        phoneRegistrationResults.push({
-          phoneNumberId: pnId,
-          registered: false,
-          errorMessage: regError instanceof Error ? regError.message : "Meta phone registration failed",
-        });
       }
+    } else {
+      phoneRegistrationResults = allPhoneNumbers.map((phone) => ({
+        phoneNumberId: phone.phone_number_id,
+        registered: false,
+        skipped: true,
+        errorMessage: "Cloud API phone registration deferred",
+      }));
+      console.log(
+        "[Embedded Signup API] Cloud API phone registration skipped during onboarding",
+      );
     }
 
     const allRegistered =
+      shouldRegisterPhoneOnConnect &&
       phoneRegistrationResults.length > 0 &&
       phoneRegistrationResults.every((r) => r.registered);
 
-    // Keep DB state aligned with Meta registration. A failed registration must not
-    // make the number look connected to guards or backend message delivery.
+    // Keep onboarding state aligned with Meta authorization. The connected
+    // account is active once Meta returns the WABA/phone and we store them.
     for (const phone of allPhoneNumbers) {
       try {
-        const registration = phoneRegistrationResults.find(
-          (result) => result.phoneNumberId === phone.phone_number_id,
-        );
-        await updatePhoneNumber(phone.id, { is_active: registration?.registered === true });
+        await updatePhoneNumber(phone.id, {
+          is_active: true,
+          can_send_messages: true,
+        });
       } catch (error) {
         console.error("Error updating phone activation state:", error);
       }
     }
 
-    if (!allRegistered) {
-      try {
-        await updateWhatsAppAccount(storedWABA.id, { is_active: false });
-      } catch (error) {
-        console.error("Error deactivating WABA after registration failure:", error);
-      }
-
-      return NextResponse.json(
-        {
-          success: false,
-          code: "PHONE_REGISTRATION_FAILED",
-          status: "needs_user_action",
-          error: "WhatsApp phone registration failed",
-          message:
-            "Meta rejected the phone registration. If two-step verification is enabled, enter the correct PIN in Meta and try again.",
-          phoneRegistration: phoneRegistrationResults,
-        },
-        { status: 422 },
-      );
+    if (storedWABA.is_active !== true) {
+      storedWABA = await updateWhatsAppAccount(storedWABA.id, {
+        is_active: true,
+      });
     }
 
     return NextResponse.json({
@@ -1031,6 +1073,7 @@ export async function POST(request: NextRequest) {
           phoneNumbersCount: allPhoneNumbers.length,
           previousStepCompleted: !!businessManagerId,
           allPhonesRegistered: allRegistered,
+          registrationDeferred: !shouldRegisterPhoneOnConnect || !allRegistered,
         },
       },
     });

@@ -1,0 +1,75 @@
+:root {
+  --color-bg-app: #f6f7fb;
+  --color-bg-subtle: #eef2f7;
+  --color-surface-1: #ffffff;
+  --color-surface-2: #f8fafc;
+  --color-surface-3: #f1f5f9;
+  --color-surface-raised: #ffffff;
+  --color-surface-overlay: rgba(15, 23, 42, 0.48);
+  --color-surface-inverse: #0f172a;
+
+  --color-text-primary: #111827;
+  --color-text-secondary: #475569;
+  --color-text-muted: #64748b;
+  --color-text-subtle: #94a3b8;
+  --color-text-inverse: #f8fafc;
+  --color-text-disabled: #9ca3af;
+
+  --color-border-subtle: rgba(15, 23, 42, 0.08);
+  --color-border-default: rgba(15, 23, 42, 0.12);
+  --color-border-strong: rgba(15, 23, 42, 0.2);
+
+  --color-accent: #16a34a;
+  --color-accent-hover: #15803d;
+  --color-accent-foreground: #ffffff;
+  --color-accent-muted: rgba(22, 163, 74, 0.12);
+  --color-accent-border: rgba(22, 163, 74, 0.32);
+
+  --color-focus-ring: rgba(22, 163, 74, 0.48);
+  --color-selection-bg: rgba(22, 163, 74, 0.22);
+
+  --color-success: #16a34a;
+  --color-success-bg: #dcfce7;
+  --color-success-border: #86efac;
+  --color-success-text: #166534;
+
+  --color-warning: #d97706;
+  --color-warning-bg: #fef3c7;
+  --color-warning-border: #fbbf24;
+  --color-warning-text: #92400e;
+
+  --color-danger: #dc2626;
+  --color-danger-bg: #fee2e2;
+  --color-danger-border: #fca5a5;
+  --color-danger-text: #991b1b;
+
+  --color-info: #2563eb;
+  --color-info-bg: #dbeafe;
+  --color-info-border: #93c5fd;
+  --color-info-text: #1e40af;
+
+  --shadow-xs: 0 1px 2px rgba(15, 23, 42, 0.04);
+  --shadow-sm: 0 1px 3px rgba(15, 23, 42, 0.08);
+  --shadow-md:
+    0 10px 24px rgba(15, 23, 42, 0.08),
+    0 2px 6px rgba(15, 23, 42, 0.04);
+  --shadow-lg:
+    0 18px 48px rgba(15, 23, 42, 0.14),
+    0 8px 18px rgba(15, 23, 42, 0.06);
+  --shadow-focus: 0 0 0 3px var(--color-focus-ring);
+
+  --chart-grid: rgba(100, 116, 139, 0.22);
+  --chart-axis: #64748b;
+  --chart-tooltip-bg: #ffffff;
+  --chart-tooltip-border: rgba(15, 23, 42, 0.12);
+  --chart-cursor: rgba(22, 163, 74, 0.08);
+  --chart-series-1: #16a34a;
+  --chart-series-2: #2563eb;
+  --chart-series-3: #7c3aed;
+  --chart-series-4: #d97706;
+  --chart-series-5: #0891b2;
+
+  --scrollbar-track: transparent;
+  --scrollbar-thumb: rgba(100, 116, 139, 0.36);
+  --scrollbar-thumb-hover: rgba(71, 85, 105, 0.62);
+}

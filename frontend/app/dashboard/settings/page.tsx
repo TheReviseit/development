@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useAuth } from "@/app/components/auth/AuthProvider";
+import { ThemePreferenceCard } from "@/app/dashboard/components/settings/ThemePreferenceCard";
 import styles from "./settings.module.css";
 
 export default function SettingsPage() {
@@ -79,6 +80,8 @@ export default function SettingsPage() {
           Manage your account and store preferences
         </p>
       </div>
+
+      <ThemePreferenceCard />
 
       {/* Store Link Card */}
       <div className={styles.settingsCard}>

@@ -146,6 +146,18 @@ const DOMAIN_MEASUREMENT_MAP: Record<string, DomainAnalyticsConfig> = {
     hostname: "booking.flowauxi.com",
     streamName: "Flowauxi Booking",
   },
+  "tools.flowauxi.com": {
+    measurementId: "G-F02P5002S8",
+    domain: "files",
+    hostname: "tools.flowauxi.com",
+    streamName: "Flowauxi Tools",
+  },
+  "files.flowauxi.com": {
+    measurementId: "G-F02P5002S8",
+    domain: "files",
+    hostname: "tools.flowauxi.com",
+    streamName: "Flowauxi Tools",
+  },
 };
 
 /**
@@ -159,6 +171,7 @@ const DEV_PORT_DOMAIN_MAP: Record<string, string> = {
   "3003": "marketing.flowauxi.com",
   "3004": "api.flowauxi.com",
   "3005": "booking.flowauxi.com",
+  "3006": "tools.flowauxi.com",
 };
 
 /** Default config when domain cannot be resolved */
@@ -188,6 +201,7 @@ export const CROSS_DOMAIN_CONFIG: CrossDomainConfig = {
     "pages.flowauxi.com",
     "api.flowauxi.com",
     "booking.flowauxi.com",
+    "tools.flowauxi.com",
   ],
   acceptIncoming: true,
   decorateForms: true,

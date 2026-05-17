@@ -12,6 +12,7 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
+import createIntlMiddleware from "next-intl/middleware";
 import {
   evaluateDomainAccess,
   applyDecision,
@@ -20,6 +21,7 @@ import {
 import { resolveDomain, getLandingRoute } from "@/lib/domain/config";
 import { getProductByDomain } from "@/lib/product/registry";
 import { domainResolver, DomainContext } from "@/lib/domain/resolver";
+import { routing } from "@/lib/i18n/routing";
 
 // =============================================================================
 // CONSTANTS - Single Source of Truth
@@ -27,6 +29,10 @@ import { domainResolver, DomainContext } from "@/lib/domain/resolver";
 
 const CANONICAL_DOMAIN = "www.flowauxi.com";
 const CANONICAL_PROTOCOL = "https:";
+const filesLocalePathPattern = /^\/(en|ta|hi|ml|kn|te)\/(?:files|tools)(?:\/|$)/;
+const legacyFilesPathPattern = /^\/files(?=\/|$)/;
+const legacyLocalizedFilesPathPattern = /^\/(en|ta|hi|ml|kn|te)\/files(?=\/|$)/;
+const intlProxy = createIntlMiddleware(routing);
 
 // Billing Security Configuration
 const BILLING_CONFIG = {
@@ -647,10 +653,20 @@ async function processRequest(
   if (isRSCRequest) {
     const userType = getUserTypeFromCookies(request);
     const requiredType = getRequiredUserType(pathname);
+    const localeMatch = pathname.match(filesLocalePathPattern);
+    const requestHeaders = new Headers(request.headers);
+    if (localeMatch?.[1]) {
+      requestHeaders.set("x-next-intl-locale", localeMatch[1]);
+      requestHeaders.set("x-flowauxi-locale", localeMatch[1]);
+    }
 
     // For RSC requests, never redirect — let client handle auth state
     // This prevents the race condition where cookie hasn't propagated yet
-    const response = NextResponse.next();
+    const response = NextResponse.next({
+      request: {
+        headers: requestHeaders,
+      },
+    });
     response.headers.set(
       "Cache-Control",
       "no-store, no-cache, must-revalidate, proxy-revalidate"
@@ -672,6 +688,18 @@ async function processRequest(
   const resolvedDomain = resolveDomain(hostname, port);
   const isApiPath = pathname.startsWith("/api/") || pathname === "/api";
   const domainDecision = evaluateDomainAccess(request);
+
+  const filesI18nResponse = handleFilesI18nRouting(
+    request,
+    pathname,
+    resolvedDomain,
+    domainDecision.seo.canonical,
+    hostname,
+    port,
+  );
+  if (filesI18nResponse) {
+    return filesI18nResponse;
+  }
 
   if (pathname === "/") {
     const domain = resolveDomain(hostname, port);
@@ -724,6 +752,7 @@ async function processRequest(
       "/api/v1",
       "/api/whatsapp",
       "/api/booking",
+      "/api/file-tools",
       "/api/showcase",
       "/api/forms/public",
       "/api/forms/workspace",
@@ -777,6 +806,8 @@ async function processRequest(
     "/offline",
     "/docs",
     "/booking",
+    "/files",
+    "/tools",
     "/showcase",
     "/onboarding-embedded",
     "/manifest.webmanifest",
@@ -822,9 +853,9 @@ async function processRequest(
   }
 
   if (isPublic) {
-    if (pathname === "/login" && userType === "normal") {
-      return redirectToOnboardingGate();
-    }
+    // Do not redirect /login from a cookie-only signal. A Firebase session
+    // cookie can outlive the Supabase tenant row after admin/user deletion, so
+    // the login client must be allowed to validate and clear stale sessions.
     if (pathname === "/console/login" && userType === "console") {
       return NextResponse.redirect(new URL("/console", request.url));
     }
@@ -866,6 +897,51 @@ async function processRequest(
     hostname,
     port,
   );
+}
+
+function handleFilesI18nRouting(
+  request: NextRequest,
+  pathname: string,
+  resolvedDomain: ProductContext | string,
+  canonical: string,
+  hostname: string,
+  port: string,
+): NextResponse | null {
+  const legacyRedirectPath = getLegacyFilesRedirectPath(pathname);
+  if (legacyRedirectPath) {
+    const redirectUrl = request.nextUrl.clone();
+    redirectUrl.pathname = legacyRedirectPath;
+    const response = NextResponse.redirect(redirectUrl, 308);
+    response.headers.set("x-redirect-reason", "legacy-files-to-tools");
+    return addProductHeaders(response, resolvedDomain, canonical, hostname, port);
+  }
+
+  const isFilesPath =
+    pathname === "/files" ||
+    pathname.startsWith("/files/") ||
+    pathname === "/tools" ||
+    pathname.startsWith("/tools/") ||
+    filesLocalePathPattern.test(pathname);
+
+  if (!isFilesPath) {
+    return null;
+  }
+
+  const response = intlProxy(request);
+  response.headers.set("x-flowauxi-i18n-scope", "files");
+  return addProductHeaders(response, resolvedDomain, canonical, hostname, port);
+}
+
+function getLegacyFilesRedirectPath(pathname: string): string | null {
+  if (pathname === "/files" || pathname.startsWith("/files/")) {
+    return pathname.replace(legacyFilesPathPattern, "/tools");
+  }
+
+  if (legacyLocalizedFilesPathPattern.test(pathname)) {
+    return pathname.replace(legacyLocalizedFilesPathPattern, (_match, locale: string) => `/${locale}/tools`);
+  }
+
+  return null;
 }
 
 // =============================================================================

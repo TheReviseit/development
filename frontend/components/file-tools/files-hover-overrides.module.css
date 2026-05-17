@@ -1,0 +1,60 @@
+.hoverScope :global([class*="files-hub-module"][class*="toolCard"]) {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  box-shadow: none !important;
+  transform: none !important;
+  transition:
+    border-color 160ms ease,
+    background 160ms ease;
+}
+
+.hoverScope :global([class*="files-hub-module"][class*="toolCard"])::before {
+  content: "";
+  position: absolute;
+  inset: -1px;
+  z-index: -1;
+  border-radius: inherit;
+  padding: 1px;
+  background: linear-gradient(120deg, #ef4444, #2563eb, #16a34a, #111827, #ef4444);
+  background-size: 320% 100%;
+  opacity: 0;
+  transition: opacity 180ms ease;
+  -webkit-mask:
+    linear-gradient(#ffffff 0 0) content-box,
+    linear-gradient(#ffffff 0 0);
+  -webkit-mask-composite: xor;
+  mask:
+    linear-gradient(#ffffff 0 0) content-box,
+    linear-gradient(#ffffff 0 0);
+  mask-composite: exclude;
+}
+
+.hoverScope :global([class*="files-hub-module"][class*="toolCard"]:hover) {
+  border-color: #111827;
+  box-shadow: none !important;
+  transform: none !important;
+}
+
+.hoverScope :global([class*="files-hub-module"][class*="toolCard"]:hover)::before {
+  opacity: 0;
+  animation: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hoverScope :global([class*="files-hub-module"][class*="toolCard"]),
+  .hoverScope :global([class*="files-hub-module"][class*="toolCard"])::before {
+    transition: none;
+    animation: none;
+  }
+}
+
+@keyframes premiumCardBorderFlow {
+  from {
+    background-position: 0% 50%;
+  }
+
+  to {
+    background-position: 320% 50%;
+  }
+}

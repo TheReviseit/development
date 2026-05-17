@@ -75,6 +75,7 @@ function ActivatePageContent() {
           dashboard: "/dashboard",
           api: "/dashboard/api",
           booking: "/dashboard/appointments",
+          files: "/dashboard/files",
         };
 
         setTimeout(() => {

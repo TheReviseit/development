@@ -49,7 +49,8 @@ export type ProductDomain =
   | 'marketing' 
   | 'api' 
   | 'dashboard' 
-  | 'booking';
+  | 'booking'
+  | 'files';
 
 export interface DomainContext {
   domain: ProductDomain;
@@ -79,6 +80,7 @@ const DEV_PORT_MAP: Record<string, ProductDomain> = {
   '3003': 'marketing',
   '3004': 'api',
   '3005': 'booking',
+  '3006': 'files',
 };
 
 const PRODUCTION_HOSTNAME_MAP: Record<string, ProductDomain> = {
@@ -87,6 +89,8 @@ const PRODUCTION_HOSTNAME_MAP: Record<string, ProductDomain> = {
   'marketing.flowauxi.com': 'marketing',
   'api.flowauxi.com': 'api',
   'booking.flowauxi.com': 'booking',
+  'tools.flowauxi.com': 'files',
+  'files.flowauxi.com': 'files',
   'flowauxi.com': 'dashboard',
   'www.flowauxi.com': 'dashboard',
 };
@@ -101,7 +105,7 @@ const DOMAIN_PATTERNS = [
 
 // Valid domains set for validation
 const VALID_DOMAINS: Set<string> = new Set([
-  'shop', 'showcase', 'marketing', 'api', 'dashboard', 'booking'
+  'shop', 'showcase', 'marketing', 'api', 'dashboard', 'booking', 'files'
 ]);
 
 // =============================================================================
@@ -308,6 +312,7 @@ export class DomainResolver {
       'api': 'tenant_api_001',
       'dashboard': 'tenant_dashboard_001',
       'booking': 'tenant_booking_001',
+      'files': 'tenant_files_001',
     };
     return tenantMap[domain];
   }

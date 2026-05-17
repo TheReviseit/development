@@ -1,0 +1,53 @@
+.typographyScope :global([class*="files-product-chrome-module"][class*="brandName"]) {
+  font-size: 18px;
+}
+
+.typographyScope :global([class*="files-product-chrome-module"][class*="navLink"]),
+.typographyScope :global([class*="files-product-chrome-module"][class*="secondaryAction"]),
+.typographyScope :global([class*="files-product-chrome-module"][class*="primaryAction"]) {
+  font-size: 14px;
+}
+
+.typographyScope :global(nav[class*="files-hub-module"][class*="categoryPills"] [data-files-category-pill]) {
+  font-size: 16px;
+}
+
+.typographyScope :global([class*="files-hub-module"][class*="toolName"]) {
+  font-size: 22px;
+}
+
+.typographyScope :global([class*="files-hub-module"][class*="toolDescription"]) {
+  font-size: 15px;
+}
+
+@media (max-width: 980px) {
+  .typographyScope :global(nav[class*="files-hub-module"][class*="categoryPills"] [data-files-category-pill]) {
+    font-size: 14px;
+  }
+}
+
+@media (max-width: 640px) {
+  .typographyScope :global([class*="files-hub-module"][class*="toolName"]) {
+    font-size: 21px;
+  }
+}
+
+@media (max-width: 380px) {
+  .typographyScope :global(nav[class*="files-hub-module"][class*="categoryPills"] [data-files-category-pill]) {
+    font-size: 13px;
+  }
+
+  .typographyScope :global([class*="files-hub-module"][class*="toolName"]) {
+    font-size: 20px;
+  }
+
+  .typographyScope :global([class*="files-hub-module"][class*="toolDescription"]) {
+    font-size: 14px;
+  }
+}
+
+@media (max-width: 330px) {
+  .typographyScope :global(nav[class*="files-hub-module"][class*="categoryPills"] [data-files-category-pill]) {
+    font-size: 12.5px;
+  }
+}

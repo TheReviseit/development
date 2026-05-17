@@ -1,0 +1,57 @@
+.radiusScope :global([class*="files-product-chrome-module"][class*="brandIcon"]),
+.radiusScope :global([class*="files-product-chrome-module"][class*="navLink"]),
+.radiusScope :global([class*="files-product-chrome-module"][class*="secondaryAction"]),
+.radiusScope :global([class*="files-product-chrome-module"][class*="primaryAction"]),
+.radiusScope :global([class*="files-product-chrome-module"][class*="iconAction"]),
+.radiusScope :global([class*="files-hub-module"][class*="actionLink"]),
+.radiusScope :global([class*="file-tools-module"][class*="iconButton"]),
+.radiusScope :global([class*="file-tools-module"][class*="primaryButton"]),
+.radiusScope :global([class*="file-tools-module"][class*="secondaryButton"]),
+.radiusScope :global([class*="file-tools-module"][class*="input"]),
+.radiusScope :global([class*="file-tools-module"][class*="textarea"]),
+.radiusScope :global([class*="file-tools-module"][class*="select"]),
+.radiusScope :global([class*="file-tools-module"][class*="numberInput"]),
+.radiusScope :global([class*="file-tools-module"][class*="segmentButton"]),
+.radiusScope :global([class*="file-tools-module"][class*="historyItem"]),
+.radiusScope :global([class*="file-tools-module"][class*="mobileTab"]) {
+  border-radius: 12px;
+}
+
+.radiusScope :global([class*="files-hub-module"][class*="toolCard"]),
+.radiusScope :global([class*="file-tools-module"][class*="panel"]),
+.radiusScope :global([class*="file-tools-module"][class*="previewStage"]) {
+  border-radius: 18px;
+}
+
+.radiusScope :global([class*="files-hub-module"][class*="placeholderPanel"]) {
+  border-radius: 16px;
+}
+
+.radiusScope :global([class*="files-hub-module"][class*="iconWrap"]),
+.radiusScope :global([class*="file-tools-module"][class*="page"]) {
+  border-radius: 10px;
+}
+
+.radiusScope :global(footer[class*="files-product-chrome-module"]) {
+  border-top-color: #111827;
+  background: #000000;
+}
+
+.radiusScope :global(footer[class*="files-product-chrome-module"] [class*="footerLogo"]),
+.radiusScope :global(footer[class*="files-product-chrome-module"] [class*="footerHeading"]) {
+  color: #ffffff;
+}
+
+.radiusScope :global(footer[class*="files-product-chrome-module"] [class*="footerCopy"]),
+.radiusScope :global(footer[class*="files-product-chrome-module"] [class*="footerColumn"] a),
+.radiusScope :global(footer[class*="files-product-chrome-module"] [class*="footerBottom"]) {
+  color: #aab6c8;
+}
+
+.radiusScope :global(footer[class*="files-product-chrome-module"] [class*="footerBottom"]) {
+  border-top-color: #1f2937;
+}
+
+.radiusScope :global(footer[class*="files-product-chrome-module"] [class*="footerColumn"] a:hover) {
+  color: #ffffff;
+}

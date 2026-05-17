@@ -1,0 +1,366 @@
+{
+  "common": {
+    "download": "డౌన్‌లోడ్",
+    "filesTools": "సాధనాలు",
+    "generatePdf": "PDF సృష్టించు",
+    "history": "చరిత్ర",
+    "language": "భాష",
+    "login": "లాగిన్",
+    "settings": "సెట్టింగ్స్",
+    "signUp": "సైన్ అప్"
+  },
+  "navbar": {
+    "filesHome": "Flowauxi సాధనాల హోమ్",
+    "quickTools": "త్వరిత సాధనాలు",
+    "tools": "సాధనాలు",
+    "openSearch": "సాధనాల వెతుకులాట తెరవండి",
+    "closeSearch": "సాధనాల వెతుకులాట మూసివేయండి",
+    "openNavigation": "సాధనాల నావిగేషన్ తెరవండి",
+    "closeNavigation": "సాధనాల నావిగేషన్ మూసివేయండి",
+    "searchButtonAria": "సాధనాలు వెతకండి",
+    "nav": {
+      "mergePdf": "PDF కలపండి",
+      "splitPdf": "PDF విడగొట్టు",
+      "compressPdf": "PDF కుదించు",
+      "convertPdf": "PDF మార్చు",
+      "allTools": "అన్ని PDF సాధనాలు",
+      "allToolsShort": "అన్ని సాధనాలు"
+    },
+    "mega": {
+      "eyebrow": "Flowauxi సాధనాలు",
+      "title": "వేగమైన డాక్యుమెంట్ పనికి PDF సాధనాలు.",
+      "copy": "ఒకే శుభ్రమైన వర్క్‌స్పేస్ నుంచి ఫైళ్లను మార్చండి, నిర్వహించండి, రక్షించండి, మెరుగుపరచండి.",
+      "viewAllTools": "అన్ని సాధనాలను చూడండి",
+      "sections": {
+        "organizePdf": "PDF నిర్వహించండి",
+        "optimizePdf": "PDF మెరుగుపరచండి",
+        "convertToPdf": "PDF గా మార్చండి",
+        "convertFromPdf": "PDF నుంచి మార్చండి",
+        "editPdf": "PDF సవరించండి",
+        "pdfSecurity": "PDF భద్రత",
+        "pdfIntelligence": "PDF ఇంటెలిజెన్స్"
+      },
+      "tools": {
+        "mergePdf": "PDF కలపండి",
+        "splitPdf": "PDF విడగొట్టు",
+        "compressPdf": "PDF కుదించు",
+        "convertPdf": "PDF మార్చు",
+        "allTools": "అన్ని PDF సాధనాలు",
+        "allToolsShort": "అన్ని సాధనాలు",
+        "organizePdf": "PDF నిర్వహించండి",
+        "optimizePdf": "PDF మెరుగుపరచండి",
+        "convertToPdf": "PDF గా మార్చండి",
+        "convertFromPdf": "PDF నుంచి మార్చండి",
+        "editPdf": "PDF సవరించండి",
+        "pdfSecurity": "PDF భద్రత",
+        "pdfIntelligence": "PDF ఇంటెలిజెన్స్",
+        "removePages": "పేజీలు తొలగించు",
+        "extractPages": "పేజీలు తీసుకోండి",
+        "scanToPdf": "స్కాన్ చేసి PDF",
+        "repairPdf": "PDF రిపేర్ చేయండి",
+        "ocrPdf": "OCR PDF",
+        "textToPdf": "టెక్స్ట్ నుంచి PDF",
+        "jpgToPdf": "JPG నుంచి PDF",
+        "wordToPdf": "Word నుంచి PDF",
+        "powerPointToPdf": "PowerPoint నుంచి PDF",
+        "excelToPdf": "Excel నుంచి PDF",
+        "htmlToPdf": "HTML నుంచి PDF",
+        "pdfToJpg": "PDF నుంచి JPG",
+        "pdfToWord": "PDF నుంచి Word",
+        "pdfToPowerPoint": "PDF నుంచి PowerPoint",
+        "pdfToExcel": "PDF నుంచి Excel",
+        "pdfToPdfA": "PDF నుంచి PDF/A",
+        "rotatePdf": "PDF తిప్పండి",
+        "addPageNumbers": "పేజీ నంబర్లు జోడించండి",
+        "addWatermark": "వాటర్‌మార్క్ జోడించండి",
+        "cropPdf": "PDF కత్తిరించండి",
+        "pdfForms": "PDF ఫారమ్‌లు",
+        "unlockPdf": "PDF అన్లాక్ చేయండి",
+        "protectPdf": "PDF రక్షించండి",
+        "signPdf": "PDF సంతకం",
+        "redactPdf": "PDF దాచండి",
+        "comparePdf": "PDF పోల్చండి",
+        "aiSummarizer": "AI సారాంశం",
+        "translatePdf": "PDF అనువదించండి"
+      }
+    },
+    "mobile": {
+      "filesNavigation": "సాధనాల నావిగేషన్",
+      "searchTools": "సాధనాలు వెతకండి",
+      "searchPlaceholder": "సాధనాలు వెతకండి",
+      "searchPdfTools": "PDF సాధనాలు వెతకండి",
+      "searchResults": "వెతుకులాట ఫలితాలు",
+      "popular": "ప్రాచుర్యం",
+      "noMatchingTools": "సరిపోలే సాధనాలు లేవు."
+    }
+  },
+  "files": {
+    "hub": {
+      "title": "PDFలతో పని చేయడానికి కావాల్సిన అన్ని టూల్స్ ఒకే చోట",
+      "description": "PDFలను మెర్జ్, స్ప్లిట్, కంస్రెస్, కన్వర్ట్, ప్రొటెక్ట్, సైన్ మరియు ఆర్గనైజ్ చేయడానికి వేగమైన టూల్స్.",
+      "actions": {
+        "history": "చరిత్ర",
+        "settings": "సెట్టింగ్స్"
+      },
+      "aria": {
+        "categories": "సాధనాల వర్గాలు",
+        "tools": "సాధనాలు",
+        "openTool": "{name} తెరవండి"
+      },
+      "categories": {
+        "all": "అన్నీ",
+        "workflows": "వర్క్‌ఫ్లోలు",
+        "organizePdf": "PDF ఆర్గనైజ్",
+        "optimizePdf": "PDF ఆప్టిమైజ్",
+        "convertPdf": "PDF కన్వర్ట్",
+        "editPdf": "PDF ఎడిట్",
+        "pdfSecurity": "PDF భద్రత",
+        "pdfIntelligence": "PDF ఇంటెలిజెన్స్"
+      },
+      "categoriesShort": {
+        "all": "అన్నీ",
+        "workflows": "ఫ్లో",
+        "organizePdf": "ఆర్గనైజ్",
+        "optimizePdf": "ఆప్టిమైజ్",
+        "convertPdf": "కన్వర్ట్",
+        "editPdf": "ఎడిట్",
+        "pdfSecurity": "భద్రత",
+        "pdfIntelligence": "AI PDF"
+      }
+    },
+    "comingSoon": {
+      "back": "సాధనాలు",
+      "eyebrow": "త్వరలో",
+      "planned": "ప్లాన్ చేయబడింది",
+      "openTextToPdf": "టెక్స్ట్ నుంచి PDF తెరవండి"
+    },
+    "textToPdf": {
+      "toolbar": {
+        "currentLocation": "ప్రస్తుత స్థానం",
+        "dashboard": "డాష్‌బోర్డ్",
+        "files": "సాధనాలు",
+        "title": "టెక్స్ట్ నుంచి PDF",
+        "authenticated": "ఆటోసేవ్, చరిత్ర మరియు సురక్షిత డౌన్‌లోడ్‌లు యాక్టివ్‌గా ఉన్నాయి.",
+        "guest": "గెస్ట్ ఎక్స్‌పోర్ట్‌లు ప్రైవేట్; అవి స్వయంగా గడువు ముగుస్తాయి."
+      },
+      "editor": {
+        "panel": "ఎడిటర్",
+        "formatting": "టెక్స్ట్ ఫార్మాటింగ్",
+        "paragraphAlignment": "ప్యారాగ్రాఫ్ అలైన్‌మెంట్",
+        "documentTitle": "డాక్యుమెంట్ శీర్షిక",
+        "untitled": "పేరులేని డాక్యుమెంట్",
+        "textareaAria": "PDFగా మార్చాల్సిన టెక్స్ట్",
+        "placeholder": "ఏదైనా టైప్ చేయండి...",
+        "bold": "బోల్డ్",
+        "italic": "ఇటాలిక్",
+        "underline": "అండర్‌లైన్",
+        "heading1": "హెడింగ్ 1",
+        "heading2": "హెడింగ్ 2",
+        "bulletList": "బులెట్ జాబితా",
+        "numberedList": "నంబర్ జాబితా",
+        "alignLeft": "ఎడమకు అలైన్",
+        "alignCenter": "మధ్యకు అలైన్",
+        "alignRight": "కుడికి అలైన్",
+        "justify": "జస్టిఫై",
+        "pageBreak": "పేజ్ బ్రేక్",
+        "headingPlaceholder": "శీర్షిక",
+        "listItemPlaceholder": "జాబితా అంశం"
+      },
+      "settings": {
+        "panel": "సెట్టింగ్స్",
+        "pageSize": "పేజ్ సైజ్",
+        "orientation": "ఓరియెంటేషన్",
+        "font": "ఫాంట్",
+        "fontSize": "ఫాంట్ సైజ్",
+        "margins": "మార్జిన్లు",
+        "lineHeight": "లైన్ హైట్",
+        "header": "హెడర్",
+        "headerText": "హెడర్ టెక్స్ట్",
+        "footer": "ఫుటర్",
+        "footerText": "ఫుటర్ టెక్స్ట్",
+        "pageNumbers": "పేజ్ నంబర్లు",
+        "portrait": "పోర్ట్రెయిట్",
+        "landscape": "ల్యాండ్‌స్కేప్",
+        "autoFont": "ఆటో (Noto + HarfBuzz)",
+        "marginPresets": {
+          "compact": "కాంపాక్ట్",
+          "standard": "ప్రామాణికం",
+          "spacious": "విస్తృతం"
+        },
+        "marginSides": {
+          "top": "పై",
+          "right": "కుడి",
+          "bottom": "కింది",
+          "left": "ఎడమ"
+        }
+      },
+      "export": {
+        "aria": "PDF ఎక్స్‌పోర్ట్",
+        "chars": "{count} / {limit} అక్షరాలు",
+        "pages": "{count, plural, one {# పేజీ} other {# పేజీలు}}",
+        "saving": "సేవ్ అవుతోంది",
+        "saved": "సేవ్ అయింది",
+        "draftOffline": "డ్రాఫ్ట్ ఆఫ్‌లైన్",
+        "draftReady": "డ్రాఫ్ట్ సిద్ధంగా ఉంది",
+        "generate": "PDF సృష్టించు",
+        "download": "{size} డౌన్‌లోడ్",
+        "share": "పంచుకోండి",
+        "shareText": "Flowauxi సాధనాల నుండి ఎగుమతి చేసిన PDF.",
+        "shareCopied": "షేర్ లింక్ కాపీ చేయబడింది",
+        "shareUnavailable": "ఈ బ్రౌజర్‌లో షేరింగ్ అందుబాటులో లేదు.",
+        "shareFailed": "ఈ PDFని పంచుకోలేకపోయాం.",
+        "emptyDocument": "PDF సృష్టించే ముందు టెక్స్ట్ జోడించండి.",
+        "characterLimitExceeded": "అక్షర పరిమితి మించిపోయింది",
+        "readyUntil": "PDF {date} వరకు సిద్ధంగా ఉంది"
+      },
+      "preview": {
+        "panel": "ప్రివ్యూ",
+        "pageCount": "{count, plural, one {# పేజీ} other {# పేజీలు}}",
+        "blockCount": "{count, plural, one {# విభాగం} other {# విభాగాలు}}",
+        "preparing": "ప్రివ్యూ సిద్ధమవుతోంది",
+        "pageAria": "PDF ప్రివ్యూ పేజీ {number}",
+        "pageNumber": "పేజీ {number}"
+      },
+      "mobileTabs": {
+        "aria": "టెక్స్ట్ నుంచి PDF ప్యానెల్లు",
+        "edit": "సవరణ",
+        "preview": "ప్రివ్యూ",
+        "settings": "సెట్టింగ్‌లు",
+        "history": "చరిత్ర"
+      },
+      "history": {
+        "panel": "చరిత్ర",
+        "signInPrompt": "సెషన్‌ల మధ్య డాక్యుమెంట్ చరిత్రను నిల్వ చేయడానికి సైన్ ఇన్ చేయండి.",
+        "loading": "చరిత్ర లోడ్ అవుతోంది",
+        "empty": "ఇంకా ఎగుమతి చేసిన డాక్యుమెంట్లు లేవు.",
+        "meta": "{size} · {date} · {count} డౌన్‌లోడ్‌లు",
+        "download": "డౌన్‌లోడ్"
+      }
+    },
+    "footer": {
+      "brandAria": "Flowauxi సాధనాల హోమ్",
+      "description": "Flowauxi సాధనాలు PDFలు, డాక్యుమెంట్లు, చిత్రాలు మరియు AI ఫైల్ పనుల కోసం ఆధునిక సమగ్ర వర్క్‌స్పేస్. వేగం, సరళత, ఉత్పాదకత కోసం రూపొందించబడింది.",
+      "columns": {
+        "tools": "సాధనాలు",
+        "pdf": "PDF",
+        "workspace": "వర్క్‌స్పేస్"
+      },
+      "links": {
+        "dashboard": "డ్యాష్‌బోర్డ్",
+        "history": "చరిత్ర",
+        "settings": "సెట్టింగ్‌లు"
+      },
+      "trust": {
+        "privateExports": "ప్రైవేట్ అతిథి ఎగుమతులు",
+        "moreTools": "మరిన్ని సాధనాలు వస్తున్నాయి"
+      }
+    }
+  },
+  "tools": {
+    "catalog": {
+      "text_to_pdf": {
+        "name": "టెక్స్ట్ నుంచి PDF",
+        "description": "రిచ్ టెక్స్ట్, జాబితాలు, చిహ్నాలు మరియు ఫార్మాట్ చేసిన కంటెంట్ నుంచి మెరుగైన PDF డాక్యుమెంట్‌లను సృష్టించండి."
+      },
+      "pdf_to_docx": {
+        "name": "PDF నుంచి Word",
+        "description": "PDF ఫైళ్లను ఎడిట్ చేయగల DOC మరియు DOCX డాక్యుమెంట్‌లుగా మార్చండి."
+      },
+      "docx_to_pdf": {
+        "name": "Word నుంచి PDF",
+        "description": "DOC మరియు DOCX ఫైళ్లను షేర్ చేయడానికి సిద్ధంగా ఉన్న PDFలుగా మార్చండి."
+      },
+      "merge_pdf": {
+        "name": "PDF కలపండి",
+        "description": "మీకు కావాల్సిన క్రమంలో PDFలను కలపండి."
+      },
+      "split_pdf": {
+        "name": "PDF విడగొట్టు",
+        "description": "ఒక పేజీ లేదా పేజ్ రేంజ్‌ను వేరు PDF ఫైళ్లుగా విడగొట్టండి."
+      },
+      "compress_pdf": {
+        "name": "PDF కుదించు",
+        "description": "నాణ్యతను నిలుపుకుంటూ PDF ఫైల్ పరిమాణాన్ని తగ్గించండి."
+      },
+      "pdf_to_ppt": {
+        "name": "PDF నుంచి PowerPoint",
+        "description": "PDF ఫైళ్లను ఎడిట్ చేయగల PPT మరియు PPTX స్లైడ్‌లుగా మార్చండి."
+      },
+      "pdf_to_excel": {
+        "name": "PDF నుంచి Excel",
+        "description": "PDFల నుంచి పట్టికలు మరియు డేటాను స్ప్రెడ్‌షీట్‌లకు తీసుకురండి."
+      },
+      "ppt_to_pdf": {
+        "name": "PowerPoint నుంచి PDF",
+        "description": "ప్రెజెంటేషన్ స్లైడ్‌లను PDFలుగా మార్చండి."
+      },
+      "excel_to_pdf": {
+        "name": "Excel నుంచి PDF",
+        "description": "స్ప్రెడ్‌షీట్‌లను చదవడానికి సులభమైన PDFలుగా ఎక్స్‌పోర్ట్ చేయండి."
+      },
+      "edit_pdf": {
+        "name": "PDF సవరించండి",
+        "description": "PDFల్లో టెక్స్ట్, చిత్రాలు, ఆకారాలు, హైలైట్‌లు మరియు వ్యాఖ్యలు జోడించండి."
+      },
+      "image_to_pdf": {
+        "name": "చిత్రం నుంచి PDF",
+        "description": "JPG, PNG మరియు స్కాన్ చిత్రాలను క్రమబద్ధమైన PDF డాక్యుమెంట్‌లుగా మార్చండి."
+      },
+      "pdf_to_image": {
+        "name": "PDF నుంచి చిత్రం",
+        "description": "PDF పేజీలను అధిక నాణ్యత చిత్రాలుగా ఎక్స్‌పోర్ట్ చేయండి."
+      },
+      "rotate_pdf": {
+        "name": "PDF తిప్పండి",
+        "description": "ఒక పేజీ లేదా అన్ని పేజీలను తిప్పి సరిచేసిన PDFను సేవ్ చేయండి."
+      },
+      "unlock_pdf": {
+        "name": "PDF అన్లాక్ చేయండి",
+        "description": "మీ ఫైళ్లలోని డాక్యుమెంట్ పరిమితులను తొలగించండి."
+      },
+      "watermark_pdf": {
+        "name": "PDF వాటర్‌మార్క్",
+        "description": "PDF పేజీలపై టెక్స్ట్ లేదా చిత్రం వాటర్‌మార్క్ జోడించండి."
+      },
+      "ocr": {
+        "name": "OCR",
+        "description": "స్కాన్ చేసిన డాక్యుమెంట్‌ల నుంచి టెక్స్ట్ గుర్తించి శోధనయోగ్యంగా చేయండి."
+      },
+      "protect_pdf": {
+        "name": "PDF రక్షించండి",
+        "description": "సున్నితమైన PDFలకు పాస్‌వర్డ్ భద్రత మరియు యాక్సెస్ నియంత్రణలు జోడించండి."
+      },
+      "sign_pdf": {
+        "name": "PDF సంతకం",
+        "description": "సంతకం మరియు ఆమోద వర్క్‌ఫ్లోల కోసం డాక్యుమెంట్‌లను సిద్ధం చేయండి."
+      },
+      "html_to_pdf": {
+        "name": "HTML నుంచి PDF",
+        "description": "వెబ్ పేజీలు, ఇన్వాయిస్‌లు మరియు HTML కంటెంట్‌ను నమ్మదగిన PDFలుగా మార్చండి."
+      }
+    }
+  },
+  "forms": {},
+  "errors": {
+    "pdfGenerationFailed": "PDF సృష్టి విఫలమైంది.",
+    "emptyTextPdfDocument": "PDF సృష్టించే ముందు టెక్స్ట్ జోడించండి.",
+    "pdfShapingUnavailable": "భారతీయ లిపి పాఠ్యాన్ని render చేయడానికి PDF సేవ ఇంకా సిద్ధంగా లేదు. సేవ refresh అయిన తర్వాత మళ్లీ ప్రయత్నించండి.",
+    "pdfGlyphPreflightUnavailable": "సర్వర్‌లో PDF ఫాంట్ తనిఖీ అందుబాటులో లేదు.",
+    "fontNotRegistered": "అవసరమైన PDF ఫాంట్ సర్వర్‌లో అందుబాటులో లేదు.",
+    "unsupportedGlyph": "ఈ పత్రంలోని కొన్ని అక్షరాలకు ఎంచుకున్న PDF ఫాంట్ మద్దతు ఇవ్వదు."
+  },
+  "validation": {},
+  "dashboard": {},
+  "metadata": {
+    "files": {
+      "title": "సాధనాలు | Flowauxi",
+      "description": "Flowauxi సాధనాల్లో PDF లేదా డాక్యుమెంట్ సాధనాన్ని ఎంచుకోండి."
+    },
+    "textToPdf": {
+      "title": "టెక్స్ట్ నుంచి PDF | Flowauxi సాధనాలు",
+      "description": "Flowauxi సాధనాలతో టెక్స్ట్ నుంచి సురక్షిత PDF సృష్టించండి."
+    },
+    "siteName": "Flowauxi సాధనాలు"
+  },
+  "seo": {}
+}

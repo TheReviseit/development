@@ -103,6 +103,7 @@ class TrialSource(str, Enum):
     REFERRAL = 'referral'
     API = 'api'
     SHOP = 'shop'
+    SHOP_ONBOARDING = 'shop_onboarding'
     ADMIN_GRANT = 'admin_grant'
 
 

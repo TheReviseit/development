@@ -1,0 +1,10 @@
+html[data-theme] {
+  --admin-bg: var(--color-bg-app);
+  --admin-surface: var(--color-surface-1);
+  --admin-surface-muted: var(--color-surface-2);
+  --admin-text: var(--color-text-primary);
+  --admin-muted: var(--color-text-muted);
+  --admin-border: var(--color-border-default);
+  --admin-accent: var(--color-accent);
+  --admin-shadow: var(--shadow-md);
+}

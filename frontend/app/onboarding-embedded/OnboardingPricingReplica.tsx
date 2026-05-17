@@ -1,6 +1,8 @@
 "use client";
 
+import type { KeyboardEvent } from "react";
 import styles from "./OnboardingPricingReplica.module.css";
+import type { OnboardingPricingMode } from "./pricing-decision";
 
 type PlanId = "starter" | "business" | "pro";
 
@@ -12,6 +14,8 @@ export interface OnboardingPricingPlan {
   popular?: boolean;
   features: string[];
   tagline?: string;
+  price: number;
+  currency: string;
 }
 
 function CheckIcon() {
@@ -44,16 +48,48 @@ function getFeaturesIntro(
 
 export default function OnboardingPricingReplica(props: {
   plans: OnboardingPricingPlan[];
+  pricingMode: OnboardingPricingMode;
+  trialToggleEnabled: boolean;
+  isBusy: boolean;
+  isRedirecting: boolean;
   paymentLoading: PlanId | null;
   paymentError: string | null;
+  onPricingModeChange: (mode: OnboardingPricingMode) => void;
   onDismissError: () => void;
   onSelectPlan: (planId: PlanId) => void;
 }) {
-  const { plans, paymentLoading, paymentError, onDismissError, onSelectPlan } =
-    props;
+  const {
+    plans,
+    pricingMode,
+    trialToggleEnabled,
+    isBusy,
+    isRedirecting,
+    paymentLoading,
+    paymentError,
+    onPricingModeChange,
+    onDismissError,
+    onSelectPlan,
+  } = props;
+
+  const isTrialMode = pricingMode === "trial";
+
+  const handleToggle = () => {
+    if (!trialToggleEnabled || isBusy) return;
+    onPricingModeChange(isTrialMode ? "paid" : "trial");
+  };
+
+  const handleToggleKeyDown = (event: KeyboardEvent<HTMLButtonElement>) => {
+    if (event.key !== " " && event.key !== "Enter") return;
+    event.preventDefault();
+    handleToggle();
+  };
 
   return (
-    <section className={styles.wrap} aria-label="Pricing plans">
+    <section
+      className={styles.wrap}
+      aria-label="Pricing plans"
+      aria-busy={isBusy}
+    >
       <div className={styles.headerRow}>
         <div>
           <h2 className={styles.title}>Choose your launch plan</h2>
@@ -63,10 +99,31 @@ export default function OnboardingPricingReplica(props: {
           </p>
         </div>
 
-        <div className={styles.assurance} aria-label="Billing assurance">
-          <span>Secure checkout</span>
-          <span>Cancel anytime</span>
-        </div>
+        {trialToggleEnabled && (
+          <div className={styles.headerControls}>
+            <button
+              type="button"
+              className={`${styles.trialSwitch} ${
+                isTrialMode ? styles.trialSwitchOn : ""
+              }`}
+              role="switch"
+              aria-label="Free trial pricing mode"
+              aria-checked={isTrialMode}
+              aria-disabled={isBusy}
+              disabled={isBusy}
+              onClick={handleToggle}
+              onKeyDown={handleToggleKeyDown}
+            >
+              <span className={styles.trialSwitchLabel}>
+                <span className={styles.controlLabelFull}>Free trial</span>
+                <span className={styles.controlLabelCompact}>Trial</span>
+              </span>
+              <span className={styles.trialSwitchTrack} aria-hidden="true">
+                <span className={styles.trialSwitchThumb} />
+              </span>
+            </button>
+          </div>
+        )}
       </div>
 
       {paymentError && (
@@ -76,6 +133,7 @@ export default function OnboardingPricingReplica(props: {
             type="button"
             className={styles.dismissBtn}
             onClick={onDismissError}
+            disabled={isBusy}
             aria-label="Dismiss error"
           >
             x
@@ -83,9 +141,13 @@ export default function OnboardingPricingReplica(props: {
         </div>
       )}
 
-      <div className={styles.cardsGrid}>
+      <div
+        className={`${styles.cardsGrid} ${
+          isTrialMode ? styles.cardsGridTrial : ""
+        }`}
+      >
         {plans.map((plan, index) => {
-          const isBusy = paymentLoading !== null;
+          const isPlanActionBusy = isBusy || paymentLoading !== null;
           const isThisLoading = paymentLoading === plan.id;
           const isStarter = plan.id === "starter";
 
@@ -110,12 +172,18 @@ export default function OnboardingPricingReplica(props: {
                 type="button"
                 className={styles.cta}
                 onClick={() => onSelectPlan(plan.id)}
-                disabled={isBusy}
+                disabled={isPlanActionBusy}
               >
-                {isThisLoading ? "Processing..." : "Get started"}
+                {isThisLoading
+                  ? isRedirecting
+                    ? "Redirecting..."
+                    : "Processing..."
+                  : isTrialMode && isStarter
+                    ? "Start free trial"
+                    : "Get started"}
               </button>
 
-              {isStarter && (
+              {isTrialMode && isStarter && (
                 <p className={styles.trialNote}>
                   7-day free trial - no credit card required
                 </p>

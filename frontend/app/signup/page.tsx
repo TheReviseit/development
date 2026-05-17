@@ -347,6 +347,8 @@ export default function SignupPage() {
 
   const [domain, setDomain] = useState<string>("dashboard");
   const router = useRouter();
+  const showPasswordFeedback =
+    Boolean(passwordStrength && password.length > 0) || Boolean(passwordError);
 
   // Resolve current domain for dynamic marketing copy
   useEffect(() => {
@@ -990,6 +992,9 @@ const syncResult = await syncWithRetry(idToken, true);
                     onChange={(e) => setPassword(e.target.value)}
                     required
                     autoComplete="new-password"
+                    aria-describedby={
+                      showPasswordFeedback ? "password-feedback" : undefined
+                    }
                     className={passwordError ? styles.inputError : ""}
                   />
                   <button
@@ -1001,20 +1006,26 @@ const syncResult = await syncWithRetry(idToken, true);
                     {showPassword ? <EyeIcon /> : <EyeOffIcon />}
                   </button>
                 </div>
-                {passwordStrength && password.length > 0 && (
-                  <div className={styles.passwordStrength}>
-                    <div
-                      className={`${styles.strengthBar} ${styles[passwordStrength]}`}
-                    ></div>
-                    <span className={styles.strengthText}>
-                      Password strength: {passwordStrength}
-                    </span>
+                {showPasswordFeedback && (
+                  <div
+                    id="password-feedback"
+                    className={styles.passwordFeedback}
+                    aria-live="polite"
+                    aria-atomic="true"
+                  >
+                    {passwordStrength && password.length > 0 && (
+                      <div className={styles.passwordStrength}>
+                        <div
+                          className={`${styles.strengthBar} ${styles[passwordStrength]}`}
+                        ></div>
+                      </div>
+                    )}
+                    {passwordError && (
+                      <span className={styles.validationError} role="alert">
+                        {passwordError}
+                      </span>
+                    )}
                   </div>
-                )}
-                {passwordError && (
-                  <span className={styles.validationError}>
-                    {passwordError}
-                  </span>
                 )}
               </div>
 

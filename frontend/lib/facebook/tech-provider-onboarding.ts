@@ -36,7 +36,7 @@ export class TechProviderOnboardingService {
    * Complete customer onboarding flow
    */
   static async onboardCustomer(
-    params: OnboardCustomerParams
+    params: OnboardCustomerParams,
   ): Promise<OnboardingResult> {
     const { code, wabaId, phoneNumberId, pin } = params;
 
@@ -61,35 +61,44 @@ export class TechProviderOnboardingService {
       console.log("📝 [Onboarding] Step 2: Subscribing to WABA webhooks...");
       const webhookSubscribed = await this.subscribeToWABAWebhooks(
         wabaId,
-        businessToken
+        businessToken,
       );
 
       if (!webhookSubscribed) {
         console.warn(
-          "⚠️ [Onboarding] Webhook subscription failed, but continuing..."
+          "⚠️ [Onboarding] Webhook subscription failed, but continuing...",
         );
       } else {
         console.log("✅ [Onboarding] Webhooks subscribed");
       }
 
       // Step 3: Register customer's phone number
-      console.log("📝 [Onboarding] Step 3: Registering phone number...");
-      const registrationPin = pin || this.generateRandomPin();
-      const phoneRegistered = await this.registerPhoneNumber(
-        phoneNumberId,
-        businessToken,
-        registrationPin
-      );
+      let phoneRegistered = false;
+      if (process.env.WA_EMBEDDED_SIGNUP_REGISTER_PHONE_ON_CONNECT === "true") {
+        console.log("📝 [Onboarding] Step 3: Registering phone number...");
+        const registrationPin = pin || this.generateRandomPin();
+        phoneRegistered = await this.registerPhoneNumber(
+          phoneNumberId,
+          businessToken,
+          registrationPin,
+        );
 
-      if (!phoneRegistered) {
-        console.warn(
-          "⚠️ [Onboarding] Phone registration failed, but customer can complete this manually"
+        if (!phoneRegistered) {
+          console.warn(
+            "⚠️ [Onboarding] Phone registration failed, but customer can complete this manually",
+          );
+        } else {
+          console.log("✅ [Onboarding] Phone number registered");
+        }
+
+        console.log(
+          "🎉 [Onboarding] Customer onboarding completed successfully",
         );
       } else {
-        console.log("✅ [Onboarding] Phone number registered");
+        console.log(
+          "[Onboarding] Step 3 skipped: Cloud API phone registration is deferred",
+        );
       }
-
-      console.log("🎉 [Onboarding] Customer onboarding completed successfully");
 
       return {
         success: true,
@@ -111,7 +120,7 @@ export class TechProviderOnboardingService {
    * Step 1: Exchange token code for business integration system user access token
    */
   private static async exchangeTokenForBusinessToken(
-    code: string
+    code: string,
   ): Promise<string> {
     try {
       const appId = process.env.NEXT_PUBLIC_FACEBOOK_APP_ID;
@@ -131,7 +140,7 @@ export class TechProviderOnboardingService {
 
       const response = await fetch(
         `https://graph.facebook.com/v24.0/oauth/access_token?${params.toString()}`,
-        { method: "GET" }
+        { method: "GET" },
       );
 
       if (!response.ok) {
@@ -160,11 +169,11 @@ export class TechProviderOnboardingService {
    */
   private static async subscribeToWABAWebhooks(
     wabaId: string,
-    businessToken: string
+    businessToken: string,
   ): Promise<boolean> {
     try {
       console.log(
-        `🔄 [Onboarding] Subscribing to webhooks for WABA ${wabaId}...`
+        `🔄 [Onboarding] Subscribing to webhooks for WABA ${wabaId}...`,
       );
 
       const response = await fetch(
@@ -174,14 +183,14 @@ export class TechProviderOnboardingService {
           headers: {
             Authorization: `Bearer ${businessToken}`,
           },
-        }
+        },
       );
 
       if (!response.ok) {
         const errorData = await response.json();
         console.error(
           "❌ [Onboarding] Webhook subscription failed:",
-          errorData
+          errorData,
         );
         return false;
       }
@@ -202,11 +211,11 @@ export class TechProviderOnboardingService {
   private static async registerPhoneNumber(
     phoneNumberId: string,
     businessToken: string,
-    pin: string
+    pin: string,
   ): Promise<boolean> {
     try {
       console.log(
-        `🔄 [Onboarding] Registering phone number ${phoneNumberId}...`
+        `🔄 [Onboarding] Registering phone number ${phoneNumberId}...`,
       );
 
       const response = await fetch(
@@ -221,7 +230,7 @@ export class TechProviderOnboardingService {
             messaging_product: "whatsapp",
             pin: pin,
           }),
-        }
+        },
       );
 
       if (!response.ok) {
@@ -247,11 +256,11 @@ export class TechProviderOnboardingService {
     phoneNumberId: string,
     businessToken: string,
     recipientNumber: string,
-    messageText: string = "Test message from your WhatsApp Business Account!"
+    messageText: string = "Test message from your WhatsApp Business Account!",
   ): Promise<{ success: boolean; messageId?: string; error?: string }> {
     try {
       console.log(
-        `📤 [Onboarding] Sending test message from ${phoneNumberId} to ${recipientNumber}...`
+        `📤 [Onboarding] Sending test message from ${phoneNumberId} to ${recipientNumber}...`,
       );
 
       const response = await fetch(
@@ -271,7 +280,7 @@ export class TechProviderOnboardingService {
               body: messageText,
             },
           }),
-        }
+        },
       );
 
       if (!response.ok) {

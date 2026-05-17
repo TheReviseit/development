@@ -57,6 +57,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone, timedelta
 from enum import Enum
 from typing import Optional, Dict, Any, List, Set, Tuple
+from services.welcome_email_jobs import enqueue_welcome_email_after_activation
 
 logger = logging.getLogger('reviseit.subscription_lifecycle')
 
@@ -528,6 +529,7 @@ class SubscriptionLifecycleEngine:
         # Activate or reactivate based on current state
         first_activation_states = {'pending', 'created'}
         reactivation_states = {'past_due', 'grace_period', 'suspended', 'halted'}
+        first_activation_succeeded = False
 
         if current_status in first_activation_states:
             # First-time activation from pending/created states
@@ -540,6 +542,7 @@ class SubscriptionLifecycleEngine:
                 payload={'razorpay_payment_id': razorpay_payment_id},
                 idempotency_key=f"activate:{razorpay_payment_id or subscription_id}",
             )
+            first_activation_succeeded = success
             if not success:
                 self.logger.warning(
                     f"payment_success_activation_failed sub={subscription_id} "
@@ -595,6 +598,19 @@ class SubscriptionLifecycleEngine:
                 self.logger.warning(
                     f"user_products_upsert_failed sub={subscription_id}: {e}"
                 )
+
+        if first_activation_succeeded:
+            enqueue_welcome_email_after_activation(
+                self._supabase,
+                user_id=user_id,
+                product=domain,
+                activation_event='paid_subscription_activated',
+                activation_id=subscription_id,
+                request_id=None,
+                traceparent=None,
+                send_immediately=True,
+                logger=self.logger,
+            )
 
         self.logger.info(
             f"payment_success_handled sub={subscription_id} user={user_id} "

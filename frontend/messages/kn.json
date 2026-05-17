@@ -1,0 +1,366 @@
+{
+  "common": {
+    "download": "ಡೌನ್‌ಲೋಡ್",
+    "filesTools": "ಉಪಕರಣಗಳು",
+    "generatePdf": "PDF ರಚಿಸಿ",
+    "history": "ಇತಿಹಾಸ",
+    "language": "ಭಾಷೆ",
+    "login": "ಲಾಗಿನ್",
+    "settings": "ಸೆಟ್ಟಿಂಗ್‌ಗಳು",
+    "signUp": "ಸೈನ್ ಅಪ್"
+  },
+  "navbar": {
+    "filesHome": "Flowauxi ಉಪಕರಣಗಳ ಮುಖಪುಟ",
+    "quickTools": "ತ್ವರಿತ ಉಪಕರಣಗಳು",
+    "tools": "ಉಪಕರಣಗಳು",
+    "openSearch": "ಉಪಕರಣ ಹುಡುಕಾಟ ತೆರೆಯಿರಿ",
+    "closeSearch": "ಉಪಕರಣ ಹುಡುಕಾಟ ಮುಚ್ಚಿ",
+    "openNavigation": "ಉಪಕರಣ ನ್ಯಾವಿಗೇಶನ್ ತೆರೆಯಿರಿ",
+    "closeNavigation": "ಉಪಕರಣ ನ್ಯಾವಿಗೇಶನ್ ಮುಚ್ಚಿ",
+    "searchButtonAria": "ಉಪಕರಣಗಳನ್ನು ಹುಡುಕಿ",
+    "nav": {
+      "mergePdf": "PDF ಸೇರಿಸಿ",
+      "splitPdf": "PDF ವಿಭಜಿಸಿ",
+      "compressPdf": "PDF ಕುಗ್ಗಿಸಿ",
+      "convertPdf": "PDF ಪರಿವರ್ತಿಸಿ",
+      "allTools": "ಎಲ್ಲಾ PDF ಉಪಕರಣಗಳು",
+      "allToolsShort": "ಎಲ್ಲಾ ಉಪಕರಣಗಳು"
+    },
+    "mega": {
+      "eyebrow": "Flowauxi ಉಪಕರಣಗಳು",
+      "title": "ವೇಗವಾದ ಡಾಕ್ಯುಮೆಂಟ್ ಕೆಲಸಕ್ಕೆ PDF ಉಪಕರಣಗಳು.",
+      "copy": "ಒಂದೇ ಸ್ವಚ್ಛ ಕಾರ್ಯಸ್ಥಳದಿಂದ ಫೈಲ್‌ಗಳನ್ನು ಪರಿವರ್ತಿಸಿ, ವ್ಯವಸ್ಥೆಗೊಳಿಸಿ, ರಕ್ಷಿಸಿ ಮತ್ತು ಸುಧಾರಿಸಿ.",
+      "viewAllTools": "ಎಲ್ಲಾ ಉಪಕರಣಗಳನ್ನು ನೋಡಿ",
+      "sections": {
+        "organizePdf": "PDF ವ್ಯವಸ್ಥೆಗೊಳಿಸಿ",
+        "optimizePdf": "PDF ಸುಧಾರಿಸಿ",
+        "convertToPdf": "PDF ಆಗಿ ಪರಿವರ್ತಿಸಿ",
+        "convertFromPdf": "PDF ನಿಂದ ಪರಿವರ್ತಿಸಿ",
+        "editPdf": "PDF ಸಂಪಾದಿಸಿ",
+        "pdfSecurity": "PDF ಭದ್ರತೆ",
+        "pdfIntelligence": "PDF ಬುದ್ಧಿಮತ್ತೆ"
+      },
+      "tools": {
+        "mergePdf": "PDF ಸೇರಿಸಿ",
+        "splitPdf": "PDF ವಿಭಜಿಸಿ",
+        "compressPdf": "PDF ಕುಗ್ಗಿಸಿ",
+        "convertPdf": "PDF ಪರಿವರ್ತಿಸಿ",
+        "allTools": "ಎಲ್ಲಾ PDF ಉಪಕರಣಗಳು",
+        "allToolsShort": "ಎಲ್ಲಾ ಉಪಕರಣಗಳು",
+        "organizePdf": "PDF ವ್ಯವಸ್ಥೆಗೊಳಿಸಿ",
+        "optimizePdf": "PDF ಸುಧಾರಿಸಿ",
+        "convertToPdf": "PDF ಆಗಿ ಪರಿವರ್ತಿಸಿ",
+        "convertFromPdf": "PDF ನಿಂದ ಪರಿವರ್ತಿಸಿ",
+        "editPdf": "PDF ಸಂಪಾದಿಸಿ",
+        "pdfSecurity": "PDF ಭದ್ರತೆ",
+        "pdfIntelligence": "PDF ಬುದ್ಧಿಮತ್ತೆ",
+        "removePages": "ಪುಟಗಳನ್ನು ತೆಗೆದುಹಾಕಿ",
+        "extractPages": "ಪುಟಗಳನ್ನು ಹೊರತೆಗೆಯಿರಿ",
+        "scanToPdf": "ಸ್ಕ್ಯಾನ್ ಮಾಡಿ PDF",
+        "repairPdf": "PDF ದುರಸ್ತಿ ಮಾಡಿ",
+        "ocrPdf": "OCR PDF",
+        "textToPdf": "ಪಠ್ಯದಿಂದ PDF",
+        "jpgToPdf": "JPG ನಿಂದ PDF",
+        "wordToPdf": "Word ನಿಂದ PDF",
+        "powerPointToPdf": "PowerPoint ನಿಂದ PDF",
+        "excelToPdf": "Excel ನಿಂದ PDF",
+        "htmlToPdf": "HTML ನಿಂದ PDF",
+        "pdfToJpg": "PDF ನಿಂದ JPG",
+        "pdfToWord": "PDF ನಿಂದ Word",
+        "pdfToPowerPoint": "PDF ನಿಂದ PowerPoint",
+        "pdfToExcel": "PDF ನಿಂದ Excel",
+        "pdfToPdfA": "PDF ನಿಂದ PDF/A",
+        "rotatePdf": "PDF ತಿರುಗಿಸಿ",
+        "addPageNumbers": "ಪುಟ ಸಂಖ್ಯೆ ಸೇರಿಸಿ",
+        "addWatermark": "ವಾಟರ್‌ಮಾರ್ಕ್ ಸೇರಿಸಿ",
+        "cropPdf": "PDF ಕ್ರಾಪ್ ಮಾಡಿ",
+        "pdfForms": "PDF ಫಾರ್ಮ್‌ಗಳು",
+        "unlockPdf": "PDF ಅನ್ಲಾಕ್ ಮಾಡಿ",
+        "protectPdf": "PDF ರಕ್ಷಿಸಿ",
+        "signPdf": "PDF ಸಹಿ",
+        "redactPdf": "PDF ಮರೆಮಾಡಿ",
+        "comparePdf": "PDF ಹೋಲಿಸಿ",
+        "aiSummarizer": "AI ಸಾರಾಂಶ",
+        "translatePdf": "PDF ಅನುವಾದಿಸಿ"
+      }
+    },
+    "mobile": {
+      "filesNavigation": "ಉಪಕರಣ ನ್ಯಾವಿಗೇಶನ್",
+      "searchTools": "ಉಪಕರಣಗಳನ್ನು ಹುಡುಕಿ",
+      "searchPlaceholder": "ಉಪಕರಣಗಳನ್ನು ಹುಡುಕಿ",
+      "searchPdfTools": "PDF ಉಪಕರಣಗಳನ್ನು ಹುಡುಕಿ",
+      "searchResults": "ಹುಡುಕಾಟ ಫಲಿತಾಂಶಗಳು",
+      "popular": "ಜನಪ್ರಿಯ",
+      "noMatchingTools": "ಹೊಂದುವ ಉಪಕರಣಗಳಿಲ್ಲ."
+    }
+  },
+  "files": {
+    "hub": {
+      "title": "PDFಗಳೊಂದಿಗೆ ಕೆಲಸ ಮಾಡಲು ಬೇಕಾದ ಎಲ್ಲಾ ಟೂಲ್ಸ್ ಒಂದೇ ಸ್ಥಳದಲ್ಲಿ",
+      "description": "PDFಗಳನ್ನು ಸೇರಿಸಲು, ವಿಭಜಿಸಲು, ಕಂಪ್ರೆಸ್ ಮಾಡಲು, ಪರಿವರ್ತಿಸಲು, ರಕ್ಷಿಸಲು, ಸಹಿ ಮಾಡಲು ಮತ್ತು ವ್ಯವಸ್ಥೆಗೊಳಿಸಲು ವೇಗವಾದ ಟೂಲ್ಸ್.",
+      "actions": {
+        "history": "ಇತಿಹಾಸ",
+        "settings": "ಸೆಟ್ಟಿಂಗ್‌ಗಳು"
+      },
+      "aria": {
+        "categories": "ಉಪಕರಣ ವಿಭಾಗಗಳು",
+        "tools": "ಉಪಕರಣಗಳು",
+        "openTool": "{name} ತೆರೆಯಿರಿ"
+      },
+      "categories": {
+        "all": "ಎಲ್ಲಾ",
+        "workflows": "ವರ್ಕ್‌ಫ್ಲೋಗಳು",
+        "organizePdf": "PDF ವ್ಯವಸ್ಥೆಗೊಳಿಸಿ",
+        "optimizePdf": "PDF ಸುಧಾರಿಸಿ",
+        "convertPdf": "PDF ಪರಿವರ್ತಿಸಿ",
+        "editPdf": "PDF ಸಂಪಾದಿಸಿ",
+        "pdfSecurity": "PDF ಭದ್ರತೆ",
+        "pdfIntelligence": "PDF ಬುದ್ಧಿಮತ್ತೆ"
+      },
+      "categoriesShort": {
+        "all": "ಎಲ್ಲಾ",
+        "workflows": "ಫ್ಲೋ",
+        "organizePdf": "ವ್ಯವಸ್ಥೆ",
+        "optimizePdf": "ಉತ್ತಮ",
+        "convertPdf": "ಮಾರ್ಪು",
+        "editPdf": "ತಿದ್ದು",
+        "pdfSecurity": "ಭದ್ರತೆ",
+        "pdfIntelligence": "AI PDF"
+      }
+    },
+    "comingSoon": {
+      "back": "ಉಪಕರಣಗಳು",
+      "eyebrow": "ಶೀಘ್ರದಲ್ಲೇ",
+      "planned": "ಯೋಜಿಸಲಾಗಿದೆ",
+      "openTextToPdf": "ಪಠ್ಯದಿಂದ PDF ತೆರೆಯಿರಿ"
+    },
+    "textToPdf": {
+      "toolbar": {
+        "currentLocation": "ಪ್ರಸ್ತುತ ಸ್ಥಳ",
+        "dashboard": "ಡ್ಯಾಶ್‌ಬೋರ್ಡ್",
+        "files": "ಉಪಕರಣಗಳು",
+        "title": "ಪಠ್ಯದಿಂದ PDF",
+        "authenticated": "ಆಟೋಸೇವ್, ಇತಿಹಾಸ ಮತ್ತು ಸುರಕ್ಷಿತ ಡೌನ್‌ಲೋಡ್‌ಗಳು ಸಕ್ರಿಯವಾಗಿವೆ.",
+        "guest": "ಅತಿಥಿ ಎಕ್ಸ್‌ಪೋರ್ಟ್‌ಗಳು ಖಾಸಗಿ ಮತ್ತು ಸ್ವಯಂಚಾಲಿತವಾಗಿ ಅವಧಿ ಮುಗಿಯುತ್ತವೆ."
+      },
+      "editor": {
+        "panel": "ಎಡಿಟರ್",
+        "formatting": "ಪಠ್ಯ ಫಾರ್ಮ್ಯಾಟಿಂಗ್",
+        "paragraphAlignment": "ಪ್ಯಾರಾಗ್ರಾಫ್ ಅಲೈನ್‌ಮೆಂಟ್",
+        "documentTitle": "ಡಾಕ್ಯುಮೆಂಟ್ ಶೀರ್ಷಿಕೆ",
+        "untitled": "ಶೀರ್ಷಿಕೆಯಿಲ್ಲದ ಡಾಕ್ಯುಮೆಂಟ್",
+        "textareaAria": "PDFಗೆ ಪರಿವರ್ತಿಸಬೇಕಾದ ಪಠ್ಯ",
+        "placeholder": "ಏನಾದರೂ ಟೈಪ್ ಮಾಡಿ...",
+        "bold": "ಬೋಲ್ಡ್",
+        "italic": "ಇಟಾಲಿಕ್",
+        "underline": "ಅಂಡರ್‌ಲೈನ್",
+        "heading1": "ಹೆಡಿಂಗ್ 1",
+        "heading2": "ಹೆಡಿಂಗ್ 2",
+        "bulletList": "ಬುಲೆಟ್ ಪಟ್ಟಿ",
+        "numberedList": "ಸಂಖ್ಯೆಯ ಪಟ್ಟಿ",
+        "alignLeft": "ಎಡಕ್ಕೆ ಅಲೈನ್ ಮಾಡಿ",
+        "alignCenter": "ಮಧ್ಯಕ್ಕೆ ಅಲೈನ್ ಮಾಡಿ",
+        "alignRight": "ಬಲಕ್ಕೆ ಅಲೈನ್ ಮಾಡಿ",
+        "justify": "ಜಸ್ಟಿಫೈ",
+        "pageBreak": "ಪುಟ ವಿರಾಮ",
+        "headingPlaceholder": "ಶೀರ್ಷಿಕೆ",
+        "listItemPlaceholder": "ಪಟ್ಟಿ ಐಟಂ"
+      },
+      "settings": {
+        "panel": "ಸೆಟ್ಟಿಂಗ್‌ಗಳು",
+        "pageSize": "ಪುಟ ಗಾತ್ರ",
+        "orientation": "ದಿಕ್ಕು",
+        "font": "ಫಾಂಟ್",
+        "fontSize": "ಫಾಂಟ್ ಗಾತ್ರ",
+        "margins": "ಮಾರ್ಜಿನ್‌ಗಳು",
+        "lineHeight": "ಸಾಲಿನ ಎತ್ತರ",
+        "header": "ಹೆಡರ್",
+        "headerText": "ಹೆಡರ್ ಪಠ್ಯ",
+        "footer": "ಫೂಟರ್",
+        "footerText": "ಫೂಟರ್ ಪಠ್ಯ",
+        "pageNumbers": "ಪುಟ ಸಂಖ್ಯೆಗಳು",
+        "portrait": "ಪೋರ್ಟ್ರೇಟ್",
+        "landscape": "ಲ್ಯಾಂಡ್‌ಸ್ಕೇಪ್",
+        "autoFont": "ಆಟೋ (Noto + HarfBuzz)",
+        "marginPresets": {
+          "compact": "ಕಾಂಪ್ಯಾಕ್ಟ್",
+          "standard": "ಪ್ರಮಾಣಿತ",
+          "spacious": "ವಿಸ್ತೃತ"
+        },
+        "marginSides": {
+          "top": "ಮೇಲೆ",
+          "right": "ಬಲ",
+          "bottom": "ಕೆಳಗೆ",
+          "left": "ಎಡ"
+        }
+      },
+      "export": {
+        "aria": "PDF ಎಕ್ಸ್‌ಪೋರ್ಟ್",
+        "chars": "{count} / {limit} ಅಕ್ಷರಗಳು",
+        "pages": "{count, plural, one {# ಪುಟ} other {# ಪುಟಗಳು}}",
+        "saving": "ಸೇವ್ ಆಗುತ್ತಿದೆ",
+        "saved": "ಸೇವ್ ಆಗಿದೆ",
+        "draftOffline": "ಡ್ರಾಫ್ಟ್ ಆಫ್‌ಲೈನ್",
+        "draftReady": "ಡ್ರಾಫ್ಟ್ ಸಿದ್ಧ",
+        "generate": "PDF ರಚಿಸಿ",
+        "download": "{size} ಡೌನ್‌ಲೋಡ್",
+        "share": "ಹಂಚಿಕೊಳ್ಳಿ",
+        "shareText": "Flowauxi ಉಪಕರಣಗಳಿಂದ ರಫ್ತು ಮಾಡಿದ PDF.",
+        "shareCopied": "ಹಂಚಿಕೆ ಲಿಂಕ್ ನಕಲಿಸಲಾಗಿದೆ",
+        "shareUnavailable": "ಈ ಬ್ರೌಸರ್‌ನಲ್ಲಿ ಹಂಚಿಕೆ ಲಭ್ಯವಿಲ್ಲ.",
+        "shareFailed": "ಈ PDF ಹಂಚಿಕೊಳ್ಳಲು ಸಾಧ್ಯವಾಗಲಿಲ್ಲ.",
+        "emptyDocument": "PDF ರಚಿಸುವ ಮೊದಲು ಪಠ್ಯವನ್ನು ಸೇರಿಸಿ.",
+        "characterLimitExceeded": "ಅಕ್ಷರ ಮಿತಿ ಮೀರಿದೆ",
+        "readyUntil": "PDF {date} ತನಕ ಸಿದ್ಧವಾಗಿದೆ"
+      },
+      "preview": {
+        "panel": "ಪೂರ್ವವೀಕ್ಷಣೆ",
+        "pageCount": "{count, plural, one {# ಪುಟ} other {# ಪುಟಗಳು}}",
+        "blockCount": "{count, plural, one {# ವಿಭಾಗ} other {# ವಿಭಾಗಗಳು}}",
+        "preparing": "ಪೂರ್ವವೀಕ್ಷಣೆ ಸಿದ್ಧವಾಗುತ್ತಿದೆ",
+        "pageAria": "PDF ಪೂರ್ವವೀಕ್ಷಣೆ ಪುಟ {number}",
+        "pageNumber": "ಪುಟ {number}"
+      },
+      "mobileTabs": {
+        "aria": "ಪಠ್ಯದಿಂದ PDF ಪ್ಯಾನೆಲ್‌ಗಳು",
+        "edit": "ಸಂಪಾದನೆ",
+        "preview": "ಪೂರ್ವವೀಕ್ಷಣೆ",
+        "settings": "ಸೆಟ್ಟಿಂಗ್‌ಗಳು",
+        "history": "ಇತಿಹಾಸ"
+      },
+      "history": {
+        "panel": "ಇತಿಹಾಸ",
+        "signInPrompt": "ಸೆಷನ್‌ಗಳ ನಡುವೆ ಡಾಕ್ಯುಮೆಂಟ್ ಇತಿಹಾಸ ಉಳಿಸಲು ಸೈನ್ ಇನ್ ಮಾಡಿ.",
+        "loading": "ಇತಿಹಾಸ ಲೋಡ್ ಆಗುತ್ತಿದೆ",
+        "empty": "ಇನ್ನೂ ರಫ್ತು ಮಾಡಿದ ಡಾಕ್ಯುಮೆಂಟ್ ಇಲ್ಲ.",
+        "meta": "{size} · {date} · {count} ಡೌನ್‌ಲೋಡ್‌ಗಳು",
+        "download": "ಡೌನ್‌ಲೋಡ್"
+      }
+    },
+    "footer": {
+      "brandAria": "Flowauxi ಉಪಕರಣಗಳ ಮುಖಪುಟ",
+      "description": "Flowauxi ಉಪಕರಣಗಳು PDF, ಡಾಕ್ಯುಮೆಂಟ್, ಚಿತ್ರಗಳು ಮತ್ತು AI ಫೈಲ್ ಕೆಲಸಗಳಿಗಾಗಿ ಆಧುನಿಕ ಸಮಗ್ರ ಕಾರ್ಯಸ್ಥಳ. ವೇಗ, ಸರಳತೆ ಮತ್ತು ಉತ್ಪಾದಕತೆಗೆ ವಿನ್ಯಾಸಗೊಳಿಸಲಾಗಿದೆ.",
+      "columns": {
+        "tools": "ಉಪಕರಣಗಳು",
+        "pdf": "PDF",
+        "workspace": "ಕಾರ್ಯಸ್ಥಳ"
+      },
+      "links": {
+        "dashboard": "ಡ್ಯಾಶ್‌ಬೋರ್ಡ್",
+        "history": "ಇತಿಹಾಸ",
+        "settings": "ಸೆಟ್ಟಿಂಗ್‌ಗಳು"
+      },
+      "trust": {
+        "privateExports": "ಖಾಸಗಿ ಅತಿಥಿ ರಫ್ತುಗಳು",
+        "moreTools": "ಇನ್ನಷ್ಟು ಉಪಕರಣಗಳು ಬರುತ್ತಿವೆ"
+      }
+    }
+  },
+  "tools": {
+    "catalog": {
+      "text_to_pdf": {
+        "name": "ಪಠ್ಯದಿಂದ PDF",
+        "description": "ರಿಚ್ ಪಠ್ಯ, ಪಟ್ಟಿಗಳು, ಚಿಹ್ನೆಗಳು ಮತ್ತು ಫಾರ್ಮ್ಯಾಟ್ ಮಾಡಿದ ವಿಷಯದಿಂದ ಮೆರುಗುಳ್ಳ PDF ಡಾಕ್ಯುಮೆಂಟ್‌ಗಳನ್ನು ರಚಿಸಿ."
+      },
+      "pdf_to_docx": {
+        "name": "PDF ನಿಂದ Word",
+        "description": "PDF ಫೈಲ್‌ಗಳನ್ನು ಸಂಪಾದಿಸಬಹುದಾದ DOC ಮತ್ತು DOCX ಡಾಕ್ಯುಮೆಂಟ್‌ಗಳಾಗಿ ಪರಿವರ್ತಿಸಿ."
+      },
+      "docx_to_pdf": {
+        "name": "Word ನಿಂದ PDF",
+        "description": "DOC ಮತ್ತು DOCX ಫೈಲ್‌ಗಳನ್ನು ಹಂಚಲು ಸಿದ್ಧವಾದ PDFಗಳಾಗಿ ಮಾಡಿ."
+      },
+      "merge_pdf": {
+        "name": "PDF ಸೇರಿಸಿ",
+        "description": "ನೀವು ಬಯಸುವ ಕ್ರಮದಲ್ಲಿ PDFಗಳನ್ನು ಸೇರಿಸಿ."
+      },
+      "split_pdf": {
+        "name": "PDF ವಿಭಜಿಸಿ",
+        "description": "ಒಂದು ಪುಟ ಅಥವಾ ಪುಟ ಶ್ರೇಣಿಯನ್ನು ಪ್ರತ್ಯೇಕ PDF ಫೈಲ್‌ಗಳಾಗಿ ವಿಭಜಿಸಿ."
+      },
+      "compress_pdf": {
+        "name": "PDF ಕುಗ್ಗಿಸಿ",
+        "description": "ಗುಣಮಟ್ಟ ಕಾಪಾಡಿ PDF ಫೈಲ್ ಗಾತ್ರವನ್ನು ಕಡಿಮೆ ಮಾಡಿ."
+      },
+      "pdf_to_ppt": {
+        "name": "PDF ನಿಂದ PowerPoint",
+        "description": "PDF ಫೈಲ್‌ಗಳನ್ನು ಸಂಪಾದಿಸಬಹುದಾದ PPT ಮತ್ತು PPTX ಸ್ಲೈಡ್‌ಗಳಾಗಿ ಪರಿವರ್ತಿಸಿ."
+      },
+      "pdf_to_excel": {
+        "name": "PDF ನಿಂದ Excel",
+        "description": "PDFಗಳಿಂದ ಪಟ್ಟಿಗಳು ಮತ್ತು ಡೇಟಾವನ್ನು ಸ್ಪ್ರೆಡ್‌ಶೀಟ್‌ಗಳಿಗೆ ತೆಗೆದುಕೊಳ್ಳಿ."
+      },
+      "ppt_to_pdf": {
+        "name": "PowerPoint ನಿಂದ PDF",
+        "description": "ಪ್ರೆಸೆಂಟೇಶನ್ ಸ್ಲೈಡ್‌ಗಳನ್ನು PDFಗಳಾಗಿ ಪರಿವರ್ತಿಸಿ."
+      },
+      "excel_to_pdf": {
+        "name": "Excel ನಿಂದ PDF",
+        "description": "ಸ್ಪ್ರೆಡ್‌ಶೀಟ್‌ಗಳನ್ನು ಓದಲು ಸುಲಭವಾದ PDFಗಳಾಗಿ ಎಕ್ಸ್‌ಪೋರ್ಟ್ ಮಾಡಿ."
+      },
+      "edit_pdf": {
+        "name": "PDF ಸಂಪಾದಿಸಿ",
+        "description": "PDFಗಳಲ್ಲಿ ಪಠ್ಯ, ಚಿತ್ರ, ಆಕಾರ, ಹೈಲೈಟ್ ಮತ್ತು ಟಿಪ್ಪಣಿಗಳನ್ನು ಸೇರಿಸಿ."
+      },
+      "image_to_pdf": {
+        "name": "ಚಿತ್ರದಿಂದ PDF",
+        "description": "JPG, PNG ಮತ್ತು ಸ್ಕ್ಯಾನ್ ಚಿತ್ರಗಳನ್ನು ವ್ಯವಸ್ಥಿತ PDF ಡಾಕ್ಯುಮೆಂಟ್‌ಗಳಾಗಿ ಮಾಡಿ."
+      },
+      "pdf_to_image": {
+        "name": "PDF ನಿಂದ ಚಿತ್ರ",
+        "description": "PDF ಪುಟಗಳನ್ನು ಉನ್ನತ ಗುಣಮಟ್ಟದ ಚಿತ್ರಗಳಾಗಿ ಎಕ್ಸ್‌ಪೋರ್ಟ್ ಮಾಡಿ."
+      },
+      "rotate_pdf": {
+        "name": "PDF ತಿರುಗಿಸಿ",
+        "description": "ಒಂದು ಪುಟ ಅಥವಾ ಎಲ್ಲಾ ಪುಟಗಳನ್ನು ತಿರುಗಿಸಿ ಸರಿಪಡಿಸಿದ PDF ಉಳಿಸಿ."
+      },
+      "unlock_pdf": {
+        "name": "PDF ಅನ್ಲಾಕ್ ಮಾಡಿ",
+        "description": "ನಿಮ್ಮ ಫೈಲ್‌ಗಳಲ್ಲಿರುವ ಡಾಕ್ಯುಮೆಂಟ್ ನಿರ್ಬಂಧಗಳನ್ನು ತೆಗೆದುಹಾಕಿ."
+      },
+      "watermark_pdf": {
+        "name": "PDF ವಾಟರ್‌ಮಾರ್ಕ್",
+        "description": "PDF ಪುಟಗಳಿಗೆ ಪಠ್ಯ ಅಥವಾ ಚಿತ್ರ ವಾಟರ್‌ಮಾರ್ಕ್ ಸೇರಿಸಿ."
+      },
+      "ocr": {
+        "name": "OCR",
+        "description": "ಸ್ಕ್ಯಾನ್ ಡಾಕ್ಯುಮೆಂಟ್‌ಗಳಿಂದ ಪಠ್ಯ ಗುರುತಿಸಿ ಹುಡುಕಬಹುದಾದಂತೆ ಮಾಡಿ."
+      },
+      "protect_pdf": {
+        "name": "PDF ರಕ್ಷಿಸಿ",
+        "description": "ಸಂವೇದನಶೀಲ PDFಗಳಿಗೆ ಪಾಸ್‌ವರ್ಡ್ ರಕ್ಷಣೆ ಮತ್ತು ಪ್ರವೇಶ ನಿಯಂತ್ರಣ ಸೇರಿಸಿ."
+      },
+      "sign_pdf": {
+        "name": "PDF ಸಹಿ",
+        "description": "ಸಹಿ ಮತ್ತು ಅನುಮೋದನೆ ಕಾರ್ಯಪ್ರವಾಹಗಳಿಗೆ ಡಾಕ್ಯುಮೆಂಟ್‌ಗಳನ್ನು ಸಿದ್ಧಗೊಳಿಸಿ."
+      },
+      "html_to_pdf": {
+        "name": "HTML ನಿಂದ PDF",
+        "description": "ವೆಬ್ ಪುಟಗಳು, ಇನ್ವಾಯ್ಸ್‌ಗಳು ಮತ್ತು HTML ವಿಷಯವನ್ನು ನಂಬಿಕಾಸ್ಪದ PDFಗಳಾಗಿ ಮಾಡಿ."
+      }
+    }
+  },
+  "forms": {},
+  "errors": {
+    "pdfGenerationFailed": "PDF ರಚನೆ ವಿಫಲವಾಗಿದೆ.",
+    "emptyTextPdfDocument": "PDF ರಚಿಸುವ ಮೊದಲು ಪಠ್ಯವನ್ನು ಸೇರಿಸಿ.",
+    "pdfShapingUnavailable": "ಭಾರತೀಯ ಲಿಪಿಯ ಪಠ್ಯವನ್ನು render ಮಾಡಲು PDF ಸೇವೆ ಇನ್ನೂ ಸಿದ್ಧವಾಗಿಲ್ಲ. ಸೇವೆ refresh ಆದ ನಂತರ ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ.",
+    "pdfGlyphPreflightUnavailable": "ಸರ್ವರ್‌ನಲ್ಲಿ PDF ಫಾಂಟ್ ಪರಿಶೀಲನೆ ಲಭ್ಯವಿಲ್ಲ.",
+    "fontNotRegistered": "ಅಗತ್ಯವಿರುವ PDF ಫಾಂಟ್ ಸರ್ವರ್‌ನಲ್ಲಿ ಲಭ್ಯವಿಲ್ಲ.",
+    "unsupportedGlyph": "ಈ ದಸ್ತಾವೇಜಿನ ಕೆಲವು ಅಕ್ಷರಗಳನ್ನು ಆಯ್ಕೆ ಮಾಡಿದ PDF ಫಾಂಟ್ ಬೆಂಬಲಿಸುವುದಿಲ್ಲ."
+  },
+  "validation": {},
+  "dashboard": {},
+  "metadata": {
+    "files": {
+      "title": "ಉಪಕರಣಗಳು | Flowauxi",
+      "description": "Flowauxi ಉಪಕರಣಗಳಲ್ಲಿ PDF ಅಥವಾ ಡಾಕ್ಯುಮೆಂಟ್ ಉಪಕರಣವನ್ನು ಆಯ್ಕೆಮಾಡಿ."
+    },
+    "textToPdf": {
+      "title": "ಪಠ್ಯದಿಂದ PDF | Flowauxi ಉಪಕರಣಗಳು",
+      "description": "Flowauxi ಉಪಕರಣಗಳಿಂದ ಪಠ್ಯದಿಂದ ಸುರಕ್ಷಿತ PDF ರಚಿಸಿ."
+    },
+    "siteName": "Flowauxi ಉಪಕರಣಗಳು"
+  },
+  "seo": {}
+}

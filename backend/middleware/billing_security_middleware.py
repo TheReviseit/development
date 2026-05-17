@@ -68,11 +68,15 @@ DOMAIN_MAP = {
     'flowauxi.com': 'dashboard',
     'www.flowauxi.com': 'dashboard',
     'api.flowauxi.com': 'api',
+    'booking.flowauxi.com': 'booking',
+    'files.flowauxi.com': 'files',
     'localhost:3000': 'dashboard',
     'localhost:3001': 'shop',
     'localhost:3002': 'showcase',
     'localhost:3003': 'marketing',
     'localhost:3004': 'api',
+    'localhost:3005': 'booking',
+    'localhost:3006': 'files',
 }
 
 

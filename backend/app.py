@@ -439,6 +439,17 @@ try:
 except ImportError as e:
     logger.warning(f"Trial routes not available: {e}")
 
+# Register Files Tools platform routes
+try:
+    from domains.file_tools.api.routes import file_tools_bp
+    if "file_tools" not in app.blueprints:
+        app.register_blueprint(file_tools_bp)
+    logger.info("Files Tools routes registered (/api/file-tools/*)")
+except ImportError as e:
+    logger.warning(f"Files Tools routes not available: {e}")
+except Exception as e:
+    logger.warning(f"Files Tools route registration failed: {e}")
+
 # Initialize Omni-Channel Messaging SDK
 try:
     from services.messaging.sdk import init_messaging

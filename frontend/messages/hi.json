@@ -1,0 +1,366 @@
+{
+  "common": {
+    "download": "डाउनलोड",
+    "filesTools": "उपकरण",
+    "generatePdf": "PDF बनाएं",
+    "history": "इतिहास",
+    "language": "भाषा",
+    "login": "लॉग इन",
+    "settings": "सेटिंग्स",
+    "signUp": "साइन अप"
+  },
+  "navbar": {
+    "filesHome": "Flowauxi उपकरण होम",
+    "quickTools": "त्वरित उपकरण",
+    "tools": "उपकरण",
+    "openSearch": "उपकरण खोज खोलें",
+    "closeSearch": "उपकरण खोज बंद करें",
+    "openNavigation": "उपकरण नेविगेशन खोलें",
+    "closeNavigation": "उपकरण नेविगेशन बंद करें",
+    "searchButtonAria": "उपकरण खोजें",
+    "nav": {
+      "mergePdf": "PDF मिलाएं",
+      "splitPdf": "PDF विभाजित करें",
+      "compressPdf": "PDF संपीड़ित करें",
+      "convertPdf": "PDF बदलें",
+      "allTools": "सभी PDF उपकरण",
+      "allToolsShort": "सभी उपकरण"
+    },
+    "mega": {
+      "eyebrow": "Flowauxi उपकरण",
+      "title": "तेज़ दस्तावेज़ काम के लिए PDF उपकरण.",
+      "copy": "एक साफ़ कार्यस्थान से फ़ाइलें बदलें, व्यवस्थित करें, सुरक्षित करें और बेहतर बनाएं.",
+      "viewAllTools": "सभी उपकरण देखें",
+      "sections": {
+        "organizePdf": "PDF व्यवस्थित करें",
+        "optimizePdf": "PDF बेहतर बनाएं",
+        "convertToPdf": "PDF में बदलें",
+        "convertFromPdf": "PDF से बदलें",
+        "editPdf": "PDF संपादित करें",
+        "pdfSecurity": "PDF सुरक्षा",
+        "pdfIntelligence": "PDF इंटेलिजेंस"
+      },
+      "tools": {
+        "mergePdf": "PDF मिलाएं",
+        "splitPdf": "PDF विभाजित करें",
+        "compressPdf": "PDF संपीड़ित करें",
+        "convertPdf": "PDF बदलें",
+        "allTools": "सभी PDF उपकरण",
+        "allToolsShort": "सभी उपकरण",
+        "organizePdf": "PDF व्यवस्थित करें",
+        "optimizePdf": "PDF बेहतर बनाएं",
+        "convertToPdf": "PDF में बदलें",
+        "convertFromPdf": "PDF से बदलें",
+        "editPdf": "PDF संपादित करें",
+        "pdfSecurity": "PDF सुरक्षा",
+        "pdfIntelligence": "PDF इंटेलिजेंस",
+        "removePages": "पेज हटाएं",
+        "extractPages": "पेज निकालें",
+        "scanToPdf": "स्कैन से PDF",
+        "repairPdf": "PDF सुधारें",
+        "ocrPdf": "OCR PDF",
+        "textToPdf": "पाठ से PDF",
+        "jpgToPdf": "JPG से PDF",
+        "wordToPdf": "Word से PDF",
+        "powerPointToPdf": "PowerPoint से PDF",
+        "excelToPdf": "Excel से PDF",
+        "htmlToPdf": "HTML से PDF",
+        "pdfToJpg": "PDF से JPG",
+        "pdfToWord": "PDF से Word",
+        "pdfToPowerPoint": "PDF से PowerPoint",
+        "pdfToExcel": "PDF से Excel",
+        "pdfToPdfA": "PDF से PDF/A",
+        "rotatePdf": "PDF घुमाएं",
+        "addPageNumbers": "पेज नंबर जोड़ें",
+        "addWatermark": "वॉटरमार्क जोड़ें",
+        "cropPdf": "PDF काटें",
+        "pdfForms": "PDF फ़ॉर्म",
+        "unlockPdf": "PDF अनलॉक करें",
+        "protectPdf": "PDF सुरक्षित करें",
+        "signPdf": "PDF हस्ताक्षर",
+        "redactPdf": "PDF छिपाएं",
+        "comparePdf": "PDF तुलना करें",
+        "aiSummarizer": "AI सारांश",
+        "translatePdf": "PDF अनुवाद करें"
+      }
+    },
+    "mobile": {
+      "filesNavigation": "उपकरण नेविगेशन",
+      "searchTools": "उपकरण खोजें",
+      "searchPlaceholder": "उपकरण खोजें",
+      "searchPdfTools": "PDF उपकरण खोजें",
+      "searchResults": "खोज परिणाम",
+      "popular": "लोकप्रिय",
+      "noMatchingTools": "मिलते-जुलते उपकरण नहीं मिले."
+    }
+  },
+  "files": {
+    "hub": {
+      "title": "PDF के साथ काम करने के लिए सभी जरूरी टूल एक जगह",
+      "description": "PDF को मर्ज, स्प्लिट, कंप्रेस, कन्वर्ट, सुरक्षित, साइन और व्यवस्थित करने के लिए तेज और आसान टूल.",
+      "actions": {
+        "history": "इतिहास",
+        "settings": "सेटिंग्स"
+      },
+      "aria": {
+        "categories": "उपकरण श्रेणियां",
+        "tools": "उपकरण",
+        "openTool": "{name} खोलें"
+      },
+      "categories": {
+        "all": "सभी",
+        "workflows": "वर्कफ्लो",
+        "organizePdf": "PDF व्यवस्थित करें",
+        "optimizePdf": "PDF ऑप्टिमाइज करें",
+        "convertPdf": "PDF कन्वर्ट करें",
+        "editPdf": "PDF एडिट करें",
+        "pdfSecurity": "PDF सुरक्षा",
+        "pdfIntelligence": "PDF इंटेलिजेंस"
+      },
+      "categoriesShort": {
+        "all": "सभी",
+        "workflows": "फ्लो",
+        "organizePdf": "व्यवस्थित",
+        "optimizePdf": "ऑप्टिमाइज",
+        "convertPdf": "कन्वर्ट",
+        "editPdf": "एडिट",
+        "pdfSecurity": "सुरक्षा",
+        "pdfIntelligence": "AI PDF"
+      }
+    },
+    "comingSoon": {
+      "back": "उपकरण",
+      "eyebrow": "जल्द आ रहा है",
+      "planned": "योजनाबद्ध",
+      "openTextToPdf": "पाठ से PDF खोलें"
+    },
+    "textToPdf": {
+      "toolbar": {
+        "currentLocation": "वर्तमान स्थान",
+        "dashboard": "डैशबोर्ड",
+        "files": "उपकरण",
+        "title": "पाठ से PDF",
+        "authenticated": "ऑटोसेव, इतिहास और सुरक्षित डाउनलोड सक्रिय हैं.",
+        "guest": "गेस्ट एक्सपोर्ट निजी हैं और अपने आप समाप्त हो जाते हैं."
+      },
+      "editor": {
+        "panel": "एडिटर",
+        "formatting": "टेक्स्ट फॉर्मेटिंग",
+        "paragraphAlignment": "पैराग्राफ अलाइनमेंट",
+        "documentTitle": "दस्तावेज शीर्षक",
+        "untitled": "बिना शीर्षक दस्तावेज",
+        "textareaAria": "PDF में बदलने के लिए टेक्स्ट",
+        "placeholder": "कुछ लिखें...",
+        "bold": "बोल्ड",
+        "italic": "इटैलिक",
+        "underline": "अंडरलाइन",
+        "heading1": "हेडिंग 1",
+        "heading2": "हेडिंग 2",
+        "bulletList": "बुलेट सूची",
+        "numberedList": "क्रमांकित सूची",
+        "alignLeft": "बाएं अलाइन",
+        "alignCenter": "बीच में अलाइन",
+        "alignRight": "दाएं अलाइन",
+        "justify": "जस्टिफाई",
+        "pageBreak": "पेज ब्रेक",
+        "headingPlaceholder": "शीर्षक",
+        "listItemPlaceholder": "सूची आइटम"
+      },
+      "settings": {
+        "panel": "सेटिंग्स",
+        "pageSize": "पेज साइज",
+        "orientation": "ओरिएंटेशन",
+        "font": "फॉन्ट",
+        "fontSize": "फॉन्ट साइज",
+        "margins": "मार्जिन",
+        "lineHeight": "लाइन हाइट",
+        "header": "हेडर",
+        "headerText": "हेडर टेक्स्ट",
+        "footer": "फूटर",
+        "footerText": "फूटर टेक्स्ट",
+        "pageNumbers": "पेज नंबर",
+        "portrait": "पोर्ट्रेट",
+        "landscape": "लैंडस्केप",
+        "autoFont": "ऑटो (Noto + HarfBuzz)",
+        "marginPresets": {
+          "compact": "कॉम्पैक्ट",
+          "standard": "मानक",
+          "spacious": "विस्तृत"
+        },
+        "marginSides": {
+          "top": "ऊपर",
+          "right": "दायां",
+          "bottom": "नीचे",
+          "left": "बायां"
+        }
+      },
+      "export": {
+        "aria": "PDF एक्सपोर्ट",
+        "chars": "{count} / {limit} अक्षर",
+        "pages": "{count, plural, one {# पेज} other {# पेज}}",
+        "saving": "सेव हो रहा है",
+        "saved": "सेव हो गया",
+        "draftOffline": "ड्राफ्ट ऑफलाइन",
+        "draftReady": "ड्राफ्ट तैयार",
+        "generate": "PDF बनाएं",
+        "download": "{size} डाउनलोड",
+        "share": "साझा करें",
+        "shareText": "Flowauxi उपकरण से निर्यात किया गया PDF.",
+        "shareCopied": "शेयर लिंक कॉपी किया गया",
+        "shareUnavailable": "इस ब्राउज़र में शेयरिंग उपलब्ध नहीं है.",
+        "shareFailed": "यह PDF साझा नहीं हो सका.",
+        "emptyDocument": "PDF बनाने से पहले टेक्स्ट जोड़ें.",
+        "characterLimitExceeded": "अक्षर सीमा पार हो गई",
+        "readyUntil": "PDF {date} तक तैयार है"
+      },
+      "preview": {
+        "panel": "पूर्वावलोकन",
+        "pageCount": "{count, plural, one {# पृष्ठ} other {# पृष्ठ}}",
+        "blockCount": "{count, plural, one {# खंड} other {# खंड}}",
+        "preparing": "पूर्वावलोकन तैयार हो रहा है",
+        "pageAria": "PDF पूर्वावलोकन पृष्ठ {number}",
+        "pageNumber": "पृष्ठ {number}"
+      },
+      "mobileTabs": {
+        "aria": "पाठ से PDF पैनल",
+        "edit": "संपादन",
+        "preview": "पूर्वावलोकन",
+        "settings": "सेटिंग्स",
+        "history": "इतिहास"
+      },
+      "history": {
+        "panel": "इतिहास",
+        "signInPrompt": "सत्रों के बीच दस्तावेज़ इतिहास रखने के लिए साइन इन करें.",
+        "loading": "इतिहास लोड हो रहा है",
+        "empty": "अभी कोई निर्यातित दस्तावेज़ नहीं.",
+        "meta": "{size} · {date} · {count} डाउनलोड",
+        "download": "डाउनलोड"
+      }
+    },
+    "footer": {
+      "brandAria": "Flowauxi उपकरण होम",
+      "description": "Flowauxi उपकरण PDF, दस्तावेज़, चित्र और AI फ़ाइल कार्यों के लिए आधुनिक एकीकृत कार्यस्थान है. यह तेज़ी, सरलता और उत्पादकता के लिए बनाया गया है.",
+      "columns": {
+        "tools": "उपकरण",
+        "pdf": "PDF",
+        "workspace": "कार्यस्थान"
+      },
+      "links": {
+        "dashboard": "डैशबोर्ड",
+        "history": "इतिहास",
+        "settings": "सेटिंग्स"
+      },
+      "trust": {
+        "privateExports": "निजी अतिथि निर्यात",
+        "moreTools": "और उपकरण आ रहे हैं"
+      }
+    }
+  },
+  "tools": {
+    "catalog": {
+      "text_to_pdf": {
+        "name": "पाठ से PDF",
+        "description": "रिच टेक्स्ट, सूचियों, प्रतीकों और फॉर्मेटेड कंटेंट से साफ PDF दस्तावेज बनाएं."
+      },
+      "pdf_to_docx": {
+        "name": "PDF से Word",
+        "description": "PDF फाइलों को साफ संरचना वाले एडिटेबल DOC और DOCX दस्तावेजों में बदलें."
+      },
+      "docx_to_pdf": {
+        "name": "Word से PDF",
+        "description": "DOC और DOCX फाइलों को शेयर करने योग्य साफ PDF में बदलें."
+      },
+      "merge_pdf": {
+        "name": "PDF मिलाएं",
+        "description": "कई PDF को अपनी पसंद के क्रम में जोड़ें."
+      },
+      "split_pdf": {
+        "name": "PDF विभाजित करें",
+        "description": "एक पेज या पेज रेंज को अलग PDF फाइलों में बांटें."
+      },
+      "compress_pdf": {
+        "name": "PDF संपीड़ित करें",
+        "description": "PDF की गुणवत्ता बनाए रखते हुए फाइल साइज कम करें."
+      },
+      "pdf_to_ppt": {
+        "name": "PDF से PowerPoint",
+        "description": "PDF फाइलों को एडिटेबल PPT और PPTX स्लाइड में बदलें."
+      },
+      "pdf_to_excel": {
+        "name": "PDF से Excel",
+        "description": "PDF से टेबल और डेटा को एडिटेबल स्प्रेडशीट में निकालें."
+      },
+      "ppt_to_pdf": {
+        "name": "PowerPoint से PDF",
+        "description": "प्रेजेंटेशन स्लाइड को शेयर करने योग्य PDF में बदलें."
+      },
+      "excel_to_pdf": {
+        "name": "Excel से PDF",
+        "description": "लेआउट और पठनीयता बचाते हुए स्प्रेडशीट को PDF में एक्सपोर्ट करें."
+      },
+      "edit_pdf": {
+        "name": "PDF संपादित करें",
+        "description": "PDF में टेक्स्ट, इमेज, शेप, हाइलाइट और एनोटेशन जोड़ें."
+      },
+      "image_to_pdf": {
+        "name": "चित्र से PDF",
+        "description": "JPG, PNG और स्कैन इमेज को व्यवस्थित PDF दस्तावेजों में बदलें."
+      },
+      "pdf_to_image": {
+        "name": "PDF से चित्र",
+        "description": "PDF पेजों को हाई-क्वालिटी इमेज के रूप में एक्सपोर्ट करें."
+      },
+      "rotate_pdf": {
+        "name": "PDF घुमाएं",
+        "description": "एक या सभी पेज घुमाकर सही की गई PDF सेव करें."
+      },
+      "unlock_pdf": {
+        "name": "PDF अनलॉक करें",
+        "description": "अपनी फाइलों से दस्तावेज प्रतिबंध हटाएं."
+      },
+      "watermark_pdf": {
+        "name": "PDF वॉटरमार्क",
+        "description": "PDF पेजों पर टेक्स्ट या इमेज वॉटरमार्क लगाएं."
+      },
+      "ocr": {
+        "name": "OCR",
+        "description": "स्कैन दस्तावेजों से टेक्स्ट पहचानें और सामग्री को खोजने योग्य बनाएं."
+      },
+      "protect_pdf": {
+        "name": "PDF सुरक्षित करें",
+        "description": "संवेदनशील PDF में पासवर्ड सुरक्षा और एक्सेस कंट्रोल जोड़ें."
+      },
+      "sign_pdf": {
+        "name": "PDF हस्ताक्षर",
+        "description": "हस्ताक्षर और अनुमोदन वर्कफ्लो के लिए दस्तावेज तैयार करें."
+      },
+      "html_to_pdf": {
+        "name": "HTML से PDF",
+        "description": "वेब पेज, इनवॉइस और HTML कंटेंट को भरोसेमंद PDF में रेंडर करें."
+      }
+    }
+  },
+  "forms": {},
+  "errors": {
+    "pdfGenerationFailed": "PDF निर्माण विफल रहा.",
+    "emptyTextPdfDocument": "PDF बनाने से पहले टेक्स्ट जोड़ें.",
+    "pdfShapingUnavailable": "PDF सेवा भारतीय लिपि का पाठ रेंडर करने के लिए अभी तैयार नहीं है. सेवा refresh होने के बाद फिर से प्रयास करें.",
+    "pdfGlyphPreflightUnavailable": "सर्वर पर PDF फ़ॉन्ट जाँच उपलब्ध नहीं है.",
+    "fontNotRegistered": "सर्वर पर आवश्यक PDF फ़ॉन्ट उपलब्ध नहीं है.",
+    "unsupportedGlyph": "इस दस्तावेज़ के कुछ अक्षर चुने गए PDF फ़ॉन्ट में समर्थित नहीं हैं."
+  },
+  "validation": {},
+  "dashboard": {},
+  "metadata": {
+    "files": {
+      "title": "उपकरण | Flowauxi",
+      "description": "Flowauxi उपकरणों में PDF या दस्तावेज़ उपकरण चुनें."
+    },
+    "textToPdf": {
+      "title": "पाठ से PDF | Flowauxi उपकरण",
+      "description": "Flowauxi उपकरणों से पाठ से सुरक्षित PDF बनाएं."
+    },
+    "siteName": "Flowauxi उपकरण"
+  },
+  "seo": {}
+}

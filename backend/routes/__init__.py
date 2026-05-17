@@ -59,6 +59,13 @@ def register_routes(app):
     app.register_blueprint(monitor_bp)  # Platform monitoring dashboard
     app.register_blueprint(health_bp)  # Health check endpoints (MUST be registered before billing)
     app.register_blueprint(billing_bp)  # Billing API endpoints
+    try:
+        from domains.file_tools.api.routes import file_tools_bp
+
+        app.register_blueprint(file_tools_bp)
+        print("Registered Files Tools routes: /api/file-tools/*")
+    except Exception as exc:
+        print(f"Files Tools routes unavailable: {exc}")
     register_test_routes(app)  # Register test push endpoint
     register_messaging_routes(app)  # Register messaging endpoint
     print("✅ Registered API routes: templates, contacts, analytics, campaigns, bulk-campaigns, appointments, orders, payments, inventory, showcase, slug-cache, monitor, health, billing, test-push, messaging")

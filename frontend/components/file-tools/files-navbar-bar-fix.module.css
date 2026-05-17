@@ -1,0 +1,30 @@
+.barFixScope :global([class*="files-mega-menu-module"][class*="navItemWithMenu"]::after) {
+  content: none !important;
+  display: none !important;
+  height: 0 !important;
+  pointer-events: none !important;
+}
+
+.barFixScope :global([class*="files-mega-menu-module"][class*="megaMenu"]) {
+  top: 100% !important;
+  padding-top: 0 !important;
+  transform: translateX(-50%) !important;
+  transition:
+    opacity 140ms ease,
+    visibility 0s linear 140ms !important;
+  z-index: 1200 !important;
+}
+
+.barFixScope :global([class*="files-mega-menu-module"][class*="navItemWithMenu"]:hover [class*="megaMenu"]),
+.barFixScope :global([class*="files-mega-menu-module"][class*="navItemWithMenu"]:focus-within [class*="megaMenu"]) {
+  transform: translateX(-50%) !important;
+  transition-delay: 0s !important;
+}
+
+.barFixScope :global([class*="files-mega-menu-module"][class*="megaMenu"]::before) {
+  top: -9px !important;
+}
+
+.barFixScope :global([class*="files-product-chrome-module"][class*="content"]) {
+  background: rgb(245, 245, 250);
+}

@@ -164,60 +164,10 @@ export async function POST(request: NextRequest) {
       console.error("Error updating user:", updateUserError);
     }
 
-    // Send welcome email
-    try {
-      const { sendEmail } = await import("@/lib/email/resend");
-      const { generateEmailHtml } = await import("@/lib/email/email-templates");
-
-      // Get user data for personalization - use maybeSingle() or handle array result
-      const { data: userDataArray, error: userError } = await supabase
-        .from("users")
-        .select("full_name, email")
-        .eq("firebase_uid", userId);
-
-      if (userError) {
-        console.error("Error fetching user for welcome email:", userError);
-      }
-
-      // Check if we got user data (array should have at least one item)
-      const userData =
-        userDataArray && userDataArray.length > 0 ? userDataArray[0] : null;
-
-      if (!userData) {
-        console.error(
-          `❌ User not found for firebase_uid: ${userId}. Cannot send welcome email.`
-        );
-      } else {
-        const emailHtml = generateEmailHtml("welcome-verified", {
-          userName: userData.full_name || "there",
-        });
-
-        if (emailHtml && userData.email) {
-          const emailResult = await sendEmail({
-            to: userData.email,
-            subject: "Welcome to Flowauxi! 🎉",
-            html: emailHtml,
-          });
-
-          if (emailResult.success) {
-            console.log(`✅ Welcome email sent to ${userData.email}`);
-          } else {
-            console.error(
-              `❌ Failed to send welcome email:`,
-              emailResult.error
-            );
-          }
-        } else {
-          console.error(
-            "❌ No email HTML generated or user email missing for welcome email"
-          );
-        }
-      }
-    } catch (emailError) {
-      console.error("Error sending welcome email:", emailError);
-      // Don't fail the verification if welcome email fails
-    }
-
+    console.info(
+      "[verify-email] Email verified; welcome email deferred until product access activation",
+      { firebaseUid: userId },
+    );
     // Clean up old verification codes for this user
     await supabase
       .from("verification_codes")
@@ -228,6 +178,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       success: true,
       message: "Email verified successfully",
+      welcomeEmailDeferred: true,
     });
   } catch (error) {
     console.error("Verify email error:", error);

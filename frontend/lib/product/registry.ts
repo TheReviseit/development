@@ -747,6 +747,33 @@ export const PRODUCT_REGISTRY: Record<ProductDomain, ProductConfig> = {
 
     seoBase: "https://booking.flowauxi.com",
   },
+
+  // ===========================================================================
+  // FILES TOOLS PRODUCT
+  // ===========================================================================
+  files: {
+    id: "files",
+    name: "Flowauxi Tools",
+    domain: "tools.flowauxi.com",
+    devPort: 3006,
+    description: "Secure document conversion and processing workspace",
+    tagline: "Convert, prepare, and manage documents from Flowauxi",
+
+    pricing: [],
+
+    enabledFeatures: ["files", "textToPdf"],
+
+    routes: {
+      landing: "/tools",
+      onboarding: "/onboarding-embedded",
+      dashboard: "/dashboard/files",
+      pricing: "/pricing",
+      login: "/login",
+      signup: "/signup",
+    },
+
+    seoBase: "https://tools.flowauxi.com",
+  },
 };
 
 // =============================================================================
@@ -760,6 +787,10 @@ export function getProductByDomain(
   hostname: string,
   port?: string,
 ): ProductConfig {
+  if (hostname === "files.flowauxi.com" || hostname.startsWith("files.")) {
+    return PRODUCT_REGISTRY.files;
+  }
+
   // Production: exact hostname match
   for (const product of Object.values(PRODUCT_REGISTRY)) {
     if (hostname === product.domain || hostname === `www.${product.domain}`) {

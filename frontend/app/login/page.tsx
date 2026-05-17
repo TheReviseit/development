@@ -22,6 +22,7 @@ import {
   getOnboardingCheck,
   getOnboardingDestination,
 } from "@/lib/auth/onboarding-check-client";
+import { clearInvalidClientSession } from "@/lib/auth/client-session-recovery";
 import type { AuthDecision } from "@/types/auth.types";
 
 // Lazy load Toast component - only loaded when needed
@@ -130,13 +131,18 @@ async function syncWithRetry(
   return { ok: false, status: 0, code: "UNKNOWN", message: "Auth sync failed" };
 }
 
-async function syncLoginWithAutoHeal(idToken: string) {
-  const first = await syncWithRetry(idToken, false);
-  if (first.ok) return first;
-  if (first.status === 404 || first.code === "USER_NOT_FOUND") {
-    return await syncWithRetry(idToken, true);
-  }
-  return first;
+type LoginSyncResult = Awaited<ReturnType<typeof syncWithRetry>>;
+
+async function syncExistingLoginSession(idToken: string) {
+  return syncWithRetry(idToken, false);
+}
+
+function isMissingAccountSyncResult(result: LoginSyncResult) {
+  return result.status === 404 || result.code === "USER_NOT_FOUND";
+}
+
+async function clearMissingAccountSession(reason: string) {
+  await clearInvalidClientSession(reason);
 }
 
 // Helper function to check onboarding status with fallback
@@ -313,9 +319,16 @@ export default function LoginPage() {
           console.log("[Login] Redirect result successful");
           const idToken = await result.user.user.getIdToken();
 
-          // Provision user + set session cookie (canonical, with auto-heal)
-          const syncResult = await syncLoginWithAutoHeal(idToken);
+          const syncResult = await syncExistingLoginSession(idToken);
           if (!syncResult.ok) {
+            if (isMissingAccountSyncResult(syncResult)) {
+              await clearMissingAccountSession("login_redirect_user_not_found");
+              setError("Your previous session no longer exists. Please sign in again.");
+              setGoogleLoading(false);
+              setIsRedirectPending(false);
+              setCheckingSession(false);
+              return;
+            }
             throw new Error(syncResult.code || "AUTH_SYNC_FAILED");
           }
 
@@ -374,7 +387,7 @@ export default function LoginPage() {
         if (firebaseUser) {
           try {
             const idToken = await firebaseUser.getIdToken(true);
-            const syncResult = await syncLoginWithAutoHeal(idToken);
+            const syncResult = await syncExistingLoginSession(idToken);
 
             if (syncResult.ok) {
               const fallbackCompleted = syncResult.authDecision
@@ -388,13 +401,19 @@ export default function LoginPage() {
               return;
             }
 
-            // If we couldn't sync, clear stale Firebase session and show login form
             console.warn("[Login] Session sync failed:", syncResult);
-            await auth.signOut();
+            await clearInvalidClientSession(
+              isMissingAccountSyncResult(syncResult)
+                ? "login_session_user_not_found"
+                : "login_session_sync_failed",
+            );
+            if (isMounted && isMissingAccountSyncResult(syncResult)) {
+              setError("Your previous session no longer exists. Please sign in again.");
+            }
           } catch (error) {
             console.error("Session validation error:", error);
             try {
-              await auth.signOut();
+              await clearInvalidClientSession("login_session_validation_error");
             } catch {}
           }
         }
@@ -446,8 +465,14 @@ export default function LoginPage() {
       try {
         const result = await signInWithEmailAndPassword(auth, email, password);
         const idToken = await result.user.getIdToken();
-        const syncResult = await syncLoginWithAutoHeal(idToken);
+        const syncResult = await syncExistingLoginSession(idToken);
         if (!syncResult.ok) {
+          if (isMissingAccountSyncResult(syncResult)) {
+            await clearMissingAccountSession("login_submit_user_not_found");
+            setError("No active Flowauxi account was found for this login. Please sign up again.");
+            setLoading(false);
+            return;
+          }
           throw new Error(syncResult.code || "AUTH_SYNC_FAILED");
         }
 
@@ -506,9 +531,14 @@ export default function LoginPage() {
           return;
         }
 
-        // STEP 2: Provision user + set session cookie (canonical, with auto-heal)
-        const syncResult = await syncLoginWithAutoHeal(idToken);
+        const syncResult = await syncExistingLoginSession(idToken);
         if (!syncResult.ok) {
+          if (isMissingAccountSyncResult(syncResult)) {
+            await clearMissingAccountSession("google_login_user_not_found");
+            setError("No active Flowauxi account was found for this Google login. Please sign up again.");
+            setGoogleLoading(false);
+            return;
+          }
           throw new Error(syncResult.code || "AUTH_SYNC_FAILED");
         }
 

@@ -1,0 +1,23 @@
+.cursorScope,
+.cursorScope :global(:where(section, article, div, span, p, h1, h2, h3, ul, ol, li)) {
+  cursor: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='28' height='28' viewBox='0 0 40 40'%3E%3Cpath d='M7 4 L31 24 L19.4 25.7 L25.8 35.6 L20.7 39 L14.2 28.8 L7.6 36.1 Z' fill='%23F0312E' stroke='%237F1D1D' stroke-width='3.5' stroke-linejoin='round'/%3E%3Cpath d='M7 4 L31 24 L19.4 25.7 L25.8 35.6 L20.7 39 L14.2 28.8 L7.6 36.1 Z' fill='%23F0312E' stroke='%23FFFFFF' stroke-width='1.6' stroke-linejoin='round'/%3E%3C/svg%3E") 5 4, auto;
+}
+
+.cursorScope :global(:where(a, button, label, select, [role="button"], [tabindex]:not([tabindex="-1"]))) {
+  cursor: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='28' height='28' viewBox='0 0 40 40'%3E%3Cpath d='M7 4 L31 24 L19.4 25.7 L25.8 35.6 L20.7 39 L14.2 28.8 L7.6 36.1 Z' fill='%23F0312E' stroke='%237F1D1D' stroke-width='3.5' stroke-linejoin='round'/%3E%3Cpath d='M7 4 L31 24 L19.4 25.7 L25.8 35.6 L20.7 39 L14.2 28.8 L7.6 36.1 Z' fill='%23F0312E' stroke='%23FFFFFF' stroke-width='1.6' stroke-linejoin='round'/%3E%3C/svg%3E") 5 4, pointer;
+}
+
+.cursorScope :global(:where(input, textarea, [contenteditable="true"])) {
+  cursor: text;
+}
+
+.cursorScope :global([class*="file-tools-module"][class*="textarea"]) {
+  scrollbar-color: auto !important;
+  scrollbar-width: auto !important;
+}
+
+.cursorScope :global([class*="file-tools-module"][class*="textarea"]::-webkit-scrollbar),
+.cursorScope :global([class*="file-tools-module"][class*="textarea"]::-webkit-scrollbar-track),
+.cursorScope :global([class*="file-tools-module"][class*="textarea"]::-webkit-scrollbar-thumb) {
+  all: revert !important;
+}

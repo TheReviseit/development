@@ -16,6 +16,10 @@ import {
 import QueryProvider from "./components/providers/QueryProvider";
 import { AnalyticsProvider } from "./components/analytics/AnalyticsProvider";
 import { GtagScript } from "./components/analytics/GtagScript";
+import { ThemeProvider } from "./theme/ThemeProvider";
+import { ThemeScript } from "./theme/ThemeScript";
+import I18nProvider from "@/components/providers/i18n/I18nProvider";
+import { directionFromLocale, localeFromHeaders } from "@/lib/i18n/server";
 
 const inter = Inter({
   variable: "--font-inter",
@@ -58,8 +62,8 @@ export const viewport: Viewport = {
   userScalable: true,
   viewportFit: "cover",
   themeColor: [
-    { media: "(prefers-color-scheme: light)", color: "#22C15A" },
-    { media: "(prefers-color-scheme: dark)", color: "#0f0f0f" },
+    { media: "(prefers-color-scheme: light)", color: "#f6f7fb" },
+    { media: "(prefers-color-scheme: dark)", color: "#050607" },
   ],
 };
 
@@ -279,6 +283,8 @@ export default async function RootLayout({
   const headersList = await headers();
   const host = headersList.get("host") || "www.flowauxi.com";
   const domain = resolveProductDomain(host);
+  const locale = localeFromHeaders(headersList);
+  const direction = directionFromLocale(locale);
 
   // Schema firewall: subdomains get their own schemas, main domain gets ALL_SCHEMAS
   const schemas =
@@ -286,11 +292,16 @@ export default async function RootLayout({
 
   return (
     <html
-      lang="en"
+      lang={locale}
+      dir={direction}
       prefix="og: https://ogp.me/ns#"
       data-scroll-behavior="smooth"
+      data-theme="light"
+      data-color-scheme="light"
+      suppressHydrationWarning
     >
       <head>
+        <ThemeScript />
         {/* DNS Prefetch for Performance */}
         <link rel="dns-prefetch" href="https://www.google-analytics.com" />
         <link rel="dns-prefetch" href="https://www.googletagmanager.com" />
@@ -353,17 +364,21 @@ export default async function RootLayout({
       <body
         className={`${inter.variable} ${jakarta.variable} ${outfit.variable} ${dancingScript.variable} antialiased`}
       >
-        <QueryProvider>
-          <ServiceWorkerRegistration />
-          <PWAInstallPrompt />
-          <GtagScript />
-          <Suspense fallback={null}>
-            <AnalyticsProvider />
-          </Suspense>
-          <CookieConsent />
-          {children}
-          <SpeedInsights />
-        </QueryProvider>
+        <I18nProvider>
+          <ThemeProvider>
+            <QueryProvider>
+              <ServiceWorkerRegistration />
+              <PWAInstallPrompt />
+              <GtagScript />
+              <Suspense fallback={null}>
+                <AnalyticsProvider />
+              </Suspense>
+              <CookieConsent />
+              {children}
+              <SpeedInsights />
+            </QueryProvider>
+          </ThemeProvider>
+        </I18nProvider>
       </body>
     </html>
   );

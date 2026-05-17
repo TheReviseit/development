@@ -221,7 +221,7 @@ async function ensureCurrentProductMembership(params: {
     allowLegacyMigration,
   } = params;
 
-  if (currentProduct === "dashboard") return null;
+  if (currentProduct === "dashboard" || currentProduct === "files") return null;
 
   const { data: membership } = await supabase
     .from("user_products")
@@ -366,6 +366,7 @@ async function legacyEnsureSupabaseUserAndMembership(
     : null;
   const hasAccess =
     currentProduct === "dashboard" ||
+    currentProduct === "files" ||
     membership?.status === "active" ||
     (membership?.status === "trial" &&
       (!trialEndsAt || Number.isNaN(trialEndsAt.getTime()) || trialEndsAt > new Date()));

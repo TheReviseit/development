@@ -591,9 +591,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             currentState !== ("UNAUTHENTICATED" as AuthState) &&
             currentState !== ("PRODUCT_NOT_ENABLED" as AuthState)
           ) {
-            console.error("[AUTH] Auth timeout — forcing signout");
-            auth.signOut();
-            return "AUTH_ERROR" as AuthState;
+            console.error("[AUTH] Auth timeout — clearing session");
+            void clearSession();
+            return "UNAUTHENTICATED" as AuthState;
           }
           return currentState;
         });
@@ -659,6 +659,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             }
           } catch (err: any) {
             console.error("[AUTH] Auto-sync failed:", err);
+
+            if (err.message === "USER_NOT_FOUND") {
+              console.error(
+                "[AUTH] USER_NOT_FOUND during auto-sync - clearing session immediately",
+              );
+              await clearSession();
+              updateAuthState(
+                "UNAUTHENTICATED" as AuthState,
+                "USER_NOT_FOUND_SESSION_CLEARED",
+              );
+              return;
+            }
 
             // CRITICAL: Only clear session if it's NOT a product membership issue
             if (err.message !== "PRODUCT_NOT_ENABLED") {
@@ -766,14 +778,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           console.error("[AUTH] Token refresh failed:", err);
           // Token refresh failure = signout
           console.warn("[AUTH] Signing out due to token refresh failure");
-          await auth.signOut();
+          await clearSession();
         }
       },
       50 * 60 * 1000,
     ); // 50 minutes
 
     return () => clearInterval(refreshInterval);
-  }, [firebaseUser, syncUser]);
+  }, [firebaseUser, syncUser, clearSession]);
 
   // ========================================================================
   // CONTEXT VALUE

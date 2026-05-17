@@ -100,6 +100,25 @@ const TemplatesIcon = () => (
   </svg>
 );
 
+const FileToolsIcon = () => (
+  <svg
+    width="20"
+    height="20"
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2"
+  >
+    <path
+      d="M14 2H7a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7z"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+    <path d="M14 2v5h5" strokeLinecap="round" strokeLinejoin="round" />
+    <path d="M9 13h6M9 17h4" strokeLinecap="round" strokeLinejoin="round" />
+  </svg>
+);
+
 const ContactsIcon = () => (
   <svg
     width="20"
@@ -606,11 +625,23 @@ export default function DashboardSidebar({
     showcase_enabled: false,
   });
   const [showProfileMenu, setShowProfileMenu] = useState(false);
-  const [hiddenItems, setHiddenItems] = useState<string[]>([]);
+  const [hiddenItems, setHiddenItems] = useState<string[]>(() => {
+    if (typeof window === "undefined") return [];
+
+    const stored = localStorage.getItem("sidebar-hidden-items");
+    if (!stored) return [];
+
+    try {
+      return JSON.parse(stored);
+    } catch {
+      return [];
+    }
+  });
   const [showHiddenMenu, setShowHiddenMenu] = useState(false);
   const [expandedItems, setExpandedItems] = useState<string[]>([
     "products",
     "showcase",
+    "files",
   ]);
 
   // Helper function to determine if a nav item is active
@@ -652,18 +683,6 @@ export default function DashboardSidebar({
       });
     }
   }, [currentDomain]);
-
-  // Load hidden items from localStorage
-  useEffect(() => {
-    const stored = localStorage.getItem("sidebar-hidden-items");
-    if (stored) {
-      try {
-        setHiddenItems(JSON.parse(stored));
-      } catch {
-        setHiddenItems([]);
-      }
-    }
-  }, []);
 
   // Items that cannot be hidden (essential navigation)
   const NON_HIDEABLE_ITEMS = ["analytics", "messages", "bot-settings"];
@@ -952,18 +971,54 @@ export default function DashboardSidebar({
         ]
       : []),
 
-    {
-      id: "bot-settings",
-      label: "AI Settings",
-      icon: <BotIcon />,
-      href: "/dashboard/bot-settings",
-    },
-    {
-      id: "preview-bot",
-      label: "Preview Bot",
-      icon: <PreviewBotIcon />,
-      href: "/dashboard/preview-bot",
-    },
+    ...(visibility.files
+      ? [
+          {
+            id: "files",
+            label: "Tools",
+            icon: <FileToolsIcon />,
+            href: "/dashboard/files",
+            subItems: [
+              {
+                id: "files-text-to-pdf",
+                label: "Text to PDF",
+                href: "/dashboard/files/text-to-pdf",
+              },
+              {
+                id: "files-history",
+                label: "History",
+                href: "/dashboard/files/history",
+              },
+              {
+                id: "files-settings",
+                label: "Settings",
+                href: "/dashboard/files/settings",
+              },
+            ],
+          },
+        ]
+      : []),
+
+    ...(visibility.aiSettings
+      ? [
+          {
+            id: "bot-settings",
+            label: "AI Settings",
+            icon: <BotIcon />,
+            href: "/dashboard/bot-settings",
+          },
+        ]
+      : []),
+    ...(visibility.previewBot
+      ? [
+          {
+            id: "preview-bot",
+            label: "Preview Bot",
+            icon: <PreviewBotIcon />,
+            href: "/dashboard/preview-bot",
+          },
+        ]
+      : []),
   ];
 
   const displayName = userName || userEmail?.split("@")[0] || "User";

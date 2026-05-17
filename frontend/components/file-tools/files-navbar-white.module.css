@@ -1,0 +1,4 @@
+.navbarWhiteScope :global(header[class*="files-product-chrome-module"][class*="navbar"]) {
+  background: #ffffff;
+  backdrop-filter: none;
+}

@@ -1,0 +1,366 @@
+{
+  "common": {
+    "download": "ഡൗൺലോഡ്",
+    "filesTools": "ഉപകരണങ്ങൾ",
+    "generatePdf": "PDF സൃഷ്ടിക്കുക",
+    "history": "ചരിത്രം",
+    "language": "ഭാഷ",
+    "login": "ലോഗിൻ",
+    "settings": "ക്രമീകരണങ്ങൾ",
+    "signUp": "സൈൻ അപ്പ്"
+  },
+  "navbar": {
+    "filesHome": "Flowauxi ഉപകരണങ്ങൾ ഹോം",
+    "quickTools": "വേഗ ഉപകരണങ്ങൾ",
+    "tools": "ഉപകരണങ്ങൾ",
+    "openSearch": "ഉപകരണ തിരയൽ തുറക്കുക",
+    "closeSearch": "ഉപകരണ തിരയൽ അടയ്ക്കുക",
+    "openNavigation": "ഉപകരണ നാവിഗേഷൻ തുറക്കുക",
+    "closeNavigation": "ഉപകരണ നാവിഗേഷൻ അടയ്ക്കുക",
+    "searchButtonAria": "ഉപകരണങ്ങൾ തിരയുക",
+    "nav": {
+      "mergePdf": "PDF ചേർക്കുക",
+      "splitPdf": "PDF വിഭജിക്കുക",
+      "compressPdf": "PDF ചുരുക്കുക",
+      "convertPdf": "PDF മാറ്റുക",
+      "allTools": "എല്ലാ PDF ഉപകരണങ്ങൾ",
+      "allToolsShort": "എല്ലാ ഉപകരണങ്ങൾ"
+    },
+    "mega": {
+      "eyebrow": "Flowauxi ഉപകരണങ്ങൾ",
+      "title": "വേഗത്തിലുള്ള ഡോക്യുമെന്റ് ജോലിക്കുള്ള PDF ഉപകരണങ്ങൾ.",
+      "copy": "ഒരൊറ്റ വൃത്തിയുള്ള വർക്സ്പേസിൽ നിന്ന് ഫയലുകൾ മാറ്റുകയും ക്രമീകരിക്കുകയും സംരക്ഷിക്കുകയും മെച്ചപ്പെടുത്തുകയും ചെയ്യുക.",
+      "viewAllTools": "എല്ലാ ഉപകരണങ്ങളും കാണുക",
+      "sections": {
+        "organizePdf": "PDF ക്രമീകരിക്കുക",
+        "optimizePdf": "PDF മെച്ചപ്പെടുത്തുക",
+        "convertToPdf": "PDF ആക്കുക",
+        "convertFromPdf": "PDFൽ നിന്ന് മാറ്റുക",
+        "editPdf": "PDF തിരുത്തുക",
+        "pdfSecurity": "PDF സുരക്ഷ",
+        "pdfIntelligence": "PDF ഇന്റലിജൻസ്"
+      },
+      "tools": {
+        "mergePdf": "PDF ചേർക്കുക",
+        "splitPdf": "PDF വിഭജിക്കുക",
+        "compressPdf": "PDF ചുരുക്കുക",
+        "convertPdf": "PDF മാറ്റുക",
+        "allTools": "എല്ലാ PDF ഉപകരണങ്ങൾ",
+        "allToolsShort": "എല്ലാ ഉപകരണങ്ങൾ",
+        "organizePdf": "PDF ക്രമീകരിക്കുക",
+        "optimizePdf": "PDF മെച്ചപ്പെടുത്തുക",
+        "convertToPdf": "PDF ആക്കുക",
+        "convertFromPdf": "PDFൽ നിന്ന് മാറ്റുക",
+        "editPdf": "PDF തിരുത്തുക",
+        "pdfSecurity": "PDF സുരക്ഷ",
+        "pdfIntelligence": "PDF ഇന്റലിജൻസ്",
+        "removePages": "പേജുകൾ നീക്കംചെയ്യുക",
+        "extractPages": "പേജുകൾ എടുക്കുക",
+        "scanToPdf": "സ്കാൻ ചെയ്ത് PDF",
+        "repairPdf": "PDF ശരിയാക്കുക",
+        "ocrPdf": "OCR PDF",
+        "textToPdf": "ടെക്സ്റ്റിൽ നിന്ന് PDF",
+        "jpgToPdf": "JPGൽ നിന്ന് PDF",
+        "wordToPdf": "Wordൽ നിന്ന് PDF",
+        "powerPointToPdf": "PowerPointൽ നിന്ന് PDF",
+        "excelToPdf": "Excelൽ നിന്ന് PDF",
+        "htmlToPdf": "HTMLൽ നിന്ന് PDF",
+        "pdfToJpg": "PDFൽ നിന്ന് JPG",
+        "pdfToWord": "PDFൽ നിന്ന് Word",
+        "pdfToPowerPoint": "PDFൽ നിന്ന് PowerPoint",
+        "pdfToExcel": "PDFൽ നിന്ന് Excel",
+        "pdfToPdfA": "PDFൽ നിന്ന് PDF/A",
+        "rotatePdf": "PDF തിരിക്കുക",
+        "addPageNumbers": "പേജ് നമ്പറുകൾ ചേർക്കുക",
+        "addWatermark": "വാട്ടർമാർക്ക് ചേർക്കുക",
+        "cropPdf": "PDF മുറിക്കുക",
+        "pdfForms": "PDF ഫോമുകൾ",
+        "unlockPdf": "PDF തുറക്കുക",
+        "protectPdf": "PDF സംരക്ഷിക്കുക",
+        "signPdf": "PDF ഒപ്പിടുക",
+        "redactPdf": "PDF മറയ്ക്കുക",
+        "comparePdf": "PDF താരതമ്യം",
+        "aiSummarizer": "AI സംഗ്രഹം",
+        "translatePdf": "PDF വിവർത്തനം"
+      }
+    },
+    "mobile": {
+      "filesNavigation": "ഉപകരണ നാവിഗേഷൻ",
+      "searchTools": "ഉപകരണങ്ങൾ തിരയുക",
+      "searchPlaceholder": "ഉപകരണങ്ങൾ തിരയുക",
+      "searchPdfTools": "PDF ഉപകരണങ്ങൾ തിരയുക",
+      "searchResults": "തിരയൽ ഫലങ്ങൾ",
+      "popular": "ജനപ്രിയം",
+      "noMatchingTools": "പൊരുത്തമുള്ള ഉപകരണങ്ങൾ ഇല്ല."
+    }
+  },
+  "files": {
+    "hub": {
+      "title": "PDFകളുമായി പ്രവർത്തിക്കാൻ വേണ്ട എല്ലാ ടൂളുകളും ഒരിടത്ത്",
+      "description": "PDFകൾ ചേർക്കാനും വിഭജിക്കാനും ചുരുക്കാനും മാറ്റാനും സംരക്ഷിക്കാനും ഒപ്പിടാനും ക്രമീകരിക്കാനും വേഗത്തിലുള്ള ടൂളുകൾ.",
+      "actions": {
+        "history": "ചരിത്രം",
+        "settings": "ക്രമീകരണങ്ങൾ"
+      },
+      "aria": {
+        "categories": "ഉപകരണ വിഭാഗങ്ങൾ",
+        "tools": "ഉപകരണങ്ങൾ",
+        "openTool": "{name} തുറക്കുക"
+      },
+      "categories": {
+        "all": "എല്ലാം",
+        "workflows": "വർക്ക്ഫ്ലോകൾ",
+        "organizePdf": "PDF ക്രമീകരിക്കുക",
+        "optimizePdf": "PDF മെച്ചപ്പെടുത്തുക",
+        "convertPdf": "PDF മാറ്റുക",
+        "editPdf": "PDF തിരുത്തുക",
+        "pdfSecurity": "PDF സുരക്ഷ",
+        "pdfIntelligence": "PDF ഇന്റലിജൻസ്"
+      },
+      "categoriesShort": {
+        "all": "എല്ലാം",
+        "workflows": "ഫ്ലോ",
+        "organizePdf": "ക്രമം",
+        "optimizePdf": "മെച്ചം",
+        "convertPdf": "മാറ്റുക",
+        "editPdf": "എഡിറ്റ്",
+        "pdfSecurity": "രക്ഷ",
+        "pdfIntelligence": "AI PDF"
+      }
+    },
+    "comingSoon": {
+      "back": "ഉപകരണങ്ങൾ",
+      "eyebrow": "ഉടൻ വരുന്നു",
+      "planned": "പ്ലാൻ ചെയ്തത്",
+      "openTextToPdf": "ടെക്സ്റ്റിൽ നിന്ന് PDF തുറക്കുക"
+    },
+    "textToPdf": {
+      "toolbar": {
+        "currentLocation": "നിലവിലെ സ്ഥാനം",
+        "dashboard": "ഡാഷ്ബോർഡ്",
+        "files": "ഉപകരണങ്ങൾ",
+        "title": "ടെക്സ്റ്റിൽ നിന്ന് PDF",
+        "authenticated": "ഓട്ടോസേവ്, ചരിത്രം, സുരക്ഷിത ഡൗൺലോഡുകൾ സജീവമാണ്.",
+        "guest": "ഗസ്റ്റ് എക്സ്പോർട്ടുകൾ സ്വകാര്യമാണ്, സ്വയം കാലഹരണപ്പെടും."
+      },
+      "editor": {
+        "panel": "എഡിറ്റർ",
+        "formatting": "ടെക്സ്റ്റ് ഫോർമാറ്റിംഗ്",
+        "paragraphAlignment": "പാരഗ്രാഫ് അലൈന്മെന്റ്",
+        "documentTitle": "ഡോക്യുമെന്റ് തലക്കെട്ട്",
+        "untitled": "പേരിടാത്ത ഡോക്യുമെന്റ്",
+        "textareaAria": "PDF ആക്കേണ്ട ടെക്സ്റ്റ്",
+        "placeholder": "എന്തെങ്കിലും ടൈപ്പ് ചെയ്യുക...",
+        "bold": "ബോൾഡ്",
+        "italic": "ഇറ്റാലിക്",
+        "underline": "അണ്ടർലൈൻ",
+        "heading1": "ഹെഡിംഗ് 1",
+        "heading2": "ഹെഡിംഗ് 2",
+        "bulletList": "ബുള്ളറ്റ് ലിസ്റ്റ്",
+        "numberedList": "നമ്പർ ലിസ്റ്റ്",
+        "alignLeft": "ഇടത്തേക്ക് അലൈനുചെയ്യുക",
+        "alignCenter": "മധ്യത്തിൽ അലൈനുചെയ്യുക",
+        "alignRight": "വലത്തേക്ക് അലൈനുചെയ്യുക",
+        "justify": "ജസ്റ്റിഫൈ",
+        "pageBreak": "പേജ് ബ്രേക്ക്",
+        "headingPlaceholder": "തലക്കെട്ട്",
+        "listItemPlaceholder": "ലിസ്റ്റ് ഇനം"
+      },
+      "settings": {
+        "panel": "ക്രമീകരണങ്ങൾ",
+        "pageSize": "പേജ് വലുപ്പം",
+        "orientation": "ഓറിയന്റേഷൻ",
+        "font": "ഫോണ്ട്",
+        "fontSize": "ഫോണ്ട് വലുപ്പം",
+        "margins": "മാർജിനുകൾ",
+        "lineHeight": "ലൈൻ ഉയരം",
+        "header": "ഹെഡർ",
+        "headerText": "ഹെഡർ ടെക്സ്റ്റ്",
+        "footer": "ഫൂട്ടർ",
+        "footerText": "ഫൂട്ടർ ടെക്സ്റ്റ്",
+        "pageNumbers": "പേജ് നമ്പറുകൾ",
+        "portrait": "പോർട്രെയിറ്റ്",
+        "landscape": "ലാൻഡ്സ്കേപ്പ്",
+        "autoFont": "ഓട്ടോ (Noto + HarfBuzz)",
+        "marginPresets": {
+          "compact": "ചുരുങ്ങിയത്",
+          "standard": "സാധാരണം",
+          "spacious": "വിശാലം"
+        },
+        "marginSides": {
+          "top": "മുകളിൽ",
+          "right": "വലത്",
+          "bottom": "താഴെ",
+          "left": "ഇടത്"
+        }
+      },
+      "export": {
+        "aria": "PDF എക്സ്പോർട്ട്",
+        "chars": "{count} / {limit} അക്ഷരങ്ങൾ",
+        "pages": "{count, plural, one {# പേജ്} other {# പേജുകൾ}}",
+        "saving": "സേവ് ചെയ്യുന്നു",
+        "saved": "സേവ് ചെയ്തു",
+        "draftOffline": "ഡ്രാഫ്റ്റ് ഓഫ്ലൈൻ",
+        "draftReady": "ഡ്രാഫ്റ്റ് തയ്യാറാണ്",
+        "generate": "PDF സൃഷ്ടിക്കുക",
+        "download": "{size} ഡൗൺലോഡ്",
+        "share": "പങ്കിടുക",
+        "shareText": "Flowauxi ഉപകരണങ്ങളിൽ നിന്ന് എക്സ്പോർട്ട് ചെയ്ത PDF.",
+        "shareCopied": "പങ്കിടൽ ലിങ്ക് പകർത്തി",
+        "shareUnavailable": "ഈ ബ്രൗസറിൽ പങ്കിടൽ ലഭ്യമല്ല.",
+        "shareFailed": "ഈ PDF പങ്കിടാൻ കഴിഞ്ഞില്ല.",
+        "emptyDocument": "PDF സൃഷ്ടിക്കുന്നതിന് മുമ്പ് ടെക്സ്റ്റ് ചേർക്കുക.",
+        "characterLimitExceeded": "അക്ഷര പരിധി കടന്നു",
+        "readyUntil": "PDF {date} വരെ തയ്യാറാണ്"
+      },
+      "preview": {
+        "panel": "പ്രിവ്യൂ",
+        "pageCount": "{count, plural, one {# പേജ്} other {# പേജുകൾ}}",
+        "blockCount": "{count, plural, one {# വിഭാഗം} other {# വിഭാഗങ്ങൾ}}",
+        "preparing": "പ്രിവ്യൂ തയ്യാറാക്കുന്നു",
+        "pageAria": "PDF പ്രിവ്യൂ പേജ് {number}",
+        "pageNumber": "പേജ് {number}"
+      },
+      "mobileTabs": {
+        "aria": "ടെക്സ്റ്റിൽ നിന്ന് PDF പാനലുകൾ",
+        "edit": "തിരുത്തുക",
+        "preview": "പ്രിവ്യൂ",
+        "settings": "ക്രമീകരണങ്ങൾ",
+        "history": "ചരിത്രം"
+      },
+      "history": {
+        "panel": "ചരിത്രം",
+        "signInPrompt": "സെഷനുകൾക്കിടയിൽ ഡോക്യുമെന്റ് ചരിത്രം സൂക്ഷിക്കാൻ സൈൻ ഇൻ ചെയ്യുക.",
+        "loading": "ചരിത്രം ലോഡുചെയ്യുന്നു",
+        "empty": "എക്സ്പോർട്ട് ചെയ്ത ഡോക്യുമെന്റുകൾ ഇല്ല.",
+        "meta": "{size} · {date} · {count} ഡൗൺലോഡുകൾ",
+        "download": "ഡൗൺലോഡ്"
+      }
+    },
+    "footer": {
+      "brandAria": "Flowauxi ഉപകരണങ്ങൾ ഹോം",
+      "description": "PDF, ഡോക്യുമെന്റുകൾ, ചിത്രങ്ങൾ, AI ഫയൽ ജോലികൾ എന്നിവയ്ക്കുള്ള ആധുനിക ഏകീകൃത വർക്സ്പേസാണ് Flowauxi ഉപകരണങ്ങൾ. വേഗം, ലാളിത്യം, ഉൽപ്പാദനക്ഷമത എന്നിവയ്ക്കായി രൂപകൽപ്പന ചെയ്തത്.",
+      "columns": {
+        "tools": "ഉപകരണങ്ങൾ",
+        "pdf": "PDF",
+        "workspace": "വർക്സ്പേസ്"
+      },
+      "links": {
+        "dashboard": "ഡാഷ്ബോർഡ്",
+        "history": "ചരിത്രം",
+        "settings": "ക്രമീകരണങ്ങൾ"
+      },
+      "trust": {
+        "privateExports": "സ്വകാര്യ ഗസ്റ്റ് എക്സ്പോർട്ടുകൾ",
+        "moreTools": "കൂടുതൽ ഉപകരണങ്ങൾ വരുന്നു"
+      }
+    }
+  },
+  "tools": {
+    "catalog": {
+      "text_to_pdf": {
+        "name": "ടെക്സ്റ്റിൽ നിന്ന് PDF",
+        "description": "റിച്ച് ടെക്സ്റ്റ്, ലിസ്റ്റുകൾ, ചിഹ്നങ്ങൾ, ഫോർമാറ്റുചെയ്ത ഉള്ളടക്കം എന്നിവയിൽ നിന്ന് മിനുക്കിയ PDFകൾ സൃഷ്ടിക്കുക."
+      },
+      "pdf_to_docx": {
+        "name": "PDFൽ നിന്ന് Word",
+        "description": "PDF ഫയലുകൾ എഡിറ്റ് ചെയ്യാവുന്ന DOC, DOCX ഡോക്യുമെന്റുകളാക്കി മാറ്റുക."
+      },
+      "docx_to_pdf": {
+        "name": "Wordൽ നിന്ന് PDF",
+        "description": "DOC, DOCX ഫയലുകൾ പങ്കിടാൻ തയ്യാറായ PDF ആക്കുക."
+      },
+      "merge_pdf": {
+        "name": "PDF ചേർക്കുക",
+        "description": "PDFകൾ നിങ്ങൾക്ക് വേണ്ട ക്രമത്തിൽ ചേർക്കുക."
+      },
+      "split_pdf": {
+        "name": "PDF വിഭജിക്കുക",
+        "description": "ഒരു പേജ് അല്ലെങ്കിൽ പേജ് ശ്രേണി വേർതിരിച്ച PDF ഫയലുകളാക്കുക."
+      },
+      "compress_pdf": {
+        "name": "PDF ചുരുക്കുക",
+        "description": "ഗുണനിലവാരം നിലനിർത്തി PDF ഫയൽ വലുപ്പം കുറയ്ക്കുക."
+      },
+      "pdf_to_ppt": {
+        "name": "PDFൽ നിന്ന് PowerPoint",
+        "description": "PDF ഫയലുകൾ എഡിറ്റ് ചെയ്യാവുന്ന PPT, PPTX സ്ലൈഡുകളാക്കി മാറ്റുക."
+      },
+      "pdf_to_excel": {
+        "name": "PDFൽ നിന്ന് Excel",
+        "description": "PDFകളിൽ നിന്ന് പട്ടികകളും ഡാറ്റയും സ്പ്രെഡ്ഷീറ്റുകളിലേക്ക് എടുക്കുക."
+      },
+      "ppt_to_pdf": {
+        "name": "PowerPointൽ നിന്ന് PDF",
+        "description": "പ്രസന്റേഷൻ സ്ലൈഡുകൾ PDF ആക്കുക."
+      },
+      "excel_to_pdf": {
+        "name": "Excelൽ നിന്ന് PDF",
+        "description": "സ്പ്രെഡ്ഷീറ്റുകൾ വായിക്കാൻ എളുപ്പമുള്ള PDF ആയി എക്സ്പോർട്ട് ചെയ്യുക."
+      },
+      "edit_pdf": {
+        "name": "PDF തിരുത്തുക",
+        "description": "PDFയിൽ ടെക്സ്റ്റ്, ചിത്രങ്ങൾ, ആകൃതികൾ, ഹൈലൈറ്റുകൾ, കുറിപ്പുകൾ ചേർക്കുക."
+      },
+      "image_to_pdf": {
+        "name": "ചിത്രത്തിൽ നിന്ന് PDF",
+        "description": "JPG, PNG, സ്കാൻ ചിത്രങ്ങൾ ക്രമപ്പെടുത്തിയ PDF ആക്കുക."
+      },
+      "pdf_to_image": {
+        "name": "PDFൽ നിന്ന് ചിത്രം",
+        "description": "PDF പേജുകൾ ഉയർന്ന ഗുണമേന്മയുള്ള ചിത്രങ്ങളായി എക്സ്പോർട്ട് ചെയ്യുക."
+      },
+      "rotate_pdf": {
+        "name": "PDF തിരിക്കുക",
+        "description": "ഒരു പേജ് അല്ലെങ്കിൽ എല്ലാ പേജുകളും തിരിച്ച് ശരിയാക്കിയ PDF സേവ് ചെയ്യുക."
+      },
+      "unlock_pdf": {
+        "name": "PDF തുറക്കുക",
+        "description": "നിങ്ങൾക്ക് സ്വന്തമായ ഫയലുകളിലെ നിയന്ത്രണങ്ങൾ നീക്കുക."
+      },
+      "watermark_pdf": {
+        "name": "PDF വാട്ടർമാർക്ക്",
+        "description": "PDF പേജുകളിൽ ടെക്സ്റ്റ് അല്ലെങ്കിൽ ചിത്രം വാട്ടർമാർക്ക് ചേർക്കുക."
+      },
+      "ocr": {
+        "name": "OCR",
+        "description": "സ്കാൻ ഡോക്യുമെന്റുകളിൽ നിന്ന് ടെക്സ്റ്റ് തിരിച്ചറിഞ്ഞ് തിരയാവുന്നതാക്കുക."
+      },
+      "protect_pdf": {
+        "name": "PDF സംരക്ഷിക്കുക",
+        "description": "സെൻസിറ്റീവ് PDFകൾക്ക് പാസ്‌വേഡ് സുരക്ഷയും ആക്സസ് നിയന്ത്രണങ്ങളും ചേർക്കുക."
+      },
+      "sign_pdf": {
+        "name": "PDF ഒപ്പിടുക",
+        "description": "ഒപ്പിടൽ, അംഗീകാര വർക്ക്ഫ്ലോകൾക്കായി ഡോക്യുമെന്റുകൾ തയ്യാറാക്കുക."
+      },
+      "html_to_pdf": {
+        "name": "HTMLൽ നിന്ന് PDF",
+        "description": "വെബ് പേജുകൾ, ഇൻവോയിസുകൾ, HTML ഉള്ളടക്കം വിശ്വസനീയമായ PDF ആക്കുക."
+      }
+    }
+  },
+  "forms": {},
+  "errors": {
+    "pdfGenerationFailed": "PDF സൃഷ്ടിക്കൽ പരാജയപ്പെട്ടു.",
+    "emptyTextPdfDocument": "PDF സൃഷ്ടിക്കുന്നതിന് മുമ്പ് ടെക്സ്റ്റ് ചേർക്കുക.",
+    "pdfShapingUnavailable": "ഇന്ത്യൻ ലിപിയിലുള്ള വാചകം റെൻഡർ ചെയ്യാൻ PDF സേവനം ഇപ്പോൾ തയ്യാറല്ല. സേവനം പുതുക്കിയ ശേഷം വീണ്ടും ശ്രമിക്കുക.",
+    "pdfGlyphPreflightUnavailable": "സെർവറിൽ PDF ഫോണ്ട് പരിശോധന ലഭ്യമല്ല.",
+    "fontNotRegistered": "ആവശ്യമായ PDF ഫോണ്ട് സെർവറിൽ ലഭ്യമല്ല.",
+    "unsupportedGlyph": "ഈ ഡോക്യുമെന്റിലെ ചില അക്ഷരങ്ങൾ തിരഞ്ഞെടുത്ത PDF ഫോണ്ട് പിന്തുണയ്ക്കുന്നില്ല."
+  },
+  "validation": {},
+  "dashboard": {},
+  "metadata": {
+    "files": {
+      "title": "ഉപകരണങ്ങൾ | Flowauxi",
+      "description": "Flowauxi ഉപകരണങ്ങളിൽ PDF അല്ലെങ്കിൽ ഡോക്യുമെന്റ് ഉപകരണം തിരഞ്ഞെടുക്കുക."
+    },
+    "textToPdf": {
+      "title": "ടെക്സ്റ്റിൽ നിന്ന് PDF | Flowauxi ഉപകരണങ്ങൾ",
+      "description": "Flowauxi ഉപകരണങ്ങളിലൂടെ ടെക്സ്റ്റിൽ നിന്ന് സുരക്ഷിത PDF സൃഷ്ടിക്കുക."
+    },
+    "siteName": "Flowauxi ഉപകരണങ്ങൾ"
+  },
+  "seo": {}
+}

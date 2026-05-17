@@ -1,4 +1,13 @@
 @import "tailwindcss";
+@import "./theme/tokens/base.css";
+@import "./theme/tokens/semantic.css";
+@import "./theme/tokens/themes/light.css";
+@import "./theme/tokens/themes/dark.css";
+@import "./theme/tokens/scopes/dashboard.css";
+@import "./theme/tokens/scopes/public.css";
+@import "./theme/tokens/scopes/admin.css";
+@import "./theme/tokens/compatibility.css";
+@import "./theme/tokens/tailwind.css";
 @import "./theme/variables.css";
 
 :root {
@@ -72,6 +81,7 @@
 body {
   color: hsl(var(--foreground));
   background: hsl(var(--background));
+  color-scheme: light dark;
   font-feature-settings:
     "rlig" 1,
     "calt" 1;
@@ -124,17 +134,17 @@ body {
    ============================================================================ */
 
 .glass {
-  background: rgba(255, 255, 255, 0.8);
+  background: var(--glass-fill);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
-  border: 1px solid rgba(255, 255, 255, 0.2);
+  border: 1px solid var(--glass-border);
 }
 
 .glass-dark {
-  background: rgba(0, 0, 0, 0.4);
+  background: color-mix(in srgb, var(--color-surface-inverse) 42%, transparent);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  border: 1px solid var(--color-border-default);
 }
 
 /* ============================================================================
@@ -256,32 +266,11 @@ body {
 }
 
 /* ============================================================================
-   CUSTOM SCROLLBAR (for webkit browsers)
+   SCROLLBARS
+   ----------------------------------------------------------------------------
+   Use browser-native scrollbars by default. Individual product surfaces can opt
+   into hidden or custom scrollbar styling locally.
    ============================================================================ */
-
-::-webkit-scrollbar {
-  width: 12px;
-  height: 12px;
-}
-
-::-webkit-scrollbar-track {
-  background: #f1f1f1;
-}
-
-::-webkit-scrollbar-thumb {
-  background: linear-gradient(to bottom, #000000, #000000);
-  border-radius: 6px;
-}
-
-::-webkit-scrollbar-thumb:hover {
-  background: linear-gradient(to bottom, #000000, #000000);
-}
-
-/* For Firefox */
-* {
-  scrollbar-width: thin;
-  scrollbar-color: #000000 #f1f1f1;
-}
 
 /* ============================================================================
    LOADING STATES
@@ -299,10 +288,10 @@ body {
 .animate-shimmer {
   background: linear-gradient(
     to right,
-    #f6f7f8 0%,
-    #edeef1 20%,
-    #f6f7f8 40%,
-    #f6f7f8 100%
+    var(--color-surface-2) 0%,
+    var(--color-surface-3) 20%,
+    var(--color-surface-2) 40%,
+    var(--color-surface-2) 100%
   );
   background-size: 1000px 100%;
   animation: shimmer 2s linear infinite;
@@ -313,12 +302,12 @@ body {
    ============================================================================ */
 
 ::selection {
-  background-color: rgba(79, 70, 229, 0.3);
+  background-color: var(--color-selection-bg);
   color: inherit;
 }
 
 ::-moz-selection {
-  background-color: rgba(79, 70, 229, 0.3);
+  background-color: var(--color-selection-bg);
   color: inherit;
 }
 
@@ -327,34 +316,53 @@ body {
    ============================================================================ */
 
 *:focus-visible {
-  outline: 2px solid #4f46e5;
+  outline: 2px solid var(--color-focus-ring);
   outline-offset: 2px;
 }
 
 /* ============================================================================
-   CUSTOM SCROLLBAR — Black thumb
+   ONBOARDING PRICING SCROLLBAR SUPPRESSION
    ============================================================================ */
 
-/* Webkit (Chrome, Safari, Edge) */
-::-webkit-scrollbar {
-  width: 8px;
+html:has(.onboarding-container.onboarding-stage-pricing),
+body:has(.onboarding-container.onboarding-stage-pricing),
+html:has(.onboarding-container.onboarding-stage-pricing) *,
+body:has(.onboarding-container.onboarding-stage-pricing) * {
+  scrollbar-width: none !important;
+  scrollbar-color: transparent transparent !important;
+  -ms-overflow-style: none !important;
 }
 
-::-webkit-scrollbar-track {
-  background: #f5f5f5;
+html:has(.onboarding-container.onboarding-stage-pricing)::-webkit-scrollbar,
+body:has(.onboarding-container.onboarding-stage-pricing)::-webkit-scrollbar,
+html:has(.onboarding-container.onboarding-stage-pricing) *::-webkit-scrollbar,
+body:has(.onboarding-container.onboarding-stage-pricing) *::-webkit-scrollbar {
+  width: 0 !important;
+  height: 0 !important;
+  display: none !important;
+  background: transparent !important;
 }
 
-::-webkit-scrollbar-thumb {
-  background: #000;
-  border-radius: 4px;
-}
-
-::-webkit-scrollbar-thumb:hover {
-  background: #333;
-}
-
-/* Firefox */
-html {
-  scrollbar-color: #000 #f5f5f5;
-  scrollbar-width: thin;
+html:has(
+    .onboarding-container.onboarding-stage-pricing
+  )::-webkit-scrollbar-track,
+body:has(
+    .onboarding-container.onboarding-stage-pricing
+  )::-webkit-scrollbar-track,
+html:has(
+    .onboarding-container.onboarding-stage-pricing
+  )::-webkit-scrollbar-thumb,
+body:has(
+    .onboarding-container.onboarding-stage-pricing
+  )::-webkit-scrollbar-thumb,
+html:has(.onboarding-container.onboarding-stage-pricing)
+  *::-webkit-scrollbar-track,
+body:has(.onboarding-container.onboarding-stage-pricing)
+  *::-webkit-scrollbar-track,
+html:has(.onboarding-container.onboarding-stage-pricing)
+  *::-webkit-scrollbar-thumb,
+body:has(.onboarding-container.onboarding-stage-pricing)
+  *::-webkit-scrollbar-thumb {
+  display: none !important;
+  background: transparent !important;
 }

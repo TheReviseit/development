@@ -7,7 +7,10 @@
  */
 
 import { validateEvent } from "@/lib/analytics/validation";
-import { isValidEventName, ANALYTICS_SCHEMA_VERSION } from "@/lib/analytics/events";
+import {
+  isValidEventName,
+  ANALYTICS_SCHEMA_VERSION,
+} from "@/lib/analytics/events";
 
 // Mock isDebugMode
 jest.mock("@/lib/analytics/config", () => ({
@@ -15,6 +18,10 @@ jest.mock("@/lib/analytics/config", () => ({
 }));
 
 describe("Event Schema Validation", () => {
+  function setNodeEnv(value: string | undefined) {
+    (process.env as Record<string, string | undefined>).NODE_ENV = value;
+  }
+
   describe("isValidEventName", () => {
     it("should accept valid GA4 events", () => {
       expect(isValidEventName("page_view")).toBe(true);
@@ -22,6 +29,9 @@ describe("Event Schema Validation", () => {
       expect(isValidEventName("login")).toBe(true);
       expect(isValidEventName("signup")).toBe(true);
       expect(isValidEventName("add_to_cart")).toBe(true);
+      expect(isValidEventName("pricing_mode_changed")).toBe(true);
+      expect(isValidEventName("trial_started")).toBe(true);
+      expect(isValidEventName("trial_start_failed")).toBe(true);
     });
 
     it("should accept custom events", () => {
@@ -39,12 +49,12 @@ describe("Event Schema Validation", () => {
     const originalEnv = process.env.NODE_ENV;
 
     afterEach(() => {
-      process.env.NODE_ENV = originalEnv;
+      setNodeEnv(originalEnv);
     });
 
     it("should pass valid page_view event in development", () => {
-      process.env.NODE_ENV = "development";
-      
+      setNodeEnv("development");
+
       const event = {
         name: "page_view",
         params: {
@@ -52,14 +62,14 @@ describe("Event Schema Validation", () => {
           page_title: "Dashboard",
         },
       };
-      
+
       // Should not throw
       expect(() => validateEvent(event as any)).not.toThrow();
     });
 
     it("should pass valid purchase event in development", () => {
-      process.env.NODE_ENV = "development";
-      
+      setNodeEnv("development");
+
       const event = {
         name: "purchase",
         params: {
@@ -69,37 +79,37 @@ describe("Event Schema Validation", () => {
           items: [{ item_id: "pro", item_name: "Pro Plan" }],
         },
       };
-      
+
       expect(() => validateEvent(event as any)).not.toThrow();
     });
 
     it("should throw on invalid event name in development", () => {
-      process.env.NODE_ENV = "development";
-      
+      setNodeEnv("development");
+
       const event = {
         name: "invalid_event_name",
         params: {},
       };
-      
+
       expect(() => validateEvent(event as any)).toThrow();
     });
 
     it("should throw on missing purchase required params", () => {
-      process.env.NODE_ENV = "development";
-      
+      setNodeEnv("development");
+
       const event = {
         name: "purchase",
         params: {
           // Missing required params
         },
       };
-      
+
       expect(() => validateEvent(event as any)).toThrow();
     });
 
     it("should validate begin_checkout required params", () => {
-      process.env.NODE_ENV = "development";
-      
+      setNodeEnv("development");
+
       const event = {
         name: "begin_checkout",
         params: {
@@ -108,53 +118,92 @@ describe("Event Schema Validation", () => {
           items: [],
         },
       };
-      
+
       expect(() => validateEvent(event as any)).not.toThrow();
     });
 
+    it("should pass onboarding pricing toggle events", () => {
+      setNodeEnv("development");
+
+      expect(() =>
+        validateEvent({
+          name: "pricing_mode_changed",
+          params: {
+            domain: "shop",
+            from_mode: "paid",
+            to_mode: "trial",
+            source: "onboarding_embedded",
+          },
+        }),
+      ).not.toThrow();
+
+      expect(() =>
+        validateEvent({
+          name: "trial_started",
+          params: {
+            domain: "shop",
+            plan: "starter",
+            pricing_mode: "trial",
+          },
+        }),
+      ).not.toThrow();
+
+      expect(() =>
+        validateEvent({
+          name: "trial_start_failed",
+          params: {
+            domain: "shop",
+            plan: "starter",
+            pricing_mode: "trial",
+            error_code: "INTERNAL_ERROR",
+          },
+        }),
+      ).not.toThrow();
+    });
+
     it("should throw on missing begin_checkout params", () => {
-      process.env.NODE_ENV = "development";
-      
+      setNodeEnv("development");
+
       const event = {
         name: "begin_checkout",
         params: {},
       };
-      
+
       expect(() => validateEvent(event as any)).toThrow();
     });
 
     it("should validate login/signup method param", () => {
-      process.env.NODE_ENV = "development";
-      
+      setNodeEnv("development");
+
       const event = {
         name: "login",
         params: {
           method: "email",
         },
       };
-      
+
       expect(() => validateEvent(event as any)).not.toThrow();
     });
 
     it("should throw on missing login method", () => {
-      process.env.NODE_ENV = "development";
-      
+      setNodeEnv("development");
+
       const event = {
         name: "login",
         params: {},
       };
-      
+
       expect(() => validateEvent(event as any)).toThrow();
     });
 
     it("should NOT validate in production (silent pass)", () => {
-      process.env.NODE_ENV = "production";
-      
+      setNodeEnv("production");
+
       const event = {
         name: "invalid_event",
         params: {},
       };
-      
+
       // Should not throw in production
       expect(() => validateEvent(event as any)).not.toThrow();
     });

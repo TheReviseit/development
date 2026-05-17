@@ -45,7 +45,8 @@ export type ProductDomain =
   | "showcase"
   | "marketing"
   | "api"
-  | "dashboard";
+  | "dashboard"
+  | "files";
 
 interface DomainFAQ {
   question: string;
@@ -135,6 +136,7 @@ const ALL_SUBDOMAIN_URLS = [
   "https://marketing.flowauxi.com",
   "https://pages.flowauxi.com",
   "https://api.flowauxi.com",
+  "https://tools.flowauxi.com",
 ];
 
 // =============================================================================
@@ -621,6 +623,58 @@ const DOMAIN_SEO_CONFIGS: Record<ProductDomain, DomainSeoConfig> = {
     breadcrumb: [{ name: "Flowauxi", url: "https://www.flowauxi.com" }],
     themeColor: "#22C15A",
   },
+  files: {
+    domain: "files",
+    title: "Online PDF and Document Tools | Flowauxi Tools",
+    titleTemplate: "%s | Flowauxi Tools",
+    description:
+      "Create secure PDFs and prepare documents with Flowauxi Tools. Start with Text to PDF and scale into enterprise document processing workflows.",
+    keywords: [
+      "text to pdf",
+      "online pdf tools",
+      "document conversion",
+      "secure pdf generator",
+      "flowauxi tools",
+    ],
+    canonicalBase: "https://tools.flowauxi.com",
+    crossDomainLinks: ALL_SUBDOMAIN_URLS.filter(
+      (u) => u !== "https://tools.flowauxi.com",
+    ),
+    og: {
+      siteName: "Flowauxi Tools",
+      type: "website",
+      locale: "en_IN",
+      image: "https://tools.flowauxi.com/og-files.png",
+      imageAlt: "Flowauxi Tools - secure document processing",
+    },
+    twitter: {
+      handle: "@flowauxi",
+      site: "@flowauxi",
+    },
+    primarySchemaType: "SoftwareApplication",
+    secondarySchemaType: "Organization",
+    organization: {
+      name: "Flowauxi Tools",
+      description: "Secure PDF and document processing tools by Flowauxi.",
+      url: "https://tools.flowauxi.com",
+      logo: "https://tools.flowauxi.com/icon-512.png",
+      sameAs: [...ORGANIZATION_SAME_AS, ...ALL_SUBDOMAIN_URLS],
+    },
+    website: {
+      name: "Flowauxi Tools",
+      description: "Online PDF and document processing tools.",
+    },
+    rating: getReviewRating(),
+    faqs: [
+      {
+        question: "Can I convert text to PDF online?",
+        answer:
+          "Yes. Flowauxi Tools can generate a PDF from structured text with page size, orientation, font, margin, header, and footer controls.",
+      },
+    ],
+    breadcrumb: [{ name: "Tools", url: "https://tools.flowauxi.com" }],
+    themeColor: "#111827",
+  },
 };
 
 // =============================================================================
@@ -638,6 +692,12 @@ export function resolveProductDomain(host: string): ProductDomain {
   if (host === "pages.flowauxi.com" || host.startsWith("pages."))
     return "showcase";
   if (host === "api.flowauxi.com" || host.startsWith("api.")) return "api";
+  if (
+    host === "tools.flowauxi.com" ||
+    host.startsWith("tools.") ||
+    host === "files.flowauxi.com" ||
+    host.startsWith("files.")
+  ) return "files";
   if (host === "flowauxi.com" || host === "www.flowauxi.com")
     return "dashboard";
 
@@ -647,6 +707,7 @@ export function resolveProductDomain(host: string): ProductDomain {
     if (host.includes(":3002")) return "showcase";
     if (host.includes(":3003")) return "marketing";
     if (host.includes(":3004")) return "api";
+    if (host.includes(":3006")) return "files";
     return "dashboard";
   }
 

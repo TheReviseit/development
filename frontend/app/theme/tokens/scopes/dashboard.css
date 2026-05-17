@@ -1,0 +1,42 @@
+html[data-theme] {
+  --dash-bg-primary: var(--color-bg-app);
+  --dash-bg-secondary: var(--color-surface-1);
+  --dash-bg-tertiary: var(--color-surface-2);
+  --dash-bg-hover: var(--color-surface-3);
+  --dash-bg-elevated: var(--color-surface-raised);
+  --dash-border: var(--color-border-default);
+  --dash-border-light: var(--color-border-subtle);
+  --dash-accent: var(--color-accent);
+  --dash-accent-hover: var(--color-accent-hover);
+  --dash-accent-muted: var(--color-accent-muted);
+  --dash-cyan: var(--color-info);
+  --dash-text-primary: var(--color-text-primary);
+  --dash-text-secondary: var(--color-text-secondary);
+  --dash-text-muted: var(--color-text-muted);
+  --dash-danger: var(--color-danger);
+  --dash-warning: var(--color-warning);
+  --dash-success: var(--color-success);
+  --dash-focus-ring: var(--color-focus-ring);
+  --dash-shadow-card: var(--shadow-md);
+  --dash-shadow-popover: var(--shadow-lg);
+  --dash-sidebar-width: 280px;
+  --dash-sidebar-collapsed: 80px;
+  --dash-badge-bg: var(--color-surface-inverse);
+  --dash-badge-text: var(--color-text-inverse);
+  --dash-action-primary-bg: var(--color-accent);
+  --dash-action-primary-text: var(--color-accent-foreground);
+  --dash-action-primary-border: var(--color-accent-border);
+  --dash-scrollbar-track: var(--scrollbar-track);
+  --dash-scrollbar-thumb: var(--scrollbar-thumb);
+  --dash-scrollbar-thumb-hover: var(--scrollbar-thumb-hover);
+}
+
+html[data-theme="light"] {
+  --dash-message-in: #ffffff;
+  --dash-message-out: #dcfce7;
+}
+
+html[data-theme="dark"] {
+  --dash-message-in: #161b22;
+  --dash-message-out: #123326;
+}

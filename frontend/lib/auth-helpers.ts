@@ -60,6 +60,9 @@ export function detectProductFromRequest(request: NextRequest): ProductDomain {
   if (pathname.startsWith("/dashboard/appointments") || pathname.startsWith("/dashboard/services")) {
     return "booking";
   }
+  if (pathname.startsWith("/dashboard/files") || pathname.startsWith("/files") || pathname.startsWith("/tools")) {
+    return "files";
+  }
 
   return resolvedDomain;
 }
@@ -125,6 +128,7 @@ export function isProductAvailableForActivation(
 ): boolean {
   if (product === "dashboard") return false;
   if (product === "api") return false;
+  if (product === "files") return false;
 
   const config = PRODUCT_REGISTRY[product];
   if (!config) return false;

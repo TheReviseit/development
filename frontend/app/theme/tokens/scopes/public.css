@@ -1,0 +1,8 @@
+html[data-theme] {
+  --public-bg: var(--color-bg-app);
+  --public-surface: var(--color-surface-1);
+  --public-text: var(--color-text-primary);
+  --public-muted: var(--color-text-secondary);
+  --public-border: var(--color-border-default);
+  --public-accent: var(--color-accent);
+}

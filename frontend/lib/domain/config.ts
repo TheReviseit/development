@@ -28,7 +28,8 @@ export type ProductDomain =
   | "marketing"
   | "api"
   | "dashboard"
-  | "booking";
+  | "booking"
+  | "files";
 
 // =============================================================================
 // HOSTNAME → PRODUCT MAPPING
@@ -41,6 +42,8 @@ const PRODUCTION_HOSTNAME_MAP: Record<string, ProductDomain> = {
   "marketing.flowauxi.com": "marketing",
   "api.flowauxi.com": "api",
   "booking.flowauxi.com": "booking",
+  "tools.flowauxi.com": "files",
+  "files.flowauxi.com": "files",
   "flowauxi.com": "dashboard",
   "www.flowauxi.com": "dashboard",
 };
@@ -53,6 +56,7 @@ const DEV_PORT_MAP: Record<string, ProductDomain> = {
   "3003": "marketing", // FIXED: was "showcase"
   "3004": "api",
   "3005": "booking",
+  "3006": "files",
 };
 
 /** Landing page routes per product (middleware rewrites "/" to these) */
@@ -62,6 +66,7 @@ const LANDING_PAGE_MAP: Record<ProductDomain, string> = {
   marketing: "/marketing",
   api: "/apis",
   booking: "/booking",
+  files: "/tools",
   dashboard: "/", // default, no rewrite needed
 };
 
@@ -88,6 +93,8 @@ export function resolveDomain(hostname: string, port?: string): ProductDomain {
   if (hostname.startsWith("marketing.")) return "marketing";
   if (hostname.startsWith("api.")) return "api";
   if (hostname.startsWith("booking.")) return "booking";
+  if (hostname.startsWith("tools.")) return "files";
+  if (hostname.startsWith("files.")) return "files";
 
   // Development: port-based mapping
   if (
@@ -138,6 +145,9 @@ export interface DomainVisibilityRules {
   forms: boolean;
   contacts: boolean;
 
+  // Files tools
+  files: boolean;
+
   // Onboarding requirements
   // Only domains that are WhatsApp-centric (the core chatbot product)
   // require WhatsApp connection as a prerequisite to access the dashboard.
@@ -162,6 +172,7 @@ const DOMAIN_VISIBILITY: Record<ProductDomain, DomainVisibilityRules> = {
     templates: false,
     forms: false,
     contacts: false,
+    files: false,
     requiresWhatsApp: false,
   },
 
@@ -180,6 +191,7 @@ const DOMAIN_VISIBILITY: Record<ProductDomain, DomainVisibilityRules> = {
     templates: false,
     forms: false,
     contacts: false,
+    files: false,
     requiresWhatsApp: false,
   },
 
@@ -198,6 +210,7 @@ const DOMAIN_VISIBILITY: Record<ProductDomain, DomainVisibilityRules> = {
     templates: true,
     forms: true,
     contacts: true,
+    files: false,
     requiresWhatsApp: false,
   },
 
@@ -216,6 +229,7 @@ const DOMAIN_VISIBILITY: Record<ProductDomain, DomainVisibilityRules> = {
     templates: false,
     forms: false,
     contacts: false,
+    files: false,
     requiresWhatsApp: false,
   },
 
@@ -234,6 +248,26 @@ const DOMAIN_VISIBILITY: Record<ProductDomain, DomainVisibilityRules> = {
     templates: false,
     forms: false,
     contacts: false,
+    files: false,
+    requiresWhatsApp: false,
+  },
+
+  files: {
+    analytics: false,
+    messages: false,
+    aiSettings: false,
+    previewBot: false,
+    orders: false,
+    products: false,
+    appointments: false,
+    services: false,
+    showcase: false,
+    campaigns: false,
+    bulkMessages: false,
+    templates: false,
+    forms: false,
+    contacts: false,
+    files: true,
     requiresWhatsApp: false,
   },
 
@@ -252,6 +286,7 @@ const DOMAIN_VISIBILITY: Record<ProductDomain, DomainVisibilityRules> = {
     templates: false,
     forms: false,
     contacts: false,
+    files: true,
     requiresWhatsApp: true,
   },
 };
@@ -332,6 +367,22 @@ const ROUTE_CONFIG: Record<string, DomainRouteConfig> = {
     loginPath: "/login",
     seoBase: "https://flowauxi.com",
   },
+  files: {
+    product: "files",
+    allowedRoutes: [
+      "/files",
+      "/tools",
+      "/dashboard/files",
+      "/login",
+      "/signup",
+      "/privacy",
+      "/terms",
+    ],
+    blockedRoutes: ["/console", "/docs"],
+    defaultHome: "/tools",
+    loginPath: "/login",
+    seoBase: "https://tools.flowauxi.com",
+  },
 };
 
 /**
@@ -354,6 +405,7 @@ const VALID_DOMAINS: ProductDomain[] = [
   "api",
   "dashboard",
   "booking",
+  "files",
 ];
 
 export function isValidProductDomain(value: string): value is ProductDomain {

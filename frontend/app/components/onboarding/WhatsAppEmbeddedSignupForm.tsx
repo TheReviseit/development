@@ -26,6 +26,7 @@ interface WhatsAppEmbeddedSignupFormProps {
     wabaName: string;
   }) => void;
   onError: (error: string) => void;
+  previewState?: "success";
 }
 
 type ConnectionState =
@@ -34,6 +35,8 @@ type ConnectionState =
   | "success"
   | "error"
   | "cancelled";
+
+type ConnectionStep = "authorizing" | "securing";
 
 interface ErrorInfo {
   message: string;
@@ -55,6 +58,17 @@ const TRUST_BADGES: TrustBadgeItem[] = [
   { label: "GDPR-ready controls", Icon: ShieldCheck },
   { label: "No password sharing", Icon: LockKeyhole },
 ];
+
+const CONNECTING_COPY: Record<ConnectionStep, { title: string; description: string }> = {
+  authorizing: {
+    title: "Connect with Meta",
+    description: "Authorize your WhatsApp account via Meta to continue.",
+  },
+  securing: {
+    title: "Establishing Secure Connection",
+    description: "Please wait while we verify your WhatsApp integration.",
+  },
+};
 
 function getErrorMessage(error: unknown, fallback: string) {
   return error instanceof Error ? error.message : fallback;
@@ -110,9 +124,14 @@ function TrustBadgeMarquee() {
 export default function WhatsAppEmbeddedSignupForm({
   onSuccess,
   onError,
+  previewState,
 }: WhatsAppEmbeddedSignupFormProps) {
-  const [connectionState, setConnectionState] =
-    useState<ConnectionState>("idle");
+  const isSuccessPreview = previewState === "success";
+  const [connectionState, setConnectionState] = useState<ConnectionState>(
+    isSuccessPreview ? "success" : "idle",
+  );
+  const [connectionStep, setConnectionStep] =
+    useState<ConnectionStep>("authorizing");
   const [errorInfo, setErrorInfo] = useState<ErrorInfo | null>(null);
   const [sdkReady, setSdkReady] = useState(false);
   const [connectionData, setConnectionData] = useState<{
@@ -121,12 +140,27 @@ export default function WhatsAppEmbeddedSignupForm({
     accountReviewStatus: string;
     tokenExpiresIn: number;
     hasSystemUserToken: boolean;
-  } | null>(null);
+  } | null>(
+    isSuccessPreview
+      ? {
+          wabaName: "Flowauxi",
+          displayPhoneNumber: "+91 98765 43210",
+          accountReviewStatus: "APPROVED",
+          tokenExpiresIn: 90,
+          hasSystemUserToken: true,
+        }
+      : null,
+  );
 
   const containerRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
+    if (isSuccessPreview) {
+      setSdkReady(true);
+      return;
+    }
+
     if (typeof window !== "undefined") {
       facebookSDK
         .init()
@@ -142,7 +176,7 @@ export default function WhatsAppEmbeddedSignupForm({
           setConnectionState("error");
         });
     }
-  }, []);
+  }, [isSuccessPreview]);
 
   useEffect(() => {
     if (contentRef.current) {
@@ -164,6 +198,7 @@ export default function WhatsAppEmbeddedSignupForm({
     }
 
     setConnectionState("connecting");
+    setConnectionStep("authorizing");
     setErrorInfo(null);
 
     try {
@@ -180,6 +215,8 @@ export default function WhatsAppEmbeddedSignupForm({
         }
         throw new Error(result.error || "Connection failed");
       }
+
+      setConnectionStep("securing");
 
       const embeddedData = facebookSDK.getLastEmbeddedSignupData();
 
@@ -261,6 +298,7 @@ export default function WhatsAppEmbeddedSignupForm({
 
   const handleRetry = () => {
     setConnectionState("idle");
+    setConnectionStep("authorizing");
     setErrorInfo(null);
     setConnectionData(null);
   };
@@ -284,8 +322,8 @@ export default function WhatsAppEmbeddedSignupForm({
         <p className="signup-eyebrow">Meta embedded signup</p>
         <h2>Connect WhatsApp Business</h2>
         <p>
-          Securely authorize Flowauxi through Meta&apos;s official flow and continue
-          to plan selection in one clean setup.
+          Securely authorize Flowauxi through Meta&apos;s official flow and
+          continue to plan selection in one clean setup.
         </p>
       </div>
 
@@ -319,24 +357,29 @@ export default function WhatsAppEmbeddedSignupForm({
   const renderConnecting = () => (
     <div ref={contentRef} className="connecting-state">
       <div className="connecting-loader-shell" aria-hidden="true">
-        <LoaderCircle className="connecting-loader-icon" size={48} strokeWidth={1.75} />
+        <LoaderCircle
+          className="connecting-loader-icon"
+          size={48}
+          strokeWidth={1.75}
+        />
       </div>
       <div className="connecting-text">
-        <h3>Authorizing</h3>
-        <p>Please complete the setup in the popup window.</p>
+        <h3>{CONNECTING_COPY[connectionStep].title}</h3>
+        <p>{CONNECTING_COPY[connectionStep].description}</p>
       </div>
     </div>
   );
 
   const renderSuccess = () => (
     <div ref={contentRef} className="success-state">
-      <div className="success-header">
-        <div className="success-icon">
-          <CheckCircle2 size={24} strokeWidth={2.5} aria-hidden="true" />
-        </div>
+      <div className="success-hero">
         <div className="success-info">
-          <h3>Successfully connected</h3>
-          <p>{connectionData?.wabaName}</p>
+          <p className="success-eyebrow">Connection secured</p>
+          <h3>WhatsApp connected</h3>
+          <p>
+            {connectionData?.wabaName} is linked and ready for your Flowauxi
+            workspace.
+          </p>
         </div>
       </div>
 
@@ -423,11 +466,7 @@ export default function WhatsAppEmbeddedSignupForm({
         <p>{errorInfo?.message}</p>
       </div>
       {errorInfo?.action === "RESTART_FLOW" && (
-        <button
-          type="button"
-          onClick={handleRetry}
-          className="error-retry-btn"
-        >
+        <button type="button" onClick={handleRetry} className="error-retry-btn">
           <RefreshCw size={16} strokeWidth={2.2} aria-hidden="true" />
           <span>Try connection again</span>
         </button>

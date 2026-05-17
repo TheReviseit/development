@@ -29,6 +29,7 @@ export async function generateMetadata() {
     marketing: "Pricing Plans | Flowauxi Marketing",
     showcase: "Pricing Plans | Flowauxi Showcase",
     api: "Pricing Plans | Flowauxi API",
+    files: "Tools | Flowauxi",
   };
 
   const descriptions: Record<ProductDomain, string> = {
@@ -42,6 +43,7 @@ export async function generateMetadata() {
     showcase:
       "Showcase your portfolio with the perfect plan for your needs.",
     api: "Developer-friendly API plans for every scale.",
+    files: "Free document tools for secure PDF generation and conversion.",
   };
 
   return {

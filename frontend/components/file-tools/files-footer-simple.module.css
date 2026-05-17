@@ -1,0 +1,49 @@
+.footerSimpleScope :global(footer[class*="files-product-chrome-module"]) {
+  border-top-color: #111827;
+  background: #000000;
+}
+
+.footerSimpleScope :global(footer[class*="files-product-chrome-module"] [class*="footerLogo"]) {
+  color: #ffffff;
+}
+
+.footerSimpleScope :global(footer[class*="files-product-chrome-module"] [class*="footerLogoMark"]) {
+  width: 42px;
+  height: 42px;
+  border-radius: 12px;
+  background: #ffffff;
+}
+
+.footerSimpleScope :global(footer[class*="files-product-chrome-module"] [class*="footerLogoImage"]) {
+  width: 28px;
+  height: 28px;
+  filter: none;
+  transform: scale(1.35);
+}
+
+.footerSimpleScope :global(footer[class*="files-product-chrome-module"] [class*="footerLogoText"]) {
+  color: #ffffff;
+  font-size: 18px;
+  font-weight: 800;
+}
+
+.footerSimpleScope :global(footer[class*="files-product-chrome-module"] [class*="footerHeading"]) {
+  color: #ffffff;
+}
+
+.footerSimpleScope :global(footer[class*="files-product-chrome-module"] [class*="footerCopy"]),
+.footerSimpleScope :global(footer[class*="files-product-chrome-module"] [class*="footerBottom"]) {
+  color: #aab6c8;
+}
+
+.footerSimpleScope :global(footer[class*="files-product-chrome-module"] [class*="footerColumn"] a) {
+  color: #aab6c8;
+}
+
+.footerSimpleScope :global(footer[class*="files-product-chrome-module"] [class*="footerColumn"] a:hover) {
+  color: #ffffff;
+}
+
+.footerSimpleScope :global(footer[class*="files-product-chrome-module"] [class*="footerBottom"]) {
+  border-top-color: #1f2937;
+}

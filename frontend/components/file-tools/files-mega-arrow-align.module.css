@@ -1,0 +1,15 @@
+.megaArrowAlignScope :global([class*="files-mega-menu-module"][class*="megaMenu"]::before) {
+  left: calc(50% + 262px) !important;
+}
+
+@media (min-width: 1480px) {
+  .megaArrowAlignScope :global([class*="files-mega-menu-module"][class*="megaMenu"]::before) {
+    left: calc(50% + 76px) !important;
+  }
+}
+
+@media (max-width: 1180px) {
+  .megaArrowAlignScope :global([class*="files-mega-menu-module"][class*="megaMenu"]::before) {
+    left: calc(50% + 224px) !important;
+  }
+}

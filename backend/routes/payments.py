@@ -1551,6 +1551,30 @@ def verify_subscription():
                         f"[{request_id}] user_products upsert failed (non-fatal): {membership_err}"
                     )
 
+            if (
+                subscription_uuid
+                and sub_current_status in ('pending', 'created')
+                and sub_product_domain
+                and sub_product_domain != 'dashboard'
+            ):
+                try:
+                    from services.welcome_email_jobs import enqueue_welcome_email_after_activation
+                    enqueue_welcome_email_after_activation(
+                        supabase,
+                        user_id=user_id,
+                        product=sub_product_domain,
+                        activation_event='paid_subscription_activated',
+                        activation_id=subscription_uuid,
+                        request_id=request_id,
+                        traceparent=request.headers.get('traceparent'),
+                        send_immediately=True,
+                        logger=logger,
+                    )
+                except Exception as welcome_err:
+                    logger.warning(
+                        f"[{request_id}] welcome email enqueue failed (non-fatal): {welcome_err}"
+                    )
+
         # CRITICAL: Invalidate status cache so the polling page sees 'active' immediately
         # Without this, the 10-second TTL cache returns stale 'pending' status
         if cache_manager:

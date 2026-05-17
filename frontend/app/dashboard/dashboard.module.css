@@ -4736,3 +4736,184 @@
     display: none;
   }
 }
+
+/* ============================================
+   Enterprise Theme Engine Compatibility Layer
+   ============================================ */
+
+.dashboardContainer {
+  background: var(--dash-bg-primary);
+  color: var(--dash-text-primary);
+}
+
+.sidebar,
+.mobileHeader,
+.mobileMenuDropdown,
+.profileMenu,
+.hiddenItemsDropdown {
+  background: var(--dash-bg-secondary);
+  border-color: var(--dash-border);
+}
+
+.profileMenu,
+.hiddenItemsDropdown,
+.mobileMenuDropdown {
+  box-shadow: var(--dash-shadow-popover);
+}
+
+.mainContent,
+.mobileContent {
+  background: var(--dash-bg-primary);
+}
+
+.logoText,
+.notificationBannerText strong {
+  color: var(--dash-text-primary);
+}
+
+.notificationBannerText span {
+  color: var(--dash-text-secondary);
+}
+
+.navBadge,
+.navBadgeCollapsed {
+  background: var(--dash-badge-bg);
+  color: var(--dash-badge-text);
+}
+
+.primaryBtn {
+  background: var(--dash-action-primary-bg);
+  color: var(--dash-action-primary-text);
+  border-color: var(--dash-action-primary-border);
+}
+
+.primaryBtn:hover {
+  background: var(--dash-accent-hover);
+  border-color: var(--dash-accent-hover);
+  box-shadow: 0 10px 24px var(--dash-accent-muted);
+}
+
+.secondaryBtn,
+.periodSelect,
+.mobileMenuBtn,
+.hiddenItemsToggle,
+.userProfile,
+.mobileProfileCard {
+  background: var(--dash-bg-tertiary);
+  color: var(--dash-text-primary);
+  border-color: var(--dash-border);
+}
+
+.secondaryBtn:focus-visible,
+.periodSelect:focus-visible,
+.mobileMenuBtn:focus-visible,
+.collapseBtn:focus-visible,
+.settingsDotsBtn:focus-visible,
+.hiddenItemsToggle:focus-visible,
+.profileMenuItem:focus-visible,
+.mobileNavLink:focus-visible {
+  outline: none;
+  border-color: var(--dash-accent);
+  box-shadow: var(--shadow-focus);
+}
+
+.statCard,
+.chartCard,
+.quickActionsCard,
+.activityCard,
+.contactStat {
+  background: var(--dash-bg-secondary);
+  border-color: var(--dash-border);
+  box-shadow: var(--dash-shadow-card);
+}
+
+.statCard:hover,
+.quickActionBtn:hover,
+.contactStat:hover {
+  border-color: var(--dash-action-primary-border);
+  box-shadow: 0 10px 28px var(--dash-accent-muted);
+}
+
+.chartBar {
+  background: var(--chart-series-1);
+}
+
+.chartBar:hover {
+  background: var(--dash-accent-hover);
+}
+
+.quickActionBtn,
+.conversationSearch {
+  background: var(--dash-bg-tertiary);
+  border-color: var(--dash-border);
+}
+
+.notificationBanner {
+  background: var(--dash-bg-secondary);
+  border-color: var(--dash-border);
+  box-shadow: var(--dash-shadow-card);
+}
+
+.notificationBannerIcon {
+  background: var(--dash-accent-muted);
+  color: var(--dash-accent);
+}
+
+.notificationBannerDismiss {
+  color: var(--dash-text-secondary);
+  border-color: var(--dash-border);
+}
+
+.notificationBannerDismiss:hover {
+  background: var(--dash-bg-hover);
+  color: var(--dash-text-primary);
+}
+
+.notificationBannerEnable {
+  background: var(--dash-action-primary-bg);
+  color: var(--dash-action-primary-text);
+}
+
+.notificationBannerEnable:hover {
+  background: var(--dash-accent-hover);
+}
+
+.checkbox:hover {
+  border-color: var(--dash-accent);
+  background-color: var(--dash-accent-muted);
+}
+
+.checkbox:checked {
+  background-color: var(--dash-accent);
+  border-color: var(--dash-accent);
+}
+
+.checkbox:checked::after {
+  border-color: var(--dash-action-primary-text);
+}
+
+::-webkit-scrollbar-track {
+  background: var(--dash-scrollbar-track);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--dash-scrollbar-thumb);
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--dash-scrollbar-thumb-hover);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sidebar,
+  .mainContent,
+  .navItem,
+  .subNavItem,
+  .mobileNavLink,
+  .statCard,
+  .templateCard,
+  .campaignCard {
+    animation: none !important;
+    transition-duration: 0.01ms !important;
+  }
+}

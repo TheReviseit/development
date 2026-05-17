@@ -5,7 +5,10 @@ import {
 } from "@/lib/facebook/graph-api-client";
 import { encryptToken } from "@/lib/encryption/crypto";
 import { withTimeout } from "@/lib/server/fetchWithTimeout";
-import type { EmbeddedSignupFinalizeInput, MetaValidationResult } from "../domain/types";
+import type {
+  EmbeddedSignupFinalizeInput,
+  MetaValidationResult,
+} from "../domain/types";
 import { WhatsAppConnectionError } from "../domain/errors";
 import { normalizeWhatsAppPhone } from "./whatsapp-connection.repository";
 
@@ -44,21 +47,28 @@ export class MetaCloudConnectionProvider {
     const setupData = params.input.setupData || {};
     const messageData = params.input.messageEventData || {};
     const code = params.input.code || setupData.code || null;
-    const setupWabaId = setupData.wabaId || setupData.waba_id || messageData.waba_id || null;
+    const setupWabaId =
+      setupData.wabaId || setupData.waba_id || messageData.waba_id || null;
     const setupPhoneId =
       setupData.phoneNumberId ||
       setupData.phone_number_id ||
       messageData.phone_number_id ||
       null;
     const businessId =
-      setupData.businessId || setupData.business_id || messageData.business_id || null;
+      setupData.businessId ||
+      setupData.business_id ||
+      messageData.business_id ||
+      null;
 
     let accessToken = params.input.accessToken || null;
     let expiresIn = params.input.expiresIn || null;
     let facebookUserId = params.input.userID || null;
 
     if (!accessToken && code) {
-      const tokenData = await this.exchangeAuthorizationCode(code, params.input.redirectUri);
+      const tokenData = await this.exchangeAuthorizationCode(
+        code,
+        params.input.redirectUri,
+      );
       accessToken = tokenData.access_token;
       expiresIn = tokenData.expires_in || expiresIn;
     }
@@ -142,7 +152,8 @@ export class MetaCloudConnectionProvider {
       "META_WABA_DETAILS_TIMEOUT",
     );
 
-    const phoneNumberId = setupPhoneId || (await this.findPhoneNumberId(graph, wabaId));
+    const phoneNumberId =
+      setupPhoneId || (await this.findPhoneNumberId(graph, wabaId));
     if (!phoneNumberId) {
       throw new WhatsAppConnectionError(
         "PHONE_NUMBER_NOT_FOUND",
@@ -201,6 +212,20 @@ export class MetaCloudConnectionProvider {
       wabaId: params.meta.wabaId,
       origin: params.origin,
     });
+
+    if (process.env.WA_EMBEDDED_SIGNUP_REGISTER_PHONE_ON_CONNECT !== "true") {
+      return {
+        ...params.meta,
+        webhookSubscribed,
+        phoneRegistered: true,
+        alreadyRegistered: false,
+        warnings: [
+          ...params.meta.warnings,
+          "Cloud API phone registration deferred during onboarding",
+        ],
+      };
+    }
+
     const registration = await this.registerPhoneNumber({
       accessToken: params.meta.accessToken,
       phoneNumberId: params.meta.phoneNumberId,
@@ -217,7 +242,10 @@ export class MetaCloudConnectionProvider {
     };
   }
 
-  private async exchangeAuthorizationCode(code: string, redirectUri?: string | null) {
+  private async exchangeAuthorizationCode(
+    code: string,
+    redirectUri?: string | null,
+  ) {
     const appId = requiredEnv("NEXT_PUBLIC_FACEBOOK_APP_ID");
     const appSecret = requiredEnv("FACEBOOK_APP_SECRET");
     const url = new URL(`${GRAPH_BASE}/oauth/access_token`);
@@ -226,7 +254,11 @@ export class MetaCloudConnectionProvider {
     url.searchParams.set("code", code);
     if (redirectUri) url.searchParams.set("redirect_uri", redirectUri);
 
-    const response = await withTimeout(fetch(url.toString()), 8000, "META_CODE_EXCHANGE_TIMEOUT");
+    const response = await withTimeout(
+      fetch(url.toString()),
+      8000,
+      "META_CODE_EXCHANGE_TIMEOUT",
+    );
     const data = await response.json();
     if (!response.ok || data.error) {
       throw new WhatsAppConnectionError(
@@ -240,17 +272,28 @@ export class MetaCloudConnectionProvider {
 
   private async safeGetProfile(graph: ReturnType<typeof createGraphAPIClient>) {
     try {
-      return await withTimeout(graph.getUserProfile(), 6000, "META_PROFILE_TIMEOUT");
+      return await withTimeout(
+        graph.getUserProfile(),
+        6000,
+        "META_PROFILE_TIMEOUT",
+      );
     } catch {
       return null;
     }
   }
 
-  private async getGrantedPermissions(accessToken: string, fallbackScopes: string[]) {
+  private async getGrantedPermissions(
+    accessToken: string,
+    fallbackScopes: string[],
+  ) {
     try {
       const url = new URL(`${GRAPH_BASE}/me/permissions`);
       url.searchParams.set("access_token", accessToken);
-      const response = await withTimeout(fetch(url.toString()), 6000, "META_PERMISSIONS_TIMEOUT");
+      const response = await withTimeout(
+        fetch(url.toString()),
+        6000,
+        "META_PERMISSIONS_TIMEOUT",
+      );
       const data = await response.json();
       if (!response.ok || data.error) return fallbackScopes;
       const granted =
@@ -276,7 +319,10 @@ export class MetaCloudConnectionProvider {
     return accounts[0]?.id || null;
   }
 
-  private async findPhoneNumberId(graph: ReturnType<typeof createGraphAPIClient>, wabaId: string) {
+  private async findPhoneNumberId(
+    graph: ReturnType<typeof createGraphAPIClient>,
+    wabaId: string,
+  ) {
     const phones = await withTimeout(
       graph.getPhoneNumbers(wabaId),
       8000,
@@ -324,7 +370,10 @@ export class MetaCloudConnectionProvider {
     }
   }
 
-  private async registerPhoneNumber(params: { accessToken: string; phoneNumberId: string }) {
+  private async registerPhoneNumber(params: {
+    accessToken: string;
+    phoneNumberId: string;
+  }) {
     const pin = nodeCrypto.randomInt(100000, 1000000).toString();
     try {
       const response = await withTimeout(
@@ -361,7 +410,10 @@ export class MetaCloudConnectionProvider {
       return {
         registered: false,
         alreadyRegistered: false,
-        warning: error instanceof Error ? error.message : "Meta phone registration failed",
+        warning:
+          error instanceof Error
+            ? error.message
+            : "Meta phone registration failed",
       };
     }
   }

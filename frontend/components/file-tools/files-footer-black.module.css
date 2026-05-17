@@ -1,0 +1,35 @@
+.footerBlackScope :global(footer[class*="files-product-chrome-module"]) {
+  border-top-color: #111827 !important;
+  background: #000000 !important;
+}
+
+.footerBlackScope :global(footer[class*="files-product-chrome-module"] [class*="footerLogo"]),
+.footerBlackScope :global(footer[class*="files-product-chrome-module"] [class*="footerHeading"]) {
+  color: #ffffff !important;
+}
+
+.footerBlackScope :global(footer[class*="files-product-chrome-module"] [class*="footerLogoMark"]) {
+  background: #ffffff !important;
+}
+
+.footerBlackScope :global(footer[class*="files-product-chrome-module"] [class*="footerLogoImage"]) {
+  filter: none !important;
+}
+
+.footerBlackScope :global(footer[class*="files-product-chrome-module"] [class*="footerLogoText"]) {
+  color: #ffffff !important;
+}
+
+.footerBlackScope :global(footer[class*="files-product-chrome-module"] [class*="footerCopy"]),
+.footerBlackScope :global(footer[class*="files-product-chrome-module"] [class*="footerColumn"] a),
+.footerBlackScope :global(footer[class*="files-product-chrome-module"] [class*="footerBottom"]) {
+  color: #aab6c8 !important;
+}
+
+.footerBlackScope :global(footer[class*="files-product-chrome-module"] [class*="footerColumn"] a:hover) {
+  color: #ffffff !important;
+}
+
+.footerBlackScope :global(footer[class*="files-product-chrome-module"] [class*="footerBottom"]) {
+  border-top-color: #1f2937 !important;
+}

@@ -19,7 +19,8 @@ export type ProductDomain =
   | "marketing"
   | "showcase"
   | "api"
-  | "booking";
+  | "booking"
+  | "files";
 
 // =============================================================================
 // PRICING TYPES
@@ -54,6 +55,8 @@ export interface PricingLimits {
   showcaseItems?: number;
   apiCalls?: number;
   apiKeys?: number;
+  fileConversions?: number;
+  fileStorageMb?: number;
   [key: string]: number | undefined;
 }
 
@@ -119,6 +122,10 @@ export interface ProductFeatures {
 
   // API features
   api: boolean;
+
+  // Files tools
+  files: boolean;
+  textToPdf: boolean;
 }
 
 /**
@@ -203,7 +210,7 @@ export interface SubscriptionCreateRequest {
  * Type guard for ProductDomain
  */
 export function isProductDomain(value: string): value is ProductDomain {
-  return ["shop", "dashboard", "marketing", "showcase", "api", "booking"].includes(value);
+  return ["shop", "dashboard", "marketing", "showcase", "api", "booking", "files"].includes(value);
 }
 
 /**

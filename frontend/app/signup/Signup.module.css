@@ -33,6 +33,7 @@
   display: flex;
   max-width: 1300px;
   width: 100%;
+  height: min(798px, calc(var(--auth-viewport-height) - var(--auth-shell-gap)));
   max-height: min(900px, calc(var(--auth-viewport-height) - var(--auth-shell-gap)));
   background: var(--card-bg);
   border-radius: 24px;
@@ -96,13 +97,13 @@
 .gradientOverlay {
   position: absolute;
   inset: 20px;
-  background: linear-gradient(
-    135deg,
-    var(--auth-gradient-dark-start) 0%,
-    var(--auth-gradient-dark-mid) 50%,
-    var(--auth-gradient-dark-end) 100%
-  );
+  background-color: var(--auth-gradient-dark-start);
   background-image: url("/gradient-waves.png");
+  background-image: image-set(
+    url("/auth-gradient-v1.avif") type("image/avif"),
+    url("/auth-gradient-v1.webp") type("image/webp"),
+    url("/gradient-waves.png") type("image/png")
+  );
   background-size: cover;
   background-position: center;
   opacity: 1;
@@ -216,7 +217,10 @@
   flex-direction: column;
   padding: 16px 40px 12px;
   position: relative;
-  overflow: hidden;
+  overflow-y: auto;
+  overflow-x: hidden;
+  scrollbar-gutter: stable;
+  overscroll-behavior: contain;
   max-height: 100%;
 }
 
@@ -240,9 +244,9 @@
   flex: 1;
   display: flex;
   flex-direction: column;
-  justify-content: flex-start;
-  padding-top: 6px;
-  padding-bottom: 0;
+  justify-content: center;
+  padding-top: 0;
+  padding-bottom: 18px;
   max-width: 420px;
   margin: 0 auto;
   width: 100%;
@@ -694,14 +698,22 @@
 .validationError {
   font-family: var(--font-primary);
   font-size: 11px;
+  line-height: 1.25;
   color: #ef4444;
   margin-top: 2px;
   display: block;
 }
 
 /* Password Strength Indicator */
+.passwordFeedback {
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-start;
+  gap: 2px;
+}
+
 .passwordStrength {
-  margin-top: 4px;
+  margin-top: 0;
 }
 
 .strengthBar {
@@ -724,13 +736,6 @@
 .strengthBar.strong {
   width: 100%;
   background: #22c55e;
-}
-
-.strengthText {
-  font-family: var(--font-primary);
-  font-size: 11px;
-  color: var(--text-muted);
-  text-transform: capitalize;
 }
 
 /* Spinner Animation */

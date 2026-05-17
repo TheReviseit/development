@@ -1,0 +1,36 @@
+.cleanHoverScope :global(nav[class*="files-product-chrome-module"][class*="navLinks"]) {
+  background: #ffffff !important;
+}
+
+.cleanHoverScope :global(nav[class*="files-product-chrome-module"][class*="navLinks"]::before),
+.cleanHoverScope :global(nav[class*="files-product-chrome-module"][class*="navLinks"]::after),
+.cleanHoverScope :global(a[class*="files-product-chrome-module"][class*="navLink"]::before),
+.cleanHoverScope :global(a[class*="files-product-chrome-module"][class*="navLink"]::after) {
+  content: none !important;
+  display: none !important;
+}
+
+.cleanHoverScope :global(a[class*="files-product-chrome-module"][class*="navLink"]) {
+  padding-right: 12px !important;
+  padding-left: 12px !important;
+  border-radius: 12px !important;
+  background: #ffffff !important;
+  color: #080a12 !important;
+  transition:
+    background 160ms ease,
+    color 160ms ease !important;
+}
+
+.cleanHoverScope :global(a[class*="files-product-chrome-module"][class*="navLink"]:hover) {
+  background: rgb(240, 49, 46) !important;
+  color: #ffffff !important;
+}
+
+.cleanHoverScope :global(a[class*="files-product-chrome-module"][class*="navLink"]:hover svg) {
+  color: #ffffff !important;
+}
+
+.cleanHoverScope :global([class*="files-product-chrome-module"][class*="iconAction"]:hover) {
+  background: rgb(240, 49, 46) !important;
+  color: #ffffff !important;
+}

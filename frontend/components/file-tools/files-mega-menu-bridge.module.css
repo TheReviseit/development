@@ -1,0 +1,31 @@
+.megaBridgeScope :global([class*="files-mega-menu-module"][class*="navItem"]) {
+  min-height: 68px;
+}
+
+.megaBridgeScope :global([class*="files-mega-menu-module"][class*="navItemWithMenu"]::after) {
+  content: none !important;
+  display: none !important;
+}
+
+.megaBridgeScope :global([class*="files-mega-menu-module"][class*="megaMenu"]) {
+  top: 100%;
+  padding-top: 0;
+  transform: translateX(-50%) !important;
+  transition:
+    opacity 140ms ease,
+    visibility 0s linear 140ms !important;
+  z-index: 1200;
+}
+
+.megaBridgeScope :global([class*="files-mega-menu-module"][class*="megaMenu"]::before) {
+  top: -9px;
+}
+
+.megaBridgeScope :global([class*="files-mega-menu-module"][class*="navItemWithMenu"]:hover [class*="megaMenu"]),
+.megaBridgeScope :global([class*="files-mega-menu-module"][class*="navItemWithMenu"]:focus-within [class*="megaMenu"]) {
+  opacity: 1;
+  pointer-events: auto;
+  visibility: visible;
+  transform: translateX(-50%) !important;
+  transition-delay: 0s !important;
+}

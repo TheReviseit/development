@@ -1,0 +1,366 @@
+{
+  "common": {
+    "download": "பதிவிறக்கு",
+    "filesTools": "கருவிகள்",
+    "generatePdf": "PDF உருவாக்கு",
+    "history": "வரலாறு",
+    "language": "மொழி",
+    "login": "உள்நுழை",
+    "settings": "அமைப்புகள்",
+    "signUp": "பதிவு செய்"
+  },
+  "navbar": {
+    "filesHome": "Flowauxi கருவிகள் முகப்பு",
+    "quickTools": "விரைவு கருவிகள்",
+    "tools": "கருவிகள்",
+    "openSearch": "கருவி தேடலை திற",
+    "closeSearch": "கருவி தேடலை மூடு",
+    "openNavigation": "கருவி வழிசெலுத்தலை திற",
+    "closeNavigation": "கருவி வழிசெலுத்தலை மூடு",
+    "searchButtonAria": "கருவிகளை தேடு",
+    "nav": {
+      "mergePdf": "PDF ஒன்றிணை",
+      "splitPdf": "PDF பிரி",
+      "compressPdf": "PDF சுருக்கு",
+      "convertPdf": "PDF மாற்று",
+      "allTools": "அனைத்து PDF கருவிகள்",
+      "allToolsShort": "அனைத்து கருவிகள்"
+    },
+    "mega": {
+      "eyebrow": "Flowauxi கருவிகள்",
+      "title": "வேகமான ஆவணப் பணிக்கான PDF கருவிகள்.",
+      "copy": "ஒரே சுத்தமான பணியிடத்தில் கோப்புகளை மாற்றவும், ஒழுங்குபடுத்தவும், பாதுகாக்கவும், மேம்படுத்தவும்.",
+      "viewAllTools": "அனைத்து கருவிகளையும் பார்க்க",
+      "sections": {
+        "organizePdf": "PDF ஒழுங்குபடுத்து",
+        "optimizePdf": "PDF மேம்படுத்து",
+        "convertToPdf": "PDF ஆக மாற்று",
+        "convertFromPdf": "PDF இலிருந்து மாற்று",
+        "editPdf": "PDF திருத்து",
+        "pdfSecurity": "PDF பாதுகாப்பு",
+        "pdfIntelligence": "PDF நுண்ணறிவு"
+      },
+      "tools": {
+        "mergePdf": "PDF ஒன்றிணை",
+        "splitPdf": "PDF பிரி",
+        "compressPdf": "PDF சுருக்கு",
+        "convertPdf": "PDF மாற்று",
+        "allTools": "அனைத்து PDF கருவிகள்",
+        "allToolsShort": "அனைத்து கருவிகள்",
+        "organizePdf": "PDF ஒழுங்குபடுத்து",
+        "optimizePdf": "PDF மேம்படுத்து",
+        "convertToPdf": "PDF ஆக மாற்று",
+        "convertFromPdf": "PDF இலிருந்து மாற்று",
+        "editPdf": "PDF திருத்து",
+        "pdfSecurity": "PDF பாதுகாப்பு",
+        "pdfIntelligence": "PDF நுண்ணறிவு",
+        "removePages": "பக்கங்களை நீக்கு",
+        "extractPages": "பக்கங்களை பிரித்தெடு",
+        "scanToPdf": "ஸ்கேன் செய்து PDF",
+        "repairPdf": "PDF பழுது நீக்கு",
+        "ocrPdf": "OCR PDF",
+        "textToPdf": "உரையிலிருந்து PDF",
+        "jpgToPdf": "JPG இலிருந்து PDF",
+        "wordToPdf": "Word இலிருந்து PDF",
+        "powerPointToPdf": "PowerPoint இலிருந்து PDF",
+        "excelToPdf": "Excel இலிருந்து PDF",
+        "htmlToPdf": "HTML இலிருந்து PDF",
+        "pdfToJpg": "PDF இலிருந்து JPG",
+        "pdfToWord": "PDF இலிருந்து Word",
+        "pdfToPowerPoint": "PDF இலிருந்து PowerPoint",
+        "pdfToExcel": "PDF இலிருந்து Excel",
+        "pdfToPdfA": "PDF இலிருந்து PDF/A",
+        "rotatePdf": "PDF சுழற்று",
+        "addPageNumbers": "பக்க எண்கள் சேர்",
+        "addWatermark": "நீர்முத்திரை சேர்",
+        "cropPdf": "PDF வெட்டு",
+        "pdfForms": "PDF படிவங்கள்",
+        "unlockPdf": "PDF திறக்க",
+        "protectPdf": "PDF பாதுகாக்க",
+        "signPdf": "PDF கையொப்பம்",
+        "redactPdf": "PDF மறை",
+        "comparePdf": "PDF ஒப்பிடு",
+        "aiSummarizer": "AI சுருக்கம்",
+        "translatePdf": "PDF மொழிபெயர்"
+      }
+    },
+    "mobile": {
+      "filesNavigation": "கருவி வழிசெலுத்தல்",
+      "searchTools": "கருவிகளை தேடு",
+      "searchPlaceholder": "கருவிகளை தேடு",
+      "searchPdfTools": "PDF கருவிகளை தேடு",
+      "searchResults": "தேடல் முடிவுகள்",
+      "popular": "பிரபலமானவை",
+      "noMatchingTools": "பொருந்தும் கருவிகள் இல்லை."
+    }
+  },
+  "files": {
+    "hub": {
+      "title": "PDF கோப்புகளுடன் வேலை செய்ய வேண்டிய அனைத்து கருவிகளும் ஒரே இடத்தில்",
+      "description": "PDF கோப்புகளை ஒன்றிணைக்க, பிரிக்க, சுருக்க, மாற்ற, பாதுகாக்க, கையொப்பமிட, ஒழுங்குபடுத்த சில கிளிக்குகள் போதும்.",
+      "actions": {
+        "history": "வரலாறு",
+        "settings": "அமைப்புகள்"
+      },
+      "aria": {
+        "categories": "கருவி வகைகள்",
+        "tools": "கருவிகள்",
+        "openTool": "{name} திற"
+      },
+      "categories": {
+        "all": "அனைத்து PDF கருவிகள்",
+        "workflows": "வேலைப்பாய்ச்சல்கள்",
+        "organizePdf": "PDF ஒழுங்குபடுத்து",
+        "optimizePdf": "PDF மேம்படுத்து",
+        "convertPdf": "PDF மாற்று",
+        "editPdf": "PDF திருத்து",
+        "pdfSecurity": "PDF பாதுகாப்பு",
+        "pdfIntelligence": "PDF நுண்ணறிவு"
+      },
+      "categoriesShort": {
+        "all": "எல்லா",
+        "workflows": "பணி",
+        "organizePdf": "ஒழுங்கு",
+        "optimizePdf": "சீர்மை",
+        "convertPdf": "மாற்று",
+        "editPdf": "திருத்து",
+        "pdfSecurity": "காப்பு",
+        "pdfIntelligence": "AI PDF"
+      }
+    },
+    "comingSoon": {
+      "back": "கருவிகள்",
+      "eyebrow": "விரைவில்",
+      "planned": "திட்டமிடப்பட்டது",
+      "openTextToPdf": "உரையிலிருந்து PDF திற"
+    },
+    "textToPdf": {
+      "toolbar": {
+        "currentLocation": "தற்போதைய இடம்",
+        "dashboard": "டாஷ்போர்டு",
+        "files": "கருவிகள்",
+        "title": "உரையிலிருந்து PDF",
+        "authenticated": "தானியங்கி சேமிப்பு, வரலாறு, பாதுகாப்பான பதிவிறக்கங்கள் செயலில் உள்ளன.",
+        "guest": "விருந்தினர் ஏற்றுமதிகள் தனிப்பட்டவை; தானாக காலாவதியாகும்."
+      },
+      "editor": {
+        "panel": "திருத்தி",
+        "formatting": "உரை வடிவமைப்பு",
+        "paragraphAlignment": "பத்தி சீரமைப்பு",
+        "documentTitle": "ஆவண தலைப்பு",
+        "untitled": "பெயரிடாத ஆவணம்",
+        "textareaAria": "PDF ஆக மாற்ற வேண்டிய உரை",
+        "placeholder": "ஏதாவது தட்டச்சு செய்க...",
+        "bold": "தடிமன்",
+        "italic": "சாய்வு",
+        "underline": "அடிக்கோடு",
+        "heading1": "தலைப்பு 1",
+        "heading2": "தலைப்பு 2",
+        "bulletList": "புள்ளி பட்டியல்",
+        "numberedList": "எண் பட்டியல்",
+        "alignLeft": "இடப்புறம் சீரமை",
+        "alignCenter": "மையத்தில் சீரமை",
+        "alignRight": "வலப்புறம் சீரமை",
+        "justify": "முழுச் சீரமைப்பு",
+        "pageBreak": "பக்க இடைவெளி",
+        "headingPlaceholder": "தலைப்பு",
+        "listItemPlaceholder": "பட்டியல் உருப்படி"
+      },
+      "settings": {
+        "panel": "அமைப்புகள்",
+        "pageSize": "பக்க அளவு",
+        "orientation": "நிலை",
+        "font": "எழுத்துரு",
+        "fontSize": "எழுத்தளவு",
+        "margins": "விளிம்புகள்",
+        "lineHeight": "வரி உயரம்",
+        "header": "தலைப்பகம்",
+        "headerText": "தலைப்பக உரை",
+        "footer": "அடிப்பகம்",
+        "footerText": "அடிப்பக உரை",
+        "pageNumbers": "பக்க எண்கள்",
+        "portrait": "நிமிர்ந்த",
+        "landscape": "அகலம்",
+        "autoFont": "தானியங்கு (Noto + HarfBuzz)",
+        "marginPresets": {
+          "compact": "சுருக்கம்",
+          "standard": "நிலையானது",
+          "spacious": "விரிவானது"
+        },
+        "marginSides": {
+          "top": "மேல்",
+          "right": "வலம்",
+          "bottom": "கீழ்",
+          "left": "இடம்"
+        }
+      },
+      "export": {
+        "aria": "PDF ஏற்றுமதி",
+        "chars": "{count} / {limit} எழுத்துகள்",
+        "pages": "{count, plural, one {# பக்கம்} other {# பக்கங்கள்}}",
+        "saving": "சேமிக்கிறது",
+        "saved": "சேமிக்கப்பட்டது",
+        "draftOffline": "வரைவு ஆஃப்லைனில் உள்ளது",
+        "draftReady": "வரைவு தயார்",
+        "generate": "PDF உருவாக்கு",
+        "download": "{size} பதிவிறக்கு",
+        "share": "பகிர்",
+        "shareText": "Flowauxi கருவிகளில் இருந்து உருவாக்கப்பட்ட PDF.",
+        "shareCopied": "பகிர்வு இணைப்பு நகலெடுக்கப்பட்டது",
+        "shareUnavailable": "இந்த உலாவியில் பகிர்வு கிடைக்கவில்லை.",
+        "shareFailed": "இந்த PDF-ஐ பகிர முடியவில்லை.",
+        "emptyDocument": "PDF உருவாக்கும் முன் உரையைச் சேர்க்கவும்.",
+        "characterLimitExceeded": "எழுத்து வரம்பு மீறப்பட்டது",
+        "readyUntil": "PDF {date} வரை தயார்"
+      },
+      "preview": {
+        "panel": "முன்னோட்டம்",
+        "pageCount": "{count, plural, one {# பக்கம்} other {# பக்கங்கள்}}",
+        "blockCount": "{count, plural, one {# பகுதி} other {# பகுதிகள்}}",
+        "preparing": "முன்னோட்டம் தயாராகிறது",
+        "pageAria": "PDF முன்னோட்டப் பக்கம் {number}",
+        "pageNumber": "பக்கம் {number}"
+      },
+      "mobileTabs": {
+        "aria": "உரையிலிருந்து PDF பலகைகள்",
+        "edit": "திருத்து",
+        "preview": "முன்னோட்டம்",
+        "settings": "அமைப்புகள்",
+        "history": "வரலாறு"
+      },
+      "history": {
+        "panel": "வரலாறு",
+        "signInPrompt": "அமர்வுகளுக்கு இடையில் ஆவண வரலாற்றை வைத்திருக்க உள்நுழைக.",
+        "loading": "வரலாறு ஏற்றப்படுகிறது",
+        "empty": "ஏற்றுமதி செய்த ஆவணங்கள் இல்லை.",
+        "meta": "{size} · {date} · {count} பதிவிறக்கங்கள்",
+        "download": "பதிவிறக்கு"
+      }
+    },
+    "footer": {
+      "brandAria": "Flowauxi கருவிகள் முகப்பு",
+      "description": "Flowauxi கருவிகள் PDF, ஆவணங்கள், படங்கள் மற்றும் AI கோப்பு பணிகளுக்கான நவீன ஒருங்கிணைந்த பணியிடம். வேகம், எளிமை, உற்பத்தித் திறன் ஆகியவற்றுக்காக வடிவமைக்கப்பட்டது.",
+      "columns": {
+        "tools": "கருவிகள்",
+        "pdf": "PDF",
+        "workspace": "பணியிடம்"
+      },
+      "links": {
+        "dashboard": "டாஷ்போர்டு",
+        "history": "வரலாறு",
+        "settings": "அமைப்புகள்"
+      },
+      "trust": {
+        "privateExports": "தனியார் விருந்தினர் ஏற்றுமதிகள்",
+        "moreTools": "மேலும் கருவிகள் வருகை"
+      }
+    }
+  },
+  "tools": {
+    "catalog": {
+      "text_to_pdf": {
+        "name": "உரையிலிருந்து PDF",
+        "description": "உரை, பட்டியல், குறியீடுகள், வடிவமைக்கப்பட்ட உள்ளடக்கம் ஆகியவற்றிலிருந்து அழகான PDF ஆவணங்களை உருவாக்குங்கள்."
+      },
+      "pdf_to_docx": {
+        "name": "PDF இலிருந்து Word",
+        "description": "PDF கோப்புகளை திருத்தக்கூடிய DOC மற்றும் DOCX ஆவணங்களாக மாற்றுங்கள்."
+      },
+      "docx_to_pdf": {
+        "name": "Word இலிருந்து PDF",
+        "description": "DOC மற்றும் DOCX கோப்புகளை பகிரத் தயாரான தெளிவான PDF ஆவணங்களாக மாற்றுங்கள்."
+      },
+      "merge_pdf": {
+        "name": "PDF ஒன்றிணை",
+        "description": "நீங்கள் விரும்பும் வரிசையில் பல PDF கோப்புகளை ஒன்றிணைக்குங்கள்."
+      },
+      "split_pdf": {
+        "name": "PDF பிரி",
+        "description": "ஒரு பக்கம் அல்லது பக்க வரம்பை தனி PDF கோப்புகளாக பிரியுங்கள்."
+      },
+      "compress_pdf": {
+        "name": "PDF சுருக்கு",
+        "description": "தரத்தை காக்கும் வகையில் PDF கோப்பு அளவை குறையுங்கள்."
+      },
+      "pdf_to_ppt": {
+        "name": "PDF இலிருந்து PowerPoint",
+        "description": "PDF கோப்புகளை திருத்தக்கூடிய PPT மற்றும் PPTX ஸ்லைடுகளாக மாற்றுங்கள்."
+      },
+      "pdf_to_excel": {
+        "name": "PDF இலிருந்து Excel",
+        "description": "PDF கோப்புகளிலிருந்து அட்டவணைகள் மற்றும் தரவை திருத்தக்கூடிய ஸ்பிரெட்ஷீட்டுகளுக்கு எடுத்துச் செல்லுங்கள்."
+      },
+      "ppt_to_pdf": {
+        "name": "PowerPoint இலிருந்து PDF",
+        "description": "வழங்கல் ஸ்லைடுகளை பகிர ஏற்ற PDF கோப்புகளாக மாற்றுங்கள்."
+      },
+      "excel_to_pdf": {
+        "name": "Excel இலிருந்து PDF",
+        "description": "வாசிப்புத் தெளிவை காக்கும் வகையில் ஸ்பிரெட்ஷீட்டுகளை PDF ஆக ஏற்றுமதி செய்யுங்கள்."
+      },
+      "edit_pdf": {
+        "name": "PDF திருத்து",
+        "description": "PDF-இல் உரை, படம், வடிவம், குறிப்பு ஆகியவற்றைச் சேர்க்குங்கள்."
+      },
+      "image_to_pdf": {
+        "name": "படத்திலிருந்து PDF",
+        "description": "JPG, PNG மற்றும் ஸ்கேன் படங்களை ஒழுங்கான PDF ஆவணங்களாக மாற்றுங்கள்."
+      },
+      "pdf_to_image": {
+        "name": "PDF இலிருந்து படம்",
+        "description": "PDF பக்கங்களை உயர்தரப் படங்களாக ஏற்றுமதி செய்யுங்கள்."
+      },
+      "rotate_pdf": {
+        "name": "PDF சுழற்று",
+        "description": "ஒரு பக்கம் அல்லது எல்லா பக்கங்களையும் சுழற்றி திருத்தப்பட்ட PDF-ஐ சேமியுங்கள்."
+      },
+      "unlock_pdf": {
+        "name": "PDF திறக்க",
+        "description": "உங்களுக்குச் சொந்தமான கோப்புகளிலிருந்து ஆவண கட்டுப்பாடுகளை நீக்குங்கள்."
+      },
+      "watermark_pdf": {
+        "name": "PDF நீர்முத்திரை",
+        "description": "PDF பக்கங்களில் உரை அல்லது பட வாட்டர்மார்க் சேர்க்குங்கள்."
+      },
+      "ocr": {
+        "name": "OCR",
+        "description": "ஸ்கேன் செய்யப்பட்ட ஆவணங்களிலிருந்து உரையை அறிந்து தேடக்கூடியதாக்குங்கள்."
+      },
+      "protect_pdf": {
+        "name": "PDF பாதுகாக்க",
+        "description": "முக்கிய PDF கோப்புகளுக்கு கடவுச்சொல் பாதுகாப்பு மற்றும் அணுகல் கட்டுப்பாடு சேர்க்குங்கள்."
+      },
+      "sign_pdf": {
+        "name": "PDF கையொப்பம்",
+        "description": "கையொப்பம் மற்றும் ஒப்புதல் பணிகளுக்கான ஆவணங்களைத் தயார் செய்யுங்கள்."
+      },
+      "html_to_pdf": {
+        "name": "HTML இலிருந்து PDF",
+        "description": "வலைப்பக்கங்கள், இன்வாய்ஸ்கள், HTML உள்ளடக்கத்தை நம்பகமான PDF ஆக மாற்றுங்கள்."
+      }
+    }
+  },
+  "forms": {},
+  "errors": {
+    "pdfGenerationFailed": "PDF உருவாக்கம் தோல்வியடைந்தது.",
+    "emptyTextPdfDocument": "PDF உருவாக்கும் முன் உரையைச் சேர்க்கவும்.",
+    "pdfShapingUnavailable": "இந்திய மொழி உரையை உருவாக்க PDF சேவை இன்னும் தயாராக இல்லை. சேவை புதுப்பித்த பிறகு மீண்டும் முயற்சிக்கவும்.",
+    "pdfGlyphPreflightUnavailable": "சேவையகத்தில் PDF எழுத்துரு சரிபார்ப்பு கிடைக்கவில்லை.",
+    "fontNotRegistered": "தேவையான PDF எழுத்துரு சேவையகத்தில் கிடைக்கவில்லை.",
+    "unsupportedGlyph": "இந்த ஆவணத்தில் உள்ள சில எழுத்துகள் தேர்ந்தெடுத்த PDF எழுத்துருவால் ஆதரிக்கப்படவில்லை."
+  },
+  "validation": {},
+  "dashboard": {},
+  "metadata": {
+    "files": {
+      "title": "கருவிகள் | Flowauxi",
+      "description": "Flowauxi கருவிகளில் PDF அல்லது ஆவண கருவியைத் தேர்வுசெய்க."
+    },
+    "textToPdf": {
+      "title": "உரையிலிருந்து PDF | Flowauxi கருவிகள்",
+      "description": "Flowauxi கருவிகளால் உரையிலிருந்து பாதுகாப்பான PDF உருவாக்குங்கள்."
+    },
+    "siteName": "Flowauxi கருவிகள்"
+  },
+  "seo": {}
+}

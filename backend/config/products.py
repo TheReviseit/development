@@ -15,7 +15,7 @@ from typing import List, Literal, Optional
 # TYPES
 # =============================================================================
 
-ProductDomain = Literal["shop", "dashboard", "marketing", "showcase", "api", "booking"]
+ProductDomain = Literal["shop", "dashboard", "marketing", "showcase", "api", "booking", "files"]
 PlanTier = Literal["starter", "business", "pro"]
 
 
@@ -31,6 +31,8 @@ class PricingLimits:
     showcase_items: Optional[int] = None
     api_calls: Optional[int] = None
     api_keys: Optional[int] = None
+    file_conversions: Optional[int] = None
+    file_storage_mb: Optional[int] = None
 
 
 @dataclass
@@ -451,6 +453,18 @@ PRODUCT_REGISTRY: dict[ProductDomain, ProductConfig] = {
             ),
         ],
         enabled_features=["ai", "messages", "appointments", "services", "analytics", "aiSettings"],
+    ),
+
+    # =========================================================================
+    # FILES TOOLS PRODUCT
+    # =========================================================================
+    "files": ProductConfig(
+        id="files",
+        name="Flowauxi Files Tools",
+        domain="files.flowauxi.com",
+        description="Secure document conversion and processing workspace",
+        pricing=[],
+        enabled_features=["files", "textToPdf"],
     ),
 }
 

@@ -53,13 +53,13 @@ body {
   left: 20px;
   right: 20px;
   bottom: 20px;
-  background: linear-gradient(
-    135deg,
-    var(--auth-gradient-dark-start) 0%,
-    var(--auth-gradient-dark-mid) 50%,
-    var(--auth-gradient-dark-end) 100%
-  );
+  background-color: var(--auth-gradient-dark-start);
   background-image: url("/gradient-waves.png");
+  background-image: image-set(
+    url("/auth-gradient-v1.avif") type("image/avif"),
+    url("/auth-gradient-v1.webp") type("image/webp"),
+    url("/gradient-waves.png") type("image/png")
+  );
   background-size: cover;
   background-position: center;
   opacity: 0.9;

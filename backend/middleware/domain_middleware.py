@@ -42,6 +42,8 @@ ALLOWED_HOSTS: dict[str, str] = {
     'flowauxi.com': 'dashboard',
     'www.flowauxi.com': 'dashboard',
     'api.flowauxi.com': 'api',
+    'booking.flowauxi.com': 'booking',
+    'files.flowauxi.com': 'files',
 
     # Development (localhost with port-based routing)
     'localhost:3000': 'dashboard',
@@ -49,6 +51,8 @@ ALLOWED_HOSTS: dict[str, str] = {
     'localhost:3002': 'showcase',
     'localhost:3003': 'marketing',
     'localhost:3004': 'api',
+    'localhost:3005': 'booking',
+    'localhost:3006': 'files',
 
     # Backend server (Render production + local dev)
     'revsieit.onrender.com': 'api',

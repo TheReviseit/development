@@ -1,0 +1,27 @@
+.navbarHoverScope :global(nav[class*="files-product-chrome-module"][class*="navLinks"]) {
+  background: #ffffff;
+}
+
+.navbarHoverScope :global(a[class*="files-product-chrome-module"][class*="navLink"]) {
+  position: relative;
+  padding-right: 12px;
+  padding-left: 12px;
+  border-radius: 12px;
+  background: #ffffff;
+}
+
+.navbarHoverScope :global(nav[class*="files-product-chrome-module"][class*="navLinks"]::after),
+.navbarHoverScope :global(a[class*="files-product-chrome-module"][class*="navLink"]::after) {
+  content: none;
+  display: none;
+}
+
+.navbarHoverScope :global(a[class*="files-product-chrome-module"][class*="navLink"]:hover) {
+  background: rgb(240, 49, 46);
+  color: #ffffff;
+}
+
+.navbarHoverScope :global([class*="files-product-chrome-module"][class*="iconAction"]:hover) {
+  background: rgb(240, 49, 46);
+  color: #ffffff;
+}

@@ -1,0 +1,100 @@
+html[data-theme="light"] {
+  --background: 220 33% 98%;
+  --foreground: 222 47% 11%;
+  --card: 0 0% 100%;
+  --card-foreground: 222 47% 11%;
+  --popover: 0 0% 100%;
+  --popover-foreground: 222 47% 11%;
+  --primary: 142 71% 36%;
+  --primary-foreground: 0 0% 100%;
+  --secondary: 210 40% 96%;
+  --secondary-foreground: 222 47% 11%;
+  --muted: 210 40% 96%;
+  --muted-foreground: 215 16% 47%;
+  --accent: 142 52% 94%;
+  --accent-foreground: 142 72% 24%;
+  --destructive: 0 84% 60%;
+  --destructive-foreground: 0 0% 100%;
+  --border: 214 32% 91%;
+  --input: 214 32% 91%;
+  --ring: 142 71% 36%;
+  --chart-1: 142 71% 36%;
+  --chart-2: 221 83% 53%;
+  --chart-3: 262 83% 58%;
+  --chart-4: 35 92% 45%;
+  --chart-5: 188 95% 34%;
+}
+
+html[data-theme="dark"],
+html.dark {
+  --background: 210 17% 3%;
+  --foreground: 210 40% 96%;
+  --card: 214 18% 6%;
+  --card-foreground: 210 40% 96%;
+  --popover: 214 18% 6%;
+  --popover-foreground: 210 40% 96%;
+  --primary: 142 71% 45%;
+  --primary-foreground: 138 76% 5%;
+  --secondary: 214 18% 12%;
+  --secondary-foreground: 210 40% 96%;
+  --muted: 214 18% 12%;
+  --muted-foreground: 215 20% 65%;
+  --accent: 142 34% 15%;
+  --accent-foreground: 142 76% 80%;
+  --destructive: 0 72% 51%;
+  --destructive-foreground: 0 0% 100%;
+  --border: 214 18% 15%;
+  --input: 214 18% 15%;
+  --ring: 142 71% 45%;
+  --chart-1: 142 71% 45%;
+  --chart-2: 217 91% 60%;
+  --chart-3: 258 90% 66%;
+  --chart-4: 43 96% 56%;
+  --chart-5: 188 86% 53%;
+}
+
+html[data-theme] {
+  --primary-color: var(--color-text-primary);
+  --secondary-color: var(--color-accent);
+  --text-color: var(--color-text-secondary);
+  --heading-color: var(--color-text-primary);
+  --text-primary: var(--color-text-primary);
+  --text-secondary: var(--color-text-secondary);
+  --text-muted: var(--color-text-muted);
+  --text-placeholder: var(--color-text-subtle);
+  --text-gray-900: var(--color-text-primary);
+  --text-gray-800: var(--color-text-primary);
+  --text-gray-700: var(--color-text-secondary);
+  --text-gray-400: var(--color-text-muted);
+  --background-color: var(--color-bg-app);
+  --auth-bg: var(--color-bg-app);
+  --header-bg: var(--color-surface-1);
+  --input-bg: var(--color-surface-1);
+  --border-color: var(--color-border-default);
+  --button-bg: var(--color-accent);
+  --button-hover-bg: var(--color-accent-hover);
+  --google-btn-bg: var(--color-surface-1);
+  --google-btn-border: var(--color-border-default);
+  --card-bg: var(--color-surface-1);
+  --input-bg-light: var(--color-surface-2);
+  --border-light: var(--color-border-default);
+  --header-border: var(--color-border-default);
+  --gray-300: var(--color-border-strong);
+  --gray-200: var(--color-border-default);
+  --gray-100: var(--color-surface-3);
+  --gray-50: var(--color-surface-2);
+  --green-50: var(--color-success-bg);
+  --blue-500: var(--color-info);
+  --green-400: var(--color-success);
+  --green-600: var(--color-accent);
+  --glass-fill: color-mix(in srgb, var(--color-surface-1) 88%, transparent);
+  --glass-border: var(--color-border-default);
+  --glass-border-light: var(--color-border-subtle);
+  --white-70: color-mix(in srgb, var(--color-surface-1) 70%, transparent);
+  --white-80: color-mix(in srgb, var(--color-surface-1) 80%, transparent);
+  --black: #000000;
+  --white: #ffffff;
+  --shadow-card: var(--shadow-md);
+  --shadow-button: 0 12px 30px color-mix(in srgb, var(--color-accent) 22%, transparent);
+  --shadow-soft: var(--shadow-sm);
+}

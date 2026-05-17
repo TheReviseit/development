@@ -1,0 +1,7 @@
+.pageBgScope.pageBgScope {
+  background: rgb(245, 245, 250) !important;
+}
+
+.pageBgScope.pageBgScope :global([class*="file-tools-module"][class*="shell"]) {
+  background: transparent !important;
+}

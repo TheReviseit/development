@@ -23,9 +23,11 @@ const imagesToOptimize = [
   },
   {
     input: "public/gradient-waves.png",
-    maxWidth: 1920,
-    quality: 85,
-    formats: ["webp", "png"],
+    outputBaseName: "public/auth-gradient-v1",
+    maxWidth: 1400,
+    quality: 74,
+    avifQuality: 52,
+    formats: ["avif", "webp"],
   },
   {
     input: "public/og-image.png",
@@ -54,11 +56,10 @@ async function optimizeImages() {
 
       // Generate optimized versions in different formats
       for (const format of img.formats) {
-        const outputPath = img.input.replace(
-          /\.(jpg|png)$/i,
-          `-optimized.${format}`
-        );
-        const fullOutputPath = path.join(__dirname, "..", outputPath);
+        const outputPath =
+          img.outputBaseName || img.input.replace(/\.(jpg|png)$/i, "-optimized");
+        const versionedOutputPath = `${outputPath}.${format}`;
+        const fullOutputPath = path.join(__dirname, "..", versionedOutputPath);
 
         const sharpInstance = sharp(inputPath).resize({
           width: img.maxWidth,
@@ -66,17 +67,28 @@ async function optimizeImages() {
         });
 
         let info;
-        if (format === "webp") {
+        const formatQuality =
+          format === "avif" ? img.avifQuality || img.quality : img.quality;
+
+        if (format === "avif") {
           info = await sharpInstance
-            .webp({ quality: img.quality })
+            .avif({
+              quality: formatQuality,
+              effort: 7,
+              chromaSubsampling: "4:2:0",
+            })
+            .toFile(fullOutputPath);
+        } else if (format === "webp") {
+          info = await sharpInstance
+            .webp({ quality: formatQuality })
             .toFile(fullOutputPath);
         } else if (format === "jpg") {
           info = await sharpInstance
-            .jpeg({ quality: img.quality, progressive: true })
+            .jpeg({ quality: formatQuality, progressive: true })
             .toFile(fullOutputPath);
         } else if (format === "png") {
           info = await sharpInstance
-            .png({ quality: img.quality, compressionLevel: 9 })
+            .png({ quality: formatQuality, compressionLevel: 9 })
             .toFile(fullOutputPath);
         }
 

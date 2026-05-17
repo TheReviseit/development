@@ -1,0 +1,44 @@
+.navbarPolishScope :global([class*="files-product-chrome-module"][class*="navbar"]) {
+  background: #ffffff;
+}
+
+.navbarPolishScope :global([class*="files-product-chrome-module"][class*="navInner"]),
+.navbarPolishScope :global([class*="files-product-chrome-module"][class*="navLinks"]) {
+  background: #ffffff !important;
+}
+
+.navbarPolishScope :global(a[class*="files-product-chrome-module"][class*="navLink"]) {
+  position: relative;
+  padding-right: 12px;
+  padding-left: 12px;
+  border-radius: 12px;
+  background: #ffffff !important;
+  color: #080a12;
+}
+
+.navbarPolishScope :global(nav[class*="files-product-chrome-module"][class*="navLinks"]::after),
+.navbarPolishScope :global(a[class*="files-product-chrome-module"][class*="navLink"]::after) {
+  content: none !important;
+  display: none !important;
+}
+
+.navbarPolishScope :global(a[class*="files-product-chrome-module"][class*="navLink"]:hover) {
+  background: rgb(240, 49, 46) !important;
+  color: #ffffff !important;
+}
+
+.navbarPolishScope :global([class*="files-product-chrome-module"][class*="secondaryAction"]:hover),
+.navbarPolishScope :global([class*="files-product-chrome-module"][class*="iconAction"]:hover) {
+  background: rgb(240, 49, 46) !important;
+  color: #ffffff !important;
+}
+
+.navbarPolishScope :global([class*="files-product-chrome-module"][class*="primaryAction"]) {
+  border-color: rgb(240, 49, 46) !important;
+  background: rgb(240, 49, 46) !important;
+}
+
+.navbarPolishScope :global([class*="files-product-chrome-module"][class*="primaryAction"]:hover) {
+  border-color: rgb(218, 38, 35) !important;
+  background: rgb(218, 38, 35) !important;
+}

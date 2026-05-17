@@ -20,6 +20,7 @@ from datetime import datetime, timezone, timedelta
 from typing import Any, Dict, Optional
 
 from celery import shared_task
+from services.welcome_email_jobs import send_welcome_email_from_payload
 
 logger = logging.getLogger("reviseit.tasks.auth_sync_jobs")
 
@@ -85,39 +86,7 @@ def _compute_next_attempt(attempts: int) -> datetime:
 
 
 def _send_welcome_email(payload: Dict[str, Any]) -> None:
-    api_key = os.getenv("RESEND_API_KEY")
-    if not api_key:
-        raise RuntimeError("RESEND_API_KEY not configured")
-
-    to_email = payload.get("email")
-    full_name = payload.get("full_name") or "there"
-    product = payload.get("product") or "Flowauxi"
-
-    if not to_email:
-        raise ValueError("Missing email")
-
-    from_email = os.getenv("RESEND_FROM_EMAIL", "onboarding@flowauxi.com")
-
-    subject = "Welcome to Flowauxi!"
-    html = f"""
-      <div>
-        <h3>Welcome to Flowauxi, {full_name}!</h3>
-        <p>Your <b>{product}</b> is ready.</p>
-        <p>You can safely close this email and continue in the app.</p>
-      </div>
-    """
-
-    import resend  # type: ignore
-
-    resend.api_key = api_key
-    resend.Emails.send(
-        {
-            "from": from_email,
-            "to": to_email,
-            "subject": subject,
-            "html": html,
-        }
-    )
+    send_welcome_email_from_payload(payload)
 
 
 def _start_trial(payload: Dict[str, Any]) -> None:
