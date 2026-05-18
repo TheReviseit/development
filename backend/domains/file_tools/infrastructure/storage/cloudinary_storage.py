@@ -193,7 +193,7 @@ def _write_cloudinary_context() -> bool:
 
 def _cloudinary_blob_key(key: str) -> str:
     if key.lower().endswith(".pdf"):
-        return f"{key[:-4]}.bin"
+        return f"{key[:-4]}.dat"
     return key
 
 

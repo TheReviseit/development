@@ -651,8 +651,8 @@ def test_cloudinary_storage_accepts_existing_frontend_env_aliases(monkeypatch):
     }
     assert captured_upload["resource_type"] == "raw"
     assert captured_upload["type"] == "authenticated"
-    assert captured_upload["public_id"] == "file-tools/guest/text_to_pdf/job/artifact.bin"
-    assert captured_upload["file_name"] == "artifact.bin"
+    assert captured_upload["public_id"] == "file-tools/guest/text_to_pdf/job/artifact.dat"
+    assert captured_upload["file_name"] == "artifact.dat"
 
 
 def test_cloudinary_storage_health_uploads_downloads_and_deletes(monkeypatch):
@@ -688,7 +688,7 @@ def test_cloudinary_storage_health_uploads_downloads_and_deletes(monkeypatch):
 
     assert [call[0] for call in calls[:3]] == ["upload", "download", "delete"]
     assert calls[0][1] and calls[0][1].startswith("file-tools/_health/")
-    assert calls[0][1].endswith(".bin")
+    assert calls[0][1].endswith(".dat")
 
 
 def test_storage_factory_prefers_cloudinary_when_configured(monkeypatch):
