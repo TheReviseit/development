@@ -15,7 +15,7 @@ export const defaultTextPdfOptions: TextPdfOptions = {
   fontSize: 12,
   lineHeight: 1.4,
   header: { enabled: false, text: "" },
-  footer: { enabled: true, text: "", pageNumbers: true },
+  footer: { enabled: false, text: "", pageNumbers: false },
 };
 
 export const defaultEditorText = "";
