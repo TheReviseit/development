@@ -11,7 +11,7 @@ from .r2_storage import R2Storage, cloudflare_r2_config_status
 
 
 def create_artifact_storage() -> ArtifactStorage:
-    provider = os.getenv("FILE_TOOLS_STORAGE_PROVIDER", "auto").strip().lower()
+    provider = os.getenv("FILE_TOOLS_STORAGE_PROVIDER", _default_storage_provider()).strip().lower()
 
     if provider in {"cloudinary", "cloudinary_raw"}:
         return CloudinaryStorage()
@@ -49,6 +49,12 @@ def _production_requires_remote_storage() -> bool:
     if os.getenv("FLASK_ENV", "development").lower() != "production":
         return False
     return os.getenv("FILE_TOOLS_ALLOW_LOCAL_STORAGE", "false").lower() not in {"1", "true", "yes"}
+
+
+def _default_storage_provider() -> str:
+    if os.getenv("FLASK_ENV", "development").lower() == "production":
+        return "cloudinary"
+    return "auto"
 
 
 def _missing_remote_storage_message() -> str:

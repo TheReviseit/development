@@ -715,6 +715,33 @@ def test_storage_factory_prefers_cloudinary_when_configured(monkeypatch):
     assert storage.provider == "cloudinary"
 
 
+def test_storage_factory_defaults_to_cloudinary_in_production(monkeypatch):
+    from domains.file_tools.infrastructure.storage import factory
+
+    class FakeCloudinaryStorage:
+        provider = "cloudinary"
+
+        @classmethod
+        def is_configured(cls):
+            return False
+
+    class FakeR2Storage:
+        provider = "cloudflare_r2"
+
+        @classmethod
+        def is_configured(cls):
+            return True
+
+    monkeypatch.delenv("FILE_TOOLS_STORAGE_PROVIDER", raising=False)
+    monkeypatch.setenv("FLASK_ENV", "production")
+    monkeypatch.setattr(factory, "CloudinaryStorage", FakeCloudinaryStorage)
+    monkeypatch.setattr(factory, "R2Storage", FakeR2Storage)
+
+    storage = factory.create_artifact_storage()
+
+    assert storage.provider == "cloudinary"
+
+
 def test_file_tools_health_reports_safe_artifact_storage_detail(monkeypatch):
     class FakeBlueprint:
         def __init__(self, *_args, **_kwargs):
