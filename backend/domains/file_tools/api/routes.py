@@ -61,6 +61,7 @@ def list_tools():
 def file_tools_health():
     """Route-level health check used by frontend proxy and deploy gates."""
     deep = request.args.get("deep") in {"1", "true", "yes"}
+    details = {}
     checks = {
         "routes": True,
         "tools_registered": bool(_tool_registry.list_public()),
@@ -71,16 +72,20 @@ def file_tools_health():
     if deep:
         checks["pdf_shaping_stack"] = _pdf_shaping_stack_ready()
         checks["pdf_glyph_preflight"] = _pdf_glyph_preflight_ready()
-        checks["artifact_storage"] = _artifact_storage_ready()
+        checks["artifact_storage"], details["artifact_storage"] = _artifact_storage_status()
 
     ready = all(checks.values())
+    payload = {
+        "success": True,
+        "status": "ready" if ready else "not_ready",
+        "service": "file_tools",
+        "checks": checks,
+    }
+    if details:
+        payload["details"] = details
+
     return success_response(
-        {
-            "success": True,
-            "status": "ready" if ready else "not_ready",
-            "service": "file_tools",
-            "checks": checks,
-        },
+        payload,
         200 if ready else 503,
     )
 
@@ -286,8 +291,14 @@ def _pdf_glyph_preflight_ready() -> bool:
         return False
 
 
-def _artifact_storage_ready() -> bool:
+def _artifact_storage_status() -> tuple[bool, dict[str, str]]:
     try:
-        return create_artifact_storage().health_check()
-    except Exception:
-        return False
+        storage = create_artifact_storage()
+        storage.health_check()
+        return True, {"status": "ready", "provider": storage.provider}
+    except Exception as exc:
+        return False, {
+            "status": "not_ready",
+            "code": getattr(exc, "code", "STORAGE_ERROR"),
+            "message": getattr(exc, "message", "Artifact storage is not ready."),
+        }

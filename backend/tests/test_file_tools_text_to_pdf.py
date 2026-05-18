@@ -1,4 +1,5 @@
 import base64
+import importlib
 import re
 import sys
 import types
@@ -543,6 +544,41 @@ def test_r2_storage_wraps_upload_failures(monkeypatch):
 
     assert exc.value.code == "STORAGE_ERROR"
     assert "internal details" not in exc.value.message
+
+
+def test_file_tools_health_reports_safe_artifact_storage_detail(monkeypatch):
+    class FakeBlueprint:
+        def __init__(self, *_args, **_kwargs):
+            pass
+
+        def route(self, *_args, **_kwargs):
+            def decorator(handler):
+                return handler
+
+            return decorator
+
+    fake_flask = types.SimpleNamespace(
+        Blueprint=FakeBlueprint,
+        jsonify=lambda payload: payload,
+        request=types.SimpleNamespace(args={}),
+        send_file=lambda *_args, **_kwargs: None,
+    )
+    monkeypatch.setitem(sys.modules, "flask", fake_flask)
+    routes = importlib.import_module("domains.file_tools.api.routes")
+
+    def broken_storage():
+        raise StorageError("Cloudflare R2 storage is not configured for file tools.")
+
+    monkeypatch.setattr(routes, "create_artifact_storage", broken_storage)
+
+    ready, detail = routes._artifact_storage_status()
+
+    assert ready is False
+    assert detail == {
+        "status": "not_ready",
+        "code": "STORAGE_ERROR",
+        "message": "Cloudflare R2 storage is not configured for file tools.",
+    }
 
 
 def test_signed_download_token_expiry_is_enforced():
