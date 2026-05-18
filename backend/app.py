@@ -440,15 +440,30 @@ except ImportError as e:
     logger.warning(f"Trial routes not available: {e}")
 
 # Register Files Tools platform routes
+def _feature_enabled_for_startup(env_key: str) -> bool:
+    return os.getenv(env_key, "true").lower() not in {"0", "false", "off", "disabled"}
+
+
+def _files_tools_required_at_startup() -> bool:
+    return (
+        os.getenv("FLASK_ENV", "development").lower() == "production"
+        and _feature_enabled_for_startup("FILES_TOOLS_ENABLED")
+    )
+
+
 try:
     from domains.file_tools.api.routes import file_tools_bp
     if "file_tools" not in app.blueprints:
         app.register_blueprint(file_tools_bp)
     logger.info("Files Tools routes registered (/api/file-tools/*)")
 except ImportError as e:
-    logger.warning(f"Files Tools routes not available: {e}")
+    logger.exception("Files Tools routes import failed")
+    if _files_tools_required_at_startup():
+        raise
 except Exception as e:
-    logger.warning(f"Files Tools route registration failed: {e}")
+    logger.exception("Files Tools route registration failed")
+    if _files_tools_required_at_startup():
+        raise
 
 # Initialize Omni-Channel Messaging SDK
 try:
