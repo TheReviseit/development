@@ -71,6 +71,7 @@ def file_tools_health():
     if deep:
         checks["pdf_shaping_stack"] = _pdf_shaping_stack_ready()
         checks["pdf_glyph_preflight"] = _pdf_glyph_preflight_ready()
+        checks["artifact_storage"] = _artifact_storage_ready()
 
     ready = all(checks.values())
     return success_response(
@@ -281,5 +282,12 @@ def _pdf_glyph_preflight_ready() -> bool:
 
         preflight_texts("Auto", ["Flowauxi", "தமிழ்", "हिन्दी", "മലയാളം", "ಕನ್ನಡ", "తెలుగు"])
         return True
+    except Exception:
+        return False
+
+
+def _artifact_storage_ready() -> bool:
+    try:
+        return create_artifact_storage().health_check()
     except Exception:
         return False

@@ -18,6 +18,10 @@ class StoredObject:
 class ArtifactStorage(ABC):
     provider: str
 
+    def health_check(self) -> bool:
+        """Return whether this storage backend is ready for artifact traffic."""
+        return True
+
     @abstractmethod
     def put_bytes(self, key: str, content: bytes, mime_type: str, metadata: Optional[dict[str, str]] = None) -> StoredObject:
         """Persist bytes and return normalized storage metadata."""

@@ -1,6 +1,7 @@
 import base64
 import re
 import sys
+import types
 import zlib
 from pathlib import Path
 
@@ -18,7 +19,7 @@ from domains.file_tools.converters.text_to_pdf.reportlab_converter import Report
 from domains.file_tools.converters.text_to_pdf.layout_mapper import paragraph_style
 from domains.file_tools.domain.entities import FileToolOwner
 from domains.file_tools.domain.enums import OwnerType
-from domains.file_tools.domain.errors import ConversionError, PermissionDeniedError, ValidationError
+from domains.file_tools.domain.errors import ConversionError, PermissionDeniedError, StorageError, ValidationError
 from domains.file_tools.infrastructure.repositories import FileToolsRepository
 from domains.file_tools.infrastructure.security.signed_downloads import create_download_token, verify_download_token
 from domains.file_tools.infrastructure.storage.local_dev_storage import LocalDevStorage
@@ -478,6 +479,70 @@ def test_orchestrator_rejects_empty_text_to_pdf_generation(tmp_path):
         orchestrator.generate_text_to_pdf(payload, context)
 
     assert exc.value.code == "EMPTY_TEXT_PDF_DOCUMENT"
+    assert "Add text" in exc.value.message
+
+
+def test_orchestrator_logs_stage_for_unexpected_storage_failures(monkeypatch):
+    class BrokenStorage:
+        provider = "broken_storage"
+
+        def put_bytes(self, key, content, mime_type, metadata=None):
+            raise RuntimeError("simulated storage outage")
+
+        def get_bytes(self, key):
+            return b""
+
+        def delete(self, key):
+            return None
+
+    captured: dict[str, object] = {}
+
+    def capture_failure(_event: str, **fields):
+        captured.update(fields)
+
+    monkeypatch.setattr(
+        "domains.file_tools.application.conversion_orchestrator.log_failure",
+        capture_failure,
+    )
+    repository = FileToolsRepository(supabase_client=None)
+    orchestrator = ConversionOrchestrator(
+        ToolRegistry(),
+        repository,
+        BrokenStorage(),
+        InMemoryRateLimitService(),
+    )
+    owner = FileToolOwner(OwnerType.GUEST, "guest-storage-failure")
+    context = RequestContext(owner=owner, request_id="req-storage-failure", ip_address="127.0.0.1")
+
+    with pytest.raises(ConversionError) as exc:
+        orchestrator.generate_text_to_pdf(sample_payload(), context)
+
+    assert exc.value.code == "CONVERSION_FAILED"
+    assert captured["stage"] == "storage_put"
+    assert captured["internal_error_type"] == "RuntimeError"
+    assert captured["internal_message"] == "simulated storage outage"
+
+
+def test_r2_storage_wraps_upload_failures(monkeypatch):
+    from domains.file_tools.infrastructure.storage.r2_storage import R2Storage
+
+    class FakeR2Client:
+        def put_object(self, **_kwargs):
+            raise RuntimeError("raw provider failure with internal details")
+
+    monkeypatch.setenv("CLOUDFLARE_R2_ACCOUNT_ID", "account")
+    monkeypatch.setenv("CLOUDFLARE_R2_ACCESS_KEY_ID", "access")
+    monkeypatch.setenv("CLOUDFLARE_R2_SECRET_ACCESS_KEY", "secret")
+    monkeypatch.setenv("CLOUDFLARE_R2_BUCKET_NAME", "bucket")
+    monkeypatch.setitem(sys.modules, "boto3", types.SimpleNamespace(client=lambda *_args, **_kwargs: FakeR2Client()))
+
+    storage = R2Storage()
+
+    with pytest.raises(StorageError) as exc:
+        storage.put_bytes("artifact.pdf", b"%PDF", "application/pdf")
+
+    assert exc.value.code == "STORAGE_ERROR"
+    assert "internal details" not in exc.value.message
 
 
 def test_signed_download_token_expiry_is_enforced():

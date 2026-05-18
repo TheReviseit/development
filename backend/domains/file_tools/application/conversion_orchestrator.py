@@ -39,6 +39,7 @@ class ConversionOrchestrator:
         started = time.perf_counter()
         request = TextPdfGenerateRequest.parse_or_raise(payload)
         tool = self.registry.get("text_to_pdf")
+        stage = "preflight"
 
         request.assert_has_renderable_content()
         self.rate_limits.assert_generate_allowed(context.owner, context.ip_address)
@@ -62,7 +63,9 @@ class ConversionOrchestrator:
         self.repository.record_event(context.owner, FILE_TOOL_JOB_CREATED, "text_to_pdf", {"job_id": job.id})
 
         try:
+            stage = "convert"
             result = tool.converter.convert(request)
+            stage = "validate_output_limits"
             if result.page_count > TEXT_TO_PDF_LIMITS.max_pages:
                 raise ValidationError(
                     "PAGE_LIMIT_EXCEEDED",
@@ -78,6 +81,7 @@ class ConversionOrchestrator:
                 f"{job.id}/{artifact_id}.pdf"
             )
             digest = sha256_hex(result.bytes)
+            stage = "storage_put"
             stored = self.storage.put_bytes(
                 storage_key,
                 result.bytes,
@@ -90,6 +94,7 @@ class ConversionOrchestrator:
                 },
             )
 
+            stage = "artifact_create"
             expires_at = utc_now() + (
                 TEXT_TO_PDF_LIMITS.authenticated_retention
                 if context.owner.is_authenticated
@@ -108,6 +113,7 @@ class ConversionOrchestrator:
                 page_count=result.page_count,
             )
             duration_ms = int((time.perf_counter() - started) * 1000)
+            stage = "job_succeeded"
             self.repository.mark_job_succeeded(job.id, result.page_count, duration_ms)
             self.repository.record_event(
                 context.owner,
@@ -150,14 +156,36 @@ class ConversionOrchestrator:
                 request_id=context.request_id,
                 job_id=job.id,
                 code=exc.code,
+                stage=stage,
                 message=exc.message,
+                internal_error_type=internal_cause.__class__.__name__ if internal_cause else None,
                 internal_message=internal_message if internal_message != exc.message else None,
             )
             raise
         except Exception as exc:
             duration_ms = int((time.perf_counter() - started) * 1000)
             self.repository.mark_job_failed(job.id, "CONVERSION_FAILED", str(exc), duration_ms)
-            log_failure("file_tool_failed", request_id=context.request_id, job_id=job.id, code="CONVERSION_FAILED")
+            self.repository.record_event(
+                context.owner,
+                FILE_TOOL_FAILED,
+                "text_to_pdf",
+                {
+                    "job_id": job.id,
+                    "code": "CONVERSION_FAILED",
+                    "message": "PDF generation failed.",
+                    "stage": stage,
+                },
+            )
+            log_failure(
+                "file_tool_failed",
+                request_id=context.request_id,
+                job_id=job.id,
+                code="CONVERSION_FAILED",
+                stage=stage,
+                message="PDF generation failed.",
+                internal_error_type=exc.__class__.__name__,
+                internal_message=str(exc),
+            )
             raise ConversionError() from exc
 
     def _generate_response(self, job_id: str, artifact: FileToolArtifact, subject: str) -> GenerateResponse:

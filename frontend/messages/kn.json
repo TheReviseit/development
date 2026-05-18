@@ -345,6 +345,7 @@
     "pdfGenerationFailed": "PDF ರಚನೆ ವಿಫಲವಾಗಿದೆ.",
     "emptyTextPdfDocument": "PDF ರಚಿಸುವ ಮೊದಲು ಪಠ್ಯವನ್ನು ಸೇರಿಸಿ.",
     "pdfBackendUnavailable": "PDF ಪ್ರಕ್ರಿಯೆ ಸೇವೆ ತಾತ್ಕಾಲಿಕವಾಗಿ ಲಭ್ಯವಿಲ್ಲ. ದಯವಿಟ್ಟು ಸ್ವಲ್ಪ ಸಮಯದ ನಂತರ ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ.",
+    "pdfStorageUnavailable": "PDF ರಚಿಸಲಾಗಿದೆ, ಆದರೆ ಸುರಕ್ಷಿತ ಡೌನ್‌ಲೋಡ್ ಸಂಗ್ರಹಣೆ ತಾತ್ಕಾಲಿಕವಾಗಿ ಲಭ್ಯವಿಲ್ಲ. ದಯವಿಟ್ಟು ಸ್ವಲ್ಪ ಸಮಯದ ನಂತರ ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ.",
     "pdfShapingUnavailable": "ಭಾರತೀಯ ಲಿಪಿಯ ಪಠ್ಯವನ್ನು render ಮಾಡಲು PDF ಸೇವೆ ಇನ್ನೂ ಸಿದ್ಧವಾಗಿಲ್ಲ. ಸೇವೆ refresh ಆದ ನಂತರ ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ.",
     "pdfGlyphPreflightUnavailable": "ಸರ್ವರ್‌ನಲ್ಲಿ PDF ಫಾಂಟ್ ಪರಿಶೀಲನೆ ಲಭ್ಯವಿಲ್ಲ.",
     "fontNotRegistered": "ಅಗತ್ಯವಿರುವ PDF ಫಾಂಟ್ ಸರ್ವರ್‌ನಲ್ಲಿ ಲಭ್ಯವಿಲ್ಲ.",

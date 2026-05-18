@@ -345,6 +345,7 @@
     "pdfGenerationFailed": "PDF निर्माण विफल रहा.",
     "emptyTextPdfDocument": "PDF बनाने से पहले टेक्स्ट जोड़ें.",
     "pdfBackendUnavailable": "PDF प्रोसेसिंग सेवा अस्थायी रूप से उपलब्ध नहीं है. कृपया थोड़ी देर बाद फिर प्रयास करें.",
+    "pdfStorageUnavailable": "PDF बन गया है, लेकिन सुरक्षित डाउनलोड स्टोरेज अस्थायी रूप से उपलब्ध नहीं है. कृपया थोड़ी देर बाद फिर प्रयास करें.",
     "pdfShapingUnavailable": "PDF सेवा भारतीय लिपि का पाठ रेंडर करने के लिए अभी तैयार नहीं है. सेवा refresh होने के बाद फिर से प्रयास करें.",
     "pdfGlyphPreflightUnavailable": "सर्वर पर PDF फ़ॉन्ट जाँच उपलब्ध नहीं है.",
     "fontNotRegistered": "सर्वर पर आवश्यक PDF फ़ॉन्ट उपलब्ध नहीं है.",

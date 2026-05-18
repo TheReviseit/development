@@ -17,6 +17,10 @@ class LocalDevStorage(ArtifactStorage):
         self.root = Path(root or os.getenv("FILE_TOOLS_LOCAL_STORAGE_DIR") or default_root).resolve()
         self.root.mkdir(parents=True, exist_ok=True)
 
+    def health_check(self) -> bool:
+        self.root.mkdir(parents=True, exist_ok=True)
+        return self.root.is_dir() and os.access(self.root, os.W_OK)
+
     def _path(self, key: str) -> Path:
         safe_parts = [part for part in key.split("/") if part and part not in {".", ".."}]
         path = (self.root / Path(*safe_parts)).resolve()

@@ -66,6 +66,7 @@ const PDF_GENERATION_ERROR_KEYS: Record<string, string> = {
   FILE_TOOLS_BACKEND_NOT_DEPLOYED: "pdfBackendUnavailable",
   FILE_TOOLS_BACKEND_TIMEOUT: "pdfBackendUnavailable",
   FILE_TOOLS_PROXY_ERROR: "pdfBackendUnavailable",
+  STORAGE_ERROR: "pdfStorageUnavailable",
 };
 
 export default function ToolShell({ mode = "public", basePath = "/tools" }: ToolShellProps) {
