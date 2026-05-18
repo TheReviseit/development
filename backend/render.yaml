@@ -55,6 +55,8 @@ services:
         value: true
       - key: FILES_TEXT_TO_PDF_ENABLED
         value: true
+      - key: FILE_TOOLS_STORAGE_HEALTH_PROBE
+        value: write
       - key: CLOUDFLARE_R2_ACCOUNT_ID
         sync: false
       - key: CLOUDFLARE_R2_ACCESS_KEY_ID

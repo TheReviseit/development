@@ -546,6 +546,75 @@ def test_r2_storage_wraps_upload_failures(monkeypatch):
     assert "internal details" not in exc.value.message
 
 
+def test_r2_storage_accepts_existing_cloudflare_env_aliases(monkeypatch):
+    from domains.file_tools.infrastructure.storage.r2_storage import ENV_GROUPS, R2Storage
+
+    captured: dict[str, object] = {}
+
+    class FakeR2Client:
+        pass
+
+    def fake_client(_service, **kwargs):
+        captured.update(kwargs)
+        return FakeR2Client()
+
+    for keys in ENV_GROUPS.values():
+        for key in keys:
+            monkeypatch.delenv(key, raising=False)
+    monkeypatch.setenv("CLOUDFLARE_ACCOUNT_ID", "existing-account")
+    monkeypatch.setenv("R2_ACCESS_KEY_ID", "existing-access")
+    monkeypatch.setenv("R2_SECRET_ACCESS_KEY", "existing-secret")
+    monkeypatch.setenv("R2_BUCKET", "existing-bucket")
+    monkeypatch.setitem(sys.modules, "boto3", types.SimpleNamespace(client=fake_client))
+
+    storage = R2Storage()
+
+    assert storage.bucket == "existing-bucket"
+    assert captured["endpoint_url"] == "https://existing-account.r2.cloudflarestorage.com"
+    assert captured["aws_access_key_id"] == "existing-access"
+    assert captured["aws_secret_access_key"] == "existing-secret"
+
+
+def test_r2_storage_health_uses_write_probe(monkeypatch):
+    from domains.file_tools.infrastructure.storage.r2_storage import R2Storage
+
+    calls: list[tuple[str, str]] = []
+
+    class FakeR2Client:
+        def put_object(self, **kwargs):
+            calls.append(("put", kwargs["Key"]))
+
+        def head_object(self, **kwargs):
+            calls.append(("head", kwargs["Key"]))
+
+        def delete_object(self, **kwargs):
+            calls.append(("delete", kwargs["Key"]))
+
+    monkeypatch.setenv("CLOUDFLARE_R2_ACCOUNT_ID", "account")
+    monkeypatch.setenv("CLOUDFLARE_R2_ACCESS_KEY_ID", "access")
+    monkeypatch.setenv("CLOUDFLARE_R2_SECRET_ACCESS_KEY", "secret")
+    monkeypatch.setenv("CLOUDFLARE_R2_BUCKET_NAME", "bucket")
+    monkeypatch.setitem(sys.modules, "boto3", types.SimpleNamespace(client=lambda *_args, **_kwargs: FakeR2Client()))
+
+    assert R2Storage().health_check() is True
+
+    assert [call[0] for call in calls] == ["put", "head", "delete"]
+    assert all(key.startswith("file-tools/_health/") for _, key in calls)
+
+
+def test_r2_config_status_reports_missing_backend_env(monkeypatch):
+    from domains.file_tools.infrastructure.storage.r2_storage import ENV_GROUPS, cloudflare_r2_config_status
+
+    for keys in ENV_GROUPS.values():
+        for key in keys:
+            monkeypatch.delenv(key, raising=False)
+
+    status = cloudflare_r2_config_status()
+
+    assert status["is_configured"] is False
+    assert status["missing"] == ["account_id", "access_key_id", "secret_access_key", "bucket_name"]
+
+
 def test_file_tools_health_reports_safe_artifact_storage_detail(monkeypatch):
     class FakeBlueprint:
         def __init__(self, *_args, **_kwargs):
