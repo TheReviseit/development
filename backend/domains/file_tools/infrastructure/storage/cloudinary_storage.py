@@ -86,7 +86,7 @@ class CloudinaryStorage(ArtifactStorage):
                 upload_options["context"] = context
             self.uploader.upload(file_obj, **upload_options)
         except Exception as exc:
-            raise StorageError("Generated PDF storage is unavailable. Please try again shortly.") from exc
+            raise StorageError("Generated file storage is unavailable. Please try again shortly.") from exc
         return StoredObject(provider=self.provider, key=key, size_bytes=len(content), mime_type=mime_type)
 
     def get_bytes(self, key: str) -> bytes:
@@ -96,7 +96,7 @@ class CloudinaryStorage(ArtifactStorage):
             response.raise_for_status()
             return response.content
         except Exception as exc:
-            raise StorageError("Generated PDF storage is unavailable. Please try again shortly.") from exc
+            raise StorageError("Generated file storage is unavailable. Please try again shortly.") from exc
 
     def delete(self, key: str) -> None:
         try:
@@ -107,7 +107,7 @@ class CloudinaryStorage(ArtifactStorage):
                 invalidate=True,
             )
         except Exception as exc:
-            raise StorageError("Generated PDF storage cleanup failed.") from exc
+            raise StorageError("Generated file storage cleanup failed.") from exc
 
     def health_check(self) -> bool:
         key = f"file-tools/_health/{uuid.uuid4().hex}.pdf"

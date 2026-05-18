@@ -3,6 +3,7 @@
 FILE_TOOL_OPENED = "file_tool_opened"
 FILE_TOOL_JOB_CREATED = "file_tool_job_created"
 TEXT_PDF_GENERATED = "text_pdf_generated"
+IMAGE_CONVERTED = "image_converted"
 FILE_TOOL_DOWNLOADED = "file_tool_downloaded"
 FILE_TOOL_FAILED = "file_tool_failed"
 DRAFT_SAVED = "draft_saved"

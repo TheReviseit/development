@@ -95,6 +95,35 @@ export interface TextPdfGenerateResponse {
   downloadUrl: string;
 }
 
+export type ImageOutputFormat = "jpeg" | "png" | "webp" | "avif";
+
+export interface ImageConvertRequest {
+  file: File;
+  outputFormat: ImageOutputFormat;
+  quality?: number;
+  background?: string;
+  idempotencyKey?: string;
+}
+
+export interface ImageConvertResponse {
+  success: true;
+  job: FileToolJob;
+  artifact: FileToolArtifact;
+  downloadUrl: string;
+}
+
+export interface ImageConverterFormatsResponse {
+  success: true;
+  formats: {
+    pillow?: string;
+    inputs: string[];
+    outputs: ImageOutputFormat[];
+    heic?: boolean;
+    avifDecode?: boolean;
+    avifEncode?: boolean;
+  };
+}
+
 export interface FileToolErrorResponse {
   success: false;
   error: {

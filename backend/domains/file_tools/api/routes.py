@@ -15,6 +15,7 @@ from ..application.draft_service import DraftService
 from ..application.history_service import HistoryService
 from ..application.rate_limit_service import InMemoryRateLimitService
 from ..application.tool_registry import ToolRegistry
+from ..contracts.image_converter import ImageConvertRequest
 from ..contracts.common import RequestContext
 from ..domain.entities import FileToolOwner
 from ..domain.enums import OwnerType
@@ -23,6 +24,7 @@ from ..domain.events import FILE_TOOL_DOWNLOADED
 from ..infrastructure.repositories import FileToolsRepository
 from ..infrastructure.security.signed_downloads import verify_download_token
 from ..infrastructure.storage.factory import create_artifact_storage, storage_factory_status
+from ..validators.image_converter_validator import image_runtime_status, supported_output_formats
 from .response_mapper import error_response, success_response, unexpected_error_response
 
 file_tools_bp = Blueprint("file_tools", __name__, url_prefix="/api/file-tools")
@@ -67,11 +69,14 @@ def file_tools_health():
         "tools_registered": bool(_tool_registry.list_public()),
         "files_tools_enabled": _feature_enabled("FILES_TOOLS_ENABLED"),
         "text_to_pdf_enabled": _feature_enabled("FILES_TEXT_TO_PDF_ENABLED"),
+        "image_converter_enabled": _feature_enabled("FILES_IMAGE_CONVERTER_ENABLED"),
     }
 
     if deep:
         checks["pdf_shaping_stack"] = _pdf_shaping_stack_ready()
         checks["pdf_glyph_preflight"] = _pdf_glyph_preflight_ready()
+        checks["image_conversion_stack"] = _image_conversion_stack_ready()
+        details["image_conversion"] = image_runtime_status() if checks["image_conversion_stack"] else {"status": "not_ready"}
         checks["artifact_storage"], details["artifact_storage"] = _artifact_storage_status()
 
     ready = all(checks.values())
@@ -103,6 +108,28 @@ def generate_text_to_pdf():
         return error_response(exc, context.request_id)
     except Exception:
         return unexpected_error_response(context.request_id)
+
+
+@file_tools_bp.route("/image-converter/convert", methods=["POST"])
+def convert_image():
+    context = _request_context()
+    try:
+        _assert_feature_enabled("FILES_TOOLS_ENABLED", "Files Tools is disabled.")
+        _assert_feature_enabled("FILES_IMAGE_CONVERTER_ENABLED", "Image Converter is disabled.")
+        image_request = ImageConvertRequest.parse_or_raise(request.files, request.form)
+        result = _services()["orchestrator"].generate_image_conversion(image_request, context)
+        return success_response(result.model_dump(), 200)
+    except FileToolError as exc:
+        return error_response(exc, context.request_id)
+    except Exception:
+        return unexpected_error_response(context.request_id)
+
+
+@file_tools_bp.route("/image-converter/formats", methods=["GET"])
+def image_converter_formats():
+    response = jsonify({"success": True, "formats": image_runtime_status()})
+    response.headers["Cache-Control"] = "public, max-age=300, stale-while-revalidate=60"
+    return response
 
 
 @file_tools_bp.route("/jobs/<job_id>", methods=["GET"])
@@ -287,6 +314,13 @@ def _pdf_glyph_preflight_ready() -> bool:
 
         preflight_texts("Auto", ["Flowauxi", "தமிழ்", "हिन्दी", "മലയാളം", "ಕನ್ನಡ", "తెలుగు"])
         return True
+    except Exception:
+        return False
+
+
+def _image_conversion_stack_ready() -> bool:
+    try:
+        return bool(supported_output_formats())
     except Exception:
         return False
 

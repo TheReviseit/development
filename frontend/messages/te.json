@@ -81,7 +81,8 @@
         "redactPdf": "PDF దాచండి",
         "comparePdf": "PDF పోల్చండి",
         "aiSummarizer": "AI సారాంశం",
-        "translatePdf": "PDF అనువదించండి"
+        "translatePdf": "PDF అనువదించండి",
+        "imageConverter": "ఇమేజ్ కన్వర్టర్"
       }
     },
     "mobile": {
@@ -261,6 +262,61 @@
         "privateExports": "ప్రైవేట్ అతిథి ఎగుమతులు",
         "moreTools": "మరిన్ని సాధనాలు వస్తున్నాయి"
       }
+    },
+    "imageConverter": {
+      "toolbar": {
+        "currentLocation": "ప్రస్తుత స్థానం",
+        "files": "సాధనాలు",
+        "title": "ఇమేజ్ కన్వర్టర్",
+        "authenticated": "సురక్షిత ఇమేజ్ మార్పులు మరియు చరిత్ర సక్రియంగా ఉన్నాయి.",
+        "guest": "గెస్ట్ ఇమేజ్ మార్పులు ప్రైవేట్; స్వయంచాలకంగా గడువు ముగుస్తాయి."
+      },
+      "aria": {
+        "workspace": "ఇమేజ్ కన్వర్టర్ వర్క్‌స్పేస్"
+      },
+      "upload": {
+        "panel": "ఇమేజ్ అప్‌లోడ్ చేయండి",
+        "title": "ఇమేజ్ ఎంచుకోండి లేదా డ్రాప్ చేయండి",
+        "copy": "{size} వరకు JPG, PNG, WebP, BMP, GIF, TIFF, HEIC, లేదా AVIF"
+      },
+      "previewAlt": "ఎంచుకున్న ఇమేజ్ ప్రివ్యూ",
+      "details": {
+        "size": "{size}",
+        "type": "{type}",
+        "dimensions": "{width} x {height}px"
+      },
+      "settings": {
+        "panel": "మార్పు సెట్టింగ్‌లు",
+        "outputFormat": "అవుట్‌పుట్ ఫార్మాట్",
+        "quality": "క్వాలిటీ {value}",
+        "background": "బ్యాక్‌గ్రౌండ్"
+      },
+      "actions": {
+        "convert": "ఇమేజ్ మార్చండి",
+        "converting": "మారుస్తోంది",
+        "downloadAndShare": "డౌన్‌లోడ్ చేసి పంచుకోండి",
+        "downloading": "డౌన్‌లోడ్ అవుతోంది"
+      },
+      "result": {
+        "panel": "ఫలితం",
+        "empty": "మార్చిన ఇమేజ్ ఇక్కడ కనిపిస్తుంది.",
+        "ready": "{name} సిద్ధం - {size}"
+      },
+      "share": {
+        "aria": "ఇమేజ్ పంచుకోండి",
+        "ready": "ఇమేజ్ డౌన్‌లోడ్ అయింది. ఇప్పుడు పంచుకోండి.",
+        "shareImage": "ఇమేజ్ పంచుకోండి",
+        "copyLink": "లింక్ కాపీ చేయండి",
+        "text": "Flowauxi Tools తో మార్చిన ఇమేజ్.",
+        "copied": "షేర్ లింక్ కాపీ చేయబడింది",
+        "unavailable": "ఈ బ్రౌజర్‌లో షేరింగ్ అందుబాటులో లేదు.",
+        "failed": "ఈ ఇమేజ్ పంచుకోలేకపోయాం."
+      },
+      "errors": {
+        "required": "మార్చే ముందు ఇమేజ్ జోడించండి.",
+        "tooLarge": "ఇమేజ్ చాలా పెద్దది. పరిమితి {size}.",
+        "downloadFailed": "డౌన్‌లోడ్ విఫలమైంది. ఇమేజ్‌ను మళ్లీ మార్చండి."
+      }
     }
   },
   "tools": {
@@ -344,6 +400,10 @@
       "html_to_pdf": {
         "name": "HTML నుంచి PDF",
         "description": "వెబ్ పేజీలు, ఇన్వాయిస్‌లు మరియు HTML కంటెంట్‌ను నమ్మదగిన PDFలుగా మార్చండి."
+      },
+      "image_converter": {
+        "name": "ఇమేజ్ కన్వర్టర్",
+        "description": "JPG, PNG, WebP మరియు మద్దతు ఉన్న ఇమేజ్ ఫార్మాట్‌లను మార్చండి."
       }
     }
   },
@@ -356,7 +416,17 @@
     "pdfShapingUnavailable": "భారతీయ లిపి పాఠ్యాన్ని render చేయడానికి PDF సేవ ఇంకా సిద్ధంగా లేదు. సేవ refresh అయిన తర్వాత మళ్లీ ప్రయత్నించండి.",
     "pdfGlyphPreflightUnavailable": "సర్వర్‌లో PDF ఫాంట్ తనిఖీ అందుబాటులో లేదు.",
     "fontNotRegistered": "అవసరమైన PDF ఫాంట్ సర్వర్‌లో అందుబాటులో లేదు.",
-    "unsupportedGlyph": "ఈ పత్రంలోని కొన్ని అక్షరాలకు ఎంచుకున్న PDF ఫాంట్ మద్దతు ఇవ్వదు."
+    "unsupportedGlyph": "ఈ పత్రంలోని కొన్ని అక్షరాలకు ఎంచుకున్న PDF ఫాంట్ మద్దతు ఇవ్వదు.",
+    "imageFileRequired": "మార్చే ముందు ఇమేజ్ జోడించండి.",
+    "unsupportedImageFormat": "ఈ ఇమేజ్ ఫార్మాట్‌కు మద్దతు లేదు.",
+    "unsupportedOutputFormat": "ఈ అవుట్‌పుట్ ఫార్మాట్ అందుబాటులో లేదు.",
+    "imageTooLarge": "ఇమేజ్ ఫైల్ చాలా పెద్దది.",
+    "imageDimensionsTooLarge": "ఇమేజ్ పరిమాణాలు చాలా పెద్దవి.",
+    "invalidImageFile": "అప్‌లోడ్ చేసిన ఫైల్ సరైన ఇమేజ్ కాదు.",
+    "imageConversionTimeout": "ఇమేజ్ మార్పు ఎక్కువ సమయం తీసుకుంది. చిన్న ఇమేజ్ ప్రయత్నించండి.",
+    "imageOutputTooLarge": "మార్చిన ఇమేజ్ చాలా పెద్దది.",
+    "imageConversionFailed": "ఇమేజ్ మార్పు విఫలమైంది.",
+    "imageStorageUnavailable": "ఇమేజ్ మార్చబడింది, కానీ సురక్షిత డౌన్‌లోడ్ స్టోరేజ్ తాత్కాలికంగా అందుబాటులో లేదు."
   },
   "validation": {},
   "dashboard": {},
@@ -369,7 +439,11 @@
       "title": "టెక్స్ట్ నుంచి PDF | Flowauxi సాధనాలు",
       "description": "Flowauxi సాధనాలతో టెక్స్ట్ నుంచి సురక్షిత PDF సృష్టించండి."
     },
-    "siteName": "Flowauxi సాధనాలు"
+    "siteName": "Flowauxi సాధనాలు",
+    "imageConverter": {
+      "title": "ఇమేజ్ కన్వర్టర్ | Flowauxi Tools",
+      "description": "Flowauxi Tools తో JPG, PNG, WebP మరియు మద్దతు ఉన్న ఇమేజ్ ఫార్మాట్‌లను మార్చండి."
+    }
   },
   "seo": {}
 }

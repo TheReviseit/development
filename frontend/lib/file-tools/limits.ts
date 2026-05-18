@@ -14,6 +14,18 @@ export const PAGE_SIZE_LABELS = {
   Legal: "Legal",
 } as const;
 
+export const IMAGE_CONVERTER_LIMITS = {
+  guestMaxInputBytes: 15 * 1024 * 1024,
+  authenticatedMaxInputBytes: 50 * 1024 * 1024,
+  defaultQuality: {
+    jpeg: 92,
+    png: 100,
+    webp: 82,
+    avif: 70,
+  },
+  qualityFormats: ["jpeg", "webp", "avif"],
+} as const;
+
 export const MARGIN_PRESETS = {
   compact: { top: 36, right: 36, bottom: 36, left: 36 },
   standard: { top: 54, right: 54, bottom: 54, left: 54 },

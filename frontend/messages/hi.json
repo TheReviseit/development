@@ -81,7 +81,8 @@
         "redactPdf": "PDF छिपाएं",
         "comparePdf": "PDF तुलना करें",
         "aiSummarizer": "AI सारांश",
-        "translatePdf": "PDF अनुवाद करें"
+        "translatePdf": "PDF अनुवाद करें",
+        "imageConverter": "इमेज कन्वर्टर"
       }
     },
     "mobile": {
@@ -261,6 +262,61 @@
         "privateExports": "निजी अतिथि निर्यात",
         "moreTools": "और उपकरण आ रहे हैं"
       }
+    },
+    "imageConverter": {
+      "toolbar": {
+        "currentLocation": "वर्तमान स्थान",
+        "files": "उपकरण",
+        "title": "इमेज कन्वर्टर",
+        "authenticated": "सुरक्षित इमेज कन्वर्जन और हिस्ट्री सक्रिय हैं.",
+        "guest": "गेस्ट इमेज कन्वर्जन निजी हैं और अपने आप समाप्त होते हैं."
+      },
+      "aria": {
+        "workspace": "इमेज कन्वर्टर वर्कस्पेस"
+      },
+      "upload": {
+        "panel": "इमेज अपलोड करें",
+        "title": "इमेज चुनें या ड्रॉप करें",
+        "copy": "{size} तक JPG, PNG, WebP, BMP, GIF, TIFF, HEIC, या AVIF"
+      },
+      "previewAlt": "चुनी गई इमेज का प्रीव्यू",
+      "details": {
+        "size": "{size}",
+        "type": "{type}",
+        "dimensions": "{width} x {height}px"
+      },
+      "settings": {
+        "panel": "कन्वर्जन सेटिंग्स",
+        "outputFormat": "आउटपुट फॉर्मेट",
+        "quality": "क्वालिटी {value}",
+        "background": "बैकग्राउंड"
+      },
+      "actions": {
+        "convert": "इमेज कन्वर्ट करें",
+        "converting": "कन्वर्ट हो रहा है",
+        "downloadAndShare": "डाउनलोड और शेयर करें",
+        "downloading": "डाउनलोड हो रहा है"
+      },
+      "result": {
+        "panel": "परिणाम",
+        "empty": "कन्वर्ट की गई इमेज यहां दिखाई देगी.",
+        "ready": "{name} तैयार - {size}"
+      },
+      "share": {
+        "aria": "इमेज शेयर करें",
+        "ready": "इमेज डाउनलोड हो गई. अब शेयर करें.",
+        "shareImage": "इमेज शेयर करें",
+        "copyLink": "लिंक कॉपी करें",
+        "text": "Flowauxi Tools से कन्वर्ट की गई इमेज.",
+        "copied": "शेयर लिंक कॉपी किया गया",
+        "unavailable": "इस ब्राउज़र में शेयरिंग उपलब्ध नहीं है.",
+        "failed": "यह इमेज शेयर नहीं हो सकी."
+      },
+      "errors": {
+        "required": "कन्वर्ट करने से पहले इमेज जोड़ें.",
+        "tooLarge": "इमेज बहुत बड़ी है. सीमा {size} है.",
+        "downloadFailed": "डाउनलोड विफल रहा. कृपया इमेज फिर से कन्वर्ट करें."
+      }
     }
   },
   "tools": {
@@ -344,6 +400,10 @@
       "html_to_pdf": {
         "name": "HTML से PDF",
         "description": "वेब पेज, इनवॉइस और HTML कंटेंट को भरोसेमंद PDF में रेंडर करें."
+      },
+      "image_converter": {
+        "name": "इमेज कन्वर्टर",
+        "description": "JPG, PNG, WebP, और समर्थित इमेज फॉर्मेट कन्वर्ट करें."
       }
     }
   },
@@ -356,7 +416,17 @@
     "pdfShapingUnavailable": "PDF सेवा भारतीय लिपि का पाठ रेंडर करने के लिए अभी तैयार नहीं है. सेवा refresh होने के बाद फिर से प्रयास करें.",
     "pdfGlyphPreflightUnavailable": "सर्वर पर PDF फ़ॉन्ट जाँच उपलब्ध नहीं है.",
     "fontNotRegistered": "सर्वर पर आवश्यक PDF फ़ॉन्ट उपलब्ध नहीं है.",
-    "unsupportedGlyph": "इस दस्तावेज़ के कुछ अक्षर चुने गए PDF फ़ॉन्ट में समर्थित नहीं हैं."
+    "unsupportedGlyph": "इस दस्तावेज़ के कुछ अक्षर चुने गए PDF फ़ॉन्ट में समर्थित नहीं हैं.",
+    "imageFileRequired": "कन्वर्ट करने से पहले इमेज जोड़ें.",
+    "unsupportedImageFormat": "यह इमेज फॉर्मेट समर्थित नहीं है.",
+    "unsupportedOutputFormat": "यह आउटपुट फॉर्मेट उपलब्ध नहीं है.",
+    "imageTooLarge": "इमेज फ़ाइल बहुत बड़ी है.",
+    "imageDimensionsTooLarge": "इमेज आयाम बहुत बड़े हैं.",
+    "invalidImageFile": "अपलोड की गई फ़ाइल वैध इमेज नहीं है.",
+    "imageConversionTimeout": "इमेज कन्वर्जन में बहुत समय लगा. छोटी इमेज आज़माएं.",
+    "imageOutputTooLarge": "कन्वर्ट की गई इमेज बहुत बड़ी है.",
+    "imageConversionFailed": "इमेज कन्वर्जन विफल रहा.",
+    "imageStorageUnavailable": "इमेज कन्वर्ट हो गई, लेकिन सुरक्षित डाउनलोड स्टोरेज अस्थायी रूप से उपलब्ध नहीं है."
   },
   "validation": {},
   "dashboard": {},
@@ -369,7 +439,11 @@
       "title": "पाठ से PDF | Flowauxi उपकरण",
       "description": "Flowauxi उपकरणों से पाठ से सुरक्षित PDF बनाएं."
     },
-    "siteName": "Flowauxi उपकरण"
+    "siteName": "Flowauxi उपकरण",
+    "imageConverter": {
+      "title": "इमेज कन्वर्टर | Flowauxi Tools",
+      "description": "Flowauxi Tools से JPG, PNG, WebP, और समर्थित इमेज फॉर्मेट कन्वर्ट करें."
+    }
   },
   "seo": {}
 }

@@ -81,7 +81,8 @@
         "redactPdf": "PDF மறை",
         "comparePdf": "PDF ஒப்பிடு",
         "aiSummarizer": "AI சுருக்கம்",
-        "translatePdf": "PDF மொழிபெயர்"
+        "translatePdf": "PDF மொழிபெயர்",
+        "imageConverter": "பட மாற்றி"
       }
     },
     "mobile": {
@@ -261,6 +262,61 @@
         "privateExports": "தனியார் விருந்தினர் ஏற்றுமதிகள்",
         "moreTools": "மேலும் கருவிகள் வருகை"
       }
+    },
+    "imageConverter": {
+      "toolbar": {
+        "currentLocation": "தற்போதைய இடம்",
+        "files": "கருவிகள்",
+        "title": "பட மாற்றி",
+        "authenticated": "பாதுகாப்பான பட மாற்றங்களும் வரலாறும் செயல்பாட்டில் உள்ளன.",
+        "guest": "விருந்தினர் பட மாற்றங்கள் தனிப்பட்டவை; தானாக காலாவதியாகும்."
+      },
+      "aria": {
+        "workspace": "பட மாற்றி பணிமனை"
+      },
+      "upload": {
+        "panel": "படத்தை பதிவேற்று",
+        "title": "படத்தை தேர்வு செய் அல்லது இழுத்துவிடு",
+        "copy": "{size} வரை JPG, PNG, WebP, BMP, GIF, TIFF, HEIC, அல்லது AVIF"
+      },
+      "previewAlt": "தேர்ந்தெடுத்த பட முன்னோட்டம்",
+      "details": {
+        "size": "{size}",
+        "type": "{type}",
+        "dimensions": "{width} x {height}px"
+      },
+      "settings": {
+        "panel": "மாற்ற அமைப்புகள்",
+        "outputFormat": "வெளியீட்டு வடிவம்",
+        "quality": "தரம் {value}",
+        "background": "பின்னணி"
+      },
+      "actions": {
+        "convert": "படத்தை மாற்று",
+        "converting": "மாற்றப்படுகிறது",
+        "downloadAndShare": "பதிவிறக்கி பகிர்",
+        "downloading": "பதிவிறக்கப்படுகிறது"
+      },
+      "result": {
+        "panel": "முடிவு",
+        "empty": "மாற்றப்பட்ட படம் இங்கே தோன்றும்.",
+        "ready": "{name} தயார் - {size}"
+      },
+      "share": {
+        "aria": "படத்தை பகிர்",
+        "ready": "படம் பதிவிறக்கப்பட்டது. இப்போது பகிரவும்.",
+        "shareImage": "படத்தை பகிர்",
+        "copyLink": "இணைப்பை நகலெடு",
+        "text": "Flowauxi கருவிகளால் மாற்றப்பட்ட படம்.",
+        "copied": "பகிர்வு இணைப்பு நகலெடுக்கப்பட்டது",
+        "unavailable": "இந்த உலாவியில் பகிர்வு இல்லை.",
+        "failed": "இந்த படத்தை பகிர முடியவில்லை."
+      },
+      "errors": {
+        "required": "மாற்றுவதற்கு முன் படத்தைச் சேர்க்கவும்.",
+        "tooLarge": "படம் மிகப் பெரியது. வரம்பு {size}.",
+        "downloadFailed": "பதிவிறக்கம் தோல்வியடைந்தது. படத்தை மீண்டும் மாற்றவும்."
+      }
     }
   },
   "tools": {
@@ -344,6 +400,10 @@
       "html_to_pdf": {
         "name": "HTML இலிருந்து PDF",
         "description": "வலைப்பக்கங்கள், இன்வாய்ஸ்கள், HTML உள்ளடக்கத்தை நம்பகமான PDF ஆக மாற்றுங்கள்."
+      },
+      "image_converter": {
+        "name": "பட மாற்றி",
+        "description": "JPG, PNG, WebP, மற்றும் ஆதரிக்கப்படும் பட வடிவங்களை மாற்றுங்கள்."
       }
     }
   },
@@ -356,7 +416,17 @@
     "pdfShapingUnavailable": "இந்திய மொழி உரையை உருவாக்க PDF சேவை இன்னும் தயாராக இல்லை. சேவை புதுப்பித்த பிறகு மீண்டும் முயற்சிக்கவும்.",
     "pdfGlyphPreflightUnavailable": "சேவையகத்தில் PDF எழுத்துரு சரிபார்ப்பு கிடைக்கவில்லை.",
     "fontNotRegistered": "தேவையான PDF எழுத்துரு சேவையகத்தில் கிடைக்கவில்லை.",
-    "unsupportedGlyph": "இந்த ஆவணத்தில் உள்ள சில எழுத்துகள் தேர்ந்தெடுத்த PDF எழுத்துருவால் ஆதரிக்கப்படவில்லை."
+    "unsupportedGlyph": "இந்த ஆவணத்தில் உள்ள சில எழுத்துகள் தேர்ந்தெடுத்த PDF எழுத்துருவால் ஆதரிக்கப்படவில்லை.",
+    "imageFileRequired": "மாற்றுவதற்கு முன் படத்தைச் சேர்க்கவும்.",
+    "unsupportedImageFormat": "இந்த பட வடிவம் ஆதரிக்கப்படவில்லை.",
+    "unsupportedOutputFormat": "இந்த வெளியீட்டு வடிவம் கிடைக்கவில்லை.",
+    "imageTooLarge": "பட கோப்பு மிகப் பெரியது.",
+    "imageDimensionsTooLarge": "பட அளவுகள் மிகப் பெரியவை.",
+    "invalidImageFile": "பதிவேற்றிய கோப்பு செல்லுபடியாகும் படம் அல்ல.",
+    "imageConversionTimeout": "பட மாற்றம் மிக நேரம் எடுத்தது. சிறிய படத்தை முயற்சிக்கவும்.",
+    "imageOutputTooLarge": "மாற்றப்பட்ட படம் மிகப் பெரியது.",
+    "imageConversionFailed": "பட மாற்றம் தோல்வியடைந்தது.",
+    "imageStorageUnavailable": "படம் மாற்றப்பட்டது, ஆனால் பாதுகாப்பான பதிவிறக்க சேமிப்பு தற்காலிகமாக இல்லை."
   },
   "validation": {},
   "dashboard": {},
@@ -369,7 +439,11 @@
       "title": "உரையிலிருந்து PDF | Flowauxi கருவிகள்",
       "description": "Flowauxi கருவிகளால் உரையிலிருந்து பாதுகாப்பான PDF உருவாக்குங்கள்."
     },
-    "siteName": "Flowauxi கருவிகள்"
+    "siteName": "Flowauxi கருவிகள்",
+    "imageConverter": {
+      "title": "பட மாற்றி | Flowauxi Tools",
+      "description": "Flowauxi கருவிகளால் JPG, PNG, WebP, மற்றும் ஆதரிக்கப்படும் பட வடிவங்களை மாற்றுங்கள்."
+    }
   },
   "seo": {}
 }

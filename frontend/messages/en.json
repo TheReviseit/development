@@ -60,6 +60,7 @@
         "repairPdf": "Repair PDF",
         "ocrPdf": "OCR PDF",
         "textToPdf": "Text to PDF",
+        "imageConverter": "Image Converter",
         "jpgToPdf": "JPG to PDF",
         "wordToPdf": "Word to PDF",
         "powerPointToPdf": "PowerPoint to PDF",
@@ -244,6 +245,61 @@
         "download": "Download"
       }
     },
+    "imageConverter": {
+      "toolbar": {
+        "currentLocation": "Current location",
+        "files": "Tools",
+        "title": "Image Converter",
+        "authenticated": "Secure image conversions and history are active.",
+        "guest": "Guest image conversions are private and expire automatically."
+      },
+      "aria": {
+        "workspace": "Image converter workspace"
+      },
+      "upload": {
+        "panel": "Upload image",
+        "title": "Choose or drop an image",
+        "copy": "JPG, PNG, WebP, BMP, GIF, TIFF, HEIC, or AVIF up to {size}"
+      },
+      "previewAlt": "Selected image preview",
+      "details": {
+        "size": "{size}",
+        "type": "{type}",
+        "dimensions": "{width} x {height}px"
+      },
+      "settings": {
+        "panel": "Conversion settings",
+        "outputFormat": "Output format",
+        "quality": "Quality {value}",
+        "background": "Background"
+      },
+      "actions": {
+        "convert": "Convert image",
+        "converting": "Converting",
+        "downloadAndShare": "Download and share",
+        "downloading": "Downloading"
+      },
+      "result": {
+        "panel": "Result",
+        "empty": "Your converted image will appear here.",
+        "ready": "{name} ready - {size}"
+      },
+      "share": {
+        "aria": "Share image",
+        "ready": "Image downloaded. Share it now.",
+        "shareImage": "Share image",
+        "copyLink": "Copy link",
+        "text": "Image converted with Flowauxi Tools.",
+        "copied": "Share link copied",
+        "unavailable": "Sharing is not available on this browser.",
+        "failed": "Couldn't share this image."
+      },
+      "errors": {
+        "required": "Add an image before converting.",
+        "tooLarge": "Image is too large. Limit is {size}.",
+        "downloadFailed": "Download failed. Please convert the image again."
+      }
+    },
     "footer": {
       "brandAria": "Flowauxi Tools home",
       "description": "Flowauxi Tools is a modern all-in-one workspace for PDFs, documents, images, and AI-powered file tools. Designed for speed, simplicity, and productivity, it helps users convert, compress, edit, organize, and optimize files effortlessly for everyday work.",
@@ -313,6 +369,10 @@
         "name": "Image to PDF",
         "description": "Turn JPG, PNG, and image scans into organized PDF documents."
       },
+      "image_converter": {
+        "name": "Image Converter",
+        "description": "Convert JPG, PNG, WebP, and supported image formats."
+      },
       "pdf_to_image": {
         "name": "PDF to Image",
         "description": "Export PDF pages as high-quality images for sharing or archiving."
@@ -356,7 +416,17 @@
     "pdfShapingUnavailable": "The PDF service is not ready to render Indian-script text. Please retry after the service refreshes.",
     "pdfGlyphPreflightUnavailable": "PDF font validation is not available on the server.",
     "fontNotRegistered": "A required PDF font is not available on the server.",
-    "unsupportedGlyph": "Some characters in this document are not supported by the selected PDF font."
+    "unsupportedGlyph": "Some characters in this document are not supported by the selected PDF font.",
+    "imageFileRequired": "Add an image before converting.",
+    "unsupportedImageFormat": "This image format is not supported.",
+    "unsupportedOutputFormat": "This output format is not available.",
+    "imageTooLarge": "Image file is too large.",
+    "imageDimensionsTooLarge": "Image dimensions are too large.",
+    "invalidImageFile": "The uploaded file is not a valid image.",
+    "imageConversionTimeout": "Image conversion took too long. Try a smaller image.",
+    "imageOutputTooLarge": "The converted image is too large.",
+    "imageConversionFailed": "Image conversion failed.",
+    "imageStorageUnavailable": "The image was converted, but secure download storage is temporarily unavailable."
   },
   "validation": {},
   "dashboard": {},
@@ -368,6 +438,10 @@
     "textToPdf": {
       "title": "Text to PDF | Flowauxi Tools",
       "description": "Create secure PDFs from text with Flowauxi Tools."
+    },
+    "imageConverter": {
+      "title": "Image Converter | Flowauxi Tools",
+      "description": "Convert JPG, PNG, WebP, and supported image formats with Flowauxi Tools."
     },
     "siteName": "Flowauxi Tools"
   },

@@ -22,6 +22,38 @@ class TextPdfLimits:
 
 TEXT_TO_PDF_LIMITS = TextPdfLimits()
 
+
+@dataclass(frozen=True)
+class ImageConversionLimits:
+    guest_max_input_bytes: int = 15 * 1024 * 1024
+    authenticated_max_input_bytes: int = 50 * 1024 * 1024
+    guest_max_megapixels: int = 25
+    authenticated_max_megapixels: int = 80
+    max_output_bytes: int = 50 * 1024 * 1024
+    max_filename_length: int = 180
+    conversion_timeout_seconds: float = 45.0
+    guest_retention: timedelta = timedelta(hours=24)
+    authenticated_retention: timedelta = timedelta(days=30)
+    default_jpeg_quality: int = 92
+    default_webp_quality: int = 82
+    default_avif_quality: int = 70
+
+
+IMAGE_CONVERSION_LIMITS = ImageConversionLimits()
+
+ALLOWED_IMAGE_INPUT_FORMATS = {"jpeg", "png", "webp", "bmp", "gif", "tiff", "heic", "avif"}
+ALLOWED_IMAGE_OUTPUT_FORMATS = {"jpeg", "png", "webp", "avif"}
+IMAGE_MIME_TYPES = {
+    "jpeg": "image/jpeg",
+    "png": "image/png",
+    "webp": "image/webp",
+    "avif": "image/avif",
+    "bmp": "image/bmp",
+    "gif": "image/gif",
+    "tiff": "image/tiff",
+    "heic": "image/heic",
+}
+
 ALLOWED_PAGE_SIZES = {"A4", "Letter", "Legal"}
 ALLOWED_ORIENTATIONS = {"portrait", "landscape"}
 ALLOWED_FONTS = {

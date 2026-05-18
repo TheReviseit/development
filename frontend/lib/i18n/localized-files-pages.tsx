@@ -6,6 +6,7 @@ import type { ReactNode } from "react";
 import FileToolComingSoon from "@/components/file-tools/FileToolComingSoon";
 import FilesProductChrome from "@/components/file-tools/FilesProductChrome";
 import FilesToolHub from "@/components/file-tools/FilesToolHub";
+import ImageConverterShell from "@/components/file-tools/ImageConverterShell";
 import ToolShell from "@/components/file-tools/ToolShell";
 import { getFileToolBySlug } from "@/lib/file-tools/tool-catalog";
 import { loadLocaleMessages } from "@/lib/i18n/messages";
@@ -54,6 +55,22 @@ export async function localizedTextToPdfMetadata(locale: Locale): Promise<Metada
 export function renderLocalizedTextToPdfPage(locale: Locale) {
   setRequestLocale(locale);
   return <ToolShell mode="public" basePath={`/${locale}${publicToolsPath}`} />;
+}
+
+export async function localizedImageConverterMetadata(locale: Locale): Promise<Metadata> {
+  const t = await getTranslations({ locale, namespace: "metadata.imageConverter" });
+  return {
+    title: t("title"),
+    description: t("description"),
+    alternates: {
+      canonical: `/${locale}${publicToolsPath}/image-converter`,
+    },
+  };
+}
+
+export function renderLocalizedImageConverterPage(locale: Locale) {
+  setRequestLocale(locale);
+  return <ImageConverterShell basePath={`/${locale}${publicToolsPath}`} />;
 }
 
 export async function localizedFileToolMetadata(locale: Locale, slug: string): Promise<Metadata> {

@@ -81,7 +81,8 @@
         "redactPdf": "PDF ಮರೆಮಾಡಿ",
         "comparePdf": "PDF ಹೋಲಿಸಿ",
         "aiSummarizer": "AI ಸಾರಾಂಶ",
-        "translatePdf": "PDF ಅನುವಾದಿಸಿ"
+        "translatePdf": "PDF ಅನುವಾದಿಸಿ",
+        "imageConverter": "ಚಿತ್ರ ಪರಿವರ್ತಕ"
       }
     },
     "mobile": {
@@ -261,6 +262,61 @@
         "privateExports": "ಖಾಸಗಿ ಅತಿಥಿ ರಫ್ತುಗಳು",
         "moreTools": "ಇನ್ನಷ್ಟು ಉಪಕರಣಗಳು ಬರುತ್ತಿವೆ"
       }
+    },
+    "imageConverter": {
+      "toolbar": {
+        "currentLocation": "ಪ್ರಸ್ತುತ ಸ್ಥಳ",
+        "files": "ಉಪಕರಣಗಳು",
+        "title": "ಚಿತ್ರ ಪರಿವರ್ತಕ",
+        "authenticated": "ಸುರಕ್ಷಿತ ಚಿತ್ರ ಪರಿವರ್ತನೆಗಳು ಮತ್ತು ಇತಿಹಾಸ ಸಕ್ರಿಯವಾಗಿವೆ.",
+        "guest": "ಅತಿಥಿ ಚಿತ್ರ ಪರಿವರ್ತನೆಗಳು ಖಾಸಗಿ; ಸ್ವಯಂಚಾಲಿತವಾಗಿ ಅವಧಿ ಮುಗಿಯುತ್ತವೆ."
+      },
+      "aria": {
+        "workspace": "ಚಿತ್ರ ಪರಿವರ್ತಕ ಕಾರ್ಯಸ್ಥಳ"
+      },
+      "upload": {
+        "panel": "ಚಿತ್ರ ಅಪ್‌ಲೋಡ್ ಮಾಡಿ",
+        "title": "ಚಿತ್ರವನ್ನು ಆಯ್ಕೆಮಾಡಿ ಅಥವಾ ಬಿಡಿ",
+        "copy": "{size} ವರೆಗೆ JPG, PNG, WebP, BMP, GIF, TIFF, HEIC, ಅಥವಾ AVIF"
+      },
+      "previewAlt": "ಆಯ್ದ ಚಿತ್ರದ ಪೂರ್ವವೀಕ್ಷಣೆ",
+      "details": {
+        "size": "{size}",
+        "type": "{type}",
+        "dimensions": "{width} x {height}px"
+      },
+      "settings": {
+        "panel": "ಪರಿವರ್ತನೆ ಸೆಟ್ಟಿಂಗ್‌ಗಳು",
+        "outputFormat": "ಔಟ್‌ಪುಟ್ ಫಾರ್ಮ್ಯಾಟ್",
+        "quality": "ಗುಣಮಟ್ಟ {value}",
+        "background": "ಹಿನ್ನೆಲೆ"
+      },
+      "actions": {
+        "convert": "ಚಿತ್ರ ಪರಿವರ್ತಿಸಿ",
+        "converting": "ಪರಿವರ್ತಿಸಲಾಗುತ್ತಿದೆ",
+        "downloadAndShare": "ಡೌನ್‌ಲೋಡ್ ಮಾಡಿ ಹಂಚಿಕೊಳ್ಳಿ",
+        "downloading": "ಡೌನ್‌ಲೋಡ್ ಆಗುತ್ತಿದೆ"
+      },
+      "result": {
+        "panel": "ಫಲಿತಾಂಶ",
+        "empty": "ಪರಿವರ್ತಿಸಿದ ಚಿತ್ರ ಇಲ್ಲಿ ಕಾಣುತ್ತದೆ.",
+        "ready": "{name} ಸಿದ್ಧ - {size}"
+      },
+      "share": {
+        "aria": "ಚಿತ್ರ ಹಂಚಿಕೊಳ್ಳಿ",
+        "ready": "ಚಿತ್ರ ಡೌನ್‌ಲೋಡ್ ಆಗಿದೆ. ಈಗ ಹಂಚಿಕೊಳ್ಳಿ.",
+        "shareImage": "ಚಿತ್ರ ಹಂಚಿಕೊಳ್ಳಿ",
+        "copyLink": "ಲಿಂಕ್ ನಕಲಿಸಿ",
+        "text": "Flowauxi Tools ಬಳಸಿ ಪರಿವರ್ತಿಸಿದ ಚಿತ್ರ.",
+        "copied": "ಹಂಚಿಕೆ ಲಿಂಕ್ ನಕಲಿಸಲಾಗಿದೆ",
+        "unavailable": "ಈ ಬ್ರೌಸರ್‌ನಲ್ಲಿ ಹಂಚಿಕೆ ಲಭ್ಯವಿಲ್ಲ.",
+        "failed": "ಈ ಚಿತ್ರವನ್ನು ಹಂಚಿಕೊಳ್ಳಲು ಸಾಧ್ಯವಾಗಲಿಲ್ಲ."
+      },
+      "errors": {
+        "required": "ಪರಿವರ್ತಿಸುವ ಮೊದಲು ಚಿತ್ರ ಸೇರಿಸಿ.",
+        "tooLarge": "ಚಿತ್ರ ತುಂಬಾ ದೊಡ್ಡದು. ಮಿತಿ {size}.",
+        "downloadFailed": "ಡೌನ್‌ಲೋಡ್ ವಿಫಲವಾಗಿದೆ. ಚಿತ್ರವನ್ನು ಮತ್ತೆ ಪರಿವರ್ತಿಸಿ."
+      }
     }
   },
   "tools": {
@@ -344,6 +400,10 @@
       "html_to_pdf": {
         "name": "HTML ನಿಂದ PDF",
         "description": "ವೆಬ್ ಪುಟಗಳು, ಇನ್ವಾಯ್ಸ್‌ಗಳು ಮತ್ತು HTML ವಿಷಯವನ್ನು ನಂಬಿಕಾಸ್ಪದ PDFಗಳಾಗಿ ಮಾಡಿ."
+      },
+      "image_converter": {
+        "name": "ಚಿತ್ರ ಪರಿವರ್ತಕ",
+        "description": "JPG, PNG, WebP ಮತ್ತು ಬೆಂಬಲಿತ ಚಿತ್ರ ಫಾರ್ಮ್ಯಾಟ್‌ಗಳನ್ನು ಪರಿವರ್ತಿಸಿ."
       }
     }
   },
@@ -356,7 +416,17 @@
     "pdfShapingUnavailable": "ಭಾರತೀಯ ಲಿಪಿಯ ಪಠ್ಯವನ್ನು render ಮಾಡಲು PDF ಸೇವೆ ಇನ್ನೂ ಸಿದ್ಧವಾಗಿಲ್ಲ. ಸೇವೆ refresh ಆದ ನಂತರ ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ.",
     "pdfGlyphPreflightUnavailable": "ಸರ್ವರ್‌ನಲ್ಲಿ PDF ಫಾಂಟ್ ಪರಿಶೀಲನೆ ಲಭ್ಯವಿಲ್ಲ.",
     "fontNotRegistered": "ಅಗತ್ಯವಿರುವ PDF ಫಾಂಟ್ ಸರ್ವರ್‌ನಲ್ಲಿ ಲಭ್ಯವಿಲ್ಲ.",
-    "unsupportedGlyph": "ಈ ದಸ್ತಾವೇಜಿನ ಕೆಲವು ಅಕ್ಷರಗಳನ್ನು ಆಯ್ಕೆ ಮಾಡಿದ PDF ಫಾಂಟ್ ಬೆಂಬಲಿಸುವುದಿಲ್ಲ."
+    "unsupportedGlyph": "ಈ ದಸ್ತಾವೇಜಿನ ಕೆಲವು ಅಕ್ಷರಗಳನ್ನು ಆಯ್ಕೆ ಮಾಡಿದ PDF ಫಾಂಟ್ ಬೆಂಬಲಿಸುವುದಿಲ್ಲ.",
+    "imageFileRequired": "ಪರಿವರ್ತಿಸುವ ಮೊದಲು ಚಿತ್ರ ಸೇರಿಸಿ.",
+    "unsupportedImageFormat": "ಈ ಚಿತ್ರ ಫಾರ್ಮ್ಯಾಟ್ ಬೆಂಬಲಿತವಲ್ಲ.",
+    "unsupportedOutputFormat": "ಈ ಔಟ್‌ಪುಟ್ ಫಾರ್ಮ್ಯಾಟ್ ಲಭ್ಯವಿಲ್ಲ.",
+    "imageTooLarge": "ಚಿತ್ರ ಫೈಲ್ ತುಂಬಾ ದೊಡ್ಡದು.",
+    "imageDimensionsTooLarge": "ಚಿತ್ರದ ಆಯಾಮಗಳು ತುಂಬಾ ದೊಡ್ಡವು.",
+    "invalidImageFile": "ಅಪ್‌ಲೋಡ್ ಮಾಡಿದ ಫೈಲ್ ಮಾನ್ಯ ಚಿತ್ರವಲ್ಲ.",
+    "imageConversionTimeout": "ಚಿತ್ರ ಪರಿವರ್ತನೆ ಹೆಚ್ಚು ಸಮಯ ತೆಗೆದುಕೊಂಡಿತು. ಚಿಕ್ಕ ಚಿತ್ರ ಪ್ರಯತ್ನಿಸಿ.",
+    "imageOutputTooLarge": "ಪರಿವರ್ತಿಸಿದ ಚಿತ್ರ ತುಂಬಾ ದೊಡ್ಡದು.",
+    "imageConversionFailed": "ಚಿತ್ರ ಪರಿವರ್ತನೆ ವಿಫಲವಾಗಿದೆ.",
+    "imageStorageUnavailable": "ಚಿತ್ರ ಪರಿವರ್ತಿಸಲಾಗಿದೆ, ಆದರೆ ಸುರಕ್ಷಿತ ಡೌನ್‌ಲೋಡ್ ಸಂಗ್ರಹಣೆ ತಾತ್ಕಾಲಿಕವಾಗಿ ಲಭ್ಯವಿಲ್ಲ."
   },
   "validation": {},
   "dashboard": {},
@@ -369,7 +439,11 @@
       "title": "ಪಠ್ಯದಿಂದ PDF | Flowauxi ಉಪಕರಣಗಳು",
       "description": "Flowauxi ಉಪಕರಣಗಳಿಂದ ಪಠ್ಯದಿಂದ ಸುರಕ್ಷಿತ PDF ರಚಿಸಿ."
     },
-    "siteName": "Flowauxi ಉಪಕರಣಗಳು"
+    "siteName": "Flowauxi ಉಪಕರಣಗಳು",
+    "imageConverter": {
+      "title": "ಚಿತ್ರ ಪರಿವರ್ತಕ | Flowauxi Tools",
+      "description": "Flowauxi Tools ಬಳಸಿ JPG, PNG, WebP ಮತ್ತು ಬೆಂಬಲಿತ ಚಿತ್ರ ಫಾರ್ಮ್ಯಾಟ್‌ಗಳನ್ನು ಪರಿವರ್ತಿಸಿ."
+    }
   },
   "seo": {}
 }

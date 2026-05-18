@@ -107,6 +107,14 @@ export const FILE_TOOL_CATALOG: FileToolCatalogItem[] = [
     status: "coming_soon",
   },
   {
+    key: "image_converter",
+    slug: "image-converter",
+    name: "Image Converter",
+    description: "Convert JPG, PNG, WebP, and supported image formats.",
+    category: "convert",
+    status: "available",
+  },
+  {
     key: "pdf_to_image",
     slug: "pdf-to-image",
     name: "PDF to Image",

@@ -43,6 +43,7 @@ const preferredToolOrder = [
   "ppt_to_pdf",
   "excel_to_pdf",
   "edit_pdf",
+  "image_converter",
   "image_to_pdf",
   "pdf_to_image",
   "rotate_pdf",

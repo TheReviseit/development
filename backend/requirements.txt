@@ -118,6 +118,8 @@ razorpay>=1.4.0
 # PDF Invoice Generation
 # =============================================================================
 reportlab>=4.4.4,<5
+pillow>=10.4.0,<12
+pillow-heif>=0.18.0
 uharfbuzz>=0.52.0
 fonttools>=4.0.0
 regex>=2024.0.0

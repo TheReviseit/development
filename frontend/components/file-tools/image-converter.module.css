@@ -1,0 +1,403 @@
+.surface {
+  min-height: 100vh;
+  max-width: 100%;
+  overflow-x: clip;
+  background: rgb(245, 245, 250);
+  color: #111827;
+}
+
+.shell {
+  width: min(1220px, 100%);
+  margin: 0 auto;
+  padding: 28px 24px 56px;
+}
+
+.header {
+  display: grid;
+  gap: 10px;
+  margin-bottom: 18px;
+}
+
+.breadcrumb {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+  color: #64748b;
+  font-size: 13px;
+  font-weight: 750;
+  white-space: nowrap;
+}
+
+.breadcrumbLink {
+  color: inherit;
+  text-decoration: none;
+}
+
+.breadcrumbLink:hover {
+  color: rgb(240, 49, 46);
+}
+
+.breadcrumbSeparator {
+  color: #a2adbd;
+  font-weight: 800;
+}
+
+.breadcrumbCurrent {
+  min-width: 0;
+  overflow: hidden;
+  color: rgb(240, 49, 46);
+  text-overflow: ellipsis;
+}
+
+.titleBlock {
+  display: grid;
+  gap: 6px;
+}
+
+.title {
+  margin: 0;
+  color: #111827;
+  font-size: 34px;
+  line-height: 1.12;
+  font-weight: 850;
+}
+
+.meta {
+  margin: 0;
+  max-width: 720px;
+  color: #64748b;
+  font-size: 15px;
+  line-height: 1.45;
+}
+
+.workspace {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(320px, 0.76fr);
+  gap: 16px;
+  align-items: start;
+}
+
+.panel {
+  display: grid;
+  gap: 14px;
+  min-width: 0;
+  border: 1px solid #e0e7f0;
+  border-radius: 14px;
+  background: #ffffff;
+  box-shadow: 0 18px 48px rgba(15, 23, 42, 0.06);
+}
+
+.panelHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 16px 16px 0;
+}
+
+.panelTitle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  color: #111827;
+  font-size: 15px;
+  font-weight: 800;
+}
+
+.dropzone {
+  display: grid;
+  justify-items: center;
+  gap: 10px;
+  min-width: 0;
+  margin: 0 16px 16px;
+  min-height: 220px;
+  padding: 26px 18px;
+  border: 1.5px dashed #cbd5e1;
+  border-radius: 14px;
+  background: #f8fafc;
+  color: #111827;
+  cursor: pointer;
+  text-align: center;
+  transition:
+    background 160ms ease,
+    border-color 160ms ease,
+    transform 160ms ease;
+}
+
+.dropzone:hover,
+.dropzoneActive {
+  border-color: #111827;
+  background: #ffffff;
+}
+
+.dropzone:focus-visible,
+.primaryButton:focus-visible,
+.secondaryButton:focus-visible,
+.segment:focus-visible,
+.colorInput:focus-visible,
+.range:focus-visible {
+  outline: 3px solid rgba(100, 116, 139, 0.24);
+  outline-offset: 2px;
+}
+
+.fileInput {
+  display: none;
+}
+
+.uploadIcon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 48px;
+  height: 48px;
+  border-radius: 12px;
+  background: #111827;
+  color: #ffffff;
+}
+
+.dropTitle {
+  max-width: 100%;
+  overflow: hidden;
+  color: #111827;
+  font-size: 18px;
+  font-weight: 850;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dropCopy {
+  max-width: min(520px, 100%);
+  color: #64748b;
+  font-size: 14px;
+  line-height: 1.45;
+}
+
+.previewBox {
+  margin: -2px 16px 16px;
+  overflow: hidden;
+  border: 1px solid #e2e8f0;
+  border-radius: 14px;
+  background: #f8fafc;
+}
+
+.previewImage {
+  display: block;
+  width: 100%;
+  max-height: 360px;
+  object-fit: contain;
+}
+
+.controls,
+.resultBody {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+  padding: 0 16px 16px;
+}
+
+.controlGroup {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
+.label {
+  color: #334155;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.segmented {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 6px;
+  min-width: 0;
+}
+
+.segment,
+.primaryButton,
+.secondaryButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-width: 0;
+  min-height: 40px;
+  border: 1px solid #d7dee8;
+  border-radius: 12px;
+  background: #ffffff;
+  color: #111827;
+  font: inherit;
+  font-weight: 800;
+  cursor: pointer;
+  transition:
+    background 160ms ease,
+    border-color 160ms ease,
+    color 160ms ease;
+}
+
+.segment {
+  padding: 0 10px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.segmentActive,
+.primaryButton {
+  border-color: #111827;
+  background: #111827;
+  color: #ffffff;
+}
+
+.primaryButton {
+  width: 100%;
+  min-height: 46px;
+}
+
+.primaryButton:disabled {
+  cursor: not-allowed;
+  opacity: 0.56;
+}
+
+.secondaryButton:hover,
+.segment:hover {
+  border-color: #aab6c8;
+  background: #f8fafc;
+}
+
+.primaryButton:hover:not(:disabled) {
+  background: #273244;
+}
+
+.range {
+  width: 100%;
+  accent-color: #64748b;
+}
+
+.colorRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-width: 0;
+}
+
+.colorInput {
+  width: 46px;
+  height: 38px;
+  padding: 2px;
+  border: 1px solid #d7dee8;
+  border-radius: 10px;
+  background: #ffffff;
+}
+
+.resultPanel {
+  grid-column: 2;
+}
+
+.emptyState {
+  min-height: 92px;
+  display: grid;
+  place-items: center;
+  color: #64748b;
+  font-size: 14px;
+  text-align: center;
+}
+
+.statusLine {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  color: #475569;
+  font-size: 13px;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
+.successText {
+  color: #047857;
+}
+
+.errorText {
+  color: #b91c1c;
+}
+
+.sharePanel {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+  padding: 10px;
+  border: 1px solid #dbe3ef;
+  border-radius: 14px;
+  background: #ffffff;
+}
+
+.shareActions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  min-width: 0;
+}
+
+.spin {
+  animation: spin 1s linear infinite;
+  color: #cbd5e1;
+}
+
+.secondaryButton .spin {
+  color: #64748b;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (max-width: 900px) {
+  .shell {
+    padding: 22px 16px 44px;
+  }
+
+  .workspace {
+    grid-template-columns: 1fr;
+  }
+
+  .resultPanel {
+    grid-column: auto;
+  }
+}
+
+@media (max-width: 480px) {
+  .title {
+    font-size: 30px;
+  }
+
+  .segmented {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .shareActions {
+    grid-template-columns: 1fr;
+  }
+
+  .dropzone {
+    min-height: 190px;
+    padding-inline: 14px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dropzone,
+  .segment,
+  .primaryButton,
+  .secondaryButton,
+  .spin {
+    transition: none;
+    animation: none;
+  }
+}

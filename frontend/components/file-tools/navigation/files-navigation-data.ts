@@ -64,6 +64,7 @@ export const FILES_MEGA_SECTIONS: FilesMegaSection[] = [
     headingKey: "mega.sections.convertToPdf",
     tools: [
       { id: "text-to-pdf", href: "/tools/text-to-pdf", icon: FileText, labelKey: "mega.tools.textToPdf", tone: "blue" },
+      { id: "image-converter", href: "/tools/image-converter", icon: FileImage, labelKey: "mega.tools.imageConverter", tone: "yellow" },
       { id: "jpg-to-pdf", href: "/tools/image-to-pdf", icon: FileImage, labelKey: "mega.tools.jpgToPdf", tone: "yellow" },
       { id: "word-to-pdf", href: "/tools/word-to-pdf", icon: FileText, labelKey: "mega.tools.wordToPdf", tone: "blue" },
       { id: "powerpoint-to-pdf", href: "/tools/powerpoint-to-pdf", icon: FileText, labelKey: "mega.tools.powerPointToPdf", tone: "coral" },
