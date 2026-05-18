@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { AlertCircle, CheckCircle2, Copy, Download, Loader2, MessageCircle, Share2, Wand2 } from "lucide-react";
+import { AlertCircle, CheckCircle2, Copy, Download, Loader2, Share2, Wand2 } from "lucide-react";
 import { useLocale, useTranslations } from "next-intl";
 import type { FileToolArtifact } from "@/lib/file-tools/contracts";
 import styles from "./file-tools.module.css";
@@ -52,31 +52,7 @@ export default function FileToolDownloadPanel({
     setShareState({ artifactId: activeShareId, status });
   };
 
-  const handleWhatsAppShare = async () => {
-    if (!sharePayload) return;
-
-    setCurrentShareStatus("idle");
-    try {
-      if (canShareFile(sharePayload.file)) {
-        await navigator.share({
-          title: sharePayload.filename,
-          text: t("shareText"),
-          files: [sharePayload.file],
-        });
-        return;
-      }
-
-      const opened = window.open(whatsAppShareUrl(sharePayload, t("shareText")), "_blank", "noopener,noreferrer");
-      if (!opened) {
-        setCurrentShareStatus("unsupported");
-      }
-    } catch (shareError) {
-      if (shareError instanceof DOMException && shareError.name === "AbortError") return;
-      setCurrentShareStatus("error");
-    }
-  };
-
-  const handleMoreAppsShare = async () => {
+  const handleSharePdf = async () => {
     if (!sharePayload) return;
 
     const canNativeShare = typeof navigator.share === "function";
@@ -187,13 +163,9 @@ export default function FileToolDownloadPanel({
               {t("downloadedShareReady")}
             </div>
             <div className={styles.shareActions}>
-              <button type="button" className={styles.whatsappButton} onClick={handleWhatsAppShare}>
-                <MessageCircle size={16} />
-                {t("whatsapp")}
-              </button>
-              <button type="button" className={styles.secondaryButton} onClick={handleMoreAppsShare}>
+              <button type="button" className={styles.secondaryButton} onClick={handleSharePdf}>
                 <Share2 size={16} />
-                {t("moreApps")}
+                {t("sharePdf")}
               </button>
               <button type="button" className={styles.secondaryButton} onClick={handleCopyShareLink}>
                 <Copy size={16} />
@@ -331,11 +303,6 @@ function canShareFile(file: File) {
     && typeof navigator.canShare === "function"
     && navigator.canShare({ files: [file] })
   );
-}
-
-function whatsAppShareUrl(payload: SharePayload, shareText: string) {
-  const text = `${shareText}\n${payload.absoluteUrl}`;
-  return `https://wa.me/?text=${encodeURIComponent(text)}`;
 }
 
 interface SharePayload {
