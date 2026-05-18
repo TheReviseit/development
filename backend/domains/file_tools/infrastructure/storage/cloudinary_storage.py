@@ -29,7 +29,12 @@ CLOUDINARY_ENV_GROUPS = {
     "api_secret": ("CLOUDINARY_API_SECRET",),
 }
 
-HEALTH_PROBE_BODY = b"flowauxi-file-tools-cloudinary-health"
+HEALTH_PROBE_BODY = (
+    b"%PDF-1.4\n"
+    b"1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj\n"
+    b"2 0 obj<</Type/Pages/Count 0/Kids[]>>endobj\n"
+    b"trailer<</Root 1 0 R>>\n%%EOF\n"
+)
 
 
 class CloudinaryStorage(ArtifactStorage):
@@ -105,9 +110,9 @@ class CloudinaryStorage(ArtifactStorage):
             raise StorageError("Generated PDF storage cleanup failed.") from exc
 
     def health_check(self) -> bool:
-        key = f"file-tools/_health/{uuid.uuid4().hex}.txt"
+        key = f"file-tools/_health/{uuid.uuid4().hex}.pdf"
         try:
-            self.put_bytes(key, HEALTH_PROBE_BODY, "text/plain", {"purpose": "file-tools-health"})
+            self.put_bytes(key, HEALTH_PROBE_BODY, "application/pdf", {"purpose": "file-tools-health"})
             if self.get_bytes(key) != HEALTH_PROBE_BODY:
                 raise StorageError("Cloudinary storage health probe returned unexpected content.")
             self.delete(key)
@@ -136,6 +141,7 @@ class CloudinaryStorage(ArtifactStorage):
         safe_key = key.replace("\\", "/").strip("/")
         if not safe_key:
             raise StorageError("Invalid Cloudinary storage key.")
+        safe_key = _cloudinary_blob_key(safe_key)
         if self.public_id_prefix and not safe_key.startswith(f"{self.public_id_prefix}/"):
             return f"{self.public_id_prefix}/{safe_key}"
         return safe_key
@@ -179,6 +185,12 @@ def _metadata_context(metadata: Optional[dict[str, str]]) -> str | None:
         safe_value = str(value).replace("|", "_")[:256]
         safe_pairs.append(f"{safe_key}={safe_value}")
     return "|".join(safe_pairs)
+
+
+def _cloudinary_blob_key(key: str) -> str:
+    if key.lower().endswith(".pdf"):
+        return f"{key[:-4]}.bin"
+    return key
 
 
 def _first_env_value(keys: tuple[str, ...]) -> str | None:

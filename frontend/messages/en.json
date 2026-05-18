@@ -204,6 +204,8 @@
         "draftReady": "Draft ready",
         "generate": "Generate PDF",
         "download": "Download {size}",
+        "downloading": "Downloading",
+        "downloadFailed": "Download failed. Please try generating the PDF again.",
         "share": "Share",
         "shareText": "PDF exported from Flowauxi Tools.",
         "shareCopied": "Share link copied",

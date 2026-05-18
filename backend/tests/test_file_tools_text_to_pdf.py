@@ -651,18 +651,19 @@ def test_cloudinary_storage_accepts_existing_frontend_env_aliases(monkeypatch):
     }
     assert captured_upload["resource_type"] == "raw"
     assert captured_upload["type"] == "authenticated"
-    assert captured_upload["public_id"] == "file-tools/guest/text_to_pdf/job/artifact.pdf"
+    assert captured_upload["public_id"] == "file-tools/guest/text_to_pdf/job/artifact.bin"
+    assert captured_upload["file_name"] == "artifact.bin"
 
 
 def test_cloudinary_storage_health_uploads_downloads_and_deletes(monkeypatch):
     from domains.file_tools.infrastructure.storage.cloudinary_storage import CloudinaryStorage, HEALTH_PROBE_BODY
 
-    calls: list[str] = []
+    calls: list[tuple[str, str | None]] = []
     fake_cloudinary = types.ModuleType("cloudinary")
     fake_cloudinary.config = lambda **_kwargs: None
     fake_cloudinary.uploader = types.SimpleNamespace(
-        upload=lambda *_args, **_kwargs: calls.append("upload") or {"public_id": _kwargs["public_id"]},
-        destroy=lambda *_args, **_kwargs: calls.append("delete") or {"result": "ok"},
+        upload=lambda *_args, **_kwargs: calls.append(("upload", _kwargs["public_id"])) or {"public_id": _kwargs["public_id"]},
+        destroy=lambda public_id, **_kwargs: calls.append(("delete", public_id)) or {"result": "ok"},
     )
     fake_cloudinary.utils = types.SimpleNamespace(
         cloudinary_url=lambda public_id, **_kwargs: (f"https://res.cloudinary.test/{public_id}", {}),
@@ -680,12 +681,14 @@ def test_cloudinary_storage_health_uploads_downloads_and_deletes(monkeypatch):
     monkeypatch.setenv("CLOUDINARY_API_SECRET", "secret")
     monkeypatch.setattr(
         "domains.file_tools.infrastructure.storage.cloudinary_storage.requests.get",
-        lambda *_args, **_kwargs: calls.append("download") or FakeResponse(),
+        lambda url, **_kwargs: calls.append(("download", url)) or FakeResponse(),
     )
 
     assert CloudinaryStorage().health_check() is True
 
-    assert calls[:3] == ["upload", "download", "delete"]
+    assert [call[0] for call in calls[:3]] == ["upload", "download", "delete"]
+    assert calls[0][1] and calls[0][1].startswith("file-tools/_health/")
+    assert calls[0][1].endswith(".bin")
 
 
 def test_storage_factory_prefers_cloudinary_when_configured(monkeypatch):

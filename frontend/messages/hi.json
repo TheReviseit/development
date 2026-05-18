@@ -204,6 +204,8 @@
         "draftReady": "ड्राफ्ट तैयार",
         "generate": "PDF बनाएं",
         "download": "{size} डाउनलोड",
+        "downloading": "डाउनलोड हो रहा है",
+        "downloadFailed": "डाउनलोड विफल रहा. कृपया PDF फिर से बनाकर प्रयास करें.",
         "share": "साझा करें",
         "shareText": "Flowauxi उपकरण से निर्यात किया गया PDF.",
         "shareCopied": "शेयर लिंक कॉपी किया गया",

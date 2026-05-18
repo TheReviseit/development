@@ -42,6 +42,8 @@ export default function FileToolDownloadPanel({
     artifactId?: string;
     status: "idle" | "copied" | "error" | "unsupported";
   }>({ status: "idle" });
+  const [isDownloading, setIsDownloading] = useState(false);
+  const [downloadFailed, setDownloadFailed] = useState(false);
   const shareStatus = hasReadyArtifact && shareState.artifactId === artifact?.id ? shareState.status : "idle";
   const setCurrentShareStatus = (status: typeof shareState.status) => {
     setShareState({ artifactId: artifact?.id, status });
@@ -79,9 +81,19 @@ export default function FileToolDownloadPanel({
     }
   };
 
-  const handleDownload = () => {
-    if (!onDownload) return;
-    window.setTimeout(onDownload, 250);
+  const handleDownload = async () => {
+    if (!hasReadyArtifact || !artifact || !downloadUrl || isDownloading) return;
+
+    setIsDownloading(true);
+    setDownloadFailed(false);
+    try {
+      await downloadArtifact(downloadUrl, artifact.filename || "flowauxi.pdf");
+      onDownload?.();
+    } catch {
+      setDownloadFailed(true);
+    } finally {
+      setIsDownloading(false);
+    }
   };
 
   return (
@@ -109,15 +121,15 @@ export default function FileToolDownloadPanel({
         </button>
         {hasReadyArtifact && artifact && downloadUrl && (
           <div className={styles.exportReadyActions}>
-            <a
+            <button
+              type="button"
               className={styles.secondaryButton}
-              href={downloadUrl}
-              download={artifact.filename}
               onClick={handleDownload}
+              disabled={isDownloading}
             >
-              <Download size={17} />
-              {t("download", { size: formatBytes(artifact.sizeBytes) })}
-            </a>
+              {isDownloading ? <Loader2 className={styles.spin} size={17} /> : <Download size={17} />}
+              {isDownloading ? t("downloading") : t("download", { size: formatBytes(artifact.sizeBytes) })}
+            </button>
             <button type="button" className={styles.secondaryButton} onClick={handleShare}>
               <Share2 size={17} />
               {t("share")}
@@ -140,6 +152,12 @@ export default function FileToolDownloadPanel({
           <div className={`${styles.statusLine} ${styles.errorText}`}>
             <AlertCircle size={16} />
             {error}
+          </div>
+        )}
+        {downloadFailed && (
+          <div className={`${styles.statusLine} ${styles.errorText}`}>
+            <AlertCircle size={16} />
+            {t("downloadFailed")}
           </div>
         )}
         {hasReadyArtifact && artifact && !error && (
@@ -209,4 +227,26 @@ async function copyShareLink(url: string) {
   }
 
   await navigator.clipboard.writeText(url);
+}
+
+async function downloadArtifact(downloadUrl: string, filename: string) {
+  const response = await fetch(downloadUrl, {
+    cache: "no-store",
+    credentials: "same-origin",
+  });
+
+  if (!response.ok) {
+    throw new Error("Download failed");
+  }
+
+  const blob = await response.blob();
+  const objectUrl = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = objectUrl;
+  link.download = filename;
+  link.rel = "noopener";
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  window.setTimeout(() => URL.revokeObjectURL(objectUrl), 30_000);
 }

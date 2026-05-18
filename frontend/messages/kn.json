@@ -204,6 +204,8 @@
         "draftReady": "ಡ್ರಾಫ್ಟ್ ಸಿದ್ಧ",
         "generate": "PDF ರಚಿಸಿ",
         "download": "{size} ಡೌನ್‌ಲೋಡ್",
+        "downloading": "ಡೌನ್‌ಲೋಡ್ ಆಗುತ್ತಿದೆ",
+        "downloadFailed": "ಡೌನ್‌ಲೋಡ್ ವಿಫಲವಾಗಿದೆ. PDF ಅನ್ನು ಮತ್ತೆ ರಚಿಸಿ ಪ್ರಯತ್ನಿಸಿ.",
         "share": "ಹಂಚಿಕೊಳ್ಳಿ",
         "shareText": "Flowauxi ಉಪಕರಣಗಳಿಂದ ರಫ್ತು ಮಾಡಿದ PDF.",
         "shareCopied": "ಹಂಚಿಕೆ ಲಿಂಕ್ ನಕಲಿಸಲಾಗಿದೆ",
