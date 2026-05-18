@@ -615,6 +615,106 @@ def test_r2_config_status_reports_missing_backend_env(monkeypatch):
     assert status["missing"] == ["account_id", "access_key_id", "secret_access_key", "bucket_name"]
 
 
+def test_cloudinary_storage_accepts_existing_frontend_env_aliases(monkeypatch):
+    from domains.file_tools.infrastructure.storage.cloudinary_storage import CloudinaryStorage
+
+    captured_config: dict[str, object] = {}
+    captured_upload: dict[str, object] = {}
+
+    fake_cloudinary = types.ModuleType("cloudinary")
+    fake_cloudinary.config = lambda **kwargs: captured_config.update(kwargs)
+    fake_cloudinary.uploader = types.SimpleNamespace(
+        upload=lambda file_obj, **kwargs: captured_upload.update({"file_name": file_obj.name, **kwargs}) or {"public_id": kwargs["public_id"]},
+        destroy=lambda *_args, **_kwargs: {"result": "ok"},
+    )
+    fake_cloudinary.utils = types.SimpleNamespace(
+        cloudinary_url=lambda public_id, **_kwargs: (f"https://res.cloudinary.test/{public_id}", {}),
+    )
+
+    monkeypatch.setitem(sys.modules, "cloudinary", fake_cloudinary)
+    monkeypatch.delenv("CLOUDINARY_URL", raising=False)
+    monkeypatch.delenv("CLOUDINARY_CLOUD_NAME", raising=False)
+    monkeypatch.delenv("CLOUDINARY_API_KEY", raising=False)
+    monkeypatch.setenv("NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME", "existing-cloud")
+    monkeypatch.setenv("NEXT_PUBLIC_CLOUDINARY_API_KEY", "existing-key")
+    monkeypatch.setenv("CLOUDINARY_API_SECRET", "existing-secret")
+
+    storage = CloudinaryStorage()
+    stored = storage.put_bytes("file-tools/guest/text_to_pdf/job/artifact.pdf", b"%PDF", "application/pdf")
+
+    assert stored.provider == "cloudinary"
+    assert captured_config == {
+        "cloud_name": "existing-cloud",
+        "api_key": "existing-key",
+        "api_secret": "existing-secret",
+        "secure": True,
+    }
+    assert captured_upload["resource_type"] == "raw"
+    assert captured_upload["type"] == "authenticated"
+    assert captured_upload["public_id"] == "file-tools/guest/text_to_pdf/job/artifact.pdf"
+
+
+def test_cloudinary_storage_health_uploads_downloads_and_deletes(monkeypatch):
+    from domains.file_tools.infrastructure.storage.cloudinary_storage import CloudinaryStorage, HEALTH_PROBE_BODY
+
+    calls: list[str] = []
+    fake_cloudinary = types.ModuleType("cloudinary")
+    fake_cloudinary.config = lambda **_kwargs: None
+    fake_cloudinary.uploader = types.SimpleNamespace(
+        upload=lambda *_args, **_kwargs: calls.append("upload") or {"public_id": _kwargs["public_id"]},
+        destroy=lambda *_args, **_kwargs: calls.append("delete") or {"result": "ok"},
+    )
+    fake_cloudinary.utils = types.SimpleNamespace(
+        cloudinary_url=lambda public_id, **_kwargs: (f"https://res.cloudinary.test/{public_id}", {}),
+    )
+
+    class FakeResponse:
+        content = HEALTH_PROBE_BODY
+
+        def raise_for_status(self):
+            return None
+
+    monkeypatch.setitem(sys.modules, "cloudinary", fake_cloudinary)
+    monkeypatch.setenv("CLOUDINARY_CLOUD_NAME", "cloud")
+    monkeypatch.setenv("CLOUDINARY_API_KEY", "key")
+    monkeypatch.setenv("CLOUDINARY_API_SECRET", "secret")
+    monkeypatch.setattr(
+        "domains.file_tools.infrastructure.storage.cloudinary_storage.requests.get",
+        lambda *_args, **_kwargs: calls.append("download") or FakeResponse(),
+    )
+
+    assert CloudinaryStorage().health_check() is True
+
+    assert calls[:3] == ["upload", "download", "delete"]
+
+
+def test_storage_factory_prefers_cloudinary_when_configured(monkeypatch):
+    from domains.file_tools.infrastructure.storage import factory
+
+    class FakeCloudinaryStorage:
+        provider = "cloudinary"
+
+        @classmethod
+        def is_configured(cls):
+            return True
+
+    class FakeR2Storage:
+        provider = "cloudflare_r2"
+
+        @classmethod
+        def is_configured(cls):
+            return True
+
+    monkeypatch.delenv("FILE_TOOLS_STORAGE_PROVIDER", raising=False)
+    monkeypatch.delenv("FLASK_ENV", raising=False)
+    monkeypatch.setattr(factory, "CloudinaryStorage", FakeCloudinaryStorage)
+    monkeypatch.setattr(factory, "R2Storage", FakeR2Storage)
+
+    storage = factory.create_artifact_storage()
+
+    assert storage.provider == "cloudinary"
+
+
 def test_file_tools_health_reports_safe_artifact_storage_detail(monkeypatch):
     class FakeBlueprint:
         def __init__(self, *_args, **_kwargs):

@@ -22,7 +22,7 @@ from ..domain.errors import FeatureDisabledError, FileToolError, NotFoundError, 
 from ..domain.events import FILE_TOOL_DOWNLOADED
 from ..infrastructure.repositories import FileToolsRepository
 from ..infrastructure.security.signed_downloads import verify_download_token
-from ..infrastructure.storage.r2_storage import create_artifact_storage
+from ..infrastructure.storage.factory import create_artifact_storage
 from .response_mapper import error_response, success_response, unexpected_error_response
 
 file_tools_bp = Blueprint("file_tools", __name__, url_prefix="/api/file-tools")
