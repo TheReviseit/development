@@ -81,7 +81,7 @@ class CloudinaryStorage(ArtifactStorage):
                 "use_filename": False,
                 "invalidate": True,
             }
-            context = _metadata_context(metadata)
+            context = _metadata_context(metadata) if _write_cloudinary_context() else None
             if context:
                 upload_options["context"] = context
             self.uploader.upload(file_obj, **upload_options)
@@ -185,6 +185,10 @@ def _metadata_context(metadata: Optional[dict[str, str]]) -> str | None:
         safe_value = str(value).replace("|", "_")[:256]
         safe_pairs.append(f"{safe_key}={safe_value}")
     return "|".join(safe_pairs)
+
+
+def _write_cloudinary_context() -> bool:
+    return os.getenv("FILE_TOOLS_CLOUDINARY_WRITE_CONTEXT", "false").lower() in {"1", "true", "yes"}
 
 
 def _cloudinary_blob_key(key: str) -> str:
