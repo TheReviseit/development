@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { AlertCircle, CheckCircle2, Download, Loader2, Share2, Wand2 } from "lucide-react";
+import { AlertCircle, CheckCircle2, Copy, Download, Loader2, MessageCircle, Share2, Wand2 } from "lucide-react";
 import { useLocale, useTranslations } from "next-intl";
 import type { FileToolArtifact } from "@/lib/file-tools/contracts";
 import styles from "./file-tools.module.css";
@@ -42,38 +42,67 @@ export default function FileToolDownloadPanel({
     artifactId?: string;
     status: "idle" | "copied" | "error" | "unsupported";
   }>({ status: "idle" });
+  const [sharePayload, setSharePayload] = useState<SharePayload | null>(null);
   const [isDownloading, setIsDownloading] = useState(false);
   const [downloadFailed, setDownloadFailed] = useState(false);
-  const shareStatus = hasReadyArtifact && shareState.artifactId === artifact?.id ? shareState.status : "idle";
+  const shouldShowEmptyDocument = emptyDocument && !sharePayload;
+  const activeShareId = artifact?.id || sharePayload?.artifactId;
+  const shareStatus = activeShareId && shareState.artifactId === activeShareId ? shareState.status : "idle";
   const setCurrentShareStatus = (status: typeof shareState.status) => {
-    setShareState({ artifactId: artifact?.id, status });
+    setShareState({ artifactId: activeShareId, status });
   };
 
-  const handleShare = async () => {
-    if (!hasReadyArtifact || !artifact || !downloadUrl) return;
+  const handleWhatsAppShare = async () => {
+    if (!sharePayload) return;
 
-    const absoluteDownloadUrl = new URL(downloadUrl, window.location.href).toString();
-    const title = artifact.filename || "Flowauxi PDF";
+    setCurrentShareStatus("idle");
+    try {
+      if (canShareFile(sharePayload.file)) {
+        await navigator.share({
+          title: sharePayload.filename,
+          text: t("shareText"),
+          files: [sharePayload.file],
+        });
+        return;
+      }
+
+      const opened = window.open(whatsAppShareUrl(sharePayload, t("shareText")), "_blank", "noopener,noreferrer");
+      if (!opened) {
+        setCurrentShareStatus("unsupported");
+      }
+    } catch (shareError) {
+      if (shareError instanceof DOMException && shareError.name === "AbortError") return;
+      setCurrentShareStatus("error");
+    }
+  };
+
+  const handleMoreAppsShare = async () => {
+    if (!sharePayload) return;
+
     const canNativeShare = typeof navigator.share === "function";
     setCurrentShareStatus("idle");
-
     try {
       if (!canNativeShare) {
-        await copyShareLink(absoluteDownloadUrl);
+        await copyShareLink(sharePayload.absoluteUrl);
         setCurrentShareStatus("copied");
         return;
       }
 
-      await navigator.share({
-        title,
-        text: t("shareText"),
-        url: absoluteDownloadUrl,
-      });
+      if (canShareFile(sharePayload.file)) {
+        await navigator.share({
+          title: sharePayload.filename,
+          text: t("shareText"),
+          files: [sharePayload.file],
+        });
+        return;
+      }
+
+      await navigator.share({ title: sharePayload.filename, text: t("shareText"), url: sharePayload.absoluteUrl });
     } catch (shareError) {
       if (shareError instanceof DOMException && shareError.name === "AbortError") return;
 
       try {
-        await copyShareLink(absoluteDownloadUrl);
+        await copyShareLink(sharePayload.absoluteUrl);
         setCurrentShareStatus("copied");
       } catch {
         setCurrentShareStatus(canNativeShare ? "error" : "unsupported");
@@ -81,13 +110,32 @@ export default function FileToolDownloadPanel({
     }
   };
 
-  const handleDownload = async () => {
+  const handleCopyShareLink = async () => {
+    if (!sharePayload) return;
+    try {
+      await copyShareLink(sharePayload.absoluteUrl);
+      setCurrentShareStatus("copied");
+    } catch {
+      setCurrentShareStatus("unsupported");
+    }
+  };
+
+  const handleDownloadAndShare = async () => {
     if (!hasReadyArtifact || !artifact || !downloadUrl || isDownloading) return;
 
+    const filename = artifact.filename || "flowauxi.pdf";
+    const absoluteUrl = new URL(downloadUrl, window.location.href).toString();
     setIsDownloading(true);
     setDownloadFailed(false);
+    setSharePayload(null);
     try {
-      await downloadArtifact(downloadUrl, artifact.filename || "flowauxi.pdf");
+      const downloaded = await downloadArtifact(downloadUrl, filename);
+      setSharePayload({
+        artifactId: artifact.id,
+        filename,
+        absoluteUrl,
+        file: downloaded.file,
+      });
       onDownload?.();
     } catch {
       setDownloadFailed(true);
@@ -124,19 +172,37 @@ export default function FileToolDownloadPanel({
             <button
               type="button"
               className={styles.secondaryButton}
-              onClick={handleDownload}
+              onClick={handleDownloadAndShare}
               disabled={isDownloading}
             >
               {isDownloading ? <Loader2 className={styles.spin} size={17} /> : <Download size={17} />}
-              {isDownloading ? t("downloading") : t("download", { size: formatBytes(artifact.sizeBytes) })}
-            </button>
-            <button type="button" className={styles.secondaryButton} onClick={handleShare}>
-              <Share2 size={17} />
-              {t("share")}
+              {isDownloading ? t("downloading") : t("downloadAndShare", { size: formatBytes(artifact.sizeBytes) })}
             </button>
           </div>
         )}
-        {emptyDocument && (
+        {sharePayload && (
+          <div className={styles.sharePanel} aria-label={t("sharePanelAria")}>
+            <div className={`${styles.statusLine} ${styles.successText}`}>
+              <CheckCircle2 size={16} />
+              {t("downloadedShareReady")}
+            </div>
+            <div className={styles.shareActions}>
+              <button type="button" className={styles.whatsappButton} onClick={handleWhatsAppShare}>
+                <MessageCircle size={16} />
+                {t("whatsapp")}
+              </button>
+              <button type="button" className={styles.secondaryButton} onClick={handleMoreAppsShare}>
+                <Share2 size={16} />
+                {t("moreApps")}
+              </button>
+              <button type="button" className={styles.secondaryButton} onClick={handleCopyShareLink}>
+                <Copy size={16} />
+                {t("copyLink")}
+              </button>
+            </div>
+          </div>
+        )}
+        {shouldShowEmptyDocument && (
           <div className={`${styles.statusLine} ${styles.errorText}`}>
             <AlertCircle size={16} />
             {t("emptyDocument")}
@@ -240,6 +306,14 @@ async function downloadArtifact(downloadUrl: string, filename: string) {
   }
 
   const blob = await response.blob();
+  const fileBlob = blob.type === "application/pdf" ? blob : blob.slice(0, blob.size, "application/pdf");
+  const file = new File([fileBlob], filename, { type: "application/pdf" });
+  saveBlobAsFile(fileBlob, filename);
+
+  return { file };
+}
+
+function saveBlobAsFile(blob: Blob, filename: string) {
   const objectUrl = URL.createObjectURL(blob);
   const link = document.createElement("a");
   link.href = objectUrl;
@@ -249,4 +323,24 @@ async function downloadArtifact(downloadUrl: string, filename: string) {
   link.click();
   link.remove();
   window.setTimeout(() => URL.revokeObjectURL(objectUrl), 30_000);
+}
+
+function canShareFile(file: File) {
+  return (
+    typeof navigator.share === "function"
+    && typeof navigator.canShare === "function"
+    && navigator.canShare({ files: [file] })
+  );
+}
+
+function whatsAppShareUrl(payload: SharePayload, shareText: string) {
+  const text = `${shareText}\n${payload.absoluteUrl}`;
+  return `https://wa.me/?text=${encodeURIComponent(text)}`;
+}
+
+interface SharePayload {
+  artifactId: string;
+  filename: string;
+  absoluteUrl: string;
+  file: File;
 }
