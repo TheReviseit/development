@@ -770,11 +770,10 @@ def test_file_tools_health_reports_safe_artifact_storage_detail(monkeypatch):
     ready, detail = routes._artifact_storage_status()
 
     assert ready is False
-    assert detail == {
-        "status": "not_ready",
-        "code": "STORAGE_ERROR",
-        "message": "Cloudflare R2 storage is not configured for file tools.",
-    }
+    assert detail["status"] == "not_ready"
+    assert detail["code"] == "STORAGE_ERROR"
+    assert detail["message"] == "Cloudflare R2 storage is not configured for file tools."
+    assert "factory" in detail
 
 
 def test_signed_download_token_expiry_is_enforced():

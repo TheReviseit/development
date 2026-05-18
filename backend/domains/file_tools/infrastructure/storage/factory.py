@@ -11,7 +11,7 @@ from .r2_storage import R2Storage, cloudflare_r2_config_status
 
 
 def create_artifact_storage() -> ArtifactStorage:
-    provider = os.getenv("FILE_TOOLS_STORAGE_PROVIDER", _default_storage_provider()).strip().lower()
+    provider = selected_storage_provider()
 
     if provider in {"cloudinary", "cloudinary_raw"}:
         return CloudinaryStorage()
@@ -35,6 +35,20 @@ def create_artifact_storage() -> ArtifactStorage:
         raise StorageError(_missing_remote_storage_message())
 
     return _local_storage_or_raise()
+
+
+def storage_factory_status() -> dict[str, object]:
+    return {
+        "selected_provider": selected_storage_provider(),
+        "configured_provider_env": os.getenv("FILE_TOOLS_STORAGE_PROVIDER") or None,
+        "default_provider": _default_storage_provider(),
+        "cloudinary": cloudinary_config_status(),
+        "cloudflare_r2": cloudflare_r2_config_status(),
+    }
+
+
+def selected_storage_provider() -> str:
+    return os.getenv("FILE_TOOLS_STORAGE_PROVIDER", _default_storage_provider()).strip().lower()
 
 
 def _local_storage_or_raise() -> ArtifactStorage:

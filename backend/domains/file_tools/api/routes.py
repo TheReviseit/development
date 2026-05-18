@@ -22,7 +22,7 @@ from ..domain.errors import FeatureDisabledError, FileToolError, NotFoundError, 
 from ..domain.events import FILE_TOOL_DOWNLOADED
 from ..infrastructure.repositories import FileToolsRepository
 from ..infrastructure.security.signed_downloads import verify_download_token
-from ..infrastructure.storage.factory import create_artifact_storage
+from ..infrastructure.storage.factory import create_artifact_storage, storage_factory_status
 from .response_mapper import error_response, success_response, unexpected_error_response
 
 file_tools_bp = Blueprint("file_tools", __name__, url_prefix="/api/file-tools")
@@ -291,14 +291,15 @@ def _pdf_glyph_preflight_ready() -> bool:
         return False
 
 
-def _artifact_storage_status() -> tuple[bool, dict[str, str]]:
+def _artifact_storage_status() -> tuple[bool, dict[str, object]]:
     try:
         storage = create_artifact_storage()
         storage.health_check()
-        return True, {"status": "ready", "provider": storage.provider}
+        return True, {"status": "ready", "provider": storage.provider, "factory": storage_factory_status()}
     except Exception as exc:
         return False, {
             "status": "not_ready",
             "code": getattr(exc, "code", "STORAGE_ERROR"),
             "message": getattr(exc, "message", "Artifact storage is not ready."),
+            "factory": storage_factory_status(),
         }
