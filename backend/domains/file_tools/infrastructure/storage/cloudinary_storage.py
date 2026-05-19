@@ -6,6 +6,7 @@ import os
 import uuid
 from dataclasses import dataclass
 from io import BytesIO
+from pathlib import Path
 from pathlib import PurePosixPath
 from typing import Optional
 
@@ -89,12 +90,52 @@ class CloudinaryStorage(ArtifactStorage):
             raise StorageError("Generated file storage is unavailable. Please try again shortly.") from exc
         return StoredObject(provider=self.provider, key=key, size_bytes=len(content), mime_type=mime_type)
 
+    def put_file(self, key: str, path: str | Path, mime_type: str, metadata: Optional[dict[str, str]] = None) -> StoredObject:
+        public_id = self._public_id(key)
+        source = Path(path)
+        try:
+            upload_options = {
+                "resource_type": "raw",
+                "type": self.delivery_type,
+                "public_id": public_id,
+                "overwrite": True,
+                "unique_filename": False,
+                "use_filename": False,
+                "invalidate": True,
+            }
+            context = _metadata_context(metadata) if _write_cloudinary_context() else None
+            if context:
+                upload_options["context"] = context
+            with source.open("rb") as file_obj:
+                self.uploader.upload(file_obj, **upload_options)
+        except Exception as exc:
+            raise StorageError("Generated file storage is unavailable. Please try again shortly.") from exc
+        return StoredObject(provider=self.provider, key=key, size_bytes=source.stat().st_size, mime_type=mime_type)
+
     def get_bytes(self, key: str) -> bytes:
         url = self._signed_download_url(key)
         try:
             response = requests.get(url, timeout=(3, 20))
             response.raise_for_status()
             return response.content
+        except Exception as exc:
+            raise StorageError("Generated file storage is unavailable. Please try again shortly.") from exc
+
+    def download_to_path(self, key: str, path: str | Path) -> int:
+        url = self._signed_download_url(key)
+        target = Path(path)
+        target.parent.mkdir(parents=True, exist_ok=True)
+        try:
+            with requests.get(url, timeout=(3, 120), stream=True) as response:
+                response.raise_for_status()
+                total = 0
+                with target.open("wb") as output:
+                    for chunk in response.iter_content(chunk_size=1024 * 1024):
+                        if not chunk:
+                            continue
+                        output.write(chunk)
+                        total += len(chunk)
+                return total
         except Exception as exc:
             raise StorageError("Generated file storage is unavailable. Please try again shortly.") from exc
 

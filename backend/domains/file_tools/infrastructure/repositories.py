@@ -36,6 +36,12 @@ class FileToolsRepository:
     _memory_artifacts: dict[str, dict[str, Any]] = {}
     _memory_drafts: dict[str, dict[str, Any]] = {}
     _memory_events: list[dict[str, Any]] = []
+    _memory_upload_sessions: dict[str, dict[str, Any]] = {}
+    _memory_upload_chunks: dict[str, dict[str, Any]] = {}
+    _memory_progress_events: dict[str, list[dict[str, Any]]] = {}
+    _memory_video_metadata: dict[str, dict[str, Any]] = {}
+    _memory_video_outputs: dict[str, dict[str, Any]] = {}
+    _memory_ocr_results: dict[str, dict[str, Any]] = {}
 
     def __init__(self, supabase_client: Any | None = None):
         self._supabase = supabase_client
@@ -120,6 +126,114 @@ class FileToolsRepository:
 
         self._memory_jobs[row["id"]] = copy.deepcopy(row)
         return self._row_to_job(row)
+
+    def create_async_job(
+        self,
+        owner: FileToolOwner,
+        tool_key: str,
+        payload: dict[str, Any],
+        idempotency_key: str | None,
+        *,
+        max_retries: int = 3,
+    ) -> FileToolJob:
+        now = utc_now()
+        row = {
+            "id": str(uuid.uuid4()),
+            "tool_key": tool_key,
+            "status": FileToolStatus.QUEUED.value,
+            "execution_mode": ExecutionMode.ASYNC.value,
+            "tenant_id": owner.tenant_id,
+            "user_id": owner.owner_id if owner.is_authenticated else None,
+            "guest_id_hash": owner.owner_id if not owner.is_authenticated else None,
+            "request_json": payload,
+            "options_json": payload.get("options", {}),
+            "idempotency_key": idempotency_key,
+            "retry_count": 0,
+            "max_retries": max_retries,
+            "created_at": _iso(now),
+            "updated_at": _iso(now),
+        }
+
+        if self._insert("file_tool_jobs", row):
+            return self._row_to_job(row)
+
+        self._memory_jobs[row["id"]] = copy.deepcopy(row)
+        return self._row_to_job(row)
+
+    def find_job_by_idempotency(
+        self,
+        owner: FileToolOwner,
+        tool_key: str,
+        idempotency_key: str | None,
+    ) -> FileToolJob | None:
+        if not idempotency_key:
+            return None
+        if self._supabase is not None:
+            try:
+                query = (
+                    self._supabase.table("file_tool_jobs")
+                    .select("*")
+                    .eq("tool_key", tool_key)
+                    .eq("idempotency_key", idempotency_key)
+                    .limit(1)
+                )
+                query = self._match_owner(query, owner)
+                result = query.execute()
+                if result.data:
+                    return self._row_to_job(result.data[0])
+            except Exception:
+                pass
+        for row in self._memory_jobs.values():
+            if (
+                row.get("tool_key") == tool_key
+                and row.get("idempotency_key") == idempotency_key
+                and self._owner_matches_row(owner, row)
+            ):
+                return self._row_to_job(row)
+        return None
+
+    def update_job(
+        self,
+        job_id: str,
+        *,
+        status: FileToolStatus | str | None = None,
+        error_code: str | None = None,
+        error_message: str | None = None,
+        duration_ms: int | None = None,
+        extra: dict[str, Any] | None = None,
+    ) -> None:
+        update = {"updated_at": _iso(utc_now())}
+        if status is not None:
+            update["status"] = status.value if isinstance(status, FileToolStatus) else status
+            if update["status"] == FileToolStatus.RUNNING.value:
+                update["started_at"] = _iso(utc_now())
+            if update["status"] in {
+                FileToolStatus.SUCCEEDED.value,
+                FileToolStatus.FAILED.value,
+                FileToolStatus.CANCELLED.value,
+                FileToolStatus.DEAD_LETTER.value,
+                FileToolStatus.EXPIRED.value,
+            }:
+                update["completed_at"] = _iso(utc_now())
+        if error_code is not None:
+            update["error_code"] = error_code
+        if error_message is not None:
+            update["error_message"] = error_message
+        if duration_ms is not None:
+            update["duration_ms"] = duration_ms
+        if extra:
+            update.update(extra)
+        self._update_job(job_id, update)
+
+    def request_job_cancellation(self, job_id: str) -> None:
+        job = self.get_job(job_id)
+        payload = copy.deepcopy(job.request_payload) if job else {}
+        payload["cancelRequestedAt"] = _iso(utc_now())
+        self._update_job(job_id, {"request_json": payload, "updated_at": _iso(utc_now())})
+
+    def is_cancellation_requested(self, job_id: str) -> bool:
+        job = self.get_job(job_id)
+        return bool(job and job.request_payload.get("cancelRequestedAt"))
 
     def mark_job_succeeded(self, job_id: str, page_count: int, duration_ms: int) -> None:
         self._update_job(job_id, {
@@ -322,6 +436,254 @@ class FileToolsRepository:
         if not self._insert("file_tool_events", row):
             self._memory_events.append(copy.deepcopy(row))
 
+    def create_upload_session(self, owner: FileToolOwner, payload: dict[str, Any]) -> dict[str, Any]:
+        now = utc_now()
+        row = {
+            "id": str(uuid.uuid4()),
+            "tenant_id": owner.tenant_id,
+            "user_id": owner.owner_id if owner.is_authenticated else None,
+            "guest_id_hash": owner.owner_id if not owner.is_authenticated else None,
+            "tool_key": payload["tool_key"],
+            "batch_id": payload.get("batch_id"),
+            "filename": payload["filename"],
+            "declared_mime_type": payload.get("declared_mime_type"),
+            "total_size_bytes": payload["total_size_bytes"],
+            "chunk_size_bytes": payload["chunk_size_bytes"],
+            "total_chunks": payload["total_chunks"],
+            "received_bytes": 0,
+            "expected_sha256": payload.get("expected_sha256"),
+            "source_sha256": None,
+            "source_storage_provider": None,
+            "source_storage_key": None,
+            "status": "receiving",
+            "expires_at": payload["expires_at"],
+            "completed_at": None,
+            "created_at": _iso(now),
+            "updated_at": _iso(now),
+        }
+        if not self._insert("file_tool_upload_sessions", row):
+            self._memory_upload_sessions[row["id"]] = copy.deepcopy(row)
+        return copy.deepcopy(row)
+
+    def get_upload_session(self, session_id: str) -> dict[str, Any] | None:
+        row = self._select_one("file_tool_upload_sessions", "id", session_id) or self._memory_upload_sessions.get(session_id)
+        return copy.deepcopy(row) if row else None
+
+    def update_upload_session(self, session_id: str, update: dict[str, Any]) -> None:
+        normalized = copy.deepcopy(update)
+        normalized["updated_at"] = _iso(utc_now())
+        if self._update_table_by_id("file_tool_upload_sessions", session_id, normalized):
+            return
+        if session_id in self._memory_upload_sessions:
+            self._memory_upload_sessions[session_id].update(normalized)
+
+    def get_upload_chunk_by_index(self, session_id: str, chunk_index: int) -> dict[str, Any] | None:
+        if self._supabase is not None:
+            try:
+                result = (
+                    self._supabase.table("file_tool_upload_chunks")
+                    .select("*")
+                    .eq("upload_session_id", session_id)
+                    .eq("chunk_index", chunk_index)
+                    .limit(1)
+                    .execute()
+                )
+                if result.data:
+                    return copy.deepcopy(result.data[0])
+            except Exception:
+                pass
+        return copy.deepcopy(self._memory_upload_chunks.get(f"{session_id}:{chunk_index}"))
+
+    def get_upload_chunk_by_idempotency(self, session_id: str, idempotency_key: str) -> dict[str, Any] | None:
+        if self._supabase is not None:
+            try:
+                result = (
+                    self._supabase.table("file_tool_upload_chunks")
+                    .select("*")
+                    .eq("upload_session_id", session_id)
+                    .eq("idempotency_key", idempotency_key)
+                    .limit(1)
+                    .execute()
+                )
+                if result.data:
+                    return copy.deepcopy(result.data[0])
+            except Exception:
+                pass
+        for row in self._memory_upload_chunks.values():
+            if row.get("upload_session_id") == session_id and row.get("idempotency_key") == idempotency_key:
+                return copy.deepcopy(row)
+        return None
+
+    def create_upload_chunk(self, row: dict[str, Any]) -> dict[str, Any]:
+        now = utc_now()
+        normalized = {
+            "id": str(uuid.uuid4()),
+            "created_at": _iso(now),
+            "updated_at": _iso(now),
+            "status": "stored",
+            **copy.deepcopy(row),
+        }
+        if not self._insert("file_tool_upload_chunks", normalized):
+            self._memory_upload_chunks[f"{normalized['upload_session_id']}:{normalized['chunk_index']}"] = copy.deepcopy(normalized)
+        return copy.deepcopy(normalized)
+
+    def list_upload_chunks(self, session_id: str) -> list[dict[str, Any]]:
+        rows: list[dict[str, Any]] = []
+        if self._supabase is not None:
+            try:
+                result = (
+                    self._supabase.table("file_tool_upload_chunks")
+                    .select("*")
+                    .eq("upload_session_id", session_id)
+                    .order("chunk_index")
+                    .execute()
+                )
+                rows = result.data or []
+            except Exception:
+                rows = []
+        if not rows:
+            rows = [
+                copy.deepcopy(row)
+                for row in self._memory_upload_chunks.values()
+                if row.get("upload_session_id") == session_id
+            ]
+            rows.sort(key=lambda item: int(item.get("chunk_index") or 0))
+        return rows
+
+    def record_progress_event(
+        self,
+        job_id: str,
+        *,
+        stage: str,
+        percent: float | None = None,
+        processed_ms: int | None = None,
+        speed: float | None = None,
+        eta_seconds: int | None = None,
+        message: str | None = None,
+        event_type: str = "progress",
+    ) -> dict[str, Any]:
+        sequence_id = self.next_progress_sequence(job_id)
+        row = {
+            "id": str(uuid.uuid4()),
+            "job_id": job_id,
+            "sequence_id": sequence_id,
+            "event_type": event_type,
+            "stage": stage,
+            "percent": percent,
+            "processed_ms": processed_ms,
+            "speed": speed,
+            "eta_seconds": eta_seconds,
+            "message": message,
+            "created_at": _iso(utc_now()),
+        }
+        if not self._insert("file_tool_job_progress_events", row):
+            self._memory_progress_events.setdefault(job_id, []).append(copy.deepcopy(row))
+        return copy.deepcopy(row)
+
+    def next_progress_sequence(self, job_id: str) -> int:
+        if self._supabase is not None:
+            try:
+                result = (
+                    self._supabase.table("file_tool_job_progress_events")
+                    .select("sequence_id")
+                    .eq("job_id", job_id)
+                    .order("sequence_id", desc=True)
+                    .limit(1)
+                    .execute()
+                )
+                if result.data:
+                    return int(result.data[0].get("sequence_id") or 0) + 1
+            except Exception:
+                pass
+        existing = self._memory_progress_events.get(job_id, [])
+        if not existing:
+            return 1
+        return max(int(row.get("sequence_id") or 0) for row in existing) + 1
+
+    def list_progress_events(self, job_id: str, after_sequence_id: int = 0, limit: int = 100) -> list[dict[str, Any]]:
+        rows: list[dict[str, Any]] = []
+        if self._supabase is not None:
+            try:
+                result = (
+                    self._supabase.table("file_tool_job_progress_events")
+                    .select("*")
+                    .eq("job_id", job_id)
+                    .gt("sequence_id", after_sequence_id)
+                    .order("sequence_id")
+                    .limit(limit)
+                    .execute()
+                )
+                rows = result.data or []
+            except Exception:
+                rows = []
+        if not rows:
+            rows = [
+                copy.deepcopy(row)
+                for row in self._memory_progress_events.get(job_id, [])
+                if int(row.get("sequence_id") or 0) > after_sequence_id
+            ][:limit]
+        return rows
+
+    def upsert_video_metadata(self, job_id: str, metadata: dict[str, Any]) -> None:
+        row = {
+            "job_id": job_id,
+            "metadata_json": copy.deepcopy(metadata),
+            "updated_at": _iso(utc_now()),
+        }
+        if self._supabase is not None:
+            try:
+                self._supabase.table("file_tool_video_metadata").upsert(row, on_conflict="job_id").execute()
+                return
+            except Exception:
+                pass
+        self._memory_video_metadata[job_id] = copy.deepcopy(row)
+
+    def create_video_output(self, job_id: str, payload: dict[str, Any]) -> None:
+        row = {
+            "id": str(uuid.uuid4()),
+            "job_id": job_id,
+            **copy.deepcopy(payload),
+            "created_at": _iso(utc_now()),
+            "updated_at": _iso(utc_now()),
+        }
+        if not self._insert("file_tool_video_outputs", row):
+            self._memory_video_outputs[job_id] = copy.deepcopy(row)
+
+    def upsert_ocr_result(self, job_id: str, payload: dict[str, Any]) -> dict[str, Any]:
+        row = {
+            "job_id": job_id,
+            **copy.deepcopy(payload),
+            "updated_at": _iso(utc_now()),
+        }
+        existing = self.get_ocr_result(job_id)
+        if existing:
+            row["created_at"] = existing.get("created_at") or _iso(utc_now())
+        else:
+            row["created_at"] = _iso(utc_now())
+        if self._supabase is not None:
+            try:
+                self._supabase.table("file_tool_ocr_results").upsert(row, on_conflict="job_id").execute()
+                return row
+            except Exception:
+                pass
+        self._memory_ocr_results[job_id] = copy.deepcopy(row)
+        return row
+
+    def get_ocr_result(self, job_id: str) -> dict[str, Any] | None:
+        row = self._select_one("file_tool_ocr_results", "job_id", job_id)
+        if row:
+            return row
+        stored = self._memory_ocr_results.get(job_id)
+        return copy.deepcopy(stored) if stored else None
+
+    def delete_ocr_result(self, job_id: str) -> None:
+        if self._supabase is not None:
+            try:
+                self._supabase.table("file_tool_ocr_results").delete().eq("job_id", job_id).execute()
+            except Exception:
+                pass
+        self._memory_ocr_results.pop(job_id, None)
+
     def cleanup_expired(self, now: datetime | None = None) -> list[FileToolArtifact]:
         now = now or utc_now()
         expired: list[FileToolArtifact] = []
@@ -369,6 +731,15 @@ class FileToolsRepository:
             return result.data[0] if result.data else None
         except Exception:
             return None
+
+    def _update_table_by_id(self, table: str, row_id: str, update: dict[str, Any]) -> bool:
+        if self._supabase is None:
+            return False
+        try:
+            self._supabase.table(table).update(update).eq("id", row_id).execute()
+            return True
+        except Exception:
+            return False
 
     def _update_job(self, job_id: str, update: dict[str, Any]) -> None:
         if self._supabase is not None:

@@ -34,6 +34,16 @@ class NotFoundError(FileToolError):
         super().__init__(code="NOT_FOUND", message=message, status_code=404)
 
 
+class ConflictError(FileToolError):
+    def __init__(self, code: str = "CONFLICT", message: str = "Resource conflict."):
+        super().__init__(code=code, message=message, status_code=409)
+
+
+class GoneError(FileToolError):
+    def __init__(self, code: str = "GONE", message: str = "Resource is no longer available."):
+        super().__init__(code=code, message=message, status_code=410)
+
+
 class RateLimitError(FileToolError):
     def __init__(self, message: str = "Too many file generations. Try again shortly."):
         super().__init__(code="RATE_LIMITED", message=message, status_code=429)

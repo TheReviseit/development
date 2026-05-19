@@ -1,0 +1,225 @@
+# Page snapshot
+
+```yaml
+- generic [active] [ref=e1]:
+  - generic [ref=e2]:
+    - banner [ref=e3]:
+      - generic [ref=e4]:
+        - link "Flowauxi Tools home" [ref=e5] [cursor=pointer]:
+          - /url: /en/tools
+          - generic [ref=e7]: Flowauxi
+        - navigation "Tools" [ref=e9]:
+          - link "Merge PDF" [ref=e10] [cursor=pointer]:
+            - /url: /en/tools/merge-pdf
+            - generic [ref=e11]: Merge PDF
+          - link "Split PDF" [ref=e12] [cursor=pointer]:
+            - /url: /en/tools/split-pdf
+            - generic [ref=e13]: Split PDF
+          - link "Compress PDF" [ref=e14] [cursor=pointer]:
+            - /url: /en/tools/compress-pdf
+            - generic [ref=e15]: Compress PDF
+          - link "Convert PDF" [ref=e16] [cursor=pointer]:
+            - /url: /en/tools/text-to-pdf
+            - generic [ref=e17]: Convert PDF
+          - button "All tools" [ref=e19] [cursor=pointer]:
+            - generic [ref=e20]: All tools
+            - img [ref=e21]
+        - generic [ref=e24]:
+          - button "Language" [ref=e26] [cursor=pointer]:
+            - img [ref=e27]
+          - link "Login" [ref=e31] [cursor=pointer]:
+            - /url: /login
+          - link "Sign up" [ref=e32] [cursor=pointer]:
+            - /url: /signup
+    - main [ref=e34]:
+      - generic [ref=e35]:
+        - generic [ref=e36]:
+          - navigation "Current location" [ref=e37]:
+            - generic [ref=e38]:
+              - link "Tools" [ref=e39]:
+                - /url: /en/tools
+              - generic [ref=e40]: /
+            - generic [ref=e42]: Text to PDF
+          - generic [ref=e43]:
+            - heading "Text to PDF" [level=1] [ref=e44]
+            - generic [ref=e45]: Guest exports are private and expire automatically.
+        - generic [ref=e46]:
+          - generic [ref=e47]:
+            - region "Preview" [ref=e48]:
+              - generic [ref=e49]:
+                - generic [ref=e50]:
+                  - img [ref=e51]
+                  - text: Preview
+                - generic [ref=e54]: 1 page · 1 block
+              - article "PDF preview page 1" [ref=e59]:
+                - generic [ref=e61]:
+                  - paragraph
+            - region "Export PDF" [ref=e62]:
+              - generic [ref=e63]:
+                - generic [ref=e64]:
+                  - generic [ref=e65]: 17 / 50,000 chars
+                  - generic [ref=e66]: 1 page
+                - generic [ref=e67]: Saved
+              - generic [ref=e68]:
+                - button "Generate PDF" [disabled] [ref=e69]:
+                  - img [ref=e70]
+                  - text: Generate PDF
+                - generic [ref=e73]:
+                  - img [ref=e74]
+                  - text: Add text before generating a PDF.
+          - generic [ref=e76]:
+            - region "Editor" [ref=e78]:
+              - generic [ref=e79]:
+                - generic [ref=e80]:
+                  - img [ref=e81]
+                  - text: Editor
+                - generic "Text formatting" [ref=e83]:
+                  - button "Bold" [ref=e84]:
+                    - img [ref=e85]
+                  - button "Italic" [ref=e87]:
+                    - img [ref=e88]
+                  - button "Underline" [ref=e90]:
+                    - img [ref=e91]
+                  - button "Heading 1" [ref=e93]:
+                    - img [ref=e94]
+                  - button "Heading 2" [ref=e96]:
+                    - img [ref=e97]
+                  - button "Bullet list" [ref=e99]:
+                    - img [ref=e100]
+                  - button "Numbered list" [ref=e101]:
+                    - img [ref=e102]
+              - generic [ref=e105]:
+                - generic [ref=e106]:
+                  - generic [ref=e107]: Document title
+                  - textbox "Document title" [ref=e108]:
+                    - /placeholder: Untitled document
+                    - text: Untitled document
+                - generic "Paragraph alignment" [ref=e109]:
+                  - button "Align left" [pressed] [ref=e110]:
+                    - img [ref=e111]
+                  - button "Align center" [ref=e112]:
+                    - img [ref=e113]
+                  - button "Align right" [ref=e114]:
+                    - img [ref=e115]
+                  - button "Justify" [ref=e116]:
+                    - img [ref=e117]
+                  - button "Page break" [ref=e118]
+                - textbox "Text to convert into PDF" [ref=e119]:
+                  - /placeholder: Type something...
+            - region "Settings" [ref=e121]:
+              - generic [ref=e123]:
+                - img [ref=e124]
+                - text: Settings
+              - generic [ref=e127]:
+                - generic [ref=e128]:
+                  - generic [ref=e129]:
+                    - generic [ref=e130]: Page size
+                    - combobox "Page size" [ref=e131]:
+                      - option "A4" [selected]
+                      - option "Letter"
+                      - option "Legal"
+                  - generic [ref=e132]:
+                    - generic [ref=e133]: Orientation
+                    - combobox "Orientation" [ref=e134]:
+                      - option "Portrait" [selected]
+                      - option "Landscape"
+                  - generic [ref=e135]:
+                    - generic [ref=e136]: Font
+                    - combobox "Font" [ref=e137]:
+                      - option "Auto (Noto + HarfBuzz)" [selected]
+                      - option "Noto Sans"
+                      - option "Noto Sans Tamil"
+                      - option "Noto Sans Devanagari"
+                      - option "Noto Sans Malayalam"
+                      - option "Noto Sans Kannada"
+                      - option "Noto Sans Telugu"
+                      - option "Nirmala UI"
+                      - option "Arial Unicode"
+                      - option "Helvetica"
+                      - option "Times"
+                      - option "Courier"
+                  - generic [ref=e138]:
+                    - generic [ref=e139]: Font size
+                    - spinbutton "Font size" [ref=e140]: "12"
+                - generic [ref=e141]:
+                  - generic [ref=e142]: Margins
+                  - generic [ref=e143]:
+                    - button "Compact" [ref=e144]
+                    - button "Standard" [ref=e145]
+                    - button "Spacious" [ref=e146]
+                - generic [ref=e147]:
+                  - generic [ref=e148]:
+                    - generic [ref=e149]: Top
+                    - spinbutton "Top" [ref=e150]: "54"
+                  - generic [ref=e151]:
+                    - generic [ref=e152]: Right
+                    - spinbutton "Right" [ref=e153]: "54"
+                  - generic [ref=e154]:
+                    - generic [ref=e155]: Bottom
+                    - spinbutton "Bottom" [ref=e156]: "54"
+                  - generic [ref=e157]:
+                    - generic [ref=e158]: Left
+                    - spinbutton "Left" [ref=e159]: "54"
+                - generic [ref=e160]:
+                  - generic [ref=e161]: Line height
+                  - slider "Line height" [ref=e162]: "1.4"
+                - generic [ref=e163]:
+                  - generic [ref=e164]:
+                    - img [ref=e165]
+                    - text: Header
+                  - checkbox [ref=e168]
+                - generic [ref=e169]:
+                  - generic [ref=e170]:
+                    - img [ref=e171]
+                    - text: Footer
+                  - checkbox [ref=e173]
+            - region "History" [ref=e175]:
+              - generic [ref=e177]:
+                - img [ref=e178]
+                - text: History
+              - paragraph [ref=e182]: Sign in to keep document history across sessions.
+    - contentinfo [ref=e183]:
+      - generic [ref=e184]:
+        - generic [ref=e185]:
+          - link "Flowauxi Tools home" [ref=e186] [cursor=pointer]:
+            - /url: /en/tools
+            - generic [ref=e188]: Flowauxi
+          - paragraph [ref=e189]: Flowauxi Tools is a modern all-in-one workspace for PDFs, documents, images, and AI-powered file tools. Designed for speed, simplicity, and productivity, it helps users convert, compress, edit, organize, and optimize files effortlessly for everyday work.
+        - generic [ref=e190]:
+          - generic [ref=e191]:
+            - heading "Tools" [level=2] [ref=e192]
+            - link "Text to PDF" [ref=e193] [cursor=pointer]:
+              - /url: /en/tools/text-to-pdf
+            - link "Word to PDF" [ref=e194] [cursor=pointer]:
+              - /url: /en/tools/word-to-pdf
+            - link "Image to PDF" [ref=e195] [cursor=pointer]:
+              - /url: /en/tools/image-to-pdf
+          - generic [ref=e196]:
+            - heading "PDF" [level=2] [ref=e197]
+            - link "Merge PDF" [ref=e198] [cursor=pointer]:
+              - /url: /en/tools/merge-pdf
+            - link "Split PDF" [ref=e199] [cursor=pointer]:
+              - /url: /en/tools/split-pdf
+            - link "Compress PDF" [ref=e200] [cursor=pointer]:
+              - /url: /en/tools/compress-pdf
+          - generic [ref=e201]:
+            - heading "Workspace" [level=2] [ref=e202]
+            - link "Dashboard" [ref=e203] [cursor=pointer]:
+              - /url: /dashboard/files
+            - link "History" [ref=e204] [cursor=pointer]:
+              - /url: /dashboard/files/history
+            - link "Settings" [ref=e205] [cursor=pointer]:
+              - /url: /dashboard/files/settings
+      - generic [ref=e206]:
+        - generic [ref=e207]: © 2026 Flowauxi
+        - generic [ref=e208]:
+          - generic [ref=e209]:
+            - img [ref=e210]
+            - text: Private guest exports
+          - generic [ref=e213]:
+            - img [ref=e214]
+            - text: More tools rolling out
+  - button "Open Next.js Dev Tools" [ref=e222] [cursor=pointer]:
+    - img [ref=e223]
+  - alert [ref=e226]
+```

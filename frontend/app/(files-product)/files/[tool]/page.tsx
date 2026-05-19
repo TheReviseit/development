@@ -1,5 +1,6 @@
 import { notFound } from "next/navigation";
 import FileToolComingSoon from "@/components/file-tools/FileToolComingSoon";
+import VideoWhatsappConverterShell from "@/components/file-tools/VideoWhatsappConverterShell";
 import { getFileToolBySlug } from "@/lib/file-tools/tool-catalog";
 
 interface FileToolPlaceholderPageProps {
@@ -22,6 +23,10 @@ export default async function FileToolPlaceholderPage({ params }: FileToolPlaceh
   const { tool: slug } = await params;
   const tool = getFileToolBySlug(slug);
   if (!tool) notFound();
+
+  if (tool.slug === "video-converter-for-whatsapp") {
+    return <VideoWhatsappConverterShell basePath="/files" />;
+  }
 
   return <FileToolComingSoon tool={tool} backHref="/tools" />;
 }

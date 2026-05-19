@@ -29,6 +29,11 @@ web: gunicorn app:app --bind 0.0.0.0:$PORT --workers 4 --threads 4 --worker-clas
 # Windows fix: Use --pool=solo to avoid ValueError on Windows
 worker: celery -A celery_app worker --pool=solo -l info -Q high,default,low
 
+# Dedicated video workers. Run these as separate processes in production.
+video_ingest: celery -A celery_app worker -l info -Q video_ingest --concurrency=2 --prefetch-multiplier=1
+video: celery -A celery_app worker -l info -Q video --concurrency=1 --prefetch-multiplier=1
+ocr: celery -A celery_app worker -l info -Q ocr --concurrency=2 --prefetch-multiplier=1
+
 # Beat scheduler for periodic tasks (REQUIRED for outbox processing!)
 # This polls the outbox every 5 seconds to send pending messages
 beat: celery -A celery_app beat --loglevel=info

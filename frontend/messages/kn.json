@@ -82,7 +82,8 @@
         "comparePdf": "PDF ಹೋಲಿಸಿ",
         "aiSummarizer": "AI ಸಾರಾಂಶ",
         "translatePdf": "PDF ಅನುವಾದಿಸಿ",
-        "imageConverter": "ಚಿತ್ರ ಪರಿವರ್ತಕ"
+        "imageConverter": "ಚಿತ್ರ ಪರಿವರ್ತಕ",
+        "videoWhatsapp": "Video to WhatsApp"
       }
     },
     "mobile": {
@@ -317,6 +318,78 @@
         "tooLarge": "ಚಿತ್ರ ತುಂಬಾ ದೊಡ್ಡದು. ಮಿತಿ {size}.",
         "downloadFailed": "ಡೌನ್‌ಲೋಡ್ ವಿಫಲವಾಗಿದೆ. ಚಿತ್ರವನ್ನು ಮತ್ತೆ ಪರಿವರ್ತಿಸಿ."
       }
+    },
+    "videoWhatsapp": {
+      "toolbar": {
+        "currentLocation": "Current location",
+        "files": "Tools",
+        "title": "Video Converter for WhatsApp",
+        "authenticated": "Secure large-video conversion and history are active.",
+        "guest": "Guest video conversions are private and expire automatically."
+      },
+      "upload": {
+        "title": "Choose or drop videos",
+        "copy": "MOV, MP4, AVI, MKV, WebM, FLV, 3GP, MTS, or M4V up to {size}"
+      },
+      "queue": {
+        "aria": "Video conversion queue",
+        "empty": "Your video queue will appear here."
+      },
+      "settings": {
+        "panel": "Conversion settings",
+        "quality": "Quality preset",
+        "resolution": "Resolution",
+        "normalizeFps": "Normalize FPS",
+        "normalizeAudio": "Normalize audio",
+        "removeAudio": "Remove audio",
+        "bitrate": "Bitrate kbps",
+        "trimStart": "Trim start",
+        "trimEnd": "Trim end",
+        "endPlaceholder": "End"
+      },
+      "quality": {
+        "whatsapp": "WhatsApp",
+        "balanced": "Balanced",
+        "small": "Small",
+        "best": "Best"
+      },
+      "resolution": {
+        "original": "Original"
+      },
+      "actions": {
+        "convertAll": "Convert all",
+        "processing": "Processing {count}",
+        "convert": "Convert",
+        "cancel": "Cancel",
+        "retry": "Retry",
+        "download": "Download"
+      },
+      "progress": {
+        "upload": "Upload",
+        "conversion": "Conversion",
+        "eta": "ETA {eta}"
+      },
+      "stages": {
+        "queued": "Queued",
+        "assembling": "Assembling",
+        "converting": "Converting",
+        "succeeded": "Ready",
+        "cancelled": "Cancelled"
+      },
+      "status": {
+        "ready": "Ready",
+        "uploading": "Uploading",
+        "assembling": "Assembling",
+        "queued": "Queued",
+        "converting": "Converting",
+        "succeeded": "Ready",
+        "failed": "Failed",
+        "cancelled": "Cancelled"
+      },
+      "errors": {
+        "unsupported": "This video format is not supported.",
+        "tooLarge": "Video is too large. Limit is {size}."
+      }
     }
   },
   "tools": {
@@ -404,6 +477,10 @@
       "image_converter": {
         "name": "ಚಿತ್ರ ಪರಿವರ್ತಕ",
         "description": "JPG, PNG, WebP ಮತ್ತು ಬೆಂಬಲಿತ ಚಿತ್ರ ಫಾರ್ಮ್ಯಾಟ್‌ಗಳನ್ನು ಪರಿವರ್ತಿಸಿ."
+      },
+      "video_whatsapp_converter": {
+        "name": "Video Converter for WhatsApp",
+        "description": "Convert MOV, MP4, WebM, MKV, and other videos into WhatsApp-friendly MP4 files."
       }
     }
   },
@@ -426,7 +503,20 @@
     "imageConversionTimeout": "ಚಿತ್ರ ಪರಿವರ್ತನೆ ಹೆಚ್ಚು ಸಮಯ ತೆಗೆದುಕೊಂಡಿತು. ಚಿಕ್ಕ ಚಿತ್ರ ಪ್ರಯತ್ನಿಸಿ.",
     "imageOutputTooLarge": "ಪರಿವರ್ತಿಸಿದ ಚಿತ್ರ ತುಂಬಾ ದೊಡ್ಡದು.",
     "imageConversionFailed": "ಚಿತ್ರ ಪರಿವರ್ತನೆ ವಿಫಲವಾಗಿದೆ.",
-    "imageStorageUnavailable": "ಚಿತ್ರ ಪರಿವರ್ತಿಸಲಾಗಿದೆ, ಆದರೆ ಸುರಕ್ಷಿತ ಡೌನ್‌ಲೋಡ್ ಸಂಗ್ರಹಣೆ ತಾತ್ಕಾಲಿಕವಾಗಿ ಲಭ್ಯವಿಲ್ಲ."
+    "imageStorageUnavailable": "ಚಿತ್ರ ಪರಿವರ್ತಿಸಲಾಗಿದೆ, ಆದರೆ ಸುರಕ್ಷಿತ ಡೌನ್‌ಲೋಡ್ ಸಂಗ್ರಹಣೆ ತಾತ್ಕಾಲಿಕವಾಗಿ ಲಭ್ಯವಿಲ್ಲ.",
+    "videoTooLarge": "Video file is too large.",
+    "unsupportedVideoFormat": "This video format is not supported.",
+    "invalidVideoFile": "The uploaded file is not a valid readable video.",
+    "videoDurationTooLong": "Video duration is longer than the allowed limit.",
+    "videoQueueUnavailable": "Video workers are temporarily unavailable. Please try again shortly.",
+    "ffmpegUnavailable": "Video conversion is not configured on this server: ffmpeg is missing.",
+    "ffprobeUnavailable": "Video conversion is not configured on this server: ffprobe is missing.",
+    "videoConversionFailed": "Video conversion failed.",
+    "videoConversionTimeout": "Video conversion took too long. Try a shorter or smaller video.",
+    "videoAssemblyTimeout": "Video upload assembly took too long. Please retry the upload.",
+    "videoOutputValidationFailed": "The converted video did not pass compatibility validation.",
+    "videoUploadExpired": "The upload session expired. Please upload the video again.",
+    "videoChunkConflict": "A different chunk was already uploaded for this video."
   },
   "validation": {},
   "dashboard": {},
@@ -443,6 +533,10 @@
     "imageConverter": {
       "title": "ಚಿತ್ರ ಪರಿವರ್ತಕ | Flowauxi Tools",
       "description": "Flowauxi Tools ಬಳಸಿ JPG, PNG, WebP ಮತ್ತು ಬೆಂಬಲಿತ ಚಿತ್ರ ಫಾರ್ಮ್ಯಾಟ್‌ಗಳನ್ನು ಪರಿವರ್ತಿಸಿ."
+    },
+    "videoWhatsapp": {
+      "title": "Video Converter for WhatsApp | Flowauxi Tools",
+      "description": "Convert videos into WhatsApp-friendly MP4 files with Flowauxi Tools."
     }
   },
   "seo": {}

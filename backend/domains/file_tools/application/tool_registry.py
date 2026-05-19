@@ -7,7 +7,7 @@ from typing import Any
 
 from ..converters.image_converter.pillow_converter import PillowImageConverter
 from ..converters.text_to_pdf.reportlab_converter import ReportLabTextToPdfConverter
-from ..domain.policies import IMAGE_CONVERSION_LIMITS, TEXT_TO_PDF_LIMITS
+from ..domain.policies import IMAGE_CONVERSION_LIMITS, OCR_LIMITS, TEXT_TO_PDF_LIMITS, VIDEO_CONVERSION_LIMITS
 from ..validators.image_converter_validator import ImageConverterValidator
 from ..validators.text_to_pdf_validator import TextToPdfValidator
 
@@ -57,6 +57,39 @@ class ToolRegistry:
                     "authenticatedMaxMegapixels": IMAGE_CONVERSION_LIMITS.authenticated_max_megapixels,
                     "maxOutputBytes": IMAGE_CONVERSION_LIMITS.max_output_bytes,
                     "conversionTimeoutSeconds": IMAGE_CONVERSION_LIMITS.conversion_timeout_seconds,
+                },
+            ),
+            "ocr": FileToolDefinition(
+                key="ocr",
+                name="OCR",
+                description="Extract text from image documents with local Tesseract OCR.",
+                category="ai",
+                execution="async",
+                converter=None,
+                validator=None,
+                limits={
+                    "guestMaxInputBytes": OCR_LIMITS.guest_max_input_bytes,
+                    "authenticatedMaxInputBytes": OCR_LIMITS.authenticated_max_input_bytes,
+                    "guestMaxMegapixels": OCR_LIMITS.guest_max_megapixels,
+                    "authenticatedMaxMegapixels": OCR_LIMITS.authenticated_max_megapixels,
+                    "timeoutSeconds": OCR_LIMITS.timeout_seconds,
+                },
+            ),
+            "video_whatsapp_converter": FileToolDefinition(
+                key="video_whatsapp_converter",
+                name="Video Converter for WhatsApp",
+                description="Convert videos to mobile-friendly MP4 with H.264, AAC, and fast-start playback.",
+                category="convert",
+                execution="async",
+                converter=None,
+                validator=None,
+                limits={
+                    "guestMaxInputBytes": VIDEO_CONVERSION_LIMITS.guest_max_input_bytes,
+                    "authenticatedMaxInputBytes": VIDEO_CONVERSION_LIMITS.authenticated_max_input_bytes,
+                    "guestMaxDurationSeconds": VIDEO_CONVERSION_LIMITS.guest_max_duration_seconds,
+                    "authenticatedMaxDurationSeconds": VIDEO_CONVERSION_LIMITS.authenticated_max_duration_seconds,
+                    "defaultChunkSizeBytes": VIDEO_CONVERSION_LIMITS.default_chunk_size_bytes,
+                    "maxChunkSizeBytes": VIDEO_CONVERSION_LIMITS.max_chunk_size_bytes,
                 },
             ),
         }

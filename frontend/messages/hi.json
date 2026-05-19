@@ -82,7 +82,8 @@
         "comparePdf": "PDF तुलना करें",
         "aiSummarizer": "AI सारांश",
         "translatePdf": "PDF अनुवाद करें",
-        "imageConverter": "इमेज कन्वर्टर"
+        "imageConverter": "इमेज कन्वर्टर",
+        "videoWhatsapp": "Video to WhatsApp"
       }
     },
     "mobile": {
@@ -317,6 +318,78 @@
         "tooLarge": "इमेज बहुत बड़ी है. सीमा {size} है.",
         "downloadFailed": "डाउनलोड विफल रहा. कृपया इमेज फिर से कन्वर्ट करें."
       }
+    },
+    "videoWhatsapp": {
+      "toolbar": {
+        "currentLocation": "Current location",
+        "files": "Tools",
+        "title": "Video Converter for WhatsApp",
+        "authenticated": "Secure large-video conversion and history are active.",
+        "guest": "Guest video conversions are private and expire automatically."
+      },
+      "upload": {
+        "title": "Choose or drop videos",
+        "copy": "MOV, MP4, AVI, MKV, WebM, FLV, 3GP, MTS, or M4V up to {size}"
+      },
+      "queue": {
+        "aria": "Video conversion queue",
+        "empty": "Your video queue will appear here."
+      },
+      "settings": {
+        "panel": "Conversion settings",
+        "quality": "Quality preset",
+        "resolution": "Resolution",
+        "normalizeFps": "Normalize FPS",
+        "normalizeAudio": "Normalize audio",
+        "removeAudio": "Remove audio",
+        "bitrate": "Bitrate kbps",
+        "trimStart": "Trim start",
+        "trimEnd": "Trim end",
+        "endPlaceholder": "End"
+      },
+      "quality": {
+        "whatsapp": "WhatsApp",
+        "balanced": "Balanced",
+        "small": "Small",
+        "best": "Best"
+      },
+      "resolution": {
+        "original": "Original"
+      },
+      "actions": {
+        "convertAll": "Convert all",
+        "processing": "Processing {count}",
+        "convert": "Convert",
+        "cancel": "Cancel",
+        "retry": "Retry",
+        "download": "Download"
+      },
+      "progress": {
+        "upload": "Upload",
+        "conversion": "Conversion",
+        "eta": "ETA {eta}"
+      },
+      "stages": {
+        "queued": "Queued",
+        "assembling": "Assembling",
+        "converting": "Converting",
+        "succeeded": "Ready",
+        "cancelled": "Cancelled"
+      },
+      "status": {
+        "ready": "Ready",
+        "uploading": "Uploading",
+        "assembling": "Assembling",
+        "queued": "Queued",
+        "converting": "Converting",
+        "succeeded": "Ready",
+        "failed": "Failed",
+        "cancelled": "Cancelled"
+      },
+      "errors": {
+        "unsupported": "This video format is not supported.",
+        "tooLarge": "Video is too large. Limit is {size}."
+      }
     }
   },
   "tools": {
@@ -404,6 +477,10 @@
       "image_converter": {
         "name": "इमेज कन्वर्टर",
         "description": "JPG, PNG, WebP, और समर्थित इमेज फॉर्मेट कन्वर्ट करें."
+      },
+      "video_whatsapp_converter": {
+        "name": "Video Converter for WhatsApp",
+        "description": "Convert MOV, MP4, WebM, MKV, and other videos into WhatsApp-friendly MP4 files."
       }
     }
   },
@@ -426,7 +503,20 @@
     "imageConversionTimeout": "इमेज कन्वर्जन में बहुत समय लगा. छोटी इमेज आज़माएं.",
     "imageOutputTooLarge": "कन्वर्ट की गई इमेज बहुत बड़ी है.",
     "imageConversionFailed": "इमेज कन्वर्जन विफल रहा.",
-    "imageStorageUnavailable": "इमेज कन्वर्ट हो गई, लेकिन सुरक्षित डाउनलोड स्टोरेज अस्थायी रूप से उपलब्ध नहीं है."
+    "imageStorageUnavailable": "इमेज कन्वर्ट हो गई, लेकिन सुरक्षित डाउनलोड स्टोरेज अस्थायी रूप से उपलब्ध नहीं है.",
+    "videoTooLarge": "Video file is too large.",
+    "unsupportedVideoFormat": "This video format is not supported.",
+    "invalidVideoFile": "The uploaded file is not a valid readable video.",
+    "videoDurationTooLong": "Video duration is longer than the allowed limit.",
+    "videoQueueUnavailable": "Video workers are temporarily unavailable. Please try again shortly.",
+    "ffmpegUnavailable": "Video conversion is not configured on this server: ffmpeg is missing.",
+    "ffprobeUnavailable": "Video conversion is not configured on this server: ffprobe is missing.",
+    "videoConversionFailed": "Video conversion failed.",
+    "videoConversionTimeout": "Video conversion took too long. Try a shorter or smaller video.",
+    "videoAssemblyTimeout": "Video upload assembly took too long. Please retry the upload.",
+    "videoOutputValidationFailed": "The converted video did not pass compatibility validation.",
+    "videoUploadExpired": "The upload session expired. Please upload the video again.",
+    "videoChunkConflict": "A different chunk was already uploaded for this video."
   },
   "validation": {},
   "dashboard": {},
@@ -443,6 +533,10 @@
     "imageConverter": {
       "title": "इमेज कन्वर्टर | Flowauxi Tools",
       "description": "Flowauxi Tools से JPG, PNG, WebP, और समर्थित इमेज फॉर्मेट कन्वर्ट करें."
+    },
+    "videoWhatsapp": {
+      "title": "Video Converter for WhatsApp | Flowauxi Tools",
+      "description": "Convert videos into WhatsApp-friendly MP4 files with Flowauxi Tools."
     }
   },
   "seo": {}

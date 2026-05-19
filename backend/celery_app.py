@@ -50,6 +50,8 @@ try:
             "tasks.messaging_tasks",  # Instagram/WhatsApp omni-channel messaging
             "tasks.auth_sync_jobs",  # Auth sync durable background jobs
             "tasks.whatsapp_connection",  # WhatsApp connection v2 cleanup/sync
+            "tasks.file_tools_video",  # File Tools video upload assembly and conversion
+            "tasks.file_tools_ocr",  # File Tools OCR extraction
         ]
     )
     
@@ -73,6 +75,9 @@ except Exception as e:
 default_exchange = Exchange("default", type="direct")
 high_priority_exchange = Exchange("high", type="direct")
 low_priority_exchange = Exchange("low", type="direct")
+video_ingest_exchange = Exchange("video_ingest", type="direct")
+video_exchange = Exchange("video", type="direct")
+ocr_exchange = Exchange("ocr", type="direct")
 
 # Define queues
 celery_app.conf.task_queues = (
@@ -84,6 +89,15 @@ celery_app.conf.task_queues = (
     
     # Low priority: Background analytics, reports (30+ seconds OK)
     Queue("low", low_priority_exchange, routing_key="low"),
+
+    # Video ingest: chunk assembly and source-object validation
+    Queue("video_ingest", video_ingest_exchange, routing_key="video_ingest"),
+
+    # Video conversion: CPU-bound FFmpeg workloads isolated from app traffic
+    Queue("video", video_exchange, routing_key="video"),
+
+    # OCR extraction: CPU-bound Tesseract workloads isolated from app traffic
+    Queue("ocr", ocr_exchange, routing_key="ocr"),
 )
 
 celery_app.conf.task_default_queue = "default"
@@ -157,6 +171,11 @@ celery_app.conf.task_routes = {
     # WhatsApp connection v2 lifecycle tasks
     "whatsapp_connection.cleanup": {"queue": "low"},
     "whatsapp_connection.sync_account": {"queue": "default"},
+
+    # File Tools video converter
+    "file_tools.video.assemble_upload": {"queue": "video_ingest"},
+    "file_tools.video.convert": {"queue": "video"},
+    "file_tools.ocr.extract": {"queue": "ocr"},
 }
 
 # =============================================================================
@@ -189,6 +208,18 @@ celery_app.conf.task_annotations = {
     },
     "tasks.messaging.send_bulk_message": {
         "rate_limit": "10/s",  # Rate limit bulk operations
+    },
+    "file_tools.video.assemble_upload": {
+        "soft_time_limit": int(os.getenv("FILE_TOOLS_VIDEO_ASSEMBLY_SOFT_TIME_LIMIT", "1800")),
+        "time_limit": int(os.getenv("FILE_TOOLS_VIDEO_ASSEMBLY_TIME_LIMIT", "2100")),
+    },
+    "file_tools.video.convert": {
+        "soft_time_limit": int(os.getenv("FILE_TOOLS_VIDEO_CONVERSION_SOFT_TIME_LIMIT", "5400")),
+        "time_limit": int(os.getenv("FILE_TOOLS_VIDEO_CONVERSION_TIME_LIMIT", "5700")),
+    },
+    "file_tools.ocr.extract": {
+        "soft_time_limit": int(os.getenv("FILES_OCR_SOFT_TIME_LIMIT", "180")),
+        "time_limit": int(os.getenv("FILES_OCR_TIME_LIMIT", "240")),
     },
 }
 

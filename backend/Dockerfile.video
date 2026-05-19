@@ -1,0 +1,23 @@
+FROM python:3.11.6-slim-bookworm
+
+ARG FFMPEG_DEBIAN_VERSION=7:5.1.7-0+deb12u1
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    FFMPEG_BINARY=/usr/bin/ffmpeg \
+    FFPROBE_BINARY=/usr/bin/ffprobe
+
+WORKDIR /app
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends ca-certificates ffmpeg=${FFMPEG_DEBIAN_VERSION} \
+    && ffmpeg -version \
+    && ffprobe -version \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+COPY . .
+
+CMD ["celery", "-A", "celery_app", "worker", "--loglevel=info", "-Q", "video", "--concurrency=1", "--prefetch-multiplier=1"]

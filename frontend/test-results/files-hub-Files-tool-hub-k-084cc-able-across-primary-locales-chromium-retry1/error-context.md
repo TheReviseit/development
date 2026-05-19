@@ -1,0 +1,207 @@
+# Page snapshot
+
+```yaml
+- generic [ref=e2]:
+  - banner [ref=e3]:
+    - generic [ref=e4]:
+      - link "Flowauxi ഉപകരണങ്ങൾ ഹോം" [ref=e5] [cursor=pointer]:
+        - /url: /ml/tools
+        - generic [ref=e7]: Flowauxi
+      - navigation "ഉപകരണങ്ങൾ" [ref=e9]:
+        - link "PDF ചേർക്കുക" [ref=e10] [cursor=pointer]:
+          - /url: /ml/tools/merge-pdf
+          - generic [ref=e11]: PDF ചേർക്കുക
+        - link "PDF വിഭജിക്കുക" [ref=e12] [cursor=pointer]:
+          - /url: /ml/tools/split-pdf
+          - generic [ref=e13]: PDF വിഭജിക്കുക
+        - link "PDF ചുരുക്കുക" [ref=e14] [cursor=pointer]:
+          - /url: /ml/tools/compress-pdf
+          - generic [ref=e15]: PDF ചുരുക്കുക
+        - link "PDF മാറ്റുക" [ref=e16] [cursor=pointer]:
+          - /url: /ml/tools/text-to-pdf
+          - generic [ref=e17]: PDF മാറ്റുക
+        - button "എല്ലാ ഉപകരണങ്ങൾ" [ref=e18] [cursor=pointer]:
+          - generic [ref=e19]: എല്ലാ ഉപകരണങ്ങൾ
+          - img [ref=e20]
+      - generic [ref=e24]:
+        - button "ഭാഷ" [ref=e26] [cursor=pointer]:
+          - img [ref=e27]
+        - link "ലോഗിൻ" [ref=e31] [cursor=pointer]:
+          - /url: /login
+        - link "സൈൻ അപ്പ്" [ref=e32] [cursor=pointer]:
+          - /url: /signup
+  - main [ref=e34]:
+    - generic [ref=e35]:
+      - generic [ref=e37]:
+        - heading "PDFകളുമായി പ്രവർത്തിക്കാൻ വേണ്ട എല്ലാ ടൂളുകളും ഒരിടത്ത്" [level=1] [ref=e38]
+        - paragraph [ref=e39]: PDFകൾ ചേർക്കാനും വിഭജിക്കാനും ചുരുക്കാനും മാറ്റാനും സംരക്ഷിക്കാനും ഒപ്പിടാനും ക്രമീകരിക്കാനും വേഗത്തിലുള്ള ടൂളുകൾ.
+      - navigation "ഉപകരണ വിഭാഗങ്ങൾ" [ref=e40]:
+        - generic "എല്ലാം" [ref=e41]:
+          - generic [ref=e42]: എല്ലാം
+        - generic "വർക്ക്ഫ്ലോകൾ" [ref=e43]:
+          - generic [ref=e44]: ഫ്ലോ
+        - generic "PDF ക്രമീകരിക്കുക" [ref=e45]:
+          - generic [ref=e46]: ക്രമം
+        - generic "PDF മെച്ചപ്പെടുത്തുക" [ref=e47]:
+          - generic [ref=e48]: മെച്ചം
+        - generic "PDF മാറ്റുക" [ref=e49]:
+          - generic [ref=e50]: മാറ്റുക
+        - generic "PDF തിരുത്തുക" [ref=e51]:
+          - generic [ref=e52]: എഡിറ്റ്
+        - generic "PDF സുരക്ഷ" [ref=e53]:
+          - generic [ref=e54]: രക്ഷ
+        - generic "PDF ഇന്റലിജൻസ്" [ref=e55]:
+          - generic [ref=e56]: AI PDF
+      - region "ഉപകരണങ്ങൾ" [ref=e57]:
+        - link "ടെക്സ്റ്റിൽ നിന്ന് PDF തുറക്കുക" [ref=e58] [cursor=pointer]:
+          - /url: /ml/tools/text-to-pdf
+          - img [ref=e60]
+          - heading "ടെക്സ്റ്റിൽ നിന്ന് PDF" [level=2] [ref=e63]
+          - paragraph [ref=e64]: റിച്ച് ടെക്സ്റ്റ്, ലിസ്റ്റുകൾ, ചിഹ്നങ്ങൾ, ഫോർമാറ്റുചെയ്ത ഉള്ളടക്കം എന്നിവയിൽ നിന്ന് മിനുക്കിയ PDFകൾ സൃഷ്ടിക്കുക.
+        - link "PDF ചേർക്കുക തുറക്കുക" [ref=e65] [cursor=pointer]:
+          - /url: /ml/tools/merge-pdf
+          - img [ref=e67]
+          - heading "PDF ചേർക്കുക" [level=2] [ref=e71]
+          - paragraph [ref=e72]: PDFകൾ നിങ്ങൾക്ക് വേണ്ട ക്രമത്തിൽ ചേർക്കുക.
+        - link "PDF വിഭജിക്കുക തുറക്കുക" [ref=e73] [cursor=pointer]:
+          - /url: /ml/tools/split-pdf
+          - img [ref=e75]
+          - heading "PDF വിഭജിക്കുക" [level=2] [ref=e79]
+          - paragraph [ref=e80]: ഒരു പേജ് അല്ലെങ്കിൽ പേജ് ശ്രേണി വേർതിരിച്ച PDF ഫയലുകളാക്കുക.
+        - link "PDF ചുരുക്കുക തുറക്കുക" [ref=e81] [cursor=pointer]:
+          - /url: /ml/tools/compress-pdf
+          - img [ref=e83]
+          - heading "PDF ചുരുക്കുക" [level=2] [ref=e88]
+          - paragraph [ref=e89]: ഗുണനിലവാരം നിലനിർത്തി PDF ഫയൽ വലുപ്പം കുറയ്ക്കുക.
+        - link "PDFൽ നിന്ന് Word തുറക്കുക" [ref=e90] [cursor=pointer]:
+          - /url: /ml/tools/pdf-to-word
+          - generic [ref=e92]: W
+          - heading "PDFൽ നിന്ന് Word" [level=2] [ref=e93]
+          - paragraph [ref=e94]: PDF ഫയലുകൾ എഡിറ്റ് ചെയ്യാവുന്ന DOC, DOCX ഡോക്യുമെന്റുകളാക്കി മാറ്റുക.
+        - link "PDFൽ നിന്ന് PowerPoint തുറക്കുക" [ref=e95] [cursor=pointer]:
+          - /url: /ml/tools/pdf-to-powerpoint
+          - generic [ref=e97]: P
+          - heading "PDFൽ നിന്ന് PowerPoint" [level=2] [ref=e98]
+          - paragraph [ref=e99]: PDF ഫയലുകൾ എഡിറ്റ് ചെയ്യാവുന്ന PPT, PPTX സ്ലൈഡുകളാക്കി മാറ്റുക.
+        - link "PDFൽ നിന്ന് Excel തുറക്കുക" [ref=e100] [cursor=pointer]:
+          - /url: /ml/tools/pdf-to-excel
+          - generic [ref=e102]: X
+          - heading "PDFൽ നിന്ന് Excel" [level=2] [ref=e103]
+          - paragraph [ref=e104]: PDFകളിൽ നിന്ന് പട്ടികകളും ഡാറ്റയും സ്പ്രെഡ്ഷീറ്റുകളിലേക്ക് എടുക്കുക.
+        - link "Wordൽ നിന്ന് PDF തുറക്കുക" [ref=e105] [cursor=pointer]:
+          - /url: /ml/tools/word-to-pdf
+          - generic [ref=e107]: W
+          - heading "Wordൽ നിന്ന് PDF" [level=2] [ref=e108]
+          - paragraph [ref=e109]: DOC, DOCX ഫയലുകൾ പങ്കിടാൻ തയ്യാറായ PDF ആക്കുക.
+        - link "PowerPointൽ നിന്ന് PDF തുറക്കുക" [ref=e110] [cursor=pointer]:
+          - /url: /ml/tools/powerpoint-to-pdf
+          - generic [ref=e112]: P
+          - heading "PowerPointൽ നിന്ന് PDF" [level=2] [ref=e113]
+          - paragraph [ref=e114]: പ്രസന്റേഷൻ സ്ലൈഡുകൾ PDF ആക്കുക.
+        - link "Excelൽ നിന്ന് PDF തുറക്കുക" [ref=e115] [cursor=pointer]:
+          - /url: /ml/tools/excel-to-pdf
+          - generic [ref=e117]: X
+          - heading "Excelൽ നിന്ന് PDF" [level=2] [ref=e118]
+          - paragraph [ref=e119]: സ്പ്രെഡ്ഷീറ്റുകൾ വായിക്കാൻ എളുപ്പമുള്ള PDF ആയി എക്സ്പോർട്ട് ചെയ്യുക.
+        - link "PDF തിരുത്തുക തുറക്കുക" [ref=e120] [cursor=pointer]:
+          - /url: /ml/tools/edit-pdf
+          - img [ref=e122]
+          - heading "PDF തിരുത്തുക" [level=2] [ref=e125]
+          - paragraph [ref=e126]: PDFയിൽ ടെക്സ്റ്റ്, ചിത്രങ്ങൾ, ആകൃതികൾ, ഹൈലൈറ്റുകൾ, കുറിപ്പുകൾ ചേർക്കുക.
+        - link "ഇമേജ് കൺവേർട്ടർ തുറക്കുക" [ref=e127] [cursor=pointer]:
+          - /url: /ml/tools/image-converter
+          - img [ref=e129]
+          - heading "ഇമേജ് കൺവേർട്ടർ" [level=2] [ref=e134]
+          - paragraph [ref=e135]: JPG, PNG, WebP, പിന്തുണയ്ക്കുന്ന ഇമേജ് ഫോർമാറ്റുകൾ മാറ്റുക.
+        - link "ചിത്രത്തിൽ നിന്ന് PDF തുറക്കുക" [ref=e136] [cursor=pointer]:
+          - /url: /ml/tools/image-to-pdf
+          - img [ref=e138]
+          - heading "ചിത്രത്തിൽ നിന്ന് PDF" [level=2] [ref=e143]
+          - paragraph [ref=e144]: JPG, PNG, സ്കാൻ ചിത്രങ്ങൾ ക്രമപ്പെടുത്തിയ PDF ആക്കുക.
+        - link "PDFൽ നിന്ന് ചിത്രം തുറക്കുക" [ref=e145] [cursor=pointer]:
+          - /url: /ml/tools/pdf-to-image
+          - img [ref=e147]
+          - heading "PDFൽ നിന്ന് ചിത്രം" [level=2] [ref=e152]
+          - paragraph [ref=e153]: PDF പേജുകൾ ഉയർന്ന ഗുണമേന്മയുള്ള ചിത്രങ്ങളായി എക്സ്പോർട്ട് ചെയ്യുക.
+        - link "PDF തിരിക്കുക തുറക്കുക" [ref=e154] [cursor=pointer]:
+          - /url: /ml/tools/rotate-pdf
+          - img [ref=e156]
+          - heading "PDF തിരിക്കുക" [level=2] [ref=e159]
+          - paragraph [ref=e160]: ഒരു പേജ് അല്ലെങ്കിൽ എല്ലാ പേജുകളും തിരിച്ച് ശരിയാക്കിയ PDF സേവ് ചെയ്യുക.
+        - link "PDF തുറക്കുക തുറക്കുക" [ref=e161] [cursor=pointer]:
+          - /url: /ml/tools/unlock-pdf
+          - img [ref=e163]
+          - heading "PDF തുറക്കുക" [level=2] [ref=e168]
+          - paragraph [ref=e169]: നിങ്ങൾക്ക് സ്വന്തമായ ഫയലുകളിലെ നിയന്ത്രണങ്ങൾ നീക്കുക.
+        - link "PDF വാട്ടർമാർക്ക് തുറക്കുക" [ref=e170] [cursor=pointer]:
+          - /url: /ml/tools/watermark-pdf
+          - img [ref=e172]
+          - heading "PDF വാട്ടർമാർക്ക്" [level=2] [ref=e175]
+          - paragraph [ref=e176]: PDF പേജുകളിൽ ടെക്സ്റ്റ് അല്ലെങ്കിൽ ചിത്രം വാട്ടർമാർക്ക് ചേർക്കുക.
+        - link "PDF സംരക്ഷിക്കുക തുറക്കുക" [ref=e177] [cursor=pointer]:
+          - /url: /ml/tools/protect-pdf
+          - img [ref=e179]
+          - heading "PDF സംരക്ഷിക്കുക" [level=2] [ref=e184]
+          - paragraph [ref=e185]: സെൻസിറ്റീവ് PDFകൾക്ക് പാസ്‌വേഡ് സുരക്ഷയും ആക്സസ് നിയന്ത്രണങ്ങളും ചേർക്കുക.
+        - link "PDF ഒപ്പിടുക തുറക്കുക" [ref=e186] [cursor=pointer]:
+          - /url: /ml/tools/sign-pdf
+          - img [ref=e188]
+          - heading "PDF ഒപ്പിടുക" [level=2] [ref=e191]
+          - paragraph [ref=e192]: ഒപ്പിടൽ, അംഗീകാര വർക്ക്ഫ്ലോകൾക്കായി ഡോക്യുമെന്റുകൾ തയ്യാറാക്കുക.
+        - link "OCR തുറക്കുക" [ref=e193] [cursor=pointer]:
+          - /url: /ml/tools/ocr
+          - img [ref=e195]
+          - heading "OCR" [level=2] [ref=e200]
+          - paragraph [ref=e201]: സ്കാൻ ഡോക്യുമെന്റുകളിൽ നിന്ന് ടെക്സ്റ്റ് തിരിച്ചറിഞ്ഞ് തിരയാവുന്നതാക്കുക.
+        - link "HTMLൽ നിന്ന് PDF തുറക്കുക" [ref=e202] [cursor=pointer]:
+          - /url: /ml/tools/html-to-pdf
+          - img [ref=e204]
+          - heading "HTMLൽ നിന്ന് PDF" [level=2] [ref=e207]
+          - paragraph [ref=e208]: വെബ് പേജുകൾ, ഇൻവോയിസുകൾ, HTML ഉള്ളടക്കം വിശ്വസനീയമായ PDF ആക്കുക.
+        - link "Video Converter for WhatsApp തുറക്കുക" [ref=e209] [cursor=pointer]:
+          - /url: /ml/tools/video-converter-for-whatsapp
+          - img [ref=e211]
+          - heading "Video Converter for WhatsApp" [level=2] [ref=e214]
+          - paragraph [ref=e215]: Convert MOV, MP4, WebM, MKV, and other videos into WhatsApp-friendly MP4 files.
+  - contentinfo [ref=e216]:
+    - generic [ref=e217]:
+      - generic [ref=e218]:
+        - link "Flowauxi ഉപകരണങ്ങൾ ഹോം" [ref=e219] [cursor=pointer]:
+          - /url: /ml/tools
+          - generic [ref=e221]: Flowauxi
+        - paragraph [ref=e222]: PDF, ഡോക്യുമെന്റുകൾ, ചിത്രങ്ങൾ, AI ഫയൽ ജോലികൾ എന്നിവയ്ക്കുള്ള ആധുനിക ഏകീകൃത വർക്സ്പേസാണ് Flowauxi ഉപകരണങ്ങൾ. വേഗം, ലാളിത്യം, ഉൽപ്പാദനക്ഷമത എന്നിവയ്ക്കായി രൂപകൽപ്പന ചെയ്തത്.
+      - generic [ref=e223]:
+        - generic [ref=e224]:
+          - heading "ഉപകരണങ്ങൾ" [level=2] [ref=e225]
+          - link "ടെക്സ്റ്റിൽ നിന്ന് PDF" [ref=e226] [cursor=pointer]:
+            - /url: /ml/tools/text-to-pdf
+          - link "Wordൽ നിന്ന് PDF" [ref=e227] [cursor=pointer]:
+            - /url: /ml/tools/word-to-pdf
+          - link "ചിത്രത്തിൽ നിന്ന് PDF" [ref=e228] [cursor=pointer]:
+            - /url: /ml/tools/image-to-pdf
+        - generic [ref=e229]:
+          - heading "PDF" [level=2] [ref=e230]
+          - link "PDF ചേർക്കുക" [ref=e231] [cursor=pointer]:
+            - /url: /ml/tools/merge-pdf
+          - link "PDF വിഭജിക്കുക" [ref=e232] [cursor=pointer]:
+            - /url: /ml/tools/split-pdf
+          - link "PDF ചുരുക്കുക" [ref=e233] [cursor=pointer]:
+            - /url: /ml/tools/compress-pdf
+        - generic [ref=e234]:
+          - heading "വർക്സ്പേസ്" [level=2] [ref=e235]
+          - link "ഡാഷ്ബോർഡ്" [ref=e236] [cursor=pointer]:
+            - /url: /dashboard/files
+          - link "ചരിത്രം" [ref=e237] [cursor=pointer]:
+            - /url: /dashboard/files/history
+          - link "ക്രമീകരണങ്ങൾ" [ref=e238] [cursor=pointer]:
+            - /url: /dashboard/files/settings
+    - generic [ref=e239]:
+      - generic [ref=e240]: © 2026 Flowauxi
+      - generic [ref=e241]:
+        - generic [ref=e242]:
+          - img [ref=e243]
+          - text: സ്വകാര്യ ഗസ്റ്റ് എക്സ്പോർട്ടുകൾ
+        - generic [ref=e246]:
+          - img [ref=e247]
+          - text: കൂടുതൽ ഉപകരണങ്ങൾ വരുന്നു
+```

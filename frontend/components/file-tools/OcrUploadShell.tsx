@@ -1,0 +1,559 @@
+"use client";
+
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import Link from "next/link";
+import {
+  AlertCircle,
+  CheckCircle2,
+  Copy,
+  Download,
+  FileJson,
+  FileText,
+  ImagePlus,
+  Loader2,
+  RotateCcw,
+  ScanText,
+  Sparkles,
+  Trash2,
+  UploadCloud,
+} from "lucide-react";
+import {
+  deleteOcrJob,
+  FileToolsApiError,
+  getOcrJob,
+  getOcrJson,
+  getOcrText,
+  retryOcrJob,
+  uploadOcrImage,
+} from "@/lib/file-tools/api-client";
+import type { OcrJob, OcrJsonResponse, OcrStatus } from "@/lib/file-tools/contracts";
+import styles from "./ocr-upload-shell.module.css";
+
+interface OcrUploadShellProps {
+  basePath?: string;
+}
+
+type OcrView = "layout" | "plain" | "json";
+type CopyState = "idle" | "copied" | "error";
+
+const ACTIVE_STATUSES = new Set<OcrStatus>([
+  "created",
+  "quarantined",
+  "queued",
+  "preprocessing",
+  "extracting",
+  "merging",
+  "exporting",
+]);
+
+const ACCEPTED_TYPES = [
+  "image/png",
+  "image/jpeg",
+  "image/webp",
+  "image/tiff",
+  "image/bmp",
+].join(",");
+
+const ACCEPTED_EXTENSIONS = new Set([".png", ".jpg", ".jpeg", ".webp", ".tif", ".tiff", ".bmp"]);
+const ACCEPTED_MIME_TYPES = new Set(ACCEPTED_TYPES.split(","));
+const UNSUPPORTED_IMAGE_MESSAGE = "OCR supports PNG, JPG, WebP, TIFF, and BMP images. PDF and HEIC OCR are not available yet.";
+
+export default function OcrUploadShell({ basePath = "/tools" }: OcrUploadShellProps) {
+  const inputRef = useRef<HTMLInputElement>(null);
+  const activeRequestRef = useRef(0);
+  const [file, setFile] = useState<File | null>(null);
+  const [isDragging, setIsDragging] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
+  const [job, setJob] = useState<OcrJob | null>(null);
+  const [text, setText] = useState("");
+  const [json, setJson] = useState<OcrJsonResponse | null>(null);
+  const [view, setView] = useState<OcrView>("layout");
+  const [error, setError] = useState<string | null>(null);
+  const [copyState, setCopyState] = useState<CopyState>("idle");
+
+  const canPoll = Boolean(job && ACTIVE_STATUSES.has(job.status));
+  const hasStarted = Boolean(file || job || text || json || isUploading);
+  const confidencePercent = typeof job?.confidence?.mean === "number"
+    ? Math.round(job.confidence.mean * 100)
+    : null;
+
+  const progress = useMemo(() => {
+    if (isUploading && !job) return 8;
+    if (!job) return 0;
+    if (job.status === "completed") return 100;
+    const pageRatio = job.pageCount > 0 ? job.processedPageCount / job.pageCount : 0;
+    const stageFloor: Record<OcrStatus, number> = {
+      created: 4,
+      quarantined: 8,
+      queued: 12,
+      preprocessing: 26,
+      extracting: 52,
+      merging: 76,
+      exporting: 90,
+      completed: 100,
+      failed: 100,
+      deleted: 100,
+      expired: 100,
+    };
+    return Math.min(99, Math.round(stageFloor[job.status] + pageRatio * 20));
+  }, [isUploading, job]);
+
+  const previewContent = view === "json" ? JSON.stringify(json ?? {}, null, 2) : text;
+  const hasPreviewContent = previewContent.trim().length > 0;
+  const previewStatusCopy = job?.status === "failed"
+    ? "OCR failed. Retry the job or choose another image."
+    : job && ACTIVE_STATUSES.has(job.status)
+      ? "Reading the image and preparing searchable text..."
+      : "Upload an image to see extracted text here.";
+  const currentStatus = isUploading ? "Uploading" : job ? statusLabel(job.status) : "Ready";
+  const sourceDetails = file
+    ? `${file.name} - ${formatBytes(file.size)}${file.type ? ` - ${file.type}` : ""}`
+    : "PNG, JPG, WebP, TIFF, or BMP";
+
+  const refreshJob = useCallback(async (jobId: string, requestId = activeRequestRef.current) => {
+    const nextJob = await getOcrJob(jobId);
+    if (activeRequestRef.current !== requestId) return;
+
+    setJob(nextJob);
+    if (nextJob.status === "completed" || nextJob.status === "failed") {
+      const [textResult, jsonResult] = await Promise.allSettled([
+        getOcrText(jobId),
+        getOcrJson(jobId),
+      ]);
+      if (activeRequestRef.current !== requestId) return;
+
+      if (textResult.status === "fulfilled") {
+        setText(textResult.value.text || "");
+      }
+      if (jsonResult.status === "fulfilled") {
+        setJson(jsonResult.value);
+      }
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!job?.id || !canPoll) return undefined;
+
+    let disposed = false;
+    const requestId = activeRequestRef.current;
+    const timer = window.setInterval(() => {
+      refreshJob(job.id, requestId).catch((refreshError) => {
+        if (disposed || activeRequestRef.current !== requestId) return;
+        setError(fileToolsErrorMessage(refreshError, "Unable to refresh OCR job."));
+      });
+    }, 2500);
+
+    return () => {
+      disposed = true;
+      window.clearInterval(timer);
+    };
+  }, [canPoll, job?.id, refreshJob]);
+
+  useEffect(() => {
+    if (copyState === "idle") return undefined;
+    const timer = window.setTimeout(() => setCopyState("idle"), 2200);
+    return () => window.clearTimeout(timer);
+  }, [copyState]);
+
+  const uploadFile = useCallback(async (nextFile: File) => {
+    if (isUploading) return;
+
+    const requestId = activeRequestRef.current + 1;
+    activeRequestRef.current = requestId;
+    setCopyState("idle");
+    setError(null);
+    setJob(null);
+    setText("");
+    setJson(null);
+
+    if (!isSupportedOcrImage(nextFile)) {
+      setFile(null);
+      setError(UNSUPPORTED_IMAGE_MESSAGE);
+      return;
+    }
+
+    setFile(nextFile);
+    setIsUploading(true);
+    try {
+      const idempotencyKey = `${nextFile.name}:${nextFile.size}:${nextFile.lastModified}`;
+      const response = await uploadOcrImage(nextFile, idempotencyKey);
+      if (activeRequestRef.current !== requestId) return;
+      setJob(response.job);
+      await refreshJob(response.job.id, requestId);
+    } catch (uploadError) {
+      if (activeRequestRef.current !== requestId) return;
+      setError(fileToolsErrorMessage(uploadError, "OCR upload failed."));
+    } finally {
+      if (activeRequestRef.current === requestId) {
+        setIsUploading(false);
+      }
+    }
+  }, [isUploading, refreshJob]);
+
+  const handleFile = (nextFile: File | null) => {
+    if (!nextFile) return;
+    void uploadFile(nextFile);
+  };
+
+  const handleRetry = async () => {
+    if (!job?.id) return;
+
+    const requestId = activeRequestRef.current + 1;
+    activeRequestRef.current = requestId;
+    setError(null);
+    setText("");
+    setJson(null);
+    setCopyState("idle");
+    try {
+      const response = await retryOcrJob(job.id);
+      if (activeRequestRef.current !== requestId) return;
+      setJob(response.job);
+      await refreshJob(response.job.id, requestId);
+    } catch (retryError) {
+      if (activeRequestRef.current !== requestId) return;
+      setError(fileToolsErrorMessage(retryError, "Unable to retry OCR job."));
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!job?.id) return;
+
+    const requestId = activeRequestRef.current + 1;
+    activeRequestRef.current = requestId;
+    setError(null);
+    try {
+      await deleteOcrJob(job.id);
+      if (activeRequestRef.current !== requestId) return;
+      setJob(null);
+      setText("");
+      setJson(null);
+      setFile(null);
+      setCopyState("idle");
+    } catch (deleteError) {
+      if (activeRequestRef.current !== requestId) return;
+      setError(fileToolsErrorMessage(deleteError, "Unable to delete OCR job."));
+    }
+  };
+
+  const handleCopy = async () => {
+    if (!hasPreviewContent) return;
+    try {
+      await navigator.clipboard.writeText(previewContent);
+      setCopyState("copied");
+    } catch {
+      setCopyState("error");
+    }
+  };
+
+  const handleDownload = () => {
+    if (!hasPreviewContent) return;
+    downloadText(view === "json" ? "ocr-result.json" : "ocr-result.txt", previewContent);
+  };
+
+  const uploadControl = (
+    <button
+      type="button"
+      className={`${styles.dropzone} ${!hasStarted ? styles.dropzoneLarge : styles.dropzoneCompact} ${isDragging ? styles.dropzoneActive : ""}`}
+      onClick={() => inputRef.current?.click()}
+      onDragOver={(event) => {
+        event.preventDefault();
+        setIsDragging(true);
+      }}
+      onDragLeave={(event) => {
+        if (event.currentTarget.contains(event.relatedTarget as Node | null)) return;
+        setIsDragging(false);
+      }}
+      onDrop={(event) => {
+        event.preventDefault();
+        setIsDragging(false);
+        handleFile(event.dataTransfer.files?.[0] || null);
+      }}
+      aria-label={file ? "Replace image for OCR" : "Upload image for OCR"}
+      data-ocr-upload-dropzone
+    >
+      <span className={hasStarted ? styles.compactIcon : styles.uploadIcon}>
+        {isUploading ? <Loader2 className={styles.spin} size={hasStarted ? 20 : 30} /> : hasStarted ? <ImagePlus size={20} /> : <UploadCloud size={30} />}
+      </span>
+      <span className={hasStarted ? styles.compactText : styles.uploadText}>
+        <span className={styles.dropTitle}>
+          {isUploading ? "Uploading image" : file ? file.name : "Choose an image or drop it here"}
+        </span>
+        <span className={styles.dropCopy}>
+          {hasStarted ? sourceDetails : "PNG, JPG, WebP, TIFF, or BMP. PDF and HEIC are coming later."}
+        </span>
+      </span>
+      {!hasStarted && (
+        <>
+          <span className={styles.uploadAction}>Browse image</span>
+        </>
+      )}
+    </button>
+  );
+
+  return (
+    <main className={styles.surface}>
+      <div className={styles.shell}>
+        <header className={styles.header}>
+          <nav className={styles.breadcrumb} aria-label="Current location">
+            <Link className={styles.breadcrumbLink} href={basePath}>Tools</Link>
+            <span className={styles.breadcrumbSeparator}>/</span>
+            <span className={styles.breadcrumbCurrent} aria-current="page">OCR</span>
+          </nav>
+
+          <div className={styles.brandBlock}>
+            <h1 className={styles.title}>Image to Text OCR</h1>
+            <p className={styles.meta}>
+              Read text from screenshots, receipts, scans, and mobile photos.
+            </p>
+          </div>
+
+          <div className={styles.headerAside}>
+            {confidencePercent !== null ? (
+              <span className={styles.confidenceBadge}>{confidencePercent}% confidence</span>
+            ) : (
+              <span className={styles.statusBadge}>{currentStatus}</span>
+            )}
+          </div>
+        </header>
+
+        <input
+          ref={inputRef}
+          type="file"
+          accept={ACCEPTED_TYPES}
+          className={styles.fileInput}
+          onChange={(event) => {
+            handleFile(event.target.files?.[0] || null);
+            event.currentTarget.value = "";
+          }}
+        />
+
+        {!hasStarted ? (
+          <section className={styles.initialHero} aria-label="Upload image for OCR">
+            {uploadControl}
+            {error && (
+              <div className={`${styles.statusLine} ${styles.errorText}`} role="alert">
+                <AlertCircle size={16} />
+                {error}
+              </div>
+            )}
+          </section>
+        ) : (
+          <>
+            <section className={styles.workspace} aria-label="OCR workspace">
+              <section className={styles.previewPanel} data-ocr-result-panel>
+                <div className={styles.previewToolbar}>
+                  <h2 className={styles.panelTitle}>
+                    <FileText size={18} />
+                    Extracted text
+                  </h2>
+                  <div className={styles.segmented} role="tablist" aria-label="Preview mode">
+                    {(["layout", "plain", "json"] as const).map((mode) => (
+                      <button
+                        key={mode}
+                        type="button"
+                        role="tab"
+                        aria-selected={view === mode}
+                        className={view === mode ? styles.segmentActive : styles.segment}
+                        onClick={() => setView(mode)}
+                      >
+                        {mode === "json" ? <FileJson size={14} /> : null}
+                        {mode}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className={styles.previewActions}>
+                  <button type="button" className={styles.secondaryButton} disabled={!hasPreviewContent} onClick={handleCopy} data-ocr-copy>
+                    <Copy size={16} />
+                    Copy
+                  </button>
+                  <button type="button" className={styles.secondaryButton} disabled={!hasPreviewContent} onClick={handleDownload} data-ocr-download>
+                    <Download size={16} />
+                    Download
+                  </button>
+                </div>
+
+                {view === "layout" && json?.blocks?.length ? (
+                  <div className={styles.reader}>
+                    <div className={styles.layoutPreview}>
+                      {json.blocks.map((block) => (
+                        <p
+                          key={block.id}
+                          className={styles.layoutBlock}
+                          style={{ marginLeft: `${Math.min(block.bbox.x / 9, 68)}px` }}
+                        >
+                          {block.text}
+                        </p>
+                      ))}
+                    </div>
+                  </div>
+                ) : (
+                  <div className={styles.reader}>
+                    <pre className={styles.plainPreview}>{hasPreviewContent ? previewContent : previewStatusCopy}</pre>
+                  </div>
+                )}
+
+                <div className={styles.previewFooter} aria-live="polite">
+                  {copyState === "copied" && (
+                    <span className={`${styles.statusLine} ${styles.successText}`}>
+                      <CheckCircle2 size={16} />
+                      Text copied.
+                    </span>
+                  )}
+                  {copyState === "error" && (
+                    <span className={`${styles.statusLine} ${styles.errorText}`}>
+                      <AlertCircle size={16} />
+                      Clipboard is not available in this browser.
+                    </span>
+                  )}
+                  {job?.status === "completed" && copyState === "idle" && (
+                    <span className={`${styles.statusLine} ${styles.successText}`}>
+                      <CheckCircle2 size={16} />
+                      OCR completed.
+                    </span>
+                  )}
+                  {error && (
+                    <span className={`${styles.statusLine} ${styles.errorText}`} role="alert">
+                      <AlertCircle size={16} />
+                      {error}
+                    </span>
+                  )}
+                </div>
+              </section>
+
+              <aside className={styles.statusColumn} aria-label="OCR job status">
+                <section className={styles.statusPanel}>
+                  <div className={styles.panelHeader}>
+                    <h2 className={styles.panelTitle}>
+                      <ScanText size={18} />
+                      Job status
+                    </h2>
+                    {job?.status === "completed" ? <CheckCircle2 className={styles.readyIcon} size={18} /> : null}
+                  </div>
+                  <div className={styles.panelBody}>
+                    <div className={styles.progressTrack} aria-label={`OCR progress ${progress}%`}>
+                      <span style={{ width: `${progress}%` }} />
+                    </div>
+                    <dl className={styles.jobMeta} data-ocr-status>
+                      <div>
+                        <dt>Status</dt>
+                        <dd>{currentStatus}</dd>
+                      </div>
+                      <div>
+                        <dt>Pages</dt>
+                        <dd>{job ? `${job.processedPageCount}/${job.pageCount}` : "-"}</dd>
+                      </div>
+                      <div>
+                        <dt>File</dt>
+                        <dd>{job?.fileName ?? file?.name ?? "-"}</dd>
+                      </div>
+                    </dl>
+                    {job?.failure && (
+                      <div className={`${styles.statusLine} ${styles.errorText}`}>
+                        <AlertCircle size={16} />
+                        {job.failure.message}
+                      </div>
+                    )}
+                    <div className={styles.actionRow}>
+                      <button type="button" className={styles.iconButton} disabled={!job || isUploading} onClick={handleRetry} title="Retry OCR" aria-label="Retry OCR">
+                        <RotateCcw size={16} />
+                      </button>
+                      <button type="button" className={styles.iconButton} disabled={!job || isUploading} onClick={handleDelete} title="Delete OCR job" aria-label="Delete OCR job">
+                        <Trash2 size={16} />
+                      </button>
+                    </div>
+                  </div>
+                </section>
+
+                <section className={styles.statusPanel}>
+                  <div className={styles.panelHeader}>
+                    <h2 className={styles.panelTitle}>
+                      <Sparkles size={18} />
+                      Result quality
+                    </h2>
+                  </div>
+                  <div className={styles.panelBody}>
+                    <dl className={styles.jobMeta}>
+                      <div>
+                        <dt>Confidence</dt>
+                        <dd>{confidencePercent !== null ? `${confidencePercent}%` : "Waiting for result"}</dd>
+                      </div>
+                      <div>
+                        <dt>Low confidence tokens</dt>
+                        <dd>{job?.confidence?.lowConfidenceTokenCount ?? "-"}</dd>
+                      </div>
+                    </dl>
+                  </div>
+                </section>
+              </aside>
+            </section>
+
+            <section className={styles.bottomUpload} aria-label="Upload another image" data-ocr-bottom-upload>
+              <div className={styles.uploadDock}>
+                {uploadControl}
+                <div className={styles.dockStatus} aria-live="polite">
+                  {isUploading ? "Uploading and starting OCR..." : "Replace the image or start a new OCR job."}
+                </div>
+              </div>
+            </section>
+          </>
+        )}
+      </div>
+    </main>
+  );
+}
+
+function fileToolsErrorMessage(error: unknown, fallback: string) {
+  if (error instanceof FileToolsApiError) {
+    return error.message || fallback;
+  }
+  if (error instanceof Error) {
+    return error.message || fallback;
+  }
+  return fallback;
+}
+
+function downloadText(filename: string, content: string) {
+  const blob = new Blob([content], {
+    type: filename.endsWith(".json") ? "application/json" : "text/plain;charset=utf-8",
+  });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  link.rel = "noopener";
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  window.setTimeout(() => URL.revokeObjectURL(url), 30_000);
+}
+
+function isSupportedOcrImage(file: File) {
+  if (file.type && ACCEPTED_MIME_TYPES.has(file.type.toLowerCase())) {
+    return true;
+  }
+  const dotIndex = file.name.lastIndexOf(".");
+  const extension = dotIndex >= 0 ? file.name.slice(dotIndex).toLowerCase() : "";
+  return ACCEPTED_EXTENSIONS.has(extension);
+}
+
+function statusLabel(status: OcrStatus) {
+  if (status === "created") return "Created";
+  if (status === "quarantined") return "Scanning";
+  if (status === "queued") return "Queued";
+  if (status === "preprocessing") return "Preparing image";
+  if (status === "extracting") return "Reading text";
+  if (status === "merging") return "Merging result";
+  if (status === "exporting") return "Preparing result";
+  if (status === "completed") return "Completed";
+  if (status === "failed") return "Failed";
+  if (status === "deleted") return "Deleted";
+  return "Expired";
+}
+
+function formatBytes(bytes: number) {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}

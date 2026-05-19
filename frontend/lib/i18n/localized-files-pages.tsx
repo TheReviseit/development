@@ -7,7 +7,9 @@ import FileToolComingSoon from "@/components/file-tools/FileToolComingSoon";
 import FilesProductChrome from "@/components/file-tools/FilesProductChrome";
 import FilesToolHub from "@/components/file-tools/FilesToolHub";
 import ImageConverterShell from "@/components/file-tools/ImageConverterShell";
+import OcrShell from "@/components/file-tools/OcrUploadShell";
 import ToolShell from "@/components/file-tools/ToolShell";
+import VideoWhatsappConverterShell from "@/components/file-tools/VideoWhatsappConverterShell";
 import { getFileToolBySlug } from "@/lib/file-tools/tool-catalog";
 import { loadLocaleMessages } from "@/lib/i18n/messages";
 import type { Locale } from "@/types/i18n";
@@ -73,9 +75,26 @@ export function renderLocalizedImageConverterPage(locale: Locale) {
   return <ImageConverterShell basePath={`/${locale}${publicToolsPath}`} />;
 }
 
+export async function localizedVideoWhatsappMetadata(locale: Locale): Promise<Metadata> {
+  const t = await getTranslations({ locale, namespace: "metadata.videoWhatsapp" });
+  return {
+    title: t("title"),
+    description: t("description"),
+    alternates: {
+      canonical: `/${locale}${publicToolsPath}/video-converter-for-whatsapp`,
+    },
+  };
+}
+
+export function renderLocalizedVideoWhatsappPage(locale: Locale) {
+  setRequestLocale(locale);
+  return <VideoWhatsappConverterShell basePath={`/${locale}${publicToolsPath}`} />;
+}
+
 export async function localizedFileToolMetadata(locale: Locale, slug: string): Promise<Metadata> {
   const tool = getFileToolBySlug(slug);
   const metadata = await getTranslations({ locale, namespace: "metadata.files" });
+  const rootMetadata = await getTranslations({ locale, namespace: "metadata" });
   const catalog = await getTranslations({ locale, namespace: "tools.catalog" });
 
   if (!tool) {
@@ -83,7 +102,7 @@ export async function localizedFileToolMetadata(locale: Locale, slug: string): P
   }
 
   return {
-    title: `${catalog(`${tool.key}.name`)} | ${metadata("siteName")}`,
+    title: `${catalog(`${tool.key}.name`)} | ${rootMetadata("siteName")}`,
     description: catalog(`${tool.key}.description`),
     alternates: {
       canonical: `/${locale}${publicToolsPath}/${tool.slug}`,
@@ -96,6 +115,14 @@ export function renderLocalizedFileToolPage(locale: Locale, slug: string) {
 
   const tool = getFileToolBySlug(slug);
   if (!tool) notFound();
+
+  if (tool.slug === "ocr") {
+    return <OcrShell basePath={`/${locale}${publicToolsPath}`} />;
+  }
+
+  if (tool.slug === "video-converter-for-whatsapp") {
+    return <VideoWhatsappConverterShell basePath={`/${locale}${publicToolsPath}`} />;
+  }
 
   return <FileToolComingSoon tool={tool} backHref={`/${locale}${publicToolsPath}`} />;
 }

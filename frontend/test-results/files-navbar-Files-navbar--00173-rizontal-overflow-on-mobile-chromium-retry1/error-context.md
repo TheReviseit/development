@@ -1,0 +1,129 @@
+# Page snapshot
+
+```yaml
+- generic [active] [ref=e1]:
+  - generic [ref=e2]:
+    - banner [ref=e3]:
+      - generic [ref=e4]:
+        - link "Flowauxi Tools home" [ref=e5] [cursor=pointer]:
+          - /url: /en/tools
+          - generic [ref=e7]: Flowauxi
+        - generic [ref=e8]:
+          - button "Open tools search" [ref=e9] [cursor=pointer]:
+            - img [ref=e10]
+          - button "Open tools navigation" [ref=e13] [cursor=pointer]:
+            - img [ref=e14]
+    - main [ref=e16]:
+      - generic [ref=e17]:
+        - generic [ref=e18]:
+          - navigation "Current location" [ref=e19]:
+            - generic [ref=e20]:
+              - link "Tools" [ref=e21]:
+                - /url: /en/tools
+              - generic [ref=e22]: /
+            - generic [ref=e24]: Text to PDF
+          - generic [ref=e25]:
+            - heading "Text to PDF" [level=1] [ref=e26]
+            - generic [ref=e27]: Guest exports are private and expire automatically.
+        - tablist "Text to PDF panels" [ref=e28]:
+          - tab "Edit" [selected] [ref=e29]
+          - tab "Preview" [ref=e30]
+          - tab "Settings" [ref=e31]
+          - tab "History" [ref=e32]
+        - generic [ref=e35]:
+          - region "Editor" [ref=e36]:
+            - generic [ref=e37]:
+              - generic [ref=e38]:
+                - img [ref=e39]
+                - text: Editor
+              - generic "Text formatting" [ref=e41]:
+                - button "Bold" [ref=e42]:
+                  - img [ref=e43]
+                - button "Italic" [ref=e45]:
+                  - img [ref=e46]
+                - button "Underline" [ref=e48]:
+                  - img [ref=e49]
+                - button "Heading 1" [ref=e51]:
+                  - img [ref=e52]
+                - button "Heading 2" [ref=e54]:
+                  - img [ref=e55]
+                - button "Bullet list" [ref=e57]:
+                  - img [ref=e58]
+                - button "Numbered list" [ref=e59]:
+                  - img [ref=e60]
+            - generic [ref=e63]:
+              - generic [ref=e64]:
+                - generic [ref=e65]: Document title
+                - textbox "Document title" [ref=e66]:
+                  - /placeholder: Untitled document
+                  - text: Untitled document
+              - generic "Paragraph alignment" [ref=e67]:
+                - button "Align left" [pressed] [ref=e68]:
+                  - img [ref=e69]
+                - button "Align center" [ref=e70]:
+                  - img [ref=e71]
+                - button "Align right" [ref=e72]:
+                  - img [ref=e73]
+                - button "Justify" [ref=e74]:
+                  - img [ref=e75]
+                - button "Page break" [ref=e76]
+              - textbox "Text to convert into PDF" [ref=e77]:
+                - /placeholder: Type something...
+          - region "Export PDF" [ref=e79]:
+            - generic [ref=e80]:
+              - generic [ref=e81]:
+                - generic [ref=e82]: 17 / 50,000 chars
+                - generic [ref=e83]: 1 page
+              - generic [ref=e84]: Saved
+            - generic [ref=e85]:
+              - button "Generate PDF" [disabled] [ref=e86]:
+                - img [ref=e87]
+                - text: Generate PDF
+              - generic [ref=e90]:
+                - img [ref=e91]
+                - text: Add text before generating a PDF.
+    - contentinfo [ref=e93]:
+      - generic [ref=e94]:
+        - generic [ref=e95]:
+          - link "Flowauxi Tools home" [ref=e96] [cursor=pointer]:
+            - /url: /en/tools
+            - generic [ref=e98]: Flowauxi
+          - paragraph [ref=e99]: Flowauxi Tools is a modern all-in-one workspace for PDFs, documents, images, and AI-powered file tools. Designed for speed, simplicity, and productivity, it helps users convert, compress, edit, organize, and optimize files effortlessly for everyday work.
+        - generic [ref=e100]:
+          - generic [ref=e101]:
+            - heading "Tools" [level=2] [ref=e102]
+            - link "Text to PDF" [ref=e103] [cursor=pointer]:
+              - /url: /en/tools/text-to-pdf
+            - link "Word to PDF" [ref=e104] [cursor=pointer]:
+              - /url: /en/tools/word-to-pdf
+            - link "Image to PDF" [ref=e105] [cursor=pointer]:
+              - /url: /en/tools/image-to-pdf
+          - generic [ref=e106]:
+            - heading "PDF" [level=2] [ref=e107]
+            - link "Merge PDF" [ref=e108] [cursor=pointer]:
+              - /url: /en/tools/merge-pdf
+            - link "Split PDF" [ref=e109] [cursor=pointer]:
+              - /url: /en/tools/split-pdf
+            - link "Compress PDF" [ref=e110] [cursor=pointer]:
+              - /url: /en/tools/compress-pdf
+          - generic [ref=e111]:
+            - heading "Workspace" [level=2] [ref=e112]
+            - link "Dashboard" [ref=e113] [cursor=pointer]:
+              - /url: /dashboard/files
+            - link "History" [ref=e114] [cursor=pointer]:
+              - /url: /dashboard/files/history
+            - link "Settings" [ref=e115] [cursor=pointer]:
+              - /url: /dashboard/files/settings
+      - generic [ref=e116]:
+        - generic [ref=e117]: © 2026 Flowauxi
+        - generic [ref=e118]:
+          - generic [ref=e119]:
+            - img [ref=e120]
+            - text: Private guest exports
+          - generic [ref=e123]:
+            - img [ref=e124]
+            - text: More tools rolling out
+  - button "Open Next.js Dev Tools" [ref=e132] [cursor=pointer]:
+    - img [ref=e133]
+  - alert [ref=e136]
+```

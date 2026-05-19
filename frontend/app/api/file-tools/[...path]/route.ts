@@ -5,6 +5,7 @@ const GUEST_COOKIE = "file_tools_guest";
 const DEFAULT_LOCAL_BACKEND_URL = "http://localhost:5000";
 const DEFAULT_PRODUCTION_BACKEND_URL = "https://revsieit.onrender.com";
 const FILE_TOOLS_PROXY_TIMEOUT_MS = Number(process.env.FILE_TOOLS_PROXY_TIMEOUT_MS || 90_000);
+const FILE_TOOLS_SSE_PROXY_TIMEOUT_MS = Number(process.env.FILE_TOOLS_SSE_PROXY_TIMEOUT_MS || 30 * 60_000);
 const FRONTEND_PROXY_HOSTS = new Set([
   "api.flowauxi.com",
   "files.flowauxi.com",
@@ -42,7 +43,7 @@ export async function OPTIONS() {
     headers: {
       "Access-Control-Allow-Origin": "*",
       "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, PATCH, OPTIONS",
-      "Access-Control-Allow-Headers": "Content-Type, X-Request-Id",
+      "Access-Control-Allow-Headers": "Content-Type, X-Request-Id, Content-Range, X-Chunk-Sha256, Idempotency-Key, Last-Event-ID",
       "Access-Control-Max-Age": "86400",
     },
   });
@@ -62,6 +63,7 @@ async function proxyFileToolsRequest(request: NextRequest, method: string) {
   const headers: Record<string, string> = {
     "X-Request-Id": requestId,
     "X-Product-Domain": "files",
+    "X-Tenant-Id": "files",
     "X-Forwarded-For": request.headers.get("x-forwarded-for") || "",
     "User-Agent": request.headers.get("user-agent") || "",
   };
@@ -76,6 +78,10 @@ async function proxyFileToolsRequest(request: NextRequest, method: string) {
   if (contentType) {
     headers["Content-Type"] = contentType;
   }
+  for (const forwarded of ["content-range", "x-chunk-sha256", "idempotency-key", "last-event-id"]) {
+    const value = request.headers.get(forwarded);
+    if (value) headers[toHeaderCase(forwarded)] = value;
+  }
 
   const fetchOptions: RequestInit = {
     method,
@@ -84,13 +90,14 @@ async function proxyFileToolsRequest(request: NextRequest, method: string) {
   };
 
   if (!["GET", "HEAD"].includes(method)) {
-    fetchOptions.body = await request.arrayBuffer();
+    fetchOptions.body = request.body;
+    (fetchOptions as RequestInit & { duplex?: "half" }).duplex = "half";
   }
 
   let timeout: ReturnType<typeof setTimeout> | undefined;
   try {
     const controller = new AbortController();
-    timeout = setTimeout(() => controller.abort(), FILE_TOOLS_PROXY_TIMEOUT_MS);
+    timeout = setTimeout(() => controller.abort(), isSseRequest(backendPath) ? FILE_TOOLS_SSE_PROXY_TIMEOUT_MS : FILE_TOOLS_PROXY_TIMEOUT_MS);
     fetchOptions.signal = controller.signal;
 
     const backendResponse = await fetch(backendUrl, fetchOptions);
@@ -148,12 +155,16 @@ async function proxyFileToolsRequest(request: NextRequest, method: string) {
 
 async function toNextResponse(response: Response) {
   const headers = new Headers();
-  for (const header of ["content-type", "content-disposition", "cache-control"]) {
+  for (const header of ["content-type", "content-disposition", "cache-control", "x-accel-buffering", "connection"]) {
     const value = response.headers.get(header);
     if (value) headers.set(header, value);
   }
 
   const contentType = response.headers.get("content-type") || "";
+  if (contentType.includes("text/event-stream")) {
+    headers.set("Cache-Control", "no-store");
+    return new NextResponse(response.body, { status: response.status, headers });
+  }
   if (contentType.includes("application/json")) {
     const data = await response.json();
     return NextResponse.json(data, { status: response.status, headers });
@@ -161,6 +172,17 @@ async function toNextResponse(response: Response) {
 
   const body = await response.arrayBuffer();
   return new NextResponse(body, { status: response.status, headers });
+}
+
+function isSseRequest(pathname: string) {
+  return pathname.includes("/video-whatsapp/jobs/") && pathname.endsWith("/events");
+}
+
+function toHeaderCase(value: string) {
+  return value
+    .split("-")
+    .map((part) => part.slice(0, 1).toUpperCase() + part.slice(1))
+    .join("-");
 }
 
 async function detectMissingFileToolsDeployment(response: Response) {

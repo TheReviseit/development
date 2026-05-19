@@ -55,6 +55,12 @@ services:
         value: true
       - key: FILES_TEXT_TO_PDF_ENABLED
         value: true
+      - key: FILES_IMAGE_CONVERTER_ENABLED
+        value: true
+      - key: FILES_OCR_ENABLED
+        value: true
+      - key: FILES_VIDEO_CONVERTER_ENABLED
+        value: true
       - key: FILE_TOOLS_STORAGE_PROVIDER
         value: cloudinary
       - key: FILE_TOOLS_STORAGE_HEALTH_PROBE
@@ -119,3 +125,139 @@ services:
         sync: false
       - key: WHATSAPP_VERIFY_TOKEN
         sync: false
+
+  - type: worker
+    name: flowauxi-video-ingest-worker
+    runtime: docker
+    region: singapore
+    rootDir: backend
+    dockerfilePath: ./Dockerfile.video
+    dockerCommand: celery -A celery_app worker --loglevel=info -Q video_ingest --concurrency=2 --prefetch-multiplier=1
+    plan: starter
+    envVars:
+      - key: FLASK_ENV
+        value: production
+      - key: REDIS_URL
+        sync: false
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: FILES_TOOLS_ENABLED
+        value: true
+      - key: FILES_VIDEO_CONVERTER_ENABLED
+        value: true
+      - key: FILE_TOOLS_STORAGE_PROVIDER
+        value: cloudinary
+      - key: CLOUDINARY_URL
+        sync: false
+      - key: CLOUDINARY_CLOUD_NAME
+        sync: false
+      - key: CLOUDINARY_API_KEY
+        sync: false
+      - key: CLOUDINARY_API_SECRET
+        sync: false
+      - key: FILE_TOOLS_CLOUDINARY_DELIVERY_TYPE
+        value: authenticated
+      - key: FFMPEG_BINARY
+        value: /usr/bin/ffmpeg
+      - key: FFPROBE_BINARY
+        value: /usr/bin/ffprobe
+
+  - type: worker
+    name: flowauxi-video-worker
+    runtime: docker
+    region: singapore
+    rootDir: backend
+    dockerfilePath: ./Dockerfile.video
+    dockerCommand: celery -A celery_app worker --loglevel=info -Q video --concurrency=1 --prefetch-multiplier=1
+    plan: starter
+    envVars:
+      - key: FLASK_ENV
+        value: production
+      - key: REDIS_URL
+        sync: false
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: FILES_TOOLS_ENABLED
+        value: true
+      - key: FILES_VIDEO_CONVERTER_ENABLED
+        value: true
+      - key: FILE_TOOLS_STORAGE_PROVIDER
+        value: cloudinary
+      - key: CLOUDINARY_URL
+        sync: false
+      - key: CLOUDINARY_CLOUD_NAME
+        sync: false
+      - key: CLOUDINARY_API_KEY
+        sync: false
+      - key: CLOUDINARY_API_SECRET
+        sync: false
+      - key: FILE_TOOLS_CLOUDINARY_DELIVERY_TYPE
+        value: authenticated
+      - key: FFMPEG_BINARY
+        value: /usr/bin/ffmpeg
+      - key: FFPROBE_BINARY
+        value: /usr/bin/ffprobe
+      - key: FILE_TOOLS_VIDEO_CONVERSION_SOFT_TIME_LIMIT
+        value: 5400
+      - key: FILE_TOOLS_VIDEO_CONVERSION_TIME_LIMIT
+        value: 5700
+
+  - type: worker
+    name: flowauxi-ocr-worker
+    runtime: docker
+    region: singapore
+    rootDir: backend
+    dockerfilePath: ./Dockerfile.ocr
+    dockerCommand: celery -A celery_app worker --loglevel=info -Q ocr --concurrency=2 --prefetch-multiplier=1
+    plan: starter
+    envVars:
+      - key: FLASK_ENV
+        value: production
+      - key: REDIS_URL
+        sync: false
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: FILES_TOOLS_ENABLED
+        value: true
+      - key: FILES_OCR_ENABLED
+        value: true
+      - key: FILES_OCR_INLINE_DEV_WORKERS
+        value: false
+      - key: FILE_TOOLS_STORAGE_PROVIDER
+        value: cloudinary
+      - key: CLOUDINARY_URL
+        sync: false
+      - key: CLOUDINARY_CLOUD_NAME
+        sync: false
+      - key: CLOUDINARY_API_KEY
+        sync: false
+      - key: CLOUDINARY_API_SECRET
+        sync: false
+      - key: FILE_TOOLS_CLOUDINARY_DELIVERY_TYPE
+        value: authenticated
+      - key: CLOUDFLARE_R2_ACCOUNT_ID
+        sync: false
+      - key: CLOUDFLARE_R2_ACCESS_KEY_ID
+        sync: false
+      - key: CLOUDFLARE_R2_SECRET_ACCESS_KEY
+        sync: false
+      - key: CLOUDFLARE_R2_BUCKET_NAME
+        sync: false
+      - key: TESSERACT_CMD
+        value: /usr/bin/tesseract
+      - key: OCR_DEFAULT_LANGUAGE_MODE
+        value: auto
+      - key: OCR_QUEUE
+        value: ocr
+      - key: OCR_MAX_RUNTIME_LANGUAGES
+        value: 8
+      - key: FILES_OCR_SOFT_TIME_LIMIT
+        value: 180
+      - key: FILES_OCR_TIME_LIMIT
+        value: 240

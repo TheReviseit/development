@@ -1,0 +1,163 @@
+
+> frontend@0.1.0 dev:files
+> next dev -p 3006
+
+▲ Next.js 16.1.6 (Turbopack)
+- Local:         http://localhost:3006
+- Network:       http://10.84.115.8:3006
+- Environments: .env
+
+✓ Starting...
+✓ Ready in 5.8s
+[DomainResolver] Resolving: host=localhost:3006, port=3006
+[DomainResolver] Resolved: localhost:3006 → files (development)
+[DomainResolver] Resolving: host=localhost:3006, port=3006
+[DomainResolver] Resolved: localhost:3006 → files (development)
+[Proxy Global] /en/tools/ocr → domain=files, user=anon...
+[Proxy Global] /en/tools/ocr → domain=files, user=anon...
+○ Compiling /en/tools/[tool] ...
+ GET /en/tools/ocr 200 in 15.4s (compile: 8.6s, proxy.ts: 1249ms, render: 5.6s)
+ GET /en/tools/ocr 200 in 15.4s (compile: 8.6s, proxy.ts: 1263ms, render: 5.6s)
+[DomainResolver] Resolving: host=localhost:3006, port=3006
+[DomainResolver] Resolved: localhost:3006 → files (development)
+[Proxy Global] /en/tools/ocr → domain=files, user=anon...
+ GET /en/tools/ocr 200 in 543ms (compile: 32ms, proxy.ts: 61ms, render: 450ms)
+[DomainResolver] Resolving: host=localhost:3006, port=3006
+[DomainResolver] Resolved: localhost:3006 → files (development)
+[Proxy Global] /en/tools/ocr → domain=files, user=anon...
+ GET /en/tools/ocr?redesign=1 200 in 423ms (compile: 26ms, proxy.ts: 27ms, render: 370ms)
+[DomainResolver] Resolving: host=localhost:3006, port=3006
+[DomainResolver] Resolved: localhost:3006 → files (development)
+[Proxy Global] /en/tools/ocr → domain=files, user=anon...
+ GET /en/tools/ocr 200 in 386ms (compile: 32ms, proxy.ts: 18ms, render: 336ms)
+[DomainResolver] Resolving: host=localhost:3006, port=3006
+[DomainResolver] Resolved: localhost:3006 → files (development)
+[Proxy Global] /en/tools/ocr → domain=files, user=anon...
+ GET /en/tools/ocr 200 in 557ms (compile: 48ms, proxy.ts: 27ms, render: 482ms)
+[DomainResolver] Resolving: host=localhost:3006, port=3006
+[DomainResolver] Resolved: localhost:3006 → files (development)
+[Proxy Global] /en/tools/ocr → domain=files, user=anon...
+ GET /en/tools/ocr 200 in 382ms (compile: 31ms, proxy.ts: 17ms, render: 334ms)
+[DomainResolver] Resolving: host=localhost:3006, port=3006
+[DomainResolver] Resolved: localhost:3006 → files (development)
+[Proxy Global] /en/tools/ocr → domain=files, user=anon...
+ GET /manifest.webmanifest 200 in 579ms (compile: 443ms, render: 136ms)
+ GET /en/tools/ocr 200 in 1149ms (compile: 26ms, proxy.ts: 17ms, render: 1106ms)
+✓ Compiled in 1577ms
+[DomainResolver] Resolving: host=localhost:3006, port=3006
+[DomainResolver] Resolved: localhost:3006 → files (development)
+[Proxy Global] /en/tools/ocr → domain=files, user=anon...
+ GET /manifest.webmanifest 200 in 28ms (compile: 11ms, render: 17ms)
+ GET /en/tools/ocr 200 in 1295ms (compile: 240ms, proxy.ts: 17ms, render: 1038ms)
+[DomainResolver] Resolving: host=localhost:3006, port=3006
+[DomainResolver] Resolved: localhost:3006 → files (development)
+[Proxy Global] /en/tools/ocr → domain=files, user=anon...
+ GET /manifest.webmanifest 200 in 130ms (compile: 55ms, render: 74ms)
+ GET /en/tools/ocr 200 in 749ms (compile: 42ms, proxy.ts: 27ms, render: 680ms)
+✓ Compiled in 851ms
+✓ Compiled in 908ms
+✓ Compiled in 816ms
+✓ Compiled in 1172ms
+[DomainResolver] Resolving: host=localhost:3006, port=3006
+[DomainResolver] Resolved: localhost:3006 → files (development)
+[Proxy Global] /en/tools/ocr → domain=files, user=anon...
+ GET /en/tools/ocr?ui=2 200 in 1387ms (compile: 320ms, proxy.ts: 22ms, render: 1044ms)
+[DomainResolver] Resolving: host=localhost:3006, port=3006
+[DomainResolver] Resolved: localhost:3006 → files (development)
+[Proxy Global] /en/tools/ocr → domain=files, user=anon...
+ GET /en/tools/ocr 200 in 526ms (compile: 45ms, proxy.ts: 25ms, render: 457ms)
+ GET /manifest.webmanifest 200 in 135ms (compile: 101ms, render: 34ms)
+[DomainResolver] Resolving: host=localhost:3006, port=3006
+[DomainResolver] Resolved: localhost:3006 → files (development)
+[Proxy Global] /en/tools/ocr → domain=files, user=anon...
+ GET /en/tools/ocr?ui=2 200 in 628ms (compile: 38ms, proxy.ts: 23ms, render: 567ms)
+[DomainResolver] Resolving: host=localhost:3006, port=3006
+[DomainResolver] Resolved: localhost:3006 → files (development)
+[Proxy Global] /en/tools/ocr → domain=files, user=anon...
+ GET /manifest.webmanifest 200 in 22ms (compile: 8ms, render: 14ms)
+ GET /en/tools/ocr 200 in 505ms (compile: 22ms, proxy.ts: 10ms, render: 473ms)
+[DomainResolver] Resolving: host=localhost:3006, port=3006
+[DomainResolver] Resolved: localhost:3006 → files (development)
+[Proxy Global] /en/tools → domain=files, user=anon...
+ GET /en/tools 200 in 670ms (compile: 320ms, proxy.ts: 15ms, render: 334ms)
+[DomainResolver] Resolving: host=localhost:3006, port=3006
+[DomainResolver] Resolved: localhost:3006 → files (development)
+[Proxy Global] /en/tools/text-to-pdf → domain=files, user=anon...
+ GET /en/tools/text-to-pdf 200 in 164ms (compile: 56ms, proxy.ts: 21ms, render: 87ms)
+[DomainResolver] Resolving: host=localhost:3006, port=3006
+[DomainResolver] Resolved: localhost:3006 → files (development)
+[Proxy Global] /en/tools → domain=files, user=anon...
+ GET /en/tools 200 in 159ms (compile: 10ms, proxy.ts: 15ms, render: 135ms)
+[DomainResolver] Resolving: host=localhost:3006, port=3006
+[DomainResolver] Resolved: localhost:3006 → files (development)
+[Proxy Global] /en/tools/video-converter-for-whatsapp → domain=files, user=anon...
+ GET /en/tools/video-converter-for-whatsapp 200 in 169ms (compile: 35ms, proxy.ts: 16ms, render: 118ms)
+[DomainResolver] Resolving: host=localhost:3006, port=3006
+[DomainResolver] Resolved: localhost:3006 → files (development)
+[Proxy Global] /en/tools/ocr → domain=files, user=anon...
+ GET /en/tools/ocr 200 in 252ms (compile: 44ms, proxy.ts: 20ms, render: 188ms)
+[DomainResolver] Resolving: host=localhost:3006, port=3006
+[DomainResolver] Resolved: localhost:3006 → files (development)
+[Proxy Global] /en/tools/ocr → domain=files, user=anon...
+✓ Compiled in 1213ms
+ GET /en/tools/ocr 500 in 2.6s (compile: 1008ms, proxy.ts: 20ms, render: 1604ms)
+ GET /manifest.webmanifest 200 in 90ms (compile: 65ms, render: 25ms)
+[DomainResolver] Resolving: host=localhost:3006, port=3006
+[DomainResolver] Resolved: localhost:3006 → files (development)
+[Proxy Global] /en/tools/ocr → domain=files, user=anon...
+✓ Compiled in 1111ms
+ GET /en/tools/ocr 200 in 1887ms (compile: 1118ms, proxy.ts: 24ms, render: 745ms)
+[DomainResolver] Resolving: host=localhost:3006, port=3006
+[DomainResolver] Resolved: localhost:3006 → files (development)
+[Proxy Global] /en/tools/ocr → domain=files, user=anon...
+[DomainResolver] Resolving: host=localhost:3006, port=3006
+[DomainResolver] Resolved: localhost:3006 → files (development)
+[Proxy Global] /en/tools/ocr → domain=files, user=anon...
+ GET /en/tools/ocr 500 in 1287ms (compile: 88ms, proxy.ts: 476ms, render: 722ms)
+ GET /en/tools/ocr?ui=2 500 in 1259ms (compile: 133ms, proxy.ts: 460ms, render: 666ms)
+[DomainResolver] Resolving: host=localhost:3006, port=3006
+[DomainResolver] Resolved: localhost:3006 → files (development)
+[Proxy Global] /en/tools/ocr → domain=files, user=anon...
+ GET /manifest.webmanifest 200 in 81ms (compile: 35ms, render: 45ms)
+ GET /en/tools/ocr 500 in 848ms (compile: 58ms, proxy.ts: 17ms, render: 774ms)
+✓ Compiled in 1400ms
+[DomainResolver] Resolving: host=localhost:3006, port=3006
+[DomainResolver] Resolved: localhost:3006 → files (development)
+[Proxy Global] /en/tools/ocr → domain=files, user=anon...
+ GET /en/tools/ocr 200 in 1908ms (compile: 420ms, proxy.ts: 30ms, render: 1459ms)
+✓ Compiled in 1376ms
+[DomainResolver] Resolving: host=localhost:3006, port=3006
+[DomainResolver] Resolved: localhost:3006 → files (development)
+[Proxy Global] /en/tools/ocr → domain=files, user=anon...
+ GET /en/tools/ocr 200 in 2.0s (compile: 452ms, proxy.ts: 24ms, render: 1552ms)
+✓ Compiled in 1278ms
+[DomainResolver] Resolving: host=localhost:3006, port=3006
+[DomainResolver] Resolved: localhost:3006 → files (development)
+[Proxy Global] /en/tools/ocr → domain=files, user=anon...
+ GET /en/tools/ocr 200 in 700ms (compile: 65ms, proxy.ts: 31ms, render: 604ms)
+[DomainResolver] Resolving: host=localhost:3006, port=3006
+[DomainResolver] Resolved: localhost:3006 → files (development)
+[Proxy Global] /en/tools/ocr → domain=files, user=anon...
+ GET /en/tools/ocr?upload-page=1 200 in 674ms (compile: 44ms, proxy.ts: 29ms, render: 600ms)
+[DomainResolver] Resolving: host=localhost:3006, port=3006
+[DomainResolver] Resolved: localhost:3006 → files (development)
+[Proxy Global] /en/tools/ocr → domain=files, user=anon...
+ GET /en/tools/ocr?upload-page=1 200 in 896ms (compile: 43ms, proxy.ts: 23ms, render: 831ms)
+[DomainResolver] Resolving: host=localhost:3006, port=3006
+[DomainResolver] Resolved: localhost:3006 → files (development)
+[Proxy Global] /en/tools/ocr → domain=files, user=anon...
+ GET /en/tools/ocr 200 in 725ms (compile: 43ms, proxy.ts: 29ms, render: 653ms)
+[DomainResolver] Resolving: host=localhost:3006, port=3006
+[DomainResolver] Resolved: localhost:3006 → files (development)
+[Proxy Global] /en/tools/ocr → domain=files, user=anon...
+ GET /en/tools/ocr?cachebust=codex 200 in 765ms (compile: 70ms, proxy.ts: 30ms, render: 665ms)
+[DomainResolver] Resolving: host=localhost:3006, port=3006
+[DomainResolver] Resolved: localhost:3006 → files (development)
+[Proxy Global] /en/tools/ocr → domain=files, user=anon...
+ GET /en/tools/ocr 200 in 794ms (compile: 54ms, proxy.ts: 28ms, render: 712ms)
+[DomainResolver] Resolving: host=localhost:3006, port=3006
+[DomainResolver] Resolved: localhost:3006 → files (development)
+[Proxy Global] /en/tools/ocr → domain=files, user=anon...
+ GET /manifest.webmanifest 200 in 92ms (compile: 42ms, render: 49ms)
+ GET /en/tools/ocr 200 in 680ms (compile: 74ms, proxy.ts: 27ms, render: 579ms)
+[?25h

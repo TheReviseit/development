@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import shutil
 from pathlib import Path
 from typing import Optional
 
@@ -34,8 +35,22 @@ class LocalDevStorage(ArtifactStorage):
         path.write_bytes(content)
         return StoredObject(provider=self.provider, key=key, size_bytes=len(content), mime_type=mime_type)
 
+    def put_file(self, key: str, path: str | Path, mime_type: str, metadata: Optional[dict[str, str]] = None) -> StoredObject:
+        target = self._path(key)
+        target.parent.mkdir(parents=True, exist_ok=True)
+        source = Path(path)
+        shutil.copyfile(source, target)
+        return StoredObject(provider=self.provider, key=key, size_bytes=target.stat().st_size, mime_type=mime_type)
+
     def get_bytes(self, key: str) -> bytes:
         return self._path(key).read_bytes()
+
+    def download_to_path(self, key: str, path: str | Path) -> int:
+        source = self._path(key)
+        target = Path(path)
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(source, target)
+        return target.stat().st_size
 
     def delete(self, key: str) -> None:
         path = self._path(key)

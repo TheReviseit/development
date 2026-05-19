@@ -82,7 +82,8 @@
         "redactPdf": "Redact PDF",
         "comparePdf": "Compare PDF",
         "aiSummarizer": "AI Summarizer",
-        "translatePdf": "Translate PDF"
+        "translatePdf": "Translate PDF",
+        "videoWhatsapp": "Video to WhatsApp"
       }
     },
     "mobile": {
@@ -317,6 +318,78 @@
         "privateExports": "Private guest exports",
         "moreTools": "More tools rolling out"
       }
+    },
+    "videoWhatsapp": {
+      "toolbar": {
+        "currentLocation": "Current location",
+        "files": "Tools",
+        "title": "Video Converter for WhatsApp",
+        "authenticated": "Secure large-video conversion and history are active.",
+        "guest": "Guest video conversions are private and expire automatically."
+      },
+      "upload": {
+        "title": "Choose or drop videos",
+        "copy": "MOV, MP4, AVI, MKV, WebM, FLV, 3GP, MTS, or M4V up to {size}"
+      },
+      "queue": {
+        "aria": "Video conversion queue",
+        "empty": "Your video queue will appear here."
+      },
+      "settings": {
+        "panel": "Conversion settings",
+        "quality": "Quality preset",
+        "resolution": "Resolution",
+        "normalizeFps": "Normalize FPS",
+        "normalizeAudio": "Normalize audio",
+        "removeAudio": "Remove audio",
+        "bitrate": "Bitrate kbps",
+        "trimStart": "Trim start",
+        "trimEnd": "Trim end",
+        "endPlaceholder": "End"
+      },
+      "quality": {
+        "whatsapp": "WhatsApp",
+        "balanced": "Balanced",
+        "small": "Small",
+        "best": "Best"
+      },
+      "resolution": {
+        "original": "Original"
+      },
+      "actions": {
+        "convertAll": "Convert all",
+        "processing": "Processing {count}",
+        "convert": "Convert",
+        "cancel": "Cancel",
+        "retry": "Retry",
+        "download": "Download"
+      },
+      "progress": {
+        "upload": "Upload",
+        "conversion": "Conversion",
+        "eta": "ETA {eta}"
+      },
+      "stages": {
+        "queued": "Queued",
+        "assembling": "Assembling",
+        "converting": "Converting",
+        "succeeded": "Ready",
+        "cancelled": "Cancelled"
+      },
+      "status": {
+        "ready": "Ready",
+        "uploading": "Uploading",
+        "assembling": "Assembling",
+        "queued": "Queued",
+        "converting": "Converting",
+        "succeeded": "Ready",
+        "failed": "Failed",
+        "cancelled": "Cancelled"
+      },
+      "errors": {
+        "unsupported": "This video format is not supported.",
+        "tooLarge": "Video is too large. Limit is {size}."
+      }
     }
   },
   "tools": {
@@ -404,6 +477,10 @@
       "html_to_pdf": {
         "name": "HTML to PDF",
         "description": "Render web pages, invoices, and HTML content as reliable PDF files."
+      },
+      "video_whatsapp_converter": {
+        "name": "Video Converter for WhatsApp",
+        "description": "Convert MOV, MP4, WebM, MKV, and other videos into WhatsApp-friendly MP4 files."
       }
     }
   },
@@ -426,7 +503,20 @@
     "imageConversionTimeout": "Image conversion took too long. Try a smaller image.",
     "imageOutputTooLarge": "The converted image is too large.",
     "imageConversionFailed": "Image conversion failed.",
-    "imageStorageUnavailable": "The image was converted, but secure download storage is temporarily unavailable."
+    "imageStorageUnavailable": "The image was converted, but secure download storage is temporarily unavailable.",
+    "videoTooLarge": "Video file is too large.",
+    "unsupportedVideoFormat": "This video format is not supported.",
+    "invalidVideoFile": "The uploaded file is not a valid readable video.",
+    "videoDurationTooLong": "Video duration is longer than the allowed limit.",
+    "videoQueueUnavailable": "Video workers are temporarily unavailable. Please try again shortly.",
+    "ffmpegUnavailable": "Video conversion is not configured on this server: ffmpeg is missing.",
+    "ffprobeUnavailable": "Video conversion is not configured on this server: ffprobe is missing.",
+    "videoConversionFailed": "Video conversion failed.",
+    "videoConversionTimeout": "Video conversion took too long. Try a shorter or smaller video.",
+    "videoAssemblyTimeout": "Video upload assembly took too long. Please retry the upload.",
+    "videoOutputValidationFailed": "The converted video did not pass compatibility validation.",
+    "videoUploadExpired": "The upload session expired. Please upload the video again.",
+    "videoChunkConflict": "A different chunk was already uploaded for this video."
   },
   "validation": {},
   "dashboard": {},
@@ -443,7 +533,11 @@
       "title": "Image Converter | Flowauxi Tools",
       "description": "Convert JPG, PNG, WebP, and supported image formats with Flowauxi Tools."
     },
-    "siteName": "Flowauxi Tools"
+    "siteName": "Flowauxi Tools",
+    "videoWhatsapp": {
+      "title": "Video Converter for WhatsApp | Flowauxi Tools",
+      "description": "Convert videos into WhatsApp-friendly MP4 files with Flowauxi Tools."
+    }
   },
   "seo": {}
 }

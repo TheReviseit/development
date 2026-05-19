@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 import uuid
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Optional
 
 from ...domain.errors import StorageError
@@ -81,21 +82,47 @@ class R2Storage(ArtifactStorage):
                 Metadata=metadata or {},
             )
         except Exception as exc:
-            raise StorageError("Generated PDF storage is unavailable. Please try again shortly.") from exc
+            raise StorageError("Generated file storage is unavailable. Please try again shortly.") from exc
         return StoredObject(provider=self.provider, key=key, size_bytes=len(content), mime_type=mime_type)
+
+    def put_file(self, key: str, path: str | Path, mime_type: str, metadata: Optional[dict[str, str]] = None) -> StoredObject:
+        source = Path(path)
+        try:
+            with source.open("rb") as body:
+                self.client.put_object(
+                    Bucket=self.bucket,
+                    Key=key,
+                    Body=body,
+                    ContentType=mime_type,
+                    CacheControl="private, max-age=0, no-store",
+                    Metadata=metadata or {},
+                )
+        except Exception as exc:
+            raise StorageError("Generated file storage is unavailable. Please try again shortly.") from exc
+        return StoredObject(provider=self.provider, key=key, size_bytes=source.stat().st_size, mime_type=mime_type)
 
     def get_bytes(self, key: str) -> bytes:
         try:
             response = self.client.get_object(Bucket=self.bucket, Key=key)
             return response["Body"].read()
         except Exception as exc:
-            raise StorageError("Generated PDF storage is unavailable. Please try again shortly.") from exc
+            raise StorageError("Generated file storage is unavailable. Please try again shortly.") from exc
+
+    def download_to_path(self, key: str, path: str | Path) -> int:
+        target = Path(path)
+        target.parent.mkdir(parents=True, exist_ok=True)
+        try:
+            with target.open("wb") as output:
+                self.client.download_fileobj(self.bucket, key, output)
+            return target.stat().st_size
+        except Exception as exc:
+            raise StorageError("Generated file storage is unavailable. Please try again shortly.") from exc
 
     def delete(self, key: str) -> None:
         try:
             self.client.delete_object(Bucket=self.bucket, Key=key)
         except Exception as exc:
-            raise StorageError("Generated PDF storage cleanup failed.") from exc
+            raise StorageError("Generated file storage cleanup failed.") from exc
 
     def health_check(self) -> bool:
         if os.getenv("FILE_TOOLS_STORAGE_HEALTH_PROBE", "write").lower() in {"1", "true", "write", "deep"}:

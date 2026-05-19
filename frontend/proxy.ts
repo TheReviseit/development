@@ -47,6 +47,7 @@ const BILLING_CONFIG = {
     'script-src': "'self' 'unsafe-inline' https://checkout.razorpay.com https://cdn.razorpay.com https://apis.google.com https://*.googleapis.com https://*.gstatic.com https://*.firebaseapp.com https://*.firebase.com",
     'style-src': "'self' 'unsafe-inline' https://fonts.googleapis.com",
     'img-src': "'self' data: https: blob:",
+    'media-src': "'self' blob: data: https:",
     'font-src': "'self' https://fonts.gstatic.com",
     'frame-src': "'self' https://checkout.razorpay.com https://*.firebaseapp.com https://*.google.com https://accounts.google.com",
     'connect-src': "'self' https://api.flowauxi.com https://lumberjack.razorpay.com https://*.googleapis.com https://*.google.com https://*.firebaseio.com wss://*.firebaseio.com",

@@ -1,0 +1,60 @@
+⨯ ReferenceError: UploadCloud is not defined
+    at OcrShell (components\file-tools\OcrShell.tsx:250:20)
+  248 |               <div className={styles.panelHeader}>
+  249 |                 <h2 className={styles.panelTitle}>
+> 250 |                   <UploadCloud size={18} />
+      |                    ^
+  251 |                   Upload
+  252 |                 </h2>
+  253 |               </div> {
+  digest: '1501334412'
+}
+⚠ Fast Refresh had to perform a full reload due to a runtime error.
+⚠ Fast Refresh had to perform a full reload due to a runtime error.
+⨯ ReferenceError: UploadCloud is not defined
+    at OcrShell (components\file-tools\OcrShell.tsx:253:20)
+  251 |               <div className={styles.panelHeader}>
+  252 |                 <h2 className={styles.panelTitle}>
+> 253 |                   <UploadCloud size={18} />
+      |                    ^
+  254 |                   Upload
+  255 |                 </h2>
+  256 |               </div> {
+  digest: '1501334412'
+}
+⨯ ReferenceError: UploadCloud is not defined
+    at OcrShell (components\file-tools\OcrShell.tsx:253:20)
+  251 |               <div className={styles.panelHeader}>
+  252 |                 <h2 className={styles.panelTitle}>
+> 253 |                   <UploadCloud size={18} />
+      |                    ^
+  254 |                   Upload
+  255 |                 </h2>
+  256 |               </div> {
+  digest: '1501334412'
+}
+⨯ ReferenceError: UploadCloud is not defined
+    at OcrShell (components\file-tools\OcrShell.tsx:253:20)
+  251 |               <div className={styles.panelHeader}>
+  252 |                 <h2 className={styles.panelTitle}>
+> 253 |                   <UploadCloud size={18} />
+      |                    ^
+  254 |                   Upload
+  255 |                 </h2>
+  256 |               </div> {
+  digest: '1501334412'
+}
+⨯ ReferenceError: UploadCloud is not defined
+    at OcrShell (components\file-tools\OcrShell.tsx:253:20)
+  251 |               <div className={styles.panelHeader}>
+  252 |                 <h2 className={styles.panelTitle}>
+> 253 |                   <UploadCloud size={18} />
+      |                    ^
+  254 |                   Upload
+  255 |                 </h2>
+  256 |               </div> {
+  digest: '1501334412'
+}
+⚠ Fast Refresh had to perform a full reload due to a runtime error.
+⚠ Fast Refresh had to perform a full reload due to a runtime error.
+⚠ Fast Refresh had to perform a full reload due to a runtime error.

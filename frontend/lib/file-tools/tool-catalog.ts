@@ -115,6 +115,14 @@ export const FILE_TOOL_CATALOG: FileToolCatalogItem[] = [
     status: "available",
   },
   {
+    key: "video_whatsapp_converter",
+    slug: "video-converter-for-whatsapp",
+    name: "Video Converter for WhatsApp",
+    description: "Convert MOV, MP4, WebM, MKV, and other videos into WhatsApp-friendly MP4 files.",
+    category: "convert",
+    status: "available",
+  },
+  {
     key: "pdf_to_image",
     slug: "pdf-to-image",
     name: "PDF to Image",
@@ -152,7 +160,7 @@ export const FILE_TOOL_CATALOG: FileToolCatalogItem[] = [
     name: "OCR",
     description: "Recognize text from scanned documents and make content searchable.",
     category: "ai",
-    status: "coming_soon",
+    status: "available",
   },
   {
     key: "protect_pdf",

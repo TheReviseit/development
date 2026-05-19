@@ -1,0 +1,31 @@
+FROM python:3.11.6-slim-bookworm
+
+ARG TESSERACT_DEBIAN_VERSION=5.3.0-2
+ARG TESSERACT_EXPECTED_VERSION=5.3.0
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    TESSERACT_CMD=/usr/bin/tesseract \
+    OCR_DEFAULT_LANGUAGE_MODE=auto \
+    OCR_QUEUE=ocr
+
+WORKDIR /app
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+        ca-certificates \
+        libgomp1 \
+        libglib2.0-0 \
+        tesseract-ocr=${TESSERACT_DEBIAN_VERSION} \
+        tesseract-ocr-all \
+    && tesseract --version \
+    && tesseract --version | head -n 1 | grep -F "tesseract ${TESSERACT_EXPECTED_VERSION}" \
+    && tesseract --list-langs | awk 'END { if (NR < 25) exit 1 }' \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+COPY . .
+
+CMD ["celery", "-A", "celery_app", "worker", "--loglevel=info", "-Q", "ocr", "--concurrency=2", "--prefetch-multiplier=1"]

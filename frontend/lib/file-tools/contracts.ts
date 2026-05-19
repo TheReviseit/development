@@ -144,3 +144,168 @@ export type FileToolHistoryItem = {
   downloadCount: number;
   downloadUrl?: string;
 };
+
+export type OcrStatus =
+  | "created"
+  | "quarantined"
+  | "queued"
+  | "preprocessing"
+  | "extracting"
+  | "merging"
+  | "exporting"
+  | "completed"
+  | "failed"
+  | "deleted"
+  | "expired";
+
+export interface OcrConfidence {
+  mean: number;
+  min: number;
+  lowConfidenceTokenCount: number;
+  providerAgreement: number;
+}
+
+export interface OcrFailure {
+  code: string;
+  message: string;
+  retryable: boolean;
+}
+
+export interface OcrJob {
+  id: string;
+  status: OcrStatus;
+  fileName: string;
+  mimeType: string;
+  pageCount: number;
+  processedPageCount: number;
+  confidence?: OcrConfidence | null;
+  failure?: OcrFailure | null;
+}
+
+export interface OcrUploadResponse {
+  job: OcrJob;
+  taskId?: string;
+  idempotentReplay?: boolean;
+}
+
+export interface OcrRetryResponse {
+  job: OcrJob;
+}
+
+export interface OcrTextResponse {
+  id: string;
+  status: OcrStatus;
+  text: string;
+}
+
+export interface OcrBlock {
+  id: string;
+  pageIndex: number;
+  type: string;
+  text: string;
+  bbox: {
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+  };
+  confidence: number;
+  readingOrder: number;
+}
+
+export interface OcrJsonResponse extends OcrJob {
+  text: string;
+  blocks: OcrBlock[];
+}
+
+export type VideoQualityPreset = "best_quality" | "balanced" | "small_size" | "whatsapp_optimized";
+export type VideoResolutionPreset = "original" | "1080p" | "720p" | "480p";
+export type VideoUploadStatus =
+  | "receiving"
+  | "assembly_queued"
+  | "assembling"
+  | "assembled"
+  | "failed"
+  | "expired"
+  | "cancelled";
+
+export interface VideoUploadSession {
+  id: string;
+  batchId?: string | null;
+  filename: string;
+  declaredMimeType?: string | null;
+  totalSizeBytes: number;
+  chunkSizeBytes: number;
+  totalChunks: number;
+  receivedBytes: number;
+  status: VideoUploadStatus;
+  expiresAt: string;
+  sourceReady: boolean;
+}
+
+export interface VideoUploadChunk {
+  chunkIndex: number;
+  byteStart: number;
+  byteEnd: number;
+  sha256: string;
+  sizeBytes: number;
+  status: string;
+}
+
+export interface VideoConversionOptions {
+  qualityPreset: VideoQualityPreset;
+  resolutionPreset: VideoResolutionPreset;
+  normalizeFps: boolean;
+  normalizeAudio: boolean;
+  removeAudio: boolean;
+  bitrateKbps?: number | null;
+  trimStartSeconds?: number | null;
+  trimEndSeconds?: number | null;
+  generateThumbnail: boolean;
+  generatePoster: boolean;
+}
+
+export interface VideoUploadCreateResponse {
+  success: true;
+  uploadSession: VideoUploadSession;
+}
+
+export interface VideoChunkUploadResponse {
+  success: true;
+  uploadSession: VideoUploadSession;
+  chunk: VideoUploadChunk;
+}
+
+export interface VideoUploadStatusResponse {
+  success: true;
+  uploadSession: VideoUploadSession;
+  chunks?: VideoUploadChunk[];
+  taskId?: string | null;
+}
+
+export interface VideoJobResponse {
+  success: true;
+  job: FileToolJob & {
+    errorCode?: string | null;
+    errorMessage?: string | null;
+  };
+  artifact?: FileToolArtifact | null;
+  downloadUrl?: string | null;
+  taskId?: string | null;
+}
+
+export interface VideoPresetResponse {
+  success: true;
+  presets: {
+    qualityPresets: Array<{
+      key: VideoQualityPreset;
+      label: string;
+      crf: number;
+      audioBitrate: string;
+      maxHeight: number | null;
+      fpsCap: number | null;
+      profile: string;
+    }>;
+    resolutionPresets: VideoResolutionPreset[];
+  };
+}
