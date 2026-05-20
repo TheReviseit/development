@@ -1,8 +1,8 @@
+// Backup of OcrUploadShell.tsx before redesign
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { motion } from "framer-motion";
 import {
   AlertCircle,
   CheckCircle2,
@@ -63,18 +63,6 @@ export default function OcrUploadShell({ basePath = "/tools" }: OcrUploadShellPr
   const inputRef = useRef<HTMLInputElement>(null);
   const activeRequestRef = useRef(0);
   const [file, setFile] = useState<File | null>(null);
-  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (!file) {
-      setPreviewUrl(null);
-      return;
-    }
-    const url = URL.createObjectURL(file);
-    setPreviewUrl(url);
-    return () => URL.revokeObjectURL(url);
-  }, [file]);
-
   const [isDragging, setIsDragging] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [job, setJob] = useState<OcrJob | null>(null);
@@ -203,44 +191,10 @@ export default function OcrUploadShell({ basePath = "/tools" }: OcrUploadShellPr
     }
   }, [isUploading, refreshJob]);
 
-  const handleFile = useCallback((nextFile: File | null) => {
+  const handleFile = (nextFile: File | null) => {
     if (!nextFile) return;
     void uploadFile(nextFile);
-  }, [uploadFile]);
-
-  useEffect(() => {
-    const handlePaste = (event: ClipboardEvent) => {
-      const target = event.target as HTMLElement;
-      if (
-        isUploading ||
-        target.tagName === "INPUT" ||
-        target.tagName === "TEXTAREA" ||
-        target.isContentEditable
-      ) {
-        return;
-      }
-
-      const items = event.clipboardData?.items;
-      if (!items) return;
-
-      for (let i = 0; i < items.length; i++) {
-        const item = items[i];
-        if (item.type.indexOf("image") !== -1) {
-          const file = item.getAsFile();
-          if (file) {
-            handleFile(file);
-            event.preventDefault();
-            break;
-          }
-        }
-      }
-    };
-
-    window.addEventListener("paste", handlePaste);
-    return () => {
-      window.removeEventListener("paste", handlePaste);
-    };
-  }, [handleFile, isUploading]);
+  };
 
   const handleRetry = async () => {
     if (!job?.id) return;
@@ -298,9 +252,7 @@ export default function OcrUploadShell({ basePath = "/tools" }: OcrUploadShellPr
   };
 
   const uploadControl = (
-    <motion.button
-      layout
-      transition={{ type: "spring", stiffness: 220, damping: 24 }}
+    <button
       type="button"
       className={`${styles.dropzone} ${!hasStarted ? styles.dropzoneLarge : styles.dropzoneCompact} ${isDragging ? styles.dropzoneActive : ""}`}
       onClick={() => inputRef.current?.click()}
@@ -320,53 +272,23 @@ export default function OcrUploadShell({ basePath = "/tools" }: OcrUploadShellPr
       aria-label={file ? "Replace image for OCR" : "Upload image for OCR"}
       data-ocr-upload-dropzone
     >
-      {!hasStarted ? (
-        <motion.div layout="position" className={styles.cardStack}>
-          <div className={`${styles.stackCard} ${styles.cardBg}`}>
-            <div className={styles.cardBgLine} />
-            <div className={styles.cardBgLine} />
-            <div className={styles.cardBgLine} />
-            <div className={styles.cardBgLine} />
-          </div>
-          <div className={`${styles.stackCard} ${styles.cardMid}`}>
-            <div className={styles.cardMidCode}>{"{"}</div>
-            <div className={styles.cardMidCode} style={{ paddingLeft: "8px" }}>"text": "..."</div>
-            <div className={styles.cardMidCode} style={{ paddingLeft: "8px" }}>"confidence": 0.98</div>
-            <div className={styles.cardMidCode}>{"}"}</div>
-          </div>
-          <div className={`${styles.stackCard} ${styles.cardFg}`}>
-            <div className={styles.cardFgIcon}>
-              <UploadCloud size={28} />
-            </div>
-            <span className={styles.cardFgText}>OCR IMAGE</span>
-          </div>
-        </motion.div>
-      ) : (
-        <motion.span layout="position" className={styles.compactIcon}>
-          {isUploading ? <Loader2 className={styles.spin} size={20} /> : <ImagePlus size={20} />}
-        </motion.span>
-      )}
-
-      <motion.span layout="position" className={hasStarted ? styles.compactText : styles.uploadText}>
+      <span className={hasStarted ? styles.compactIcon : styles.uploadIcon}>
+        {isUploading ? <Loader2 className={styles.spin} size={hasStarted ? 20 : 30} /> : hasStarted ? <ImagePlus size={20} /> : <UploadCloud size={30} />}
+      </span>
+      <span className={hasStarted ? styles.compactText : styles.uploadText}>
         <span className={styles.dropTitle}>
           {isUploading ? "Uploading image" : file ? file.name : "Choose an image or drop it here"}
         </span>
-        {hasStarted && (
-          <span className={styles.dropCopy}>
-            {sourceDetails}
-          </span>
-        )}
-        {!hasStarted && (
-          <div className={styles.formatBadgeGroup}>
-            <span className={styles.formatBadge}>png</span>
-            <span className={styles.formatBadge}>jpg</span>
-            <span className={styles.formatBadge}>webp</span>
-            <span className={styles.formatBadge}>tiff</span>
-            <span className={styles.formatBadge}>bmp</span>
-          </div>
-        )}
-      </motion.span>
-    </motion.button>
+        <span className={styles.dropCopy}>
+          {hasStarted ? sourceDetails : "PNG, JPG, WebP, TIFF, or BMP. PDF and HEIC are coming later."}
+        </span>
+      </span>
+      {!hasStarted && (
+        <>
+          <span className={styles.uploadAction}>Browse image</span>
+        </>
+      )}
+    </button>
   );
 
   return (
@@ -419,73 +341,6 @@ export default function OcrUploadShell({ basePath = "/tools" }: OcrUploadShellPr
         ) : (
           <>
             <section className={styles.workspace} aria-label="OCR workspace">
-              {/* Left Column: Source Image Preview */}
-              <section className={styles.imagePanel}>
-                <div className={styles.panelHeader}>
-                  <h2 className={styles.panelTitle}>
-                    <ImagePlus size={18} style={{ color: "rgb(240, 49, 46)" }} />
-                    Source image
-                  </h2>
-                  {file && (
-                    <span className={styles.imageMeta}>
-                      {(file.size / 1024).toFixed(1)} KB • {file.name.split(".").pop()?.toUpperCase()}
-                    </span>
-                  )}
-                </div>
-
-                <div className={styles.imageViewer}>
-                  {previewUrl ? (
-                    <div className={styles.imageWrapper}>
-                      {(isUploading ||
-                        job?.status === "preprocessing" ||
-                        job?.status === "extracting" ||
-                        job?.status === "merging" ||
-                        job?.status === "exporting" ||
-                        job?.status === "queued" ||
-                        job?.status === "created") && (
-                        <>
-                          <div className={styles.scanline} />
-                          <div className={styles.scanningOverlay} />
-                        </>
-                      )}
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img
-                        src={previewUrl}
-                        alt="Uploaded source"
-                        className={styles.sourceImage}
-                      />
-                    </div>
-                  ) : (
-                    <div className={styles.imagePlaceholder}>
-                      <UploadCloud size={40} className={styles.placeholderIcon} />
-                      <span>No image loaded</span>
-                    </div>
-                  )}
-                </div>
-
-                <div className={styles.imageFooter}>
-                  <button
-                    type="button"
-                    className={styles.secondaryButton}
-                    disabled={isUploading}
-                    onClick={() => inputRef.current?.click()}
-                  >
-                    <ImagePlus size={16} />
-                    Replace Image
-                  </button>
-                  <button
-                    type="button"
-                    className={`${styles.secondaryButton} ${styles.dangerButton}`}
-                    disabled={isUploading}
-                    onClick={handleDelete}
-                  >
-                    <Trash2 size={16} />
-                    Clear
-                  </button>
-                </div>
-              </section>
-
-              {/* Right Column: OCR Text Results */}
               <section className={styles.previewPanel} data-ocr-result-panel>
                 <div className={styles.previewToolbar}>
                   <h2 className={styles.panelTitle}>
@@ -510,53 +365,14 @@ export default function OcrUploadShell({ basePath = "/tools" }: OcrUploadShellPr
                 </div>
 
                 <div className={styles.previewActions}>
-                  <div className={styles.statusBadgeRow}>
-                    <span
-                      className={`${styles.statusIndicator} ${
-                        isUploading
-                          ? styles.processing
-                          : styles[job?.status || "idle"]
-                      }`}
-                    />
-                    <span className={styles.statusTextLabel}>
-                      {isUploading
-                        ? "Uploading..."
-                        : job?.status === "completed"
-                        ? "Extraction complete"
-                        : job?.status === "failed"
-                        ? "OCR failed"
-                        : job?.status
-                        ? statusLabel(job.status)
-                        : "Ready"}
-                    </span>
-                    {confidencePercent !== null && (
-                      <span className={styles.confidenceText}>
-                        ({confidencePercent}% confidence)
-                      </span>
-                    )}
-                  </div>
-                  <div className={styles.actionButtonsGroup}>
-                    <button
-                      type="button"
-                      className={styles.secondaryButton}
-                      disabled={!hasPreviewContent}
-                      onClick={handleCopy}
-                      data-ocr-copy
-                    >
-                      <Copy size={16} />
-                      Copy
-                    </button>
-                    <button
-                      type="button"
-                      className={styles.secondaryButton}
-                      disabled={!hasPreviewContent}
-                      onClick={handleDownload}
-                      data-ocr-download
-                    >
-                      <Download size={16} />
-                      Download
-                    </button>
-                  </div>
+                  <button type="button" className={styles.secondaryButton} disabled={!hasPreviewContent} onClick={handleCopy} data-ocr-copy>
+                    <Copy size={16} />
+                    Copy
+                  </button>
+                  <button type="button" className={styles.secondaryButton} disabled={!hasPreviewContent} onClick={handleDownload} data-ocr-download>
+                    <Download size={16} />
+                    Download
+                  </button>
                 </div>
 
                 {view === "layout" && json?.blocks?.length ? (
@@ -575,9 +391,7 @@ export default function OcrUploadShell({ basePath = "/tools" }: OcrUploadShellPr
                   </div>
                 ) : (
                   <div className={styles.reader}>
-                    <pre className={styles.plainPreview}>
-                      {hasPreviewContent ? previewContent : previewStatusCopy}
-                    </pre>
+                    <pre className={styles.plainPreview}>{hasPreviewContent ? previewContent : previewStatusCopy}</pre>
                   </div>
                 )}
 
@@ -594,6 +408,12 @@ export default function OcrUploadShell({ basePath = "/tools" }: OcrUploadShellPr
                       Clipboard is not available in this browser.
                     </span>
                   )}
+                  {job?.status === "completed" && copyState === "idle" && (
+                    <span className={`${styles.statusLine} ${styles.successText}`}>
+                      <CheckCircle2 size={16} />
+                      OCR completed.
+                    </span>
+                  )}
                   {error && (
                     <span className={`${styles.statusLine} ${styles.errorText}`} role="alert">
                       <AlertCircle size={16} />
@@ -602,6 +422,81 @@ export default function OcrUploadShell({ basePath = "/tools" }: OcrUploadShellPr
                   )}
                 </div>
               </section>
+
+              <aside className={styles.statusColumn} aria-label="OCR job status">
+                <section className={styles.statusPanel}>
+                  <div className={styles.panelHeader}>
+                    <h2 className={styles.panelTitle}>
+                      <ScanText size={18} />
+                      Job status
+                    </h2>
+                    {job?.status === "completed" ? <CheckCircle2 className={styles.readyIcon} size={18} /> : null}
+                  </div>
+                  <div className={styles.panelBody}>
+                    <div className={styles.progressTrack} aria-label={`OCR progress ${progress}%`}>
+                      <span style={{ width: `${progress}%` }} />
+                    </div>
+                    <dl className={styles.jobMeta} data-ocr-status>
+                      <div>
+                        <dt>Status</dt>
+                        <dd>{currentStatus}</dd>
+                      </div>
+                      <div>
+                        <dt>Pages</dt>
+                        <dd>{job ? `${job.processedPageCount}/${job.pageCount}` : "-"}</dd>
+                      </div>
+                      <div>
+                        <dt>File</dt>
+                        <dd>{job?.fileName ?? file?.name ?? "-"}</dd>
+                      </div>
+                    </dl>
+                    {job?.failure && (
+                      <div className={`${styles.statusLine} ${styles.errorText}`}>
+                        <AlertCircle size={16} />
+                        {job.failure.message}
+                      </div>
+                    )}
+                    <div className={styles.actionRow}>
+                      <button type="button" className={styles.iconButton} disabled={!job || isUploading} onClick={handleRetry} title="Retry OCR" aria-label="Retry OCR">
+                        <RotateCcw size={16} />
+                      </button>
+                      <button type="button" className={styles.iconButton} disabled={!job || isUploading} onClick={handleDelete} title="Delete OCR job" aria-label="Delete OCR job">
+                        <Trash2 size={16} />
+                      </button>
+                    </div>
+                  </div>
+                </section>
+
+                <section className={styles.statusPanel}>
+                  <div className={styles.panelHeader}>
+                    <h2 className={styles.panelTitle}>
+                      <Sparkles size={18} />
+                      Result quality
+                    </h2>
+                  </div>
+                  <div className={styles.panelBody}>
+                    <dl className={styles.jobMeta}>
+                      <div>
+                        <dt>Confidence</dt>
+                        <dd>{confidencePercent !== null ? `${confidencePercent}%` : "Waiting for result"}</dd>
+                      </div>
+                      <div>
+                        <dt>Low confidence tokens</dt>
+                        <dd>{job?.confidence?.lowConfidenceTokenCount ?? "-"}</dd>
+                      </div>
+                    </dl>
+                  </div>
+                </section>
+              </aside>
+            </section>
+
+            <section className={styles.bottomUpload} aria-label="Upload another image" data-ocr-bottom-upload>
+              <div className={styles.uploadDock}>
+                {uploadControl}
+                <div className={styles.dockStatus} aria-live="polite">
+                  {isUploading ? "Uploading and starting OCR..." : "Replace the image or start a new OCR job."}
+                </div>
+              </div>
             </section>
           </>
         )}
