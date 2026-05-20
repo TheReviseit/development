@@ -1,0 +1,33 @@
+FROM python:3.11.6-slim-bookworm
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    TESSERACT_CMD=/usr/bin/tesseract \
+    OCR_DEFAULT_LANGUAGE_MODE=auto
+
+WORKDIR /app
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+        ca-certificates \
+        ffmpeg \
+        libgomp1 \
+        libglib2.0-0 \
+        tesseract-ocr \
+        tesseract-ocr-eng \
+        tesseract-ocr-hin \
+        tesseract-ocr-tam \
+        tesseract-ocr-tel \
+        tesseract-ocr-kan \
+        tesseract-ocr-mal \
+        tesseract-ocr-osd \
+    && tesseract --version \
+    && tesseract --list-langs \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+COPY . .
+
+CMD ["sh", "-c", "gunicorn app:app --bind 0.0.0.0:${PORT:-10000} --workers 2 --threads 4 --worker-class gthread --timeout 120 --keep-alive 5 --max-requests 1000 --max-requests-jitter 50 --log-level info --access-logfile - --error-logfile -"]

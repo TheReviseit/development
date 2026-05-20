@@ -1,4 +1,5 @@
 import sys
+from datetime import timedelta
 from io import BytesIO
 from pathlib import Path
 
@@ -96,6 +97,19 @@ class FakeQueue:
     def enqueue_extraction(self, job_id: str):
         self.enqueued.append(job_id)
         return type("Task", (), {"task_id": f"fake-task-{job_id}", "queue": "ocr"})()
+
+
+class FakeInlineQueue(FakeQueue):
+    def inline_enabled(self) -> bool:
+        return True
+
+    def health(self) -> dict[str, object]:
+        return {
+            "available": True,
+            "mode": "inline",
+            "queue": "ocr",
+            "broker": {"configured": False, "local": False},
+        }
 
 
 class FakeEngine:
@@ -235,6 +249,32 @@ def test_ocr_upload_stores_source_and_enqueues_async_job(tmp_path):
     )
     assert replay["idempotentReplay"] is True
     assert replay["job"]["id"] == job["id"]
+
+
+def test_ocr_health_uses_tesseract_when_inline_worker_is_enabled(tmp_path):
+    service = make_service(tmp_path, queue=FakeInlineQueue(), engine=FakeEngine())
+
+    health = service.health()
+
+    assert health["available"] is True
+    assert health["queue"]["mode"] == "inline"
+    assert health["tesseract"]["available"] is True
+
+
+def test_ocr_get_job_requeues_stale_inline_job(tmp_path):
+    queue = FakeInlineQueue()
+    service = make_service(tmp_path, queue=queue)
+    ctx = context()
+    uploaded = service.upload(upload_files(image_bytes("FLOWAUXI OCR 123")), upload_form("stale-inline"), ctx)
+    job_id = uploaded["job"]["id"]
+    queue.enqueued.clear()
+    FileToolsRepository._memory_jobs[job_id]["updated_at"] = (service.repository.get_job(job_id).updated_at - timedelta(seconds=60)).isoformat()
+
+    job = service.get_job(job_id, ctx)
+
+    assert job["status"] == "queued"
+    assert queue.enqueued == [job_id]
+    assert FileToolsRepository._memory_jobs[job_id]["request_json"]["inlineRescueQueuedAt"]
 
 
 def test_ocr_extract_completes_job_and_serializes_text_and_json(tmp_path):

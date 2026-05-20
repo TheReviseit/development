@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 import hashlib
+import os
 import shutil
 import tempfile
 import time
 import uuid
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -160,6 +162,7 @@ class OcrService:
 
     def get_job(self, job_id: str, context: RequestContext) -> dict[str, Any]:
         job = self._owned_job(job_id, context)
+        job = self._rescue_stale_inline_job(job) or job
         return self._job_payload(job)
 
     def get_text(self, job_id: str, context: RequestContext) -> dict[str, Any]:
@@ -254,6 +257,40 @@ class OcrService:
             raise PermissionDeniedError("You do not have access to this OCR job.")
         return job
 
+    def _rescue_stale_inline_job(self, job: FileToolJob) -> FileToolJob | None:
+        if job.status != FileToolStatus.QUEUED or self.queue is None:
+            return None
+        inline_enabled = getattr(self.queue, "inline_enabled", None)
+        if not callable(inline_enabled):
+            return None
+        try:
+            if not inline_enabled():
+                return None
+        except Exception:
+            return None
+
+        threshold_seconds = _env_float("FILES_OCR_INLINE_REQUEUE_AFTER_SECONDS", 30.0)
+        now = utc_now()
+        if (now - job.updated_at).total_seconds() < threshold_seconds:
+            return None
+
+        rescue_queued_at = _parse_datetime(job.request_payload.get("inlineRescueQueuedAt"))
+        if rescue_queued_at and (now - rescue_queued_at).total_seconds() < threshold_seconds:
+            return None
+
+        if not job.request_payload.get("sourceStorageKey"):
+            return None
+
+        self.repository.update_job(
+            job.id,
+            extra={"request_json": {**job.request_payload, "inlineRescueQueuedAt": now.isoformat()}},
+        )
+        try:
+            self.queue.enqueue_extraction(job.id)
+        except FileToolError as exc:
+            self.repository.mark_job_failed(job.id, exc.code, exc.message)
+        return self.repository.get_job(job.id)
+
     def _job_payload(self, job: FileToolJob) -> dict[str, Any]:
         result = self.repository.get_ocr_result(job.id)
         confidence = result.get("confidence_json") if result else None
@@ -278,6 +315,8 @@ def _ocr_status(job: FileToolJob) -> str:
         return "completed"
     if job.status == FileToolStatus.FAILED:
         return "failed"
+    if job.status == FileToolStatus.DEAD_LETTER:
+        return "failed"
     if job.status == FileToolStatus.EXPIRED:
         return "expired"
     if job.status == FileToolStatus.CANCELLED:
@@ -286,7 +325,7 @@ def _ocr_status(job: FileToolJob) -> str:
 
 
 def _failure_payload(job: FileToolJob) -> dict[str, Any] | None:
-    if job.status != FileToolStatus.FAILED:
+    if job.status not in {FileToolStatus.FAILED, FileToolStatus.DEAD_LETTER}:
         return None
     code = job.error_code or "OCR_FAILED"
     return {
@@ -294,3 +333,20 @@ def _failure_payload(job: FileToolJob) -> dict[str, Any] | None:
         "message": job.error_message or "OCR extraction failed.",
         "retryable": code not in {"OCR_UNSUPPORTED_INPUT", "OCR_MIME_MISMATCH", "OCR_FILE_TOO_LARGE", "OCR_IMAGE_TOO_LARGE"},
     }
+
+
+def _env_float(key: str, fallback: float) -> float:
+    try:
+        value = float(os.getenv(key, ""))
+    except ValueError:
+        return fallback
+    return value if value >= 0 else fallback
+
+
+def _parse_datetime(value: object) -> datetime | None:
+    if not isinstance(value, str) or not value:
+        return None
+    try:
+        return datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        return None
