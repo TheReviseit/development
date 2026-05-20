@@ -22,6 +22,7 @@ from domains.file_tools.domain.entities import FileToolOwner
 from domains.file_tools.domain.enums import OwnerType
 from domains.file_tools.domain.errors import ConflictError, PermissionDeniedError, ValidationError
 from domains.file_tools.infrastructure.repositories import FileToolsRepository
+from domains.file_tools.infrastructure.queue.ocr_queue import _inline_dev_workers_enabled
 from domains.file_tools.infrastructure.storage.local_dev_storage import LocalDevStorage
 from domains.file_tools.validators.ocr_validator import OcrValidator
 
@@ -146,6 +147,45 @@ def make_service(tmp_path: Path, queue: FakeQueue | None = None, engine: FakeEng
         OcrPreprocessor(),
         engine or FakeEngine(),
     )
+
+
+def clear_ocr_queue_env(monkeypatch):
+    for key in (
+        "FILES_OCR_INLINE_DEV_WORKERS",
+        "FLASK_ENV",
+        "APP_ENV",
+        "ENV",
+        "PYTHON_ENV",
+        "NODE_ENV",
+        "REDIS_URL",
+        "RENDER",
+        "RAILWAY_ENVIRONMENT",
+        "RAILWAY_SERVICE_NAME",
+    ):
+        monkeypatch.delenv(key, raising=False)
+
+
+def test_ocr_inline_workers_default_to_local_development(monkeypatch):
+    clear_ocr_queue_env(monkeypatch)
+
+    assert _inline_dev_workers_enabled() is True
+
+
+def test_ocr_inline_workers_disable_on_managed_runtime(monkeypatch):
+    clear_ocr_queue_env(monkeypatch)
+    monkeypatch.setenv("RENDER", "true")
+
+    assert _inline_dev_workers_enabled() is False
+
+
+def test_ocr_inline_workers_disable_with_remote_broker_unless_explicit(monkeypatch):
+    clear_ocr_queue_env(monkeypatch)
+    monkeypatch.setenv("REDIS_URL", "rediss://default:secret@example.redis.render.com:6379/0")
+
+    assert _inline_dev_workers_enabled() is False
+
+    monkeypatch.setenv("FILES_OCR_INLINE_DEV_WORKERS", "true")
+    assert _inline_dev_workers_enabled() is True
 
 
 def test_ocr_validator_accepts_image_and_rejects_pdf():

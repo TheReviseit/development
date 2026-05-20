@@ -200,10 +200,18 @@ class OcrService:
         return {**self._job_payload(job), "status": "deleted"}
 
     def health(self) -> dict[str, Any]:
+        tesseract = self.engine.health()
+        queue_health = self.queue.health() if hasattr(self.queue, "health") else {
+            "available": False,
+            "mode": "unconfigured",
+            "queue": "ocr",
+        }
+        inline_mode = queue_health.get("mode") == "inline"
         return {
-            "available": self.engine.is_available(),
+            "available": bool(tesseract.get("available")) if inline_mode else bool(queue_health.get("available")),
             "engine": "tesseract",
-            "tesseract": self.engine.health(),
+            "tesseract": tesseract,
+            "queue": queue_health,
             "limits": {
                 "guestMaxInputBytes": OCR_LIMITS.guest_max_input_bytes,
                 "authenticatedMaxInputBytes": OCR_LIMITS.authenticated_max_input_bytes,
@@ -286,4 +294,3 @@ def _failure_payload(job: FileToolJob) -> dict[str, Any] | None:
         "message": job.error_message or "OCR extraction failed.",
         "retryable": code not in {"OCR_UNSUPPORTED_INPUT", "OCR_MIME_MISMATCH", "OCR_FILE_TOO_LARGE", "OCR_IMAGE_TOO_LARGE"},
     }
-
