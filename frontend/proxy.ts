@@ -45,6 +45,8 @@ const CUSTOM_DOMAIN_STORE_RELATIVE_PATHS = [
   "/checkout",
   "/track-order",
 ];
+const DEFAULT_CUSTOM_DOMAIN_ROUTING_TIMEOUT_MS = 5_000;
+const MAX_CUSTOM_DOMAIN_ROUTING_TIMEOUT_MS = 8_000;
 const filesLocalePathPattern = /^\/(en|ta|hi|ml|kn|te)\/(?:files|tools)(?:\/|$)/;
 const legacyFilesPathPattern = /^\/files(?=\/|$)/;
 const legacyLocalizedFilesPathPattern = /^\/(en|ta|hi|ml|kn|te)\/files(?=\/|$)/;
@@ -576,6 +578,14 @@ function customDomainHtml(status: number, title: string, message: string): NextR
   );
 }
 
+function customDomainRoutingTimeoutMs(): number {
+  const configured = Number(process.env.DOMAIN_ROUTING_TIMEOUT_MS);
+  if (!Number.isFinite(configured) || configured <= 0) {
+    return DEFAULT_CUSTOM_DOMAIN_ROUTING_TIMEOUT_MS;
+  }
+  return Math.min(Math.max(configured, 800), MAX_CUSTOM_DOMAIN_ROUTING_TIMEOUT_MS);
+}
+
 async function resolveCustomDomainRouting(hostname: string): Promise<CustomDomainRoutingLookup> {
   const cacheKey = hostname.toLowerCase();
   const cached = customDomainRoutingCache.get(cacheKey);
@@ -597,6 +607,7 @@ async function resolveCustomDomainRouting(hostname: string): Promise<CustomDomai
   url.searchParams.set("host", hostname);
   const secretFp = await secretFingerprint(secret);
   const debugRouting = process.env.DOMAIN_ROUTING_DEBUG === "true";
+  const timeoutMs = customDomainRoutingTimeoutMs();
 
   try {
     if (debugRouting) {
@@ -607,6 +618,7 @@ async function resolveCustomDomainRouting(hostname: string): Promise<CustomDomai
           endpointHost: url.host,
           hasSecret: Boolean(secret),
           secretFp,
+          timeoutMs,
         }),
       );
     }
@@ -615,7 +627,7 @@ async function resolveCustomDomainRouting(hostname: string): Promise<CustomDomai
       method: "GET",
       headers: secret ? { "X-Internal-Domain-Secret": secret } : {},
       cache: "no-store",
-      signal: AbortSignal.timeout(800),
+      signal: AbortSignal.timeout(timeoutMs),
     });
     if (!response.ok) {
       let body: { code?: string; message?: string } | null = null;
@@ -641,9 +653,11 @@ async function resolveCustomDomainRouting(hostname: string): Promise<CustomDomai
           code: lookup.failure.code,
           hasSecret: Boolean(secret),
           secretFp,
+          timeoutMs,
         }),
       );
-      customDomainRoutingCache.set(cacheKey, { value: lookup, expiresAt: Date.now() + 15_000 });
+      const failureTtlMs = response.status >= 500 || lookup.failure.code === "AUTH_REQUIRED" ? 5_000 : 15_000;
+      customDomainRoutingCache.set(cacheKey, { value: lookup, expiresAt: Date.now() + failureTtlMs });
       return lookup;
     }
     const payload = await response.json();
@@ -677,6 +691,7 @@ async function resolveCustomDomainRouting(hostname: string): Promise<CustomDomai
         endpointHost: url.host,
         hasSecret: Boolean(secret),
         secretFp,
+        timeoutMs,
         error: error instanceof Error ? error.message : String(error),
       }),
     );
