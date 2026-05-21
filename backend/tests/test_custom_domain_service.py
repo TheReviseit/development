@@ -73,6 +73,26 @@ class FakeRepo:
         self.idempotency[data["namespace"]] = data
 
 
+class FakeLegacyDomainRepo(FakeRepo):
+    optional_fields = {
+        "setup_mode",
+        "nameserver_status",
+        "managed_dns_status",
+        "desired_nameservers",
+        "managed_dns_records",
+    }
+
+    def create_domain(self, data):
+        return super().create_domain({
+            key: value for key, value in data.items() if key not in self.optional_fields
+        })
+
+    def update_domain(self, domain_id, fields):
+        return super().update_domain(domain_id, {
+            key: value for key, value in fields.items() if key not in self.optional_fields
+        })
+
+
 class FakeProvider:
     def __init__(self, fail_remove=False, fail_add=False):
         self.fail_remove = fail_remove
@@ -259,6 +279,27 @@ def test_add_domain_defaults_to_nameserver_setup(monkeypatch):
     assert domain["nameserverStatus"] == "pending"
     assert domain["managedDnsStatus"] == "pending"
     assert domain["desiredNameservers"] == ["ns1.vercel-dns.com", "ns2.vercel-dns.com"]
+
+
+def test_nameserver_setup_survives_legacy_schema_compatibility(monkeypatch):
+    monkeypatch.setenv("DOMAIN_OWNERSHIP_SECRET", "test-secret")
+    repo = FakeLegacyDomainRepo()
+    svc = service(repo=repo)
+
+    created = svc.add_domain("user_1", "customer.com", "idem-1").body["domain"]
+    stored_row = repo.rows[created["id"]]
+
+    assert "setup_mode" not in stored_row
+    assert "desired_nameservers" not in stored_row
+    assert created["setupMode"] == "nameserver"
+    assert created["desiredNameservers"] == ["ns1.vercel-dns.com", "ns2.vercel-dns.com"]
+
+    verified = svc.verify_domain("user_1", created["id"]).body["domain"]
+
+    assert verified["setupMode"] == "nameserver"
+    assert verified["nameserverStatus"] == "verified"
+    assert verified["managedDnsStatus"] == "synced"
+    assert verified["managedRecords"][0]["type"] == "TXT"
 
 
 def test_verify_nameserver_domain_syncs_managed_dns(monkeypatch):

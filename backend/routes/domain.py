@@ -36,11 +36,14 @@ def _unexpected_error_response(exc: Exception):
 
     message = "Domain service failed unexpectedly."
     code = DomainErrorCode.INTERNAL_ERROR.value
+    status_code = 500
     if _looks_like_missing_domain_migration(exc):
         message = (
             "Custom domain database schema is missing required columns. "
-            "Apply migration 20260521002200_domain_setup_modes.sql to Supabase, then retry."
+            "Apply migration 20260521002300_reload_domain_setup_schema_cache.sql to Supabase, then retry."
         )
+        code = DomainErrorCode.SCHEMA_MIGRATION_REQUIRED.value
+        status_code = 503
 
     return jsonify({
         "success": False,
@@ -49,7 +52,7 @@ def _unexpected_error_response(exc: Exception):
         "retryable": False,
         "nextRetryAt": None,
         "requestId": request_id,
-    }), 500
+    }), status_code
 
 
 def _looks_like_missing_domain_migration(exc: Exception) -> bool:

@@ -1,5 +1,7 @@
--- Domain setup modes for Vercel-managed DNS onboarding.
--- nameserver mode is the recommended SaaS flow; manual_dns remains the fallback.
+-- Re-apply domain setup columns idempotently and force PostgREST schema reload.
+-- This is safe to run after 20260521002200_domain_setup_modes.sql and fixes
+-- deployments where Supabase accepted the ALTER TABLE but PostgREST still has
+-- a stale schema cache.
 
 ALTER TABLE public.tenant_domains
     ADD COLUMN IF NOT EXISTS setup_mode TEXT NOT NULL DEFAULT 'manual_dns',
@@ -45,6 +47,4 @@ CREATE INDEX IF NOT EXISTS idx_tenant_domains_setup_mode
     ON public.tenant_domains (setup_mode, nameserver_status, managed_dns_status)
     WHERE deleted_at IS NULL;
 
--- Supabase/PostgREST keeps a schema cache. Reload it immediately so the
--- application can write newly added columns without waiting for cache expiry.
 NOTIFY pgrst, 'reload schema';

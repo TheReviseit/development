@@ -85,7 +85,7 @@ class CustomDomainService:
                     "Idempotency key was reused with a different payload.",
                     status_code=409,
                 )
-            if existing_idempotency["state"] == "completed" and existing_idempotency.get("response_body"):
+            if existing_idempotency["state"] in {"completed", "failed_transient"} and existing_idempotency.get("response_body"):
                 return ServiceResult(existing_idempotency["response_body"], existing_idempotency["status_code"], replayed=True)
             raise DomainEngineError(
                 DomainErrorCode.IDEMPOTENCY_IN_PROGRESS,
@@ -116,6 +116,22 @@ class CustomDomainService:
                 expires_hours=2 if exc.retryable else 24,
             )
             raise
+        except Exception as exc:
+            self._store_idempotency(
+                namespace,
+                payload_hash,
+                "failed_transient",
+                response_body={
+                    "success": False,
+                    "code": DomainErrorCode.INTERNAL_ERROR.value,
+                    "message": "Domain creation failed unexpectedly.",
+                    "retryable": True,
+                    "nextRetryAt": None,
+                },
+                status_code=500,
+                expires_hours=2,
+            )
+            raise
 
     def verify_domain(self, user_id: str, domain_id: str) -> ServiceResult:
         row = self._require_domain(user_id, domain_id)
@@ -124,7 +140,7 @@ class CustomDomainService:
 
         host = normalize_host(row["normalized_host"])
         token = self._ownership_token(row["tenant_id"], host.normalized_host)
-        setup_mode = self._normalize_setup_mode(row.get("setup_mode") or "manual_dns")
+        setup_mode = self._domain_setup_mode(row)
         if setup_mode == "nameserver":
             return self._verify_nameserver_domain(row, host, token)
 
@@ -313,7 +329,14 @@ class CustomDomainService:
             "apex_host": host.apex_host,
             "domain_kind": host.domain_kind,
             "verification_token_hash": hashlib.sha256(token.encode("utf-8")).hexdigest(),
-            "expected_records": {"records": expected_records},
+            "expected_records": self._expected_records_payload(
+                expected_records,
+                setup_mode,
+                desired_nameservers=desired_nameservers,
+                managed_records=managed_records,
+                nameserver_status="pending" if setup_mode == "nameserver" else "not_applicable",
+                managed_dns_status="pending" if setup_mode == "nameserver" else "not_applicable",
+            ),
             "setup_mode": setup_mode,
             "nameserver_status": "pending" if setup_mode == "nameserver" else "not_applicable",
             "managed_dns_status": "pending" if setup_mode == "nameserver" else "not_applicable",
@@ -353,7 +376,7 @@ class CustomDomainService:
 
     def _retry_failed_provider_assignment(self, row: dict[str, Any], host: NormalizedHost, setup_mode: str) -> ServiceResult:
         token = self._ownership_token(row["tenant_id"], host.normalized_host)
-        setup_mode = self._normalize_setup_mode(row.get("setup_mode") or setup_mode)
+        setup_mode = self._domain_setup_mode(row, fallback=setup_mode)
         expected_records = self._expected_setup_records(host, token, setup_mode)
         desired_nameservers = self.provider.get_managed_nameservers() if setup_mode == "nameserver" else []
         managed_records = self._managed_dns_records(host, token) if setup_mode == "nameserver" else []
@@ -371,7 +394,14 @@ class CustomDomainService:
             raise
 
         updated = self.repo.update_domain(row["id"], {
-            "expected_records": {"records": expected_records},
+            "expected_records": self._expected_records_payload(
+                expected_records,
+                setup_mode,
+                desired_nameservers=desired_nameservers,
+                managed_records=managed_records,
+                nameserver_status="pending" if setup_mode == "nameserver" else "not_applicable",
+                managed_dns_status="pending" if setup_mode == "nameserver" else "not_applicable",
+            ),
             "setup_mode": setup_mode,
             "nameserver_status": "pending" if setup_mode == "nameserver" else "not_applicable",
             "managed_dns_status": "pending" if setup_mode == "nameserver" else "not_applicable",
@@ -411,7 +441,13 @@ class CustomDomainService:
 
         if not dns_result.verified:
             updated = self.repo.update_domain(row["id"], {
-                "expected_records": {"records": expected_records},
+                "expected_records": self._expected_records_payload(
+                    expected_records,
+                    "nameserver",
+                    desired_nameservers=desired_nameservers,
+                    nameserver_status="failed" if dns_result.error_code == DomainErrorCode.NAMESERVER_MISMATCH else "pending",
+                    managed_dns_status="pending",
+                ),
                 "observed_records": dns_result.observed_records,
                 "desired_nameservers": desired_nameservers,
                 "ownership_status": "pending",
@@ -438,7 +474,14 @@ class CustomDomainService:
 
         if managed_dns_error:
             updated = self.repo.update_domain(row["id"], {
-                "expected_records": {"records": expected_records},
+                "expected_records": self._expected_records_payload(
+                    expected_records,
+                    "nameserver",
+                    desired_nameservers=desired_nameservers,
+                    managed_records=managed_records,
+                    nameserver_status="verified",
+                    managed_dns_status=managed_dns_status,
+                ),
                 "observed_records": dns_result.observed_records,
                 "desired_nameservers": desired_nameservers,
                 "managed_dns_records": {
@@ -462,7 +505,14 @@ class CustomDomainService:
         active = provider_result.verified
         new_version = int(row.get("routing_version") or 1) + (1 if active and not row.get("routing_enabled") else 0)
         updated = self.repo.update_domain(row["id"], {
-            "expected_records": {"records": expected_records},
+            "expected_records": self._expected_records_payload(
+                expected_records,
+                "nameserver",
+                desired_nameservers=desired_nameservers,
+                managed_records=managed_records,
+                nameserver_status="verified",
+                managed_dns_status=managed_dns_status,
+            ),
             "observed_records": dns_result.observed_records,
             "desired_nameservers": desired_nameservers,
             "managed_dns_records": {
@@ -497,6 +547,42 @@ class CustomDomainService:
                 for record in self.dns.expected_nameserver_records(host, self.provider.get_managed_nameservers())
             ]
         return [record.to_dict() for record in self.dns.expected_records(host, token)]
+
+    def _expected_records_payload(
+        self,
+        records: list[dict[str, Any]],
+        setup_mode: str,
+        *,
+        desired_nameservers: list[str] | None = None,
+        managed_records: list[ProviderDnsRecord] | None = None,
+        nameserver_status: str | None = None,
+        managed_dns_status: str | None = None,
+    ) -> dict[str, Any]:
+        payload: dict[str, Any] = {
+            "records": records,
+            "setupMode": setup_mode,
+        }
+        if desired_nameservers is not None:
+            payload["desiredNameservers"] = desired_nameservers
+        if managed_records is not None:
+            payload["managedRecords"] = [record.to_dict() for record in managed_records]
+        if nameserver_status is not None:
+            payload["nameserverStatus"] = nameserver_status
+        if managed_dns_status is not None:
+            payload["managedDnsStatus"] = managed_dns_status
+        return payload
+
+    def _domain_setup_mode(self, row: dict[str, Any], fallback: str = "manual_dns") -> str:
+        stored = row.get("setup_mode")
+        if stored:
+            return self._normalize_setup_mode(stored)
+
+        expected_records = row.get("expected_records") or {}
+        metadata_mode = expected_records.get("setupMode") or expected_records.get("setup_mode")
+        if metadata_mode:
+            return self._normalize_setup_mode(str(metadata_mode))
+
+        return self._normalize_setup_mode(fallback)
 
     def _managed_dns_records(self, host: NormalizedHost, token: str) -> list[ProviderDnsRecord]:
         records = [ProviderDnsRecord("TXT", "_flowauxi", token)]
@@ -557,21 +643,30 @@ class CustomDomainService:
         return row
 
     def _public_domain(self, row: dict[str, Any], *, include_records: bool = False) -> dict[str, Any]:
+        expected_metadata = row.get("expected_records") or {}
+        setup_mode = self._domain_setup_mode(row)
+        nameserver_status = row.get("nameserver_status") or expected_metadata.get("nameserverStatus")
+        if not nameserver_status:
+            nameserver_status = "pending" if setup_mode == "nameserver" else "not_applicable"
+        managed_dns_status = row.get("managed_dns_status") or expected_metadata.get("managedDnsStatus")
+        if not managed_dns_status:
+            managed_dns_status = "pending" if setup_mode == "nameserver" else "not_applicable"
+
         body = {
             "id": row["id"],
             "host": row["display_host"],
             "normalizedHost": row["normalized_host"],
             "apexHost": row.get("apex_host"),
-            "setupMode": row.get("setup_mode", "manual_dns"),
+            "setupMode": setup_mode,
             "productDomain": row["product_domain"],
             "status": row["status"],
             "dnsStatus": row["dns_status"],
             "sslStatus": row["ssl_status"],
             "providerStatus": row["provider_status"],
             "ownershipStatus": row["ownership_status"],
-            "nameserverStatus": row.get("nameserver_status", "not_applicable"),
-            "managedDnsStatus": row.get("managed_dns_status", "not_applicable"),
-            "desiredNameservers": row.get("desired_nameservers") or [],
+            "nameserverStatus": nameserver_status,
+            "managedDnsStatus": managed_dns_status,
+            "desiredNameservers": row.get("desired_nameservers") or expected_metadata.get("desiredNameservers") or [],
             "routingEnabled": row["routing_enabled"],
             "routingVersion": row["routing_version"],
             "isPrimary": row["is_primary"],
@@ -583,9 +678,10 @@ class CustomDomainService:
             "updatedAt": row.get("updated_at"),
         }
         if include_records:
-            body["expectedRecords"] = (row.get("expected_records") or {}).get("records", [])
+            body["expectedRecords"] = expected_metadata.get("records", [])
             body["observedRecords"] = row.get("observed_records") or {}
-            body["managedRecords"] = (row.get("managed_dns_records") or {}).get("records", [])
+            managed_records = row.get("managed_dns_records") or {}
+            body["managedRecords"] = managed_records.get("records") or expected_metadata.get("managedRecords") or []
         return body
 
     def _ownership_token(self, tenant_id: str, normalized_host: str) -> str:

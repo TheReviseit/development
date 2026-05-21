@@ -1,7 +1,22 @@
 from __future__ import annotations
 
+import re
 from datetime import datetime, timezone
 from typing import Any
+
+try:
+    from postgrest.exceptions import APIError
+except Exception:  # pragma: no cover - defensive for dependency drift
+    APIError = Exception
+
+
+OPTIONAL_TENANT_DOMAIN_FIELDS = {
+    "setup_mode",
+    "nameserver_status",
+    "managed_dns_status",
+    "desired_nameservers",
+    "managed_dns_records",
+}
 
 
 class DomainRepository:
@@ -72,18 +87,73 @@ class DomainRepository:
         return rows[0] if rows else None
 
     def create_domain(self, data: dict[str, Any]) -> dict[str, Any]:
-        result = self.client.table("tenant_domains").insert(data).execute()
+        result = self._execute_domain_insert(data)
         rows = result.data or []
         if not rows:
             raise RuntimeError("Failed to create tenant domain")
         return rows[0]
 
     def update_domain(self, domain_id: str, fields: dict[str, Any]) -> dict[str, Any]:
-        result = self.client.table("tenant_domains").update(fields).eq("id", domain_id).execute()
+        result = self._execute_domain_update(domain_id, fields)
         rows = result.data or []
         if not rows:
             raise RuntimeError("Failed to update tenant domain")
         return rows[0]
+
+    def _execute_domain_insert(self, data: dict[str, Any]):
+        try:
+            return self.client.table("tenant_domains").insert(data).execute()
+        except APIError as exc:
+            if not self._is_optional_domain_schema_error(exc):
+                raise
+            compatible_data = self._without_optional_domain_fields(data)
+            print(
+                "[DomainRepository] tenant_domains optional columns are not available in "
+                "PostgREST schema cache; retrying insert with compatibility payload. "
+                "Apply 20260521002200_domain_setup_modes.sql and reload schema cache."
+            )
+            return self.client.table("tenant_domains").insert(compatible_data).execute()
+
+    def _execute_domain_update(self, domain_id: str, fields: dict[str, Any]):
+        try:
+            return self.client.table("tenant_domains").update(fields).eq("id", domain_id).execute()
+        except APIError as exc:
+            if not self._is_optional_domain_schema_error(exc):
+                raise
+            compatible_fields = self._without_optional_domain_fields(fields)
+            print(
+                "[DomainRepository] tenant_domains optional columns are not available in "
+                "PostgREST schema cache; retrying update with compatibility payload. "
+                "Apply 20260521002200_domain_setup_modes.sql and reload schema cache."
+            )
+            if not compatible_fields:
+                return self.client.table("tenant_domains").select("*").eq("id", domain_id).limit(1).execute()
+            return self.client.table("tenant_domains").update(compatible_fields).eq("id", domain_id).execute()
+
+    def _without_optional_domain_fields(self, data: dict[str, Any]) -> dict[str, Any]:
+        return {key: value for key, value in data.items() if key not in OPTIONAL_TENANT_DOMAIN_FIELDS}
+
+    def _is_optional_domain_schema_error(self, exc: Exception) -> bool:
+        missing_column = self._missing_column_name(exc)
+        if missing_column in OPTIONAL_TENANT_DOMAIN_FIELDS:
+            return True
+
+        text = str(exc).lower()
+        return (
+            "tenant_domains" in text
+            and "schema cache" in text
+            and any(field in text for field in OPTIONAL_TENANT_DOMAIN_FIELDS)
+        )
+
+    def _missing_column_name(self, exc: Exception) -> str | None:
+        text = str(exc).lower()
+        quoted_match = re.search(r"['\"]([a-z_]+)['\"] column", text)
+        if quoted_match:
+            return quoted_match.group(1)
+        dotted_match = re.search(r"tenant_domains\.([a-z_]+)", text)
+        if dotted_match:
+            return dotted_match.group(1)
+        return None
 
     def get_business_slug(self, user_id: str) -> str:
         result = (
@@ -118,4 +188,3 @@ class DomainRepository:
 
     def store_idempotency(self, data: dict[str, Any]) -> None:
         self.client.table("domain_idempotency_keys").upsert(data, on_conflict="namespace").execute()
-
