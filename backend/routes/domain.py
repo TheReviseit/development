@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import time
+import traceback
 from typing import Any
 
 from flask import Blueprint, jsonify, request, g
@@ -26,6 +27,41 @@ def _json_result(result: ServiceResult):
 
 def _error_response(exc: DomainEngineError):
     return jsonify(exc.to_dict(_request_id())), exc.status_code
+
+
+def _unexpected_error_response(exc: Exception):
+    request_id = _request_id()
+    print(f"[DomainRoutes] Unexpected error request_id={request_id}: {type(exc).__name__}: {exc}")
+    traceback.print_exc()
+
+    message = "Domain service failed unexpectedly."
+    code = DomainErrorCode.INTERNAL_ERROR.value
+    if _looks_like_missing_domain_migration(exc):
+        message = (
+            "Custom domain database schema is missing required columns. "
+            "Apply migration 20260521002200_domain_setup_modes.sql to Supabase, then retry."
+        )
+
+    return jsonify({
+        "success": False,
+        "code": code,
+        "message": message,
+        "retryable": False,
+        "nextRetryAt": None,
+        "requestId": request_id,
+    }), 500
+
+
+def _looks_like_missing_domain_migration(exc: Exception) -> bool:
+    text = str(exc).lower()
+    return (
+        "tenant_domains.setup_mode" in text
+        or "tenant_domains.nameserver_status" in text
+        or "tenant_domains.managed_dns_status" in text
+        or "tenant_domains.desired_nameservers" in text
+        or "tenant_domains.managed_dns_records" in text
+        or "could not find" in text and "tenant_domains" in text and "schema cache" in text
+    )
 
 
 def _get_authenticated_user_id() -> str | None:
@@ -84,6 +120,11 @@ def handle_domain_engine_error(exc: DomainEngineError):
     return _error_response(exc)
 
 
+@domain_bp.errorhandler(Exception)
+def handle_unexpected_domain_error(exc: Exception):
+    return _unexpected_error_response(exc)
+
+
 @domain_bp.route("", methods=["GET"])
 def list_domains():
     try:
@@ -92,6 +133,8 @@ def list_domains():
         return _json_result(get_custom_domain_service().list_domains(user_id, product))
     except DomainEngineError as exc:
         return _error_response(exc)
+    except Exception as exc:
+        return _unexpected_error_response(exc)
 
 
 @domain_bp.route("", methods=["POST"])
@@ -115,6 +158,8 @@ def add_domain():
         )
     except DomainEngineError as exc:
         return _error_response(exc)
+    except Exception as exc:
+        return _unexpected_error_response(exc)
 
 
 @domain_bp.route("/<domain_id>", methods=["GET"])
@@ -123,6 +168,8 @@ def get_domain(domain_id: str):
         return _json_result(get_custom_domain_service().get_domain(_require_user_id(), domain_id))
     except DomainEngineError as exc:
         return _error_response(exc)
+    except Exception as exc:
+        return _unexpected_error_response(exc)
 
 
 @domain_bp.route("/<domain_id>/verify", methods=["POST"])
@@ -131,6 +178,8 @@ def verify_domain(domain_id: str):
         return _json_result(get_custom_domain_service().verify_domain(_require_user_id(), domain_id))
     except DomainEngineError as exc:
         return _error_response(exc)
+    except Exception as exc:
+        return _unexpected_error_response(exc)
 
 
 @domain_bp.route("/<domain_id>", methods=["PATCH"])
@@ -140,6 +189,8 @@ def update_domain(domain_id: str):
         return _json_result(get_custom_domain_service().update_domain(_require_user_id(), domain_id, payload))
     except DomainEngineError as exc:
         return _error_response(exc)
+    except Exception as exc:
+        return _unexpected_error_response(exc)
 
 
 @domain_bp.route("/<domain_id>", methods=["DELETE"])
@@ -148,6 +199,8 @@ def delete_domain(domain_id: str):
         return _json_result(get_custom_domain_service().delete_domain(_require_user_id(), domain_id))
     except DomainEngineError as exc:
         return _error_response(exc)
+    except Exception as exc:
+        return _unexpected_error_response(exc)
 
 
 @domain_bp.route("/routing/resolve", methods=["GET"])
@@ -160,3 +213,5 @@ def resolve_routing_host():
         return _json_result(get_custom_domain_service().resolve_host(host))
     except DomainEngineError as exc:
         return _error_response(exc)
+    except Exception as exc:
+        return _unexpected_error_response(exc)
