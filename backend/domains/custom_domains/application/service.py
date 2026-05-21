@@ -290,6 +290,13 @@ class CustomDomainService:
             raise DomainEngineError(DomainErrorCode.DOMAIN_NOT_ACTIVE, "Domain is not active.", status_code=404)
 
         store_slug = self.repo.get_business_slug(row["user_id"])
+        if not store_slug:
+            raise DomainEngineError(
+                DomainErrorCode.STORE_NOT_CONFIGURED,
+                "The custom domain is active, but the Shop storefront is not configured for this tenant.",
+                status_code=404,
+            )
+
         entry = self.routing_cache.set(host.normalized_host, {
             "domain_id": row["id"],
             "tenant_id": row["tenant_id"],

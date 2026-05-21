@@ -110,12 +110,26 @@ def _require_user_id() -> str:
 def _require_internal_secret() -> None:
     expected = os.getenv("DOMAIN_INTERNAL_SECRET")
     if not expected:
-        if os.getenv("FLASK_ENV") == "production":
+        if _is_production_environment():
             raise DomainEngineError(DomainErrorCode.INTERNAL_ERROR, "Internal domain routing secret is not configured.", 503)
         return
     provided = request.headers.get("X-Internal-Domain-Secret")
     if provided != expected:
         raise DomainEngineError(DomainErrorCode.AUTH_REQUIRED, "Internal domain routing auth failed.", 401)
+
+
+def _is_production_environment() -> bool:
+    env_values = {
+        os.getenv("FLASK_ENV", ""),
+        os.getenv("APP_ENV", ""),
+        os.getenv("ENV", ""),
+        os.getenv("ENVIRONMENT", ""),
+        os.getenv("PYTHON_ENV", ""),
+        os.getenv("RENDER_ENV", ""),
+    }
+    if any(value.strip().lower() in {"production", "prod"} for value in env_values):
+        return True
+    return bool(os.getenv("RENDER"))
 
 
 @domain_bp.errorhandler(DomainEngineError)

@@ -76,7 +76,7 @@ const BILLING_CONFIG = {
 
 // In-memory rate limiting store (use Redis in production)
 const rateLimitStore = new Map<string, { count: number; resetTime: number }>();
-const customDomainRoutingCache = new Map<string, { value: CustomDomainRouting | null; expiresAt: number }>();
+const customDomainRoutingCache = new Map<string, { value: CustomDomainRoutingLookup; expiresAt: number }>();
 
 interface CustomDomainRouting {
   domain_id: string;
@@ -88,6 +88,17 @@ interface CustomDomainRouting {
   routing_enabled: boolean;
   status: "active";
   store_slug: string;
+}
+
+interface CustomDomainRoutingFailure {
+  status: number;
+  code: string;
+  message: string;
+}
+
+interface CustomDomainRoutingLookup {
+  routing: CustomDomainRouting | null;
+  failure: CustomDomainRoutingFailure | null;
 }
 
 // =============================================================================
@@ -553,7 +564,7 @@ function customDomainHtml(status: number, title: string, message: string): NextR
   );
 }
 
-async function resolveCustomDomainRouting(hostname: string): Promise<CustomDomainRouting | null> {
+async function resolveCustomDomainRouting(hostname: string): Promise<CustomDomainRoutingLookup> {
   const cacheKey = hostname.toLowerCase();
   const cached = customDomainRoutingCache.get(cacheKey);
   if (cached && Date.now() < cached.expiresAt) {
@@ -561,8 +572,9 @@ async function resolveCustomDomainRouting(hostname: string): Promise<CustomDomai
   }
 
   if (process.env.NODE_ENV === "test" && !process.env.DOMAIN_ROUTING_ENDPOINT) {
-    customDomainRoutingCache.set(cacheKey, { value: null, expiresAt: Date.now() + 1000 });
-    return null;
+    const lookup = { routing: null, failure: null };
+    customDomainRoutingCache.set(cacheKey, { value: lookup, expiresAt: Date.now() + 1000 });
+    return lookup;
   }
 
   const endpoint =
@@ -580,8 +592,22 @@ async function resolveCustomDomainRouting(hostname: string): Promise<CustomDomai
       signal: AbortSignal.timeout(800),
     });
     if (!response.ok) {
-      customDomainRoutingCache.set(cacheKey, { value: null, expiresAt: Date.now() + 15_000 });
-      return null;
+      let body: { code?: string; message?: string } | null = null;
+      try {
+        body = await response.json();
+      } catch {
+        body = null;
+      }
+      const lookup = {
+        routing: null,
+        failure: {
+          status: response.status,
+          code: body?.code || "DOMAIN_NOT_CONFIGURED",
+          message: body?.message || "Domain is not active on Flowauxi yet.",
+        },
+      };
+      customDomainRoutingCache.set(cacheKey, { value: lookup, expiresAt: Date.now() + 15_000 });
+      return lookup;
     }
     const payload = await response.json();
     const routing = payload?.routing as CustomDomainRouting | undefined;
@@ -591,15 +617,17 @@ async function resolveCustomDomainRouting(hostname: string): Promise<CustomDomai
       routing.product_domain === "shop" &&
       routing.store_slug
     ) {
-      customDomainRoutingCache.set(cacheKey, { value: routing, expiresAt: Date.now() + 60_000 });
-      return routing;
+      const lookup = { routing, failure: null };
+      customDomainRoutingCache.set(cacheKey, { value: lookup, expiresAt: Date.now() + 60_000 });
+      return lookup;
     }
   } catch (error) {
     console.error("[Proxy] Custom domain routing lookup failed:", error);
   }
 
-  customDomainRoutingCache.set(cacheKey, { value: null, expiresAt: Date.now() + 15_000 });
-  return null;
+  const lookup = { routing: null, failure: null };
+  customDomainRoutingCache.set(cacheKey, { value: lookup, expiresAt: Date.now() + 15_000 });
+  return lookup;
 }
 
 async function handleCustomDomainRequest(
@@ -607,8 +635,17 @@ async function handleCustomDomainRequest(
   hostname: string,
   pathname: string,
 ): Promise<NextResponse> {
-  const routing = await resolveCustomDomainRouting(hostname);
+  const lookup = await resolveCustomDomainRouting(hostname);
+  const routing = lookup.routing;
   if (!routing) {
+    if (lookup.failure?.code === "STORE_NOT_CONFIGURED") {
+      return customDomainHtml(
+        404,
+        "Store not configured",
+        "This custom domain is connected, but the Shop storefront is not configured yet. Complete your Shop setup or attach the domain to the correct store.",
+      );
+    }
+
     return customDomainHtml(
       404,
       "Domain not configured",

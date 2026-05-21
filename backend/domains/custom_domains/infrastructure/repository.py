@@ -155,17 +155,40 @@ class DomainRepository:
             return dotted_match.group(1)
         return None
 
-    def get_business_slug(self, user_id: str) -> str:
+    def get_business_slug(self, user_id: str) -> str | None:
+        slug = self._get_business_slug_by_owner_id(user_id)
+        if slug:
+            return slug
+
+        resolved_user_id = self._get_internal_user_id(user_id)
+        if resolved_user_id and resolved_user_id != user_id:
+            return self._get_business_slug_by_owner_id(resolved_user_id)
+
+        return None
+
+    def _get_business_slug_by_owner_id(self, user_id: str) -> str | None:
         result = (
             self.client.table("businesses")
             .select("url_slug")
             .eq("user_id", user_id)
+            .order("updated_at", desc=True)
             .limit(1)
             .execute()
         )
         rows = result.data or []
         slug = rows[0].get("url_slug") if rows else None
-        return slug or user_id[:8].lower()
+        return slug or None
+
+    def _get_internal_user_id(self, firebase_uid: str) -> str | None:
+        result = (
+            self.client.table("users")
+            .select("id")
+            .eq("firebase_uid", firebase_uid)
+            .limit(1)
+            .execute()
+        )
+        rows = result.data or []
+        return rows[0].get("id") if rows else None
 
     def record_attempt(self, data: dict[str, Any]) -> None:
         self.client.table("domain_verification_attempts").insert(data).execute()

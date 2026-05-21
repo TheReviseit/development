@@ -284,6 +284,27 @@ def test_resolve_www_host_can_use_active_apex_routing(monkeypatch):
     assert result.body["routing"]["store_slug"] == "demo-store"
 
 
+def test_resolve_host_rejects_active_domain_without_storefront(monkeypatch):
+    monkeypatch.setenv("DOMAIN_OWNERSHIP_SECRET", "test-secret")
+    repo = FakeRepo()
+    repo.business_slug = None
+    svc = service(repo=repo)
+    created = svc.add_domain("user_1", "customer.com", "idem-1").body["domain"]
+    repo.update_domain(created["id"], {
+        "routing_enabled": True,
+        "status": "active",
+        "provider_status": "verified",
+        "dns_status": "verified",
+        "ssl_status": "active",
+        "ownership_status": "verified",
+    })
+
+    with pytest.raises(DomainEngineError) as exc:
+        svc.resolve_host("customer.com")
+
+    assert exc.value.code == DomainErrorCode.STORE_NOT_CONFIGURED
+
+
 def test_dns_domain_entitlement_uses_pro_only_feature_key():
     assert DNS_CUSTOM_DOMAIN_FEATURE == "custom_dns_domain"
 
