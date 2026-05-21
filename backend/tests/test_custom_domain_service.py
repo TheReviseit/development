@@ -22,7 +22,10 @@ class FakeRepo:
         }]
 
     def list_for_user(self, user_id, product_domain=None):
-        return list(self.rows.values())
+        return [
+            row for row in self.rows.values()
+            if row["user_id"] == user_id and (product_domain is None or row["product_domain"] == product_domain)
+        ]
 
     def count_active_for_user(self, user_id, product_domain):
         return 0
@@ -331,6 +334,22 @@ def test_resolve_host_rejects_active_domain_without_storefront(monkeypatch):
     assert repo.rows[created["id"]]["last_error_code"] == DomainErrorCode.STORE_NOT_CONFIGURED.value
 
 
+def test_resolve_host_reports_store_setup_required_when_verified_domain_is_disabled(monkeypatch):
+    monkeypatch.setenv("DOMAIN_OWNERSHIP_SECRET", "test-secret")
+    repo = FakeRepo()
+    repo.shop_stores = []
+    svc = service(repo=repo)
+    created = svc.add_domain("user_1", "customer.com", "idem-1").body["domain"]
+    svc.verify_domain("user_1", created["id"])
+
+    with pytest.raises(DomainEngineError) as exc:
+        svc.resolve_host("www.customer.com")
+
+    assert exc.value.code == DomainErrorCode.STORE_NOT_CONFIGURED
+    assert repo.rows[created["id"]]["status"] == "active"
+    assert repo.rows[created["id"]]["routing_enabled"] is False
+
+
 def test_add_domain_rejects_ambiguous_store_binding(monkeypatch):
     monkeypatch.setenv("DOMAIN_OWNERSHIP_SECRET", "test-secret")
     repo = FakeRepo()
@@ -373,6 +392,55 @@ def test_stale_cached_route_is_rejected_after_store_deletion(monkeypatch):
     assert exc.value.code == DomainErrorCode.STORE_NOT_CONFIGURED
     assert repo.rows[created["id"]]["routing_enabled"] is False
     assert cache.get("customer.com") is None
+
+
+def test_reconcile_enables_verified_domain_after_store_setup(monkeypatch):
+    monkeypatch.setenv("DOMAIN_OWNERSHIP_SECRET", "test-secret")
+    repo = FakeRepo()
+    repo.shop_stores = []
+    cache = FakeCache()
+    svc = service(repo=repo, cache=cache)
+    created = svc.add_domain("user_1", "customer.com", "idem-1").body["domain"]
+
+    verified = svc.verify_domain("user_1", created["id"]).body["domain"]
+    assert verified["lastErrorCode"] == DomainErrorCode.STORE_NOT_CONFIGURED.value
+    assert repo.rows[created["id"]]["routing_enabled"] is False
+
+    repo.shop_stores = [{
+        "id": "biz_1",
+        "user_id": "user_1",
+        "url_slug": "demo-store",
+        "url_slug_lower": "demo-store",
+        "business_name": "Demo Store",
+        "updated_at": "2026-05-21T00:00:00Z",
+    }]
+
+    result = svc.reconcile_shop_store_bindings_for_user("user_1")
+
+    row = repo.rows[created["id"]]
+    assert result.body["enabled"] == 1
+    assert row["routing_enabled"] is True
+    assert row["resource_id"] == "biz_1"
+    assert row["canonical_store_slug"] == "demo-store"
+    assert row["last_error_code"] is None
+    assert "customer.com" in cache.invalidated
+    assert "www.customer.com" in cache.invalidated
+
+
+def test_reconcile_binds_but_does_not_enable_unverified_domain(monkeypatch):
+    monkeypatch.setenv("DOMAIN_OWNERSHIP_SECRET", "test-secret")
+    repo = FakeRepo()
+    cache = FakeCache()
+    svc = service(repo=repo, cache=cache)
+    created = svc.add_domain("user_1", "customer.com", "idem-1").body["domain"]
+
+    result = svc.reconcile_shop_store_bindings_for_user("user_1")
+
+    row = repo.rows[created["id"]]
+    assert result.body["enabled"] == 0
+    assert row["routing_enabled"] is False
+    assert row["resource_id"] == "biz_1"
+    assert row["canonical_store_slug"] == "demo-store"
 
 
 def test_dns_domain_entitlement_uses_pro_only_feature_key():

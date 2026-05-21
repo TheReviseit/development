@@ -66,6 +66,42 @@ logging.getLogger('httpx').setLevel(logging.WARNING)
 logging.getLogger('httpcore').setLevel(logging.WARNING)
 logging.getLogger('hpack').setLevel(logging.WARNING)
 
+
+def _is_production_like_environment() -> bool:
+    env_values = {
+        os.getenv("FLASK_ENV", ""),
+        os.getenv("APP_ENV", ""),
+        os.getenv("ENV", ""),
+        os.getenv("ENVIRONMENT", ""),
+        os.getenv("PYTHON_ENV", ""),
+        os.getenv("RENDER_ENV", ""),
+    }
+    return bool(os.getenv("RENDER")) or any(
+        value.strip().lower() in {"production", "prod"} for value in env_values
+    )
+
+
+def _feature_enabled(env_key: str, default: str = "true") -> bool:
+    return os.getenv(env_key, default).strip().lower() not in {"0", "false", "off", "disabled"}
+
+
+def _validate_custom_domain_runtime_config() -> None:
+    if not _is_production_like_environment() or not _feature_enabled("CUSTOM_DOMAINS_ENABLED"):
+        return
+
+    missing = [
+        key for key in ("DOMAIN_INTERNAL_SECRET",)
+        if not os.getenv(key)
+    ]
+    if missing:
+        raise RuntimeError(
+            "Custom domain routing is enabled but required secret(s) are missing: "
+            f"{', '.join(missing)}. Set them on Render before deploying."
+        )
+
+
+_validate_custom_domain_runtime_config()
+
 # =============================================================================
 # Service Imports
 # =============================================================================

@@ -576,6 +576,33 @@ def update_business():
             "message": "Failed to save business data"
         }), 500
 
+    # ── CUSTOM DOMAIN RECONCILIATION ────────────────────────────────────
+    # Saving a real Shop URL should recover domains that were already DNS /
+    # provider verified but held offline with STORE_NOT_CONFIGURED. This path
+    # never creates business data and never calls DNS/Vercel; it only binds the
+    # saved businesses row to existing tenant_domains rows and enables routing
+    # when all prior verification gates are already green.
+    domain_reconciliation = None
+    if 'url_slug' in db_data and db_data.get('url_slug'):
+        try:
+            from domains.custom_domains.application.service import get_custom_domain_service
+            domain_reconciliation = (
+                get_custom_domain_service()
+                .reconcile_shop_store_bindings_for_user(user_id)
+                .body
+            )
+            logger.info(
+                "✅ Custom domain store-binding reconciliation complete for user %s: %s",
+                user_id,
+                domain_reconciliation,
+            )
+        except Exception as e:
+            logger.warning(
+                "⚠️ Custom domain store-binding reconciliation failed for user %s: %s",
+                user_id,
+                e,
+            )
+
     # ── CACHE INVALIDATION (fire-and-forget, never blocks write) ─────────
     # Pass old slug so invalidate_slug_cache clears the stale Redis entry.
     # Without this, the old cached slug entry survives indefinitely and the
@@ -643,4 +670,7 @@ def update_business():
     thread = threading.Thread(target=_sync_firestore, daemon=True)
     thread.start()
 
-    return jsonify({"success": True}), 200
+    response_body = {"success": True}
+    if domain_reconciliation is not None:
+        response_body["domainReconciliation"] = domain_reconciliation
+    return jsonify(response_body), 200

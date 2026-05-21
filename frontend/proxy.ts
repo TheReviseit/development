@@ -623,6 +623,16 @@ async function resolveCustomDomainRouting(hostname: string): Promise<CustomDomai
     }
   } catch (error) {
     console.error("[Proxy] Custom domain routing lookup failed:", error);
+    const lookup = {
+      routing: null,
+      failure: {
+        status: 503,
+        code: "DOMAIN_ROUTING_LOOKUP_FAILED",
+        message: "Domain routing service could not be reached.",
+      },
+    };
+    customDomainRoutingCache.set(cacheKey, { value: lookup, expiresAt: Date.now() + 5_000 });
+    return lookup;
   }
 
   const lookup = { routing: null, failure: null };
@@ -638,6 +648,18 @@ async function handleCustomDomainRequest(
   const lookup = await resolveCustomDomainRouting(hostname);
   const routing = lookup.routing;
   if (!routing) {
+    if (
+      lookup.failure?.status && lookup.failure.status >= 500
+      || lookup.failure?.code === "AUTH_REQUIRED"
+      || lookup.failure?.code === "DOMAIN_ROUTING_LOOKUP_FAILED"
+    ) {
+      return customDomainHtml(
+        503,
+        "Domain temporarily unavailable",
+        "Flowauxi could not resolve this custom domain right now. The domain is connected, but routing is temporarily unavailable.",
+      );
+    }
+
     if (
       lookup.failure?.code === "STORE_NOT_CONFIGURED"
       || lookup.failure?.code === "STORE_BINDING_AMBIGUOUS"
