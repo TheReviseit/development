@@ -2,7 +2,23 @@ import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { verifySessionCookieSafe } from "@/lib/firebase-admin";
 
-const BACKEND_URL = process.env.BACKEND_URL || "http://127.0.0.1:5000";
+const DEFAULT_LOCAL_BACKEND_URL = "http://127.0.0.1:5000";
+const DEFAULT_PRODUCTION_BACKEND_URL = "https://revsieit.onrender.com";
+
+function getBackendUrl(): string {
+  const configured =
+    process.env.BACKEND_URL ||
+    process.env.NEXT_PUBLIC_API_URL ||
+    process.env.NEXT_PUBLIC_BACKEND_URL;
+
+  if (configured?.trim()) {
+    return configured.replace(/\/+$/, "");
+  }
+
+  return process.env.NODE_ENV === "production"
+    ? DEFAULT_PRODUCTION_BACKEND_URL
+    : DEFAULT_LOCAL_BACKEND_URL;
+}
 
 type ProxyOptions = {
   method: "GET" | "POST" | "PATCH" | "DELETE";
@@ -28,7 +44,7 @@ export async function proxyDomainRequest({
   }
 
   const sourceUrl = new URL(request.url);
-  const targetUrl = new URL(`${BACKEND_URL}${backendPath}`);
+  const targetUrl = new URL(`${getBackendUrl()}${backendPath}`);
   sourceUrl.searchParams.forEach((value, key) => {
     targetUrl.searchParams.set(key, value);
   });
@@ -55,12 +71,33 @@ export async function proxyDomainRequest({
     }
   }
 
-  const response = await fetch(targetUrl.toString(), {
-    method,
-    headers,
-    body,
-    cache: "no-store",
-  });
+  let response: Response;
+  try {
+    response = await fetch(targetUrl.toString(), {
+      method,
+      headers,
+      body,
+      cache: "no-store",
+    });
+  } catch (error) {
+    console.error("[CustomDomainsAPI] Backend request failed", {
+      backendPath,
+      targetOrigin: targetUrl.origin,
+      error,
+    });
+    return NextResponse.json(
+      {
+        success: false,
+        code: "PROVIDER_UNAVAILABLE",
+        message:
+          "The domain service is temporarily unavailable. Check BACKEND_URL in Vercel and confirm the Render backend is running.",
+        retryable: true,
+        nextRetryAt: null,
+        requestId: headers["X-Request-Id"],
+      },
+      { status: 503 },
+    );
+  }
 
   const contentType = response.headers.get("content-type") || "";
   if (contentType.includes("application/json")) {
