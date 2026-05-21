@@ -78,6 +78,18 @@ const BILLING_CONFIG = {
 const rateLimitStore = new Map<string, { count: number; resetTime: number }>();
 const customDomainRoutingCache = new Map<string, { value: CustomDomainRoutingLookup; expiresAt: number }>();
 
+async function secretFingerprint(value: string): Promise<string | null> {
+  if (!value) {
+    return null;
+  }
+  const bytes = new TextEncoder().encode(value);
+  const digest = await crypto.subtle.digest("SHA-256", bytes);
+  return Array.from(new Uint8Array(digest))
+    .slice(0, 6)
+    .map((byte) => byte.toString(16).padStart(2, "0"))
+    .join("");
+}
+
 interface CustomDomainRouting {
   domain_id: string;
   tenant_id: string;
@@ -583,8 +595,22 @@ async function resolveCustomDomainRouting(hostname: string): Promise<CustomDomai
   const secret = process.env.DOMAIN_INTERNAL_SECRET || "";
   const url = new URL(endpoint);
   url.searchParams.set("host", hostname);
+  const secretFp = await secretFingerprint(secret);
+  const debugRouting = process.env.DOMAIN_ROUTING_DEBUG === "true";
 
   try {
+    if (debugRouting) {
+      console.log(
+        "[Proxy CustomDomain] lookup_start",
+        JSON.stringify({
+          host: hostname,
+          endpointHost: url.host,
+          hasSecret: Boolean(secret),
+          secretFp,
+        }),
+      );
+    }
+
     const response = await fetch(url.toString(), {
       method: "GET",
       headers: secret ? { "X-Internal-Domain-Secret": secret } : {},
@@ -606,6 +632,17 @@ async function resolveCustomDomainRouting(hostname: string): Promise<CustomDomai
           message: body?.message || "Domain is not active on Flowauxi yet.",
         },
       };
+      console.error(
+        "[Proxy CustomDomain] lookup_failed",
+        JSON.stringify({
+          host: hostname,
+          endpointHost: url.host,
+          status: response.status,
+          code: lookup.failure.code,
+          hasSecret: Boolean(secret),
+          secretFp,
+        }),
+      );
       customDomainRoutingCache.set(cacheKey, { value: lookup, expiresAt: Date.now() + 15_000 });
       return lookup;
     }
@@ -618,11 +655,31 @@ async function resolveCustomDomainRouting(hostname: string): Promise<CustomDomai
       routing.store_slug
     ) {
       const lookup = { routing, failure: null };
+      if (debugRouting) {
+        console.log(
+          "[Proxy CustomDomain] lookup_ok",
+          JSON.stringify({
+            host: hostname,
+            normalizedHost: routing.normalized_host,
+            routingVersion: routing.routing_version,
+            storeSlug: routing.store_slug,
+          }),
+        );
+      }
       customDomainRoutingCache.set(cacheKey, { value: lookup, expiresAt: Date.now() + 60_000 });
       return lookup;
     }
   } catch (error) {
-    console.error("[Proxy] Custom domain routing lookup failed:", error);
+    console.error(
+      "[Proxy CustomDomain] lookup_exception",
+      JSON.stringify({
+        host: hostname,
+        endpointHost: url.host,
+        hasSecret: Boolean(secret),
+        secretFp,
+        error: error instanceof Error ? error.message : String(error),
+      }),
+    );
     const lookup = {
       routing: null,
       failure: {
@@ -747,6 +804,10 @@ export async function proxy(request: NextRequest) {
   // Resolve domain ONCE here, inject headers for ALL downstream handlers.
   // This ensures API routes, page routes, and backend all see the same context.
   
+  if (isCustomerDomainCandidate(hostname)) {
+    return handleCustomDomainRequest(request, hostname, pathname);
+  }
+
   const resolution = domainResolver.resolve(request);
   
   if (resolution.matched && resolution.context) {
@@ -819,8 +880,6 @@ export async function proxy(request: NextRequest) {
         `user=${userId?.substring(0, 8) || 'anon'}...`
       );
     }
-  } else if (isCustomerDomainCandidate(hostname)) {
-    return handleCustomDomainRequest(request, hostname, pathname);
   }
 
   // ═══════════════════════════════════════════════════════════════════════════

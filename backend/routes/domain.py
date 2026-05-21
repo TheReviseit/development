@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 import time
 import traceback
+import hashlib
 from typing import Any
 
 from flask import Blueprint, jsonify, request, g
@@ -114,11 +115,47 @@ def _require_internal_secret() -> None:
     expected = os.getenv("DOMAIN_INTERNAL_SECRET")
     if not expected:
         if _is_production_environment():
+            _log_routing_auth_failure("missing_expected_secret")
             raise DomainEngineError(DomainErrorCode.INTERNAL_ERROR, "Internal domain routing secret is not configured.", 503)
         return
     provided = request.headers.get("X-Internal-Domain-Secret")
     if provided != expected:
-        raise DomainEngineError(DomainErrorCode.AUTH_REQUIRED, "Internal domain routing auth failed.", 401)
+        _log_routing_auth_failure("secret_mismatch", expected=expected, provided=provided)
+        raise DomainEngineError(DomainErrorCode.AUTH_REQUIRED, "Internal domain routing auth failed: secret mismatch.", 401)
+    _log_routing_auth_success(expected)
+
+
+def _secret_fingerprint(value: str | None) -> str | None:
+    if not value:
+        return None
+    return hashlib.sha256(value.encode("utf-8")).hexdigest()[:12]
+
+
+def _routing_debug_enabled() -> bool:
+    return os.getenv("DOMAIN_ROUTING_DEBUG", "false").strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _log_routing_auth_failure(reason: str, *, expected: str | None = None, provided: str | None = None) -> None:
+    print(
+        "[DomainRoutes] routing_auth_failed "
+        f"request_id={_request_id()} "
+        f"host={request.args.get('host', '')} "
+        f"reason={reason} "
+        f"provided_present={bool(provided)} "
+        f"expected_fp={_secret_fingerprint(expected)} "
+        f"provided_fp={_secret_fingerprint(provided)}"
+    )
+
+
+def _log_routing_auth_success(expected: str) -> None:
+    if not _routing_debug_enabled():
+        return
+    print(
+        "[DomainRoutes] routing_auth_ok "
+        f"request_id={_request_id()} "
+        f"host={request.args.get('host', '')} "
+        f"secret_fp={_secret_fingerprint(expected)}"
+    )
 
 
 def _is_production_environment() -> bool:
