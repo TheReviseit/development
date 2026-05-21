@@ -21,6 +21,7 @@ class RoutingCacheEntry:
     store_slug: str
     cached_at: float
     expires_at: float
+    alias_host: str | None = None
 
     def is_usable(self, hard_check_after_seconds: int) -> bool:
         now = time.time()
@@ -108,4 +109,3 @@ def get_domain_routing_cache() -> DomainRoutingCache:
     if _cache is None:
         _cache = DomainRoutingCache()
     return _cache
-

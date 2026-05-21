@@ -279,6 +279,11 @@ class CustomDomainService:
             return ServiceResult({"success": True, "routing": asdict(cached), "cache": "hit"}, 200)
 
         row = self.repo.find_routing_host(host.normalized_host)
+        alias_host = None
+        if not row and host.domain_kind == "www" and host.apex_host != host.normalized_host:
+            row = self.repo.find_routing_host(host.apex_host)
+            alias_host = host.normalized_host if row else None
+
         if not row:
             raise DomainEngineError(DomainErrorCode.DOMAIN_NOT_CONFIGURED, "Domain is not configured.", status_code=404)
         if row.get("deleted_at") or not row.get("routing_enabled") or row.get("status") != "active":
@@ -295,6 +300,7 @@ class CustomDomainService:
             "routing_enabled": bool(row.get("routing_enabled")),
             "status": row["status"],
             "store_slug": store_slug,
+            "alias_host": alias_host,
         })
         return ServiceResult({"success": True, "routing": asdict(entry), "cache": "miss"}, 200)
 
