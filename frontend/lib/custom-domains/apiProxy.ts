@@ -115,6 +115,24 @@ export async function proxyDomainRequest({
     );
   }
 
+  if (!response.ok) {
+    const compactText = text.replace(/\s+/g, " ").trim().slice(0, 220);
+    const looksLikeHtml = /^<!doctype html|^<html/i.test(compactText);
+    return NextResponse.json(
+      {
+        success: false,
+        code: "INTERNAL_ERROR",
+        message: looksLikeHtml
+          ? `Backend returned ${response.status} instead of JSON. Check Render logs for the domain service.`
+          : compactText,
+        retryable: response.status >= 500,
+        nextRetryAt: null,
+        requestId: headers["X-Request-Id"],
+      },
+      { status: response.status },
+    );
+  }
+
   return new NextResponse(text, {
     status: response.status,
     headers: { "content-type": contentType || "text/plain" },

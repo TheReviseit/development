@@ -114,8 +114,12 @@ export default function DomainsPage() {
   }, [refresh]);
 
   async function addDomain() {
-    const host = domainInput.trim();
-    if (!host) return;
+    const host = normalizeDomainForSubmit(domainInput);
+    const validationError = validateDomainForSubmit(host);
+    if (validationError) {
+      setError(validationError);
+      return;
+    }
     setSaving(true);
     setError(null);
     setMessage(null);
@@ -264,7 +268,14 @@ export default function DomainsPage() {
             <input
               value={domainInput}
               onChange={(event) => setDomainInput(event.target.value)}
+              onBlur={() => setDomainInput(normalizeDomainForSubmit(domainInput))}
               placeholder="yourdomain.com"
+              name="custom-domain-host"
+              autoComplete="off"
+              autoCorrect="off"
+              autoCapitalize="none"
+              spellCheck={false}
+              inputMode="url"
               disabled={!dnsAllowed || saving}
             />
             <button onClick={addDomain} disabled={!dnsAllowed || saving || !domainInput.trim()}>
@@ -477,9 +488,15 @@ async function readApiResponse<T extends object>(response: Response): Promise<T 
   try {
     return JSON.parse(text) as T & ApiError;
   } catch {
+    const compactText = text.replace(/\s+/g, " ").trim().slice(0, 180);
+    const looksLikeHtml = /^<!doctype html|^<html/i.test(compactText);
     return {
       error: text,
-      message: response.ok ? undefined : "Server returned an invalid response.",
+      message: response.ok
+        ? undefined
+        : looksLikeHtml
+          ? `Server returned ${response.status} instead of JSON. Check the deployment logs.`
+          : compactText || `Server returned ${response.status} without JSON.`,
     } as T & ApiError;
   }
 }
@@ -500,7 +517,44 @@ function formatTtl(ttl?: number) {
   return ttl ? `${ttl}s` : "Auto or 300s";
 }
 
+function normalizeDomainForSubmit(value: string) {
+  const trimmed = value.trim();
+  if (!trimmed) return "";
+
+  try {
+    const url = new URL(/^[a-z][a-z0-9+.-]*:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`);
+    return url.hostname.toLowerCase().replace(/\.$/, "");
+  } catch {
+    return trimmed
+      .replace(/^[a-z][a-z0-9+.-]*:\/\//i, "")
+      .split(/[/?#]/)[0]
+      .split(":")[0]
+      .trim()
+      .toLowerCase()
+      .replace(/\.$/, "");
+  }
+}
+
+function validateDomainForSubmit(host: string) {
+  if (!host) {
+    return "Enter a domain like flowaux.in.";
+  }
+  if (host.includes("server returned") || host.includes("invalid response")) {
+    return "That is an error message, not a domain. Enter only the domain, for example flowaux.in.";
+  }
+  if (!host.includes(".") || host.startsWith(".") || host.endsWith(".")) {
+    return "Domain must include a registrable suffix, for example flowaux.in.";
+  }
+  if (/\s/.test(host)) {
+    return "Domain cannot contain spaces.";
+  }
+  return null;
+}
+
 function toFriendlyError(data: ApiError) {
+  if (data.code === "INVALID_HOST") {
+    return data.message || "Enter only the domain name, for example flowaux.in.";
+  }
   if (data.code === "ENTITLEMENT_REQUIRED") {
     return "Business keeps /store/storeurl. Real DNS custom domains are Pro only.";
   }
