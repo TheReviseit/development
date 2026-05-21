@@ -720,8 +720,19 @@ export async function proxy(request: NextRequest) {
       }
     }
     
-    // Sign context (async - needs await)
-    const signedContext = await domainResolver.signContext(resolution.context, userId);
+    // Sign context (async - needs await). Missing production secrets must fail
+    // closed, but with an explicit response instead of an opaque Vercel 500.
+    let signedContext: string;
+    try {
+      signedContext = await domainResolver.signContext(resolution.context, userId);
+    } catch (error) {
+      console.error("[Proxy Global] Failed to sign domain context:", error);
+      return customDomainHtml(
+        503,
+        "Application configuration error",
+        "The platform domain context secret is not configured. Set CONTEXT_SIGNING_SECRET in Vercel and redeploy.",
+      );
+    }
     
     // Inject headers on request (for downstream handlers)
     const requestHeaders = new Headers(request.headers);
