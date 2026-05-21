@@ -144,6 +144,16 @@ describe("Redirect Middleware - Production Grade", () => {
     });
   });
 
+  describe("Customer Domains", () => {
+    it("does NOT redirect unknown customer domains to Flowauxi canonical", async () => {
+      const req = createMockRequest("https://customerdomain.com");
+      const response = await proxy(req);
+
+      expect(response.status).not.toBe(301);
+      expect(response.headers.get("location")).not.toBe(`${CANONICAL}/`);
+    });
+  });
+
   describe("Localhost (No Redirect)", () => {
     it("does NOT redirect localhost", async () => {
       const req = createMockRequest("http://localhost:3000");

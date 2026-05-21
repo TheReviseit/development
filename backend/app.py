@@ -235,9 +235,9 @@ if ',' in frontend_url:
 else:
     origins = [frontend_url]
 
-# Add all localhost development ports for domain testing
-# This allows dev:shop (3001), dev:showcase (3002), dev:marketing (3003), dev:api (3004)
-localhost_ports = [3000, 3001, 3002, 3003, 3004]
+# Add all localhost development ports for domain testing.
+# This allows dashboard, shop, showcase, marketing, api, booking, and files.
+localhost_ports = [3000, 3001, 3002, 3003, 3004, 3005, 3006]
 for port in localhost_ports:
     localhost_origin = f'http://localhost:{port}'
     if localhost_origin not in origins:
@@ -249,7 +249,11 @@ production_subdomains = [
     'https://shop.flowauxi.com',
     'https://pages.flowauxi.com',
     'https://flowauxi.com',
+    'https://www.flowauxi.com',
     'https://api.flowauxi.com',
+    'https://booking.flowauxi.com',
+    'https://tools.flowauxi.com',
+    'https://files.flowauxi.com',
 ]
 for subdomain in production_subdomains:
     if subdomain not in origins:
@@ -268,6 +272,11 @@ cors_resources = {
             "X-Correlation-Id",    # Request tracing
             "X-Request-Id",        # Request identification
             "X-Idempotency-Key",   # Feature gate idempotent increments
+            "X-Signed-Context",    # Signed tenant/product context
+            "X-Tenant-Domain",
+            "X-Tenant-Id",
+            "X-Product-Domain",
+            "X-Internal-Domain-Secret",
             "Accept",
             "Origin",
             "Cache-Control",
@@ -361,7 +370,7 @@ except ImportError as e:
 try:
     from routes.domain import domain_bp
     app.register_blueprint(domain_bp)
-    logger.info("🌐 Domain routes registered (/api/domain/*)")
+    logger.info("🌐 Domain routes registered (/api/domains/*)")
 except ImportError as e:
     logger.warning(f"Domain routes not available: {e}")
 

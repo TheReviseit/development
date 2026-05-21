@@ -90,6 +90,29 @@ services:
       - key: CLOUDFLARE_R2_BUCKET_NAME
         sync: false
 
+  - type: web
+    name: flowauxi-voice-agents
+    runtime: docker
+    region: singapore
+    rootDir: backend
+    dockerfilePath: ./Dockerfile.web
+    dockerCommand: uvicorn agents_app:app --host 0.0.0.0 --port $PORT --workers 1 --timeout-keep-alive 10
+    plan: free
+    healthCheckPath: /health
+    envVars:
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: REDIS_URL
+        sync: false
+      - key: INTERNAL_API_KEY
+        sync: false
+      - key: FRONTEND_INTERNAL_BASE_URL
+        sync: false
+      - key: VOICE_BOOKING_WRITES_ENABLED
+        value: true
+
   # Celery Worker for Background Tasks (Google Sheets sync, notifications, etc.)
   # Also runs beat scheduler (--beat flag) for periodic billing monitor tasks
   - type: worker

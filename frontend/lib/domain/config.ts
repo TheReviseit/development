@@ -87,15 +87,6 @@ export function resolveDomain(hostname: string, port?: string): ProductDomain {
     return PRODUCTION_HOSTNAME_MAP[hostname];
   }
 
-  // Production: subdomain prefix match (handles edge cases)
-  if (hostname.startsWith("shop.")) return "shop";
-  if (hostname.startsWith("pages.")) return "showcase";
-  if (hostname.startsWith("marketing.")) return "marketing";
-  if (hostname.startsWith("api.")) return "api";
-  if (hostname.startsWith("booking.")) return "booking";
-  if (hostname.startsWith("tools.")) return "files";
-  if (hostname.startsWith("files.")) return "files";
-
   // Development: port-based mapping
   if (
     port &&
@@ -114,6 +105,11 @@ export function resolveDomain(hostname: string, port?: string): ProductDomain {
  */
 export function getLandingRoute(domain: ProductDomain): string {
   return LANDING_PAGE_MAP[domain];
+}
+
+export function isKnownPlatformHostname(hostname: string): boolean {
+  const host = hostname.toLowerCase();
+  return Boolean(PRODUCTION_HOSTNAME_MAP[host]);
 }
 
 // =============================================================================

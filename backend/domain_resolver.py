@@ -28,6 +28,15 @@ from dataclasses import dataclass
 # Must match frontend CONTEXT_SIGNING_SECRET
 DEFAULT_SECRET = 'dev-secret-change-in-production'
 SIGNING_SECRET = os.environ.get('CONTEXT_SIGNING_SECRET', DEFAULT_SECRET)
+if (
+    os.environ.get('FLASK_ENV') == 'production'
+    and SIGNING_SECRET == DEFAULT_SECRET
+    and os.environ.get('ALLOW_INSECURE_CONTEXT_SECRET') != 'true'
+):
+    raise RuntimeError(
+        "CONTEXT_SIGNING_SECRET must be set in production. "
+        "Refusing to use the development fallback secret."
+    )
 
 # 5 minute TTL (in seconds)
 CONTEXT_TTL_SECONDS = 5 * 60

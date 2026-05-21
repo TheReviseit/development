@@ -20,6 +20,9 @@
 
 web: gunicorn app:app --bind 0.0.0.0:$PORT --workers 4 --threads 4 --worker-class gthread --timeout 120 --keep-alive 5 --max-requests 1000 --max-requests-jitter 50 --log-level info --access-logfile - --error-logfile -
 
+# Voice agents FastAPI sidecar for Retell custom LLM WebSocket
+voice: uvicorn agents_app:app --host 0.0.0.0 --port $PORT --workers 1 --timeout-keep-alive 10
+
 # Alternative: Use gevent on Linux/macOS for maximum concurrency (uncomment below, comment above)
 
 # web: gunicorn app:app --bind 0.0.0.0:$PORT --workers 4 --worker-class gevent --timeout 120 --keep-alive 5 --max-requests 1000 --max-requests-jitter 50 --log-level info --access-logfile - --error-logfile -

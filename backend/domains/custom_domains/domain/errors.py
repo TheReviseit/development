@@ -1,0 +1,71 @@
+from __future__ import annotations
+
+from dataclasses import dataclass
+from enum import Enum
+from typing import Any, Optional
+
+
+class DomainErrorCode(str, Enum):
+    INVALID_HOST = "INVALID_HOST"
+    UNSUPPORTED_TLD = "UNSUPPORTED_TLD"
+    RESERVED_HOST = "RESERVED_HOST"
+    PLATFORM_HOST_FORBIDDEN = "PLATFORM_HOST_FORBIDDEN"
+    MIXED_SCRIPT_HOST = "MIXED_SCRIPT_HOST"
+    HOMOGRAPH_RISK = "HOMOGRAPH_RISK"
+    WILDCARD_NOT_SUPPORTED = "WILDCARD_NOT_SUPPORTED"
+    INVALID_REDIRECT_TARGET = "INVALID_REDIRECT_TARGET"
+    INVALID_SETUP_MODE = "INVALID_SETUP_MODE"
+    ENTITLEMENT_REQUIRED = "ENTITLEMENT_REQUIRED"
+    ENTITLEMENT_EXCEEDED = "ENTITLEMENT_EXCEEDED"
+    PRODUCT_NOT_SUPPORTED = "PRODUCT_NOT_SUPPORTED"
+    DOMAIN_CONFLICT = "DOMAIN_CONFLICT"
+    DOMAIN_IN_QUARANTINE = "DOMAIN_IN_QUARANTINE"
+    DOMAIN_ALREADY_ATTACHED = "DOMAIN_ALREADY_ATTACHED"
+    DOMAIN_PROVIDER_CONFLICT = "DOMAIN_PROVIDER_CONFLICT"
+    OWNERSHIP_TXT_MISSING = "OWNERSHIP_TXT_MISSING"
+    OWNERSHIP_TXT_MISMATCH = "OWNERSHIP_TXT_MISMATCH"
+    DNS_PROPAGATION_PENDING = "DNS_PROPAGATION_PENDING"
+    DNS_RECORD_MISMATCH = "DNS_RECORD_MISMATCH"
+    NAMESERVER_MISMATCH = "NAMESERVER_MISMATCH"
+    DNS_LOOKUP_TIMEOUT = "DNS_LOOKUP_TIMEOUT"
+    DNS_PROVIDER_ERROR = "DNS_PROVIDER_ERROR"
+    MANAGED_DNS_FAILED = "MANAGED_DNS_FAILED"
+    PROVIDER_RATE_LIMITED = "PROVIDER_RATE_LIMITED"
+    PROVIDER_UNAVAILABLE = "PROVIDER_UNAVAILABLE"
+    PROVIDER_VERIFICATION_REQUIRED = "PROVIDER_VERIFICATION_REQUIRED"
+    SSL_PENDING = "SSL_PENDING"
+    SSL_FAILED = "SSL_FAILED"
+    PROVIDER_REMOVAL_FAILED = "PROVIDER_REMOVAL_FAILED"
+    DOMAIN_NOT_CONFIGURED = "DOMAIN_NOT_CONFIGURED"
+    DOMAIN_NOT_ACTIVE = "DOMAIN_NOT_ACTIVE"
+    ROUTING_CACHE_STALE = "ROUTING_CACHE_STALE"
+    DOMAIN_DELETED = "DOMAIN_DELETED"
+    IDEMPOTENCY_KEY_REUSED = "IDEMPOTENCY_KEY_REUSED"
+    IDEMPOTENCY_IN_PROGRESS = "IDEMPOTENCY_IN_PROGRESS"
+    MISSING_IDEMPOTENCY_KEY = "MISSING_IDEMPOTENCY_KEY"
+    AUTH_REQUIRED = "AUTH_REQUIRED"
+    INTERNAL_ERROR = "INTERNAL_ERROR"
+
+
+@dataclass(frozen=True)
+class DomainEngineError(Exception):
+    code: DomainErrorCode
+    message: str
+    status_code: int = 400
+    retryable: bool = False
+    next_retry_at: Optional[str] = None
+    expected_records: Optional[list[dict[str, Any]]] = None
+
+    def to_dict(self, request_id: Optional[str] = None) -> dict[str, Any]:
+        body: dict[str, Any] = {
+            "success": False,
+            "code": self.code.value,
+            "message": self.message,
+            "retryable": self.retryable,
+            "nextRetryAt": self.next_retry_at,
+        }
+        if request_id:
+            body["requestId"] = request_id
+        if self.expected_records is not None:
+            body["expectedRecords"] = self.expected_records
+        return body

@@ -778,7 +778,10 @@ export default function LoginPage() {
                         type="button"
                         className={styles.togglePassword}
                         onClick={togglePassword}
+                        onMouseDown={(event) => event.preventDefault()}
+                        tabIndex={-1}
                         aria-label="Toggle password visibility"
+                        aria-pressed={showPassword}
                       >
                         {showPassword ? <EyeIcon /> : <EyeOffIcon />}
                       </button>

@@ -18,7 +18,7 @@ import {
   applyDecision,
   type ProductContext,
 } from "@/lib/domain-policy";
-import { resolveDomain, getLandingRoute } from "@/lib/domain/config";
+import { resolveDomain, getLandingRoute, isKnownPlatformHostname } from "@/lib/domain/config";
 import { getProductByDomain } from "@/lib/product/registry";
 import { domainResolver, DomainContext } from "@/lib/domain/resolver";
 import { routing } from "@/lib/i18n/routing";
@@ -29,6 +29,22 @@ import { routing } from "@/lib/i18n/routing";
 
 const CANONICAL_DOMAIN = "www.flowauxi.com";
 const CANONICAL_PROTOCOL = "https:";
+const CUSTOM_DOMAIN_BLOCKED_PATHS = [
+  "/dashboard",
+  "/login",
+  "/signup",
+  "/payment",
+  "/upgrade",
+  "/billing",
+  "/console",
+  "/onboarding",
+  "/settings",
+  "/admin",
+];
+const CUSTOM_DOMAIN_STORE_RELATIVE_PATHS = [
+  "/checkout",
+  "/track-order",
+];
 const filesLocalePathPattern = /^\/(en|ta|hi|ml|kn|te)\/(?:files|tools)(?:\/|$)/;
 const legacyFilesPathPattern = /^\/files(?=\/|$)/;
 const legacyLocalizedFilesPathPattern = /^\/(en|ta|hi|ml|kn|te)\/files(?=\/|$)/;
@@ -60,6 +76,19 @@ const BILLING_CONFIG = {
 
 // In-memory rate limiting store (use Redis in production)
 const rateLimitStore = new Map<string, { count: number; resetTime: number }>();
+const customDomainRoutingCache = new Map<string, { value: CustomDomainRouting | null; expiresAt: number }>();
+
+interface CustomDomainRouting {
+  domain_id: string;
+  tenant_id: string;
+  user_id: string;
+  product_domain: "shop";
+  normalized_host: string;
+  routing_version: number;
+  routing_enabled: boolean;
+  status: "active";
+  store_slug: string;
+}
 
 // =============================================================================
 // RATE LIMITING
@@ -494,6 +523,151 @@ async function handleBillingSecurity(
   return response;
 }
 
+function isCustomerDomainCandidate(hostname: string): boolean {
+  const host = hostname.toLowerCase();
+  return !(
+    isKnownPlatformHostname(host) ||
+    host === "localhost" ||
+    host === "127.0.0.1" ||
+    host === "[::1]" ||
+    host.endsWith(".flowauxi.com") ||
+    host.includes("vercel.app") ||
+    host.includes("vercel.sh")
+  );
+}
+
+function isBlockedCustomDomainPath(pathname: string): boolean {
+  return CUSTOM_DOMAIN_BLOCKED_PATHS.some((path) => pathname === path || pathname.startsWith(`${path}/`));
+}
+
+function customDomainHtml(status: number, title: string, message: string): NextResponse {
+  return new NextResponse(
+    `<!doctype html><html><head><meta charset="utf-8"><title>${title}</title><meta name="robots" content="noindex"></head><body><main style="font-family:system-ui,sans-serif;max-width:680px;margin:12vh auto;padding:0 24px;line-height:1.5"><h1>${title}</h1><p>${message}</p></main></body></html>`,
+    {
+      status,
+      headers: {
+        "content-type": "text/html; charset=utf-8",
+        "cache-control": "no-store",
+      },
+    },
+  );
+}
+
+async function resolveCustomDomainRouting(hostname: string): Promise<CustomDomainRouting | null> {
+  const cacheKey = hostname.toLowerCase();
+  const cached = customDomainRoutingCache.get(cacheKey);
+  if (cached && Date.now() < cached.expiresAt) {
+    return cached.value;
+  }
+
+  if (process.env.NODE_ENV === "test" && !process.env.DOMAIN_ROUTING_ENDPOINT) {
+    customDomainRoutingCache.set(cacheKey, { value: null, expiresAt: Date.now() + 1000 });
+    return null;
+  }
+
+  const endpoint =
+    process.env.DOMAIN_ROUTING_ENDPOINT ||
+    `${process.env.BACKEND_URL || process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000"}/api/domains/routing/resolve`;
+  const secret = process.env.DOMAIN_INTERNAL_SECRET || "";
+  const url = new URL(endpoint);
+  url.searchParams.set("host", hostname);
+
+  try {
+    const response = await fetch(url.toString(), {
+      method: "GET",
+      headers: secret ? { "X-Internal-Domain-Secret": secret } : {},
+      cache: "no-store",
+      signal: AbortSignal.timeout(800),
+    });
+    if (!response.ok) {
+      customDomainRoutingCache.set(cacheKey, { value: null, expiresAt: Date.now() + 15_000 });
+      return null;
+    }
+    const payload = await response.json();
+    const routing = payload?.routing as CustomDomainRouting | undefined;
+    if (
+      routing?.routing_enabled &&
+      routing.status === "active" &&
+      routing.product_domain === "shop" &&
+      routing.store_slug
+    ) {
+      customDomainRoutingCache.set(cacheKey, { value: routing, expiresAt: Date.now() + 60_000 });
+      return routing;
+    }
+  } catch (error) {
+    console.error("[Proxy] Custom domain routing lookup failed:", error);
+  }
+
+  customDomainRoutingCache.set(cacheKey, { value: null, expiresAt: Date.now() + 15_000 });
+  return null;
+}
+
+async function handleCustomDomainRequest(
+  request: NextRequest,
+  hostname: string,
+  pathname: string,
+): Promise<NextResponse> {
+  const routing = await resolveCustomDomainRouting(hostname);
+  if (!routing) {
+    return customDomainHtml(
+      404,
+      "Domain not configured",
+      "This domain is not active on Flowauxi yet. Check your DNS settings or verify it from your dashboard.",
+    );
+  }
+
+  if (isBlockedCustomDomainPath(pathname)) {
+    return customDomainHtml(
+      404,
+      "Not found",
+      "Dashboard and account pages are only available on Flowauxi platform domains.",
+    );
+  }
+
+  const context: DomainContext = {
+    domain: "shop",
+    tenantId: routing.tenant_id,
+    userId: routing.user_id,
+    environment: process.env.NODE_ENV === "development" ? "development" : "production",
+    hostname,
+    timestamp: Date.now(),
+    nonce: crypto.randomUUID(),
+  };
+  const signedContext = await domainResolver.signContext(context, routing.user_id);
+  const requestHeaders = new Headers(request.headers);
+  requestHeaders.set("x-signed-context", signedContext);
+  requestHeaders.set("x-tenant-domain", "shop");
+  requestHeaders.set("x-tenant-id", routing.tenant_id);
+  requestHeaders.set("x-user-id", routing.user_id);
+  requestHeaders.set("x-custom-domain", routing.normalized_host);
+  requestHeaders.set("x-custom-domain-routing-version", String(routing.routing_version));
+
+  const rewriteUrl = request.nextUrl.clone();
+  if (pathname === "/" || pathname === "") {
+    rewriteUrl.pathname = `/store/${routing.store_slug}`;
+  } else if (CUSTOM_DOMAIN_STORE_RELATIVE_PATHS.some((path) => pathname === path || pathname.startsWith(`${path}/`))) {
+    rewriteUrl.pathname = `/store/${routing.store_slug}${pathname}`;
+  } else if (pathname.startsWith("/api/") || pathname.startsWith("/store/")) {
+    const response = NextResponse.next({ request: { headers: requestHeaders } });
+    response.headers.set("x-product-domain", "shop");
+    response.headers.set("x-custom-domain", routing.normalized_host);
+    return response;
+  } else {
+    return customDomainHtml(
+      404,
+      "Not found",
+      "This custom domain only serves the connected public store.",
+    );
+  }
+
+  const response = NextResponse.rewrite(rewriteUrl, { request: { headers: requestHeaders } });
+  response.headers.set("x-product-domain", "shop");
+  response.headers.set("x-custom-domain", routing.normalized_host);
+  response.headers.set("x-rewrite-source", "custom-domain-routing");
+  response.headers.set("cache-control", "public, s-maxage=30, stale-while-revalidate=60");
+  return response;
+}
+
 // =============================================================================
 // MAIN PROXY FUNCTION
 // =============================================================================
@@ -571,6 +745,8 @@ export async function proxy(request: NextRequest) {
         `user=${userId?.substring(0, 8) || 'anon'}...`
       );
     }
+  } else if (isCustomerDomainCandidate(hostname)) {
+    return handleCustomDomainRequest(request, hostname, pathname);
   }
 
   // ═══════════════════════════════════════════════════════════════════════════

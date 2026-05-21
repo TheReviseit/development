@@ -298,7 +298,22 @@
     background 0.2s;
   background: var(--input-bg-light);
   width: 100%;
-  color: var(--text-secondary);
+  color: #111111;
+  font-weight: 600;
+}
+
+.formGroup input:-webkit-autofill,
+.formGroup input:-webkit-autofill:hover,
+.formGroup input:-webkit-autofill:focus,
+.formGroup input:-webkit-autofill:active {
+  -webkit-text-fill-color: #111111 !important;
+  caret-color: #111111;
+  background-color: var(--card-bg) !important;
+  -webkit-box-shadow: 0 0 0 1000px var(--card-bg) inset !important;
+  box-shadow: 0 0 0 1000px var(--card-bg) inset !important;
+  transition:
+    background-color 999999s ease-out,
+    color 999999s ease-out;
 }
 
 .formGroup input:focus {
@@ -309,6 +324,7 @@
 
 .formGroup input::placeholder {
   color: var(--text-placeholder);
+  font-weight: 400;
 }
 
 .passwordWrapper {
@@ -338,6 +354,12 @@
 
 .togglePassword:hover {
   color: var(--text-secondary);
+}
+
+.togglePassword:focus,
+.togglePassword:focus-visible {
+  outline: none;
+  box-shadow: none;
 }
 
 .formOptions {

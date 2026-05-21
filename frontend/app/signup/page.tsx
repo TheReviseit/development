@@ -1001,7 +1001,10 @@ const syncResult = await syncWithRetry(idToken, true);
                     type="button"
                     className={styles.togglePassword}
                     onClick={() => setShowPassword((p) => !p)}
+                    onMouseDown={(event) => event.preventDefault()}
+                    tabIndex={-1}
                     aria-label="Toggle password visibility"
+                    aria-pressed={showPassword}
                   >
                     {showPassword ? <EyeIcon /> : <EyeOffIcon />}
                   </button>
@@ -1045,7 +1048,10 @@ const syncResult = await syncWithRetry(idToken, true);
                     type="button"
                     className={styles.togglePassword}
                     onClick={() => setShowConfirmPassword((p) => !p)}
+                    onMouseDown={(event) => event.preventDefault()}
+                    tabIndex={-1}
                     aria-label="Toggle password visibility"
+                    aria-pressed={showConfirmPassword}
                   >
                     {showConfirmPassword ? <EyeIcon /> : <EyeOffIcon />}
                   </button>

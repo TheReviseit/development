@@ -117,6 +117,15 @@ export class DomainResolver {
 
   constructor() {
     this.secret = process.env.CONTEXT_SIGNING_SECRET || 'dev-secret-change-in-production';
+    if (
+      process.env.NODE_ENV === 'production' &&
+      this.secret === 'dev-secret-change-in-production' &&
+      process.env.ALLOW_INSECURE_CONTEXT_SECRET !== 'true'
+    ) {
+      throw new Error(
+        'CONTEXT_SIGNING_SECRET must be set in production. Refusing to use the development fallback secret.'
+      );
+    }
   }
 
   /**
