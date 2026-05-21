@@ -12,7 +12,14 @@ class FakeRepo:
         self.idempotency = {}
         self.events = []
         self.attempts = []
-        self.business_slug = "demo-store"
+        self.shop_stores = [{
+            "id": "biz_1",
+            "user_id": "user_1",
+            "url_slug": "demo-store",
+            "url_slug_lower": "demo-store",
+            "business_name": "Demo Store",
+            "updated_at": "2026-05-21T00:00:00Z",
+        }]
 
     def list_for_user(self, user_id, product_domain=None):
         return list(self.rows.values())
@@ -48,6 +55,9 @@ class FakeRepo:
             "last_error_code": None,
             "last_error_message": None,
             "next_check_at": None,
+            "resource_type": None,
+            "resource_id": None,
+            "canonical_store_slug": None,
             **data,
         }
         self.rows[row["id"]] = row
@@ -57,8 +67,17 @@ class FakeRepo:
         self.rows[domain_id].update(fields)
         return self.rows[domain_id]
 
-    def get_business_slug(self, user_id):
-        return self.business_slug
+    def list_shop_store_candidates(self, user_id):
+        return [store for store in self.shop_stores if store["user_id"] == user_id and store.get("url_slug")]
+
+    def get_shop_store_by_id(self, resource_id, user_id):
+        return next(
+            (
+                store for store in self.shop_stores
+                if store["id"] == resource_id and store["user_id"] == user_id and store.get("url_slug")
+            ),
+            None,
+        )
 
     def record_attempt(self, data):
         self.attempts.append(data)
@@ -80,6 +99,9 @@ class FakeLegacyDomainRepo(FakeRepo):
         "managed_dns_status",
         "desired_nameservers",
         "managed_dns_records",
+        "resource_type",
+        "resource_id",
+        "canonical_store_slug",
     }
 
     def create_domain(self, data):
@@ -261,6 +283,8 @@ def test_resolve_host_returns_active_shop_routing(monkeypatch):
 
     assert result.body["routing"]["product_domain"] == "shop"
     assert result.body["routing"]["store_slug"] == "demo-store"
+    assert repo.rows[created["id"]]["resource_id"] == "biz_1"
+    assert repo.rows[created["id"]]["canonical_store_slug"] == "demo-store"
 
 
 def test_resolve_www_host_can_use_active_apex_routing(monkeypatch):
@@ -287,7 +311,7 @@ def test_resolve_www_host_can_use_active_apex_routing(monkeypatch):
 def test_resolve_host_rejects_active_domain_without_storefront(monkeypatch):
     monkeypatch.setenv("DOMAIN_OWNERSHIP_SECRET", "test-secret")
     repo = FakeRepo()
-    repo.business_slug = None
+    repo.shop_stores = []
     svc = service(repo=repo)
     created = svc.add_domain("user_1", "customer.com", "idem-1").body["domain"]
     repo.update_domain(created["id"], {
@@ -303,6 +327,52 @@ def test_resolve_host_rejects_active_domain_without_storefront(monkeypatch):
         svc.resolve_host("customer.com")
 
     assert exc.value.code == DomainErrorCode.STORE_NOT_CONFIGURED
+    assert repo.rows[created["id"]]["routing_enabled"] is False
+    assert repo.rows[created["id"]]["last_error_code"] == DomainErrorCode.STORE_NOT_CONFIGURED.value
+
+
+def test_add_domain_rejects_ambiguous_store_binding(monkeypatch):
+    monkeypatch.setenv("DOMAIN_OWNERSHIP_SECRET", "test-secret")
+    repo = FakeRepo()
+    repo.shop_stores.append({
+        "id": "biz_2",
+        "user_id": "user_1",
+        "url_slug": "second-store",
+        "url_slug_lower": "second-store",
+        "business_name": "Second Store",
+        "updated_at": "2026-05-21T00:01:00Z",
+    })
+    svc = service(repo=repo)
+
+    with pytest.raises(DomainEngineError) as exc:
+        svc.add_domain("user_1", "customer.com", "idem-1")
+
+    assert exc.value.code == DomainErrorCode.STORE_BINDING_AMBIGUOUS
+
+
+def test_stale_cached_route_is_rejected_after_store_deletion(monkeypatch):
+    monkeypatch.setenv("DOMAIN_OWNERSHIP_SECRET", "test-secret")
+    repo = FakeRepo()
+    cache = FakeCache()
+    svc = service(repo=repo, cache=cache)
+    created = svc.add_domain("user_1", "customer.com", "idem-1").body["domain"]
+    repo.update_domain(created["id"], {
+        "routing_enabled": True,
+        "status": "active",
+        "provider_status": "verified",
+        "dns_status": "verified",
+        "ssl_status": "active",
+        "ownership_status": "verified",
+    })
+    svc.resolve_host("customer.com")
+    repo.shop_stores = []
+
+    with pytest.raises(DomainEngineError) as exc:
+        svc.resolve_host("customer.com")
+
+    assert exc.value.code == DomainErrorCode.STORE_NOT_CONFIGURED
+    assert repo.rows[created["id"]]["routing_enabled"] is False
+    assert cache.get("customer.com") is None
 
 
 def test_dns_domain_entitlement_uses_pro_only_feature_key():

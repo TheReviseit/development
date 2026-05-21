@@ -173,7 +173,9 @@ class CustomDomainService:
 
         provider_result = self.provider.verify_domain(host)
         active = provider_result.verified
-        new_version = int(row.get("routing_version") or 1) + (1 if active and not row.get("routing_enabled") else 0)
+        binding = self._optional_shop_store_binding(row)
+        routing_enabled = active and binding is not None
+        new_version = int(row.get("routing_version") or 1) + (1 if routing_enabled != bool(row.get("routing_enabled")) else 0)
         updated = self.repo.update_domain(row["id"], {
             "expected_records": {"records": expected_records},
             "observed_records": dns_result.observed_records,
@@ -182,18 +184,19 @@ class CustomDomainService:
             "provider_status": "verified" if provider_result.verified else "assigned",
             "ssl_status": "active" if provider_result.certificate_active or provider_result.verified else "pending",
             "status": "active" if active else "verified",
-            "routing_enabled": active,
+            "routing_enabled": routing_enabled,
             "routing_version": new_version,
+            **self._store_binding_fields(binding),
             "verified_at": self._now(),
             "ssl_active_at": self._now() if provider_result.certificate_active or provider_result.verified else None,
             "last_checked_at": self._now(),
-            "last_error_code": None,
-            "last_error_message": None,
+            "last_error_code": None if routing_enabled or not active else DomainErrorCode.STORE_NOT_CONFIGURED.value,
+            "last_error_message": None if routing_enabled or not active else "Domain verified, but Shop storefront setup is required before routing can turn on.",
             "provider_last_response": provider_result.raw,
         })
-        if active:
+        if routing_enabled:
             self.routing_cache.invalidate(host.normalized_host)
-        self._event(updated, "domain_verified", {"routing_enabled": active})
+        self._event(updated, "domain_verified", {"routing_enabled": routing_enabled})
         return ServiceResult({"success": True, "domain": self._public_domain(updated, include_records=True)}, 200)
 
     def delete_domain(self, user_id: str, domain_id: str) -> ServiceResult:
@@ -276,7 +279,16 @@ class CustomDomainService:
         host = normalize_host(raw_host)
         cached = self.routing_cache.get(host.normalized_host)
         if cached:
-            return ServiceResult({"success": True, "routing": asdict(cached), "cache": "hit"}, 200)
+            cached_row = self.repo.find_routing_host(cached.normalized_host)
+            try:
+                if cached_row and int(cached_row.get("routing_version") or 1) == cached.routing_version:
+                    binding = self._require_shop_store_binding(cached_row, persist=False)
+                    if binding["url_slug"] == cached.store_slug:
+                        return ServiceResult({"success": True, "routing": asdict(cached), "cache": "hit"}, 200)
+            except DomainEngineError:
+                self.routing_cache.invalidate(host.normalized_host)
+                raise
+            self.routing_cache.invalidate(host.normalized_host)
 
         row = self.repo.find_routing_host(host.normalized_host)
         alias_host = None
@@ -289,13 +301,7 @@ class CustomDomainService:
         if row.get("deleted_at") or not row.get("routing_enabled") or row.get("status") != "active":
             raise DomainEngineError(DomainErrorCode.DOMAIN_NOT_ACTIVE, "Domain is not active.", status_code=404)
 
-        store_slug = self.repo.get_business_slug(row["user_id"])
-        if not store_slug:
-            raise DomainEngineError(
-                DomainErrorCode.STORE_NOT_CONFIGURED,
-                "The custom domain is active, but the Shop storefront is not configured for this tenant.",
-                status_code=404,
-            )
+        binding = self._require_shop_store_binding(row, persist=False)
 
         entry = self.routing_cache.set(host.normalized_host, {
             "domain_id": row["id"],
@@ -306,7 +312,7 @@ class CustomDomainService:
             "routing_version": int(row.get("routing_version") or 1),
             "routing_enabled": bool(row.get("routing_enabled")),
             "status": row["status"],
-            "store_slug": store_slug,
+            "store_slug": binding["url_slug"],
             "alias_host": alias_host,
         })
         return ServiceResult({"success": True, "routing": asdict(entry), "cache": "miss"}, 200)
@@ -331,6 +337,7 @@ class CustomDomainService:
         expected_records = self._expected_setup_records(host, token, setup_mode)
         desired_nameservers = self.provider.get_managed_nameservers() if setup_mode == "nameserver" else []
         managed_records = self._managed_dns_records(host, token) if setup_mode == "nameserver" else []
+        store_binding = self._resolve_shop_store_binding(user_id)
         row = self.repo.create_domain({
             "tenant_id": tenant_id,
             "user_id": user_id,
@@ -355,6 +362,7 @@ class CustomDomainService:
             "managed_dns_status": "pending" if setup_mode == "nameserver" else "not_applicable",
             "desired_nameservers": desired_nameservers,
             "managed_dns_records": {"records": [record.to_dict() for record in managed_records]},
+            **self._store_binding_fields(store_binding),
             "status": "pending_dns",
             "dns_status": "pending",
             "ssl_status": "pending",
@@ -516,7 +524,9 @@ class CustomDomainService:
 
         provider_result = self.provider.verify_domain(host)
         active = provider_result.verified
-        new_version = int(row.get("routing_version") or 1) + (1 if active and not row.get("routing_enabled") else 0)
+        binding = self._optional_shop_store_binding(row)
+        routing_enabled = active and binding is not None
+        new_version = int(row.get("routing_version") or 1) + (1 if routing_enabled != bool(row.get("routing_enabled")) else 0)
         updated = self.repo.update_domain(row["id"], {
             "expected_records": self._expected_records_payload(
                 expected_records,
@@ -539,18 +549,19 @@ class CustomDomainService:
             "provider_status": "verified" if provider_result.verified else "assigned",
             "ssl_status": "active" if provider_result.certificate_active or provider_result.verified else "pending",
             "status": "active" if active else "verified",
-            "routing_enabled": active,
+            "routing_enabled": routing_enabled,
             "routing_version": new_version,
+            **self._store_binding_fields(binding),
             "verified_at": self._now(),
             "ssl_active_at": self._now() if provider_result.certificate_active or provider_result.verified else None,
             "last_checked_at": self._now(),
-            "last_error_code": None,
-            "last_error_message": None,
+            "last_error_code": None if routing_enabled or not active else DomainErrorCode.STORE_NOT_CONFIGURED.value,
+            "last_error_message": None if routing_enabled or not active else "Domain verified, but Shop storefront setup is required before routing can turn on.",
             "provider_last_response": provider_result.raw,
         })
-        if active:
+        if routing_enabled:
             self.routing_cache.invalidate(host.normalized_host)
-        self._event(updated, "domain_verified", {"routing_enabled": active, "setup_mode": "nameserver"})
+        self._event(updated, "domain_verified", {"routing_enabled": routing_enabled, "setup_mode": "nameserver"})
         return ServiceResult({"success": True, "domain": self._public_domain(updated, include_records=True)}, 200)
 
     def _expected_setup_records(self, host: NormalizedHost, token: str, setup_mode: str) -> list[dict[str, Any]]:
@@ -649,6 +660,73 @@ class CustomDomainService:
         if self.repo.count_active_for_user(user_id, product_domain) >= limit:
             raise DomainEngineError(DomainErrorCode.ENTITLEMENT_EXCEEDED, "Custom domain quota exceeded.", 403)
 
+    def _resolve_shop_store_binding(self, user_id: str) -> dict[str, Any] | None:
+        candidates = self.repo.list_shop_store_candidates(user_id)
+        if not candidates:
+            return None
+        if len(candidates) > 1:
+            raise DomainEngineError(
+                DomainErrorCode.STORE_BINDING_AMBIGUOUS,
+                "Multiple Shop storefronts matched this tenant. Resolve the store binding before enabling routing.",
+                status_code=409,
+            )
+        return candidates[0]
+
+    def _optional_shop_store_binding(self, row: dict[str, Any]) -> dict[str, Any] | None:
+        if row.get("resource_type") and row.get("resource_type") != "shop_store":
+            raise DomainEngineError(
+                DomainErrorCode.STORE_RESOURCE_MISMATCH,
+                "Domain is not bound to a Shop storefront.",
+                status_code=409,
+            )
+
+        if row.get("resource_id"):
+            store = self.repo.get_shop_store_by_id(str(row["resource_id"]), row["user_id"])
+            if not store:
+                return None
+            return store
+
+        return self._resolve_shop_store_binding(row["user_id"])
+
+    def _require_shop_store_binding(self, row: dict[str, Any], *, persist: bool) -> dict[str, Any]:
+        binding = self._optional_shop_store_binding(row)
+        if not binding:
+            if row.get("routing_enabled"):
+                updated = self.repo.update_domain(row["id"], {
+                    "routing_enabled": False,
+                    "routing_version": int(row.get("routing_version") or 1) + 1,
+                    "last_error_code": DomainErrorCode.STORE_NOT_CONFIGURED.value,
+                    "last_error_message": "Domain verified, but Shop storefront setup is required before routing can turn on.",
+                })
+                self.routing_cache.invalidate(row["normalized_host"])
+                self._event(updated, "routing_disabled_store_missing", {"reason": DomainErrorCode.STORE_NOT_CONFIGURED.value})
+            raise DomainEngineError(
+                DomainErrorCode.STORE_NOT_CONFIGURED,
+                "The custom domain is active, but the Shop storefront is not configured for this tenant.",
+                status_code=404,
+            )
+
+        if persist and (
+            row.get("resource_type") != "shop_store"
+            or row.get("resource_id") != binding["id"]
+            or row.get("canonical_store_slug") != binding["url_slug"]
+        ):
+            self.repo.update_domain(row["id"], self._store_binding_fields(binding))
+        return binding
+
+    def _store_binding_fields(self, binding: dict[str, Any] | None) -> dict[str, Any]:
+        if not binding:
+            return {
+                "resource_type": None,
+                "resource_id": None,
+                "canonical_store_slug": None,
+            }
+        return {
+            "resource_type": "shop_store",
+            "resource_id": binding["id"],
+            "canonical_store_slug": binding["url_slug"],
+        }
+
     def _require_domain(self, user_id: str, domain_id: str) -> dict[str, Any]:
         row = self.repo.get_for_user(domain_id, user_id)
         if not row:
@@ -680,6 +758,9 @@ class CustomDomainService:
             "nameserverStatus": nameserver_status,
             "managedDnsStatus": managed_dns_status,
             "desiredNameservers": row.get("desired_nameservers") or expected_metadata.get("desiredNameservers") or [],
+            "resourceType": row.get("resource_type"),
+            "resourceId": row.get("resource_id"),
+            "canonicalStoreSlug": row.get("canonical_store_slug"),
             "routingEnabled": row["routing_enabled"],
             "routingVersion": row["routing_version"],
             "isPrimary": row["is_primary"],

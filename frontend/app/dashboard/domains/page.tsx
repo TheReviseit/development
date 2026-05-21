@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import {
   AlertCircle,
   CheckCircle2,
@@ -35,6 +36,9 @@ type TenantDomain = {
   nameserverStatus?: string;
   managedDnsStatus?: string;
   desiredNameservers?: string[];
+  resourceType?: string | null;
+  resourceId?: string | null;
+  canonicalStoreSlug?: string | null;
   routingEnabled: boolean;
   lastErrorCode?: string | null;
   lastErrorMessage?: string | null;
@@ -324,6 +328,17 @@ export default function DomainsPage() {
                 </div>
               )}
 
+              {needsStoreSetup(domain) && (
+                <div className={styles.setupRequired}>
+                  <strong>Domain connected, store setup required.</strong>
+                  <p>
+                    DNS and provider setup can complete, but this domain cannot route until
+                    your Shop business profile has a real store URL.
+                  </p>
+                  <Link href="/dashboard/profile">Complete Shop setup</Link>
+                </div>
+              )}
+
               {domain.lastErrorCode && (
                 <div className={styles.inlineError}>
                   {domain.lastErrorCode}: {domain.lastErrorMessage}
@@ -461,6 +476,14 @@ function needsNameserverChange(domain: TenantDomain) {
   return domain.setupMode === "nameserver" && domain.nameserverStatus !== "verified";
 }
 
+function needsStoreSetup(domain: TenantDomain) {
+  return (
+    domain.lastErrorCode === "STORE_NOT_CONFIGURED"
+    || domain.lastErrorCode === "STORE_BINDING_AMBIGUOUS"
+    || domain.lastErrorCode === "STORE_RESOURCE_MISMATCH"
+  );
+}
+
 async function loadDomainDetails(listedDomains: TenantDomain[]) {
   if (listedDomains.length === 0) return listedDomains;
   return Promise.all(
@@ -557,6 +580,15 @@ function toFriendlyError(data: ApiError) {
   }
   if (data.code === "ENTITLEMENT_REQUIRED") {
     return "Business keeps /store/storeurl. Real DNS custom domains are Pro only.";
+  }
+  if (data.code === "STORE_NOT_CONFIGURED") {
+    return "Domain is connected, but your Shop storefront is not configured yet. Complete Shop setup first.";
+  }
+  if (data.code === "STORE_BINDING_AMBIGUOUS") {
+    return "Multiple Shop storefronts matched this account. Resolve the store binding before enabling the domain.";
+  }
+  if (data.code === "STORE_RESOURCE_MISMATCH") {
+    return "This domain is not bound to the expected Shop storefront. Remove and reconnect it after checking the store setup.";
   }
   return data.message || data.error || data.code || "Request failed";
 }

@@ -638,7 +638,11 @@ async function handleCustomDomainRequest(
   const lookup = await resolveCustomDomainRouting(hostname);
   const routing = lookup.routing;
   if (!routing) {
-    if (lookup.failure?.code === "STORE_NOT_CONFIGURED") {
+    if (
+      lookup.failure?.code === "STORE_NOT_CONFIGURED"
+      || lookup.failure?.code === "STORE_BINDING_AMBIGUOUS"
+      || lookup.failure?.code === "STORE_RESOURCE_MISMATCH"
+    ) {
       return customDomainHtml(
         404,
         "Store not configured",

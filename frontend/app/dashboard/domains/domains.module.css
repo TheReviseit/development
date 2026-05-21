@@ -330,6 +330,37 @@
   line-height: 1.45;
 }
 
+.setupRequired {
+  display: grid;
+  gap: 0.4rem;
+  margin-bottom: 1rem;
+  padding: 0.85rem 0.95rem;
+  border-radius: 8px;
+  border: 1px solid rgba(245, 158, 11, 0.34);
+  background: rgba(245, 158, 11, 0.12);
+  color: var(--dash-text-primary);
+}
+
+.setupRequired strong {
+  font-size: 0.9rem;
+}
+
+.setupRequired p {
+  margin: 0;
+  color: var(--dash-text-muted);
+  font-size: 0.84rem;
+  line-height: 1.45;
+}
+
+.setupRequired a {
+  width: fit-content;
+  color: #92400e;
+  font-size: 0.86rem;
+  font-weight: 800;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
 .records {
   display: grid;
   gap: 0.5rem;

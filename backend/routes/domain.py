@@ -40,7 +40,7 @@ def _unexpected_error_response(exc: Exception):
     if _looks_like_missing_domain_migration(exc):
         message = (
             "Custom domain database schema is missing required columns. "
-            "Apply migration 20260521002300_reload_domain_setup_schema_cache.sql to Supabase, then retry."
+            "Apply the latest custom-domain migrations through 20260521002400_domain_store_bindings.sql to Supabase, then retry."
         )
         code = DomainErrorCode.SCHEMA_MIGRATION_REQUIRED.value
         status_code = 503
@@ -63,6 +63,9 @@ def _looks_like_missing_domain_migration(exc: Exception) -> bool:
         or "tenant_domains.managed_dns_status" in text
         or "tenant_domains.desired_nameservers" in text
         or "tenant_domains.managed_dns_records" in text
+        or "tenant_domains.resource_type" in text
+        or "tenant_domains.resource_id" in text
+        or "tenant_domains.canonical_store_slug" in text
         or "could not find" in text and "tenant_domains" in text and "schema cache" in text
     )
 
