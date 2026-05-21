@@ -113,19 +113,18 @@ const VALID_DOMAINS: Set<string> = new Set([
 // =============================================================================
 
 export class DomainResolver {
-  private secret: string;
-
-  constructor() {
-    this.secret = process.env.CONTEXT_SIGNING_SECRET || 'dev-secret-change-in-production';
+  private getSecret(): string {
+    const secret = process.env.CONTEXT_SIGNING_SECRET || 'dev-secret-change-in-production';
     if (
       process.env.NODE_ENV === 'production' &&
-      this.secret === 'dev-secret-change-in-production' &&
+      secret === 'dev-secret-change-in-production' &&
       process.env.ALLOW_INSECURE_CONTEXT_SECRET !== 'true'
     ) {
       throw new Error(
         'CONTEXT_SIGNING_SECRET must be set in production. Refusing to use the development fallback secret.'
       );
     }
+    return secret;
   }
 
   /**
@@ -197,7 +196,7 @@ export class DomainResolver {
       environment: context.environment,
     });
 
-    const signature = await signHmac(payload, this.secret);
+    const signature = await signHmac(payload, this.getSecret());
     const payloadB64 = btoa(payload);
 
     return `${payloadB64}.${signature}`;
@@ -216,7 +215,7 @@ export class DomainResolver {
       const payload = atob(payloadB64);
 
       // Verify signature
-      const expectedSignature = await signHmac(payload, this.secret);
+      const expectedSignature = await signHmac(payload, this.getSecret());
 
       if (signature !== expectedSignature) {
         console.error('[DomainResolver] Invalid signature');

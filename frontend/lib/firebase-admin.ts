@@ -5,7 +5,11 @@ import { getApps } from "firebase-admin/app";
  * Initialize Firebase Admin SDK
  * Uses service account for server-side authentication
  */
-if (!getApps().length) {
+function getFirebaseAdminApp() {
+  if (getApps().length) {
+    return admin.app();
+  }
+
   try {
     // Get service account from environment variable (base64 encoded JSON)
     const serviceAccountBase64 = process.env.FIREBASE_SERVICE_ACCOUNT_KEY;
@@ -26,7 +30,7 @@ if (!getApps().length) {
     ).toString("utf-8");
     const serviceAccount = JSON.parse(serviceAccountJson);
 
-    admin.initializeApp({
+    return admin.initializeApp({
       credential: admin.credential.cert(serviceAccount),
       projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
     });
@@ -38,8 +42,29 @@ if (!getApps().length) {
   }
 }
 
-export const adminAuth = admin.auth();
-export const adminDb = admin.firestore();
+export function getAdminAuth() {
+  return getFirebaseAdminApp().auth();
+}
+
+export function getAdminDb() {
+  return getFirebaseAdminApp().firestore();
+}
+
+export const adminAuth = new Proxy({} as admin.auth.Auth, {
+  get(_target, prop, receiver) {
+    const auth = getAdminAuth() as unknown as Record<PropertyKey, unknown>;
+    const value = Reflect.get(auth, prop, receiver);
+    return typeof value === "function" ? value.bind(auth) : value;
+  },
+});
+
+export const adminDb = new Proxy({} as admin.firestore.Firestore, {
+  get(_target, prop, receiver) {
+    const db = getAdminDb() as unknown as Record<PropertyKey, unknown>;
+    const value = Reflect.get(db, prop, receiver);
+    return typeof value === "function" ? value.bind(db) : value;
+  },
+});
 
 /**
  * Verify Firebase ID token
