@@ -103,15 +103,13 @@ export default async function StorePage({ params }: StorePageProps) {
   const storeData = await getStoreBySlugCached(username);
   console.log(`[StorePage SSR] Result: ${storeData ? "FOUND" : "NULL"}`);
 
-  if (!storeData) {
-    notFound();
-  }
+  // If store data doesn't exist yet, we don't 404. We render the client page in demo mode.
 
   // ── CANONICAL REDIRECT ─────────────────────────────────────────────
   // If the URL slug doesn't match the canonical slug, redirect.
   // This handles: username → slug, mixed case → lowercase, UID → slug
   if (
-    storeData.canonicalSlug &&
+    storeData?.canonicalSlug &&
     username.toLowerCase() !== storeData.canonicalSlug.toLowerCase()
   ) {
     console.log(
@@ -127,14 +125,14 @@ export default async function StorePage({ params }: StorePageProps) {
   const isLocalhost = host.includes("localhost") || host.includes("127.0.0.1");
   const protocol = isLocalhost ? "http" : "https";
   const baseUrl = `${protocol}://${host}`;
-  const storeUrl = `${baseUrl}/store/${storeData.canonicalSlug || username}`;
+  const storeUrl = `${baseUrl}/store/${storeData?.canonicalSlug || username}`;
 
-  const schemas = generateAllStoreSchemas({
+  const schemas = storeData ? generateAllStoreSchemas({
     store: storeData,
     storeUrl,
     baseUrl,
     slug: storeData.canonicalSlug || username,
-  });
+  }) : [];
 
   return (
     <>

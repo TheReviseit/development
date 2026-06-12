@@ -13,7 +13,23 @@ export type UserType = "normal" | "console";
  * Value: required user type
  */
 export const ROUTE_POLICY: Record<string, UserType> = {
-  "/dashboard": "normal",
+  "/home": "normal",
+  "/orders": "normal",
+  "/products": "normal",
+  "/contacts": "normal",
+  "/messages": "normal",
+  "/bulk-messages": "normal",
+  "/templates": "normal",
+  "/campaigns": "normal",
+  "/appointments": "normal",
+  "/services": "normal",
+  "/forms": "normal",
+  "/files": "normal",
+  "/bot-settings": "normal",
+  "/preview-bot": "normal",
+  "/profile": "normal",
+  "/domains": "normal",
+  "/showcase-manager": "normal",
   "/console": "console",
   "/settings": "normal",
   "/onboarding": "normal",
@@ -103,5 +119,5 @@ export function getLoginUrl(userType: UserType): string {
  * Get dashboard URL for a user type
  */
 export function getDashboardUrl(userType: UserType): string {
-  return userType === "console" ? "/console" : "/dashboard";
+  return userType === "console" ? "/console" : "/home";
 }

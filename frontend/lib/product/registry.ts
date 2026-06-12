@@ -231,7 +231,7 @@ export const PRODUCT_REGISTRY: Record<ProductDomain, ProductConfig> = {
     routes: {
       landing: "/shop",
       onboarding: "/onboarding-embedded",
-      dashboard: "/dashboard",
+      dashboard: "/home",
       pricing: "/pricing",
       login: "/login",
       signup: "/signup",
@@ -339,7 +339,7 @@ export const PRODUCT_REGISTRY: Record<ProductDomain, ProductConfig> = {
     routes: {
       landing: "/",
       onboarding: "/onboarding-embedded",
-      dashboard: "/dashboard",
+      dashboard: "/home",
       pricing: "/pricing",
       login: "/login",
       signup: "/signup",
@@ -448,7 +448,7 @@ export const PRODUCT_REGISTRY: Record<ProductDomain, ProductConfig> = {
     routes: {
       landing: "/marketing",
       onboarding: "/onboarding-embedded",
-      dashboard: "/dashboard",
+      dashboard: "/home",
       pricing: "/pricing",
       login: "/login",
       signup: "/signup",
@@ -544,7 +544,7 @@ export const PRODUCT_REGISTRY: Record<ProductDomain, ProductConfig> = {
     routes: {
       landing: "/showcase",
       onboarding: "/onboarding-embedded",
-      dashboard: "/dashboard",
+      dashboard: "/home",
       pricing: "/pricing",
       login: "/login",
       signup: "/signup",
@@ -739,7 +739,7 @@ export const PRODUCT_REGISTRY: Record<ProductDomain, ProductConfig> = {
     routes: {
       landing: "/booking",
       onboarding: "/onboarding-embedded",
-      dashboard: "/dashboard",
+      dashboard: "/home",
       pricing: "/pricing",
       login: "/login",
       signup: "/signup",
@@ -766,7 +766,7 @@ export const PRODUCT_REGISTRY: Record<ProductDomain, ProductConfig> = {
     routes: {
       landing: "/tools",
       onboarding: "/onboarding-embedded",
-      dashboard: "/dashboard/files",
+      dashboard: "/files",
       pricing: "/pricing",
       login: "/login",
       signup: "/signup",

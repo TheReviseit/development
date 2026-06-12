@@ -29,7 +29,7 @@ export default async function AdminEmailPage() {
 
     if (!user || user.role !== "admin") {
       // Not an admin - redirect to dashboard
-      redirect("/dashboard");
+      redirect("/home");
     }
 
     // User is authenticated and is an admin - render client component

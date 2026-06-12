@@ -163,7 +163,7 @@ export default function OnboardingPricingReplica(props: {
                 <div className={styles.planName}>{plan.name} plan</div>
                 <div className={styles.priceRow}>
                   <div className={styles.price}>{plan.priceDisplay}</div>
-                  <div className={styles.period}>per month</div>
+                  <div className={styles.period}>/ month</div>
                 </div>
                 <p className={styles.description}>{plan.description}</p>
               </div>

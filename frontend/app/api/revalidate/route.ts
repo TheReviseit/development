@@ -63,9 +63,9 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
         invalidated.push(`slug:${slug}`);
       }
 
-      // Revalidate ISR cache for the store page
+      // Revalidate ISR cache for the store page and ALL its children
       try {
-        revalidatePath(`/store/${slug}`);
+        revalidatePath(`/store/${slug}`, "layout");
         invalidated.push(`isr:/store/${slug}`);
       } catch (e) {
         console.warn("[revalidate] ISR revalidation failed:", e);

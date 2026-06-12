@@ -132,7 +132,7 @@ export function buildAuthDecision(
         : "product_access_required";
 
   const nextPath = canEnterDashboard
-    ? "/dashboard"
+    ? "/home"
     : `/onboarding-embedded?domain=${product}`;
 
   return {

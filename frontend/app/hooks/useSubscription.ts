@@ -26,7 +26,7 @@
 
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useRef } from "react";
-import type { BillingLockReason, TrialInfo } from "@/app/dashboard/components/BillingLockScreen";
+import type { BillingLockReason, TrialInfo } from "@/app/(dashboard)/components/BillingLockScreen";
 import { getProductDomainFromBrowser } from "@/lib/domain/client";
 
 // =============================================================================

@@ -104,7 +104,7 @@ export function usePushNotification() {
           badge: "/icon-192.png",
           tag: data.conversationId || "foreground-message",
           data: {
-            url: data.url || "/dashboard",
+            url: data.url || "/home",
             conversationId: data.conversationId,
           },
         });
@@ -113,7 +113,7 @@ export function usePushNotification() {
         notif.onclick = () => {
           window.focus();
           if (data.conversationId) {
-            window.location.href = `/dashboard?conversation=${data.conversationId}`;
+            window.location.href = `/home?conversation=${data.conversationId}`;
           }
           notif.close();
         };

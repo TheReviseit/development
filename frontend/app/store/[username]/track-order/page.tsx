@@ -4,7 +4,7 @@ import React, { useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import styles from "./track-order.module.css";
-import ImageModal from "@/app/dashboard/components/ImageModal";
+import ImageModal from "@/app/(dashboard)/components/ImageModal";
 import {
   Search,
   Package,

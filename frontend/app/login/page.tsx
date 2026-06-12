@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useState, useCallback, memo, useEffect } from "react";
+import { useState, useCallback, memo, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import dynamic from "next/dynamic";
 import Image from "next/image";
@@ -119,10 +119,16 @@ async function syncWithRetry(
       const code = errorData.code || errorData.error;
       const message = errorData.message || errorData.error;
 
-      if (i === retries) return { ok: false, status: response.status, code, message };
+      if (i === retries)
+        return { ok: false, status: response.status, code, message };
     } catch (error) {
       if (i === retries) {
-        return { ok: false, status: 0, code: "NETWORK_ERROR", message: "Failed to reach auth server" };
+        return {
+          ok: false,
+          status: 0,
+          code: "NETWORK_ERROR",
+          message: "Failed to reach auth server",
+        };
       }
       await new Promise((resolve) => setTimeout(resolve, 150 * (i + 1)));
     }
@@ -150,7 +156,7 @@ async function checkOnboardingStatus(): Promise<boolean> {
   try {
     const data = await getOnboardingCheck({ force: true });
     const product = getProductDomainFromBrowser();
-    return getOnboardingDestination(data, product).startsWith("/dashboard");
+    return getOnboardingDestination(data, product).startsWith("/home");
   } catch {
     return false;
   }
@@ -166,7 +172,7 @@ function getPostAuthPath(
 
   if (typeof fallbackOnboardingCompleted === "boolean") {
     return fallbackOnboardingCompleted
-      ? "/dashboard"
+      ? "/home"
       : `/onboarding-embedded?domain=${getProductDomainFromBrowser()}`;
   }
 
@@ -183,13 +189,15 @@ function getPostAuthPath(
 async function getIdTokenWithCircuitBreaker(
   user: import("firebase/auth").User,
   maxRetries: number = 2,
-  timeoutMs: number = 5000
+  timeoutMs: number = 5000,
 ): Promise<string | null> {
   const operationId = `token_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
 
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     try {
-      console.log(`[${operationId}] Token retrieval attempt ${attempt + 1}/${maxRetries + 1}`);
+      console.log(
+        `[${operationId}] Token retrieval attempt ${attempt + 1}/${maxRetries + 1}`,
+      );
 
       const tokenPromise = user.getIdToken(true);
       const timeoutPromise = new Promise<never>((_, reject) => {
@@ -206,10 +214,15 @@ async function getIdTokenWithCircuitBreaker(
         ? `Token retrieval timed out after ${timeoutMs}ms`
         : error?.message || "Unknown error";
 
-      console.error(`[${operationId}] Attempt ${attempt + 1} failed:`, errorMessage);
+      console.error(
+        `[${operationId}] Attempt ${attempt + 1} failed:`,
+        errorMessage,
+      );
 
       if (attempt === maxRetries) {
-        console.error(`[${operationId}] All ${maxRetries + 1} attempts exhausted`);
+        console.error(
+          `[${operationId}] All ${maxRetries + 1} attempts exhausted`,
+        );
         return null;
       }
 
@@ -226,7 +239,9 @@ async function getIdTokenWithCircuitBreaker(
  * Log performance metrics to console and optionally to analytics.
  */
 function logPerformanceMetric(measureName: string, targetMs: number): void {
-  const measure = performance.getEntriesByName(measureName)[0] as PerformanceMeasure;
+  const measure = performance.getEntriesByName(
+    measureName,
+  )[0] as PerformanceMeasure;
 
   if (!measure) {
     console.warn(`[AuthPerf] No measure found: ${measureName}`);
@@ -237,12 +252,14 @@ function logPerformanceMetric(measureName: string, targetMs: number): void {
   const status = duration <= targetMs ? "✓" : "✗";
 
   if (process.env.NODE_ENV === "development") {
-    console.log(`[AuthPerf] ${status} ${measureName}: ${duration}ms (target: ${targetMs}ms)`);
+    console.log(
+      `[AuthPerf] ${status} ${measureName}: ${duration}ms (target: ${targetMs}ms)`,
+    );
   }
 
   if (duration > targetMs) {
     console.warn(
-      `[AuthPerf] SLOW: ${measureName} took ${duration}ms, exceeding ${targetMs}ms target`
+      `[AuthPerf] SLOW: ${measureName} took ${duration}ms, exceeding ${targetMs}ms target`,
     );
   }
 
@@ -252,7 +269,8 @@ function logPerformanceMetric(measureName: string, targetMs: number): void {
         event_category: "performance",
         event_label: measureName,
         value: duration,
-        custom_parameter_1: duration <= targetMs ? "within_target" : "exceeded_target",
+        custom_parameter_1:
+          duration <= targetMs ? "within_target" : "exceeded_target",
       });
     }
   }
@@ -262,7 +280,12 @@ function logPerformanceMetric(measureName: string, targetMs: number): void {
  * Clear all auth-related performance marks and measures.
  */
 function clearAuthPerformanceMarks(): void {
-  const marks = ["auth-start", "auth-success", "navigation-start", "navigation-complete"];
+  const marks = [
+    "auth-start",
+    "auth-success",
+    "navigation-start",
+    "navigation-complete",
+  ];
   const measures = ["auth-to-nav", "nav-latency"];
 
   marks.forEach((mark) => {
@@ -293,6 +316,7 @@ export default function LoginPage() {
   const [isRedirectPending, setIsRedirectPending] = useState(false);
   const [domain, setDomain] = useState<string>("dashboard");
   const router = useRouter();
+  const passwordRef = useRef<HTMLInputElement>(null);
 
   // Resolve current domain for dynamic marketing copy
   useEffect(() => {
@@ -311,7 +335,7 @@ export default function LoginPage() {
       try {
         setGoogleLoading(true);
         setIsRedirectPending(true);
-        
+
         console.log("[Login] Checking redirect result...");
         const result = await checkRedirectResult(auth);
 
@@ -323,7 +347,9 @@ export default function LoginPage() {
           if (!syncResult.ok) {
             if (isMissingAccountSyncResult(syncResult)) {
               await clearMissingAccountSession("login_redirect_user_not_found");
-              setError("Your previous session no longer exists. Please sign in again.");
+              setError(
+                "Your previous session no longer exists. Please sign in again.",
+              );
               setGoogleLoading(false);
               setIsRedirectPending(false);
               setCheckingSession(false);
@@ -395,7 +421,8 @@ export default function LoginPage() {
                 : await checkOnboardingStatus();
               if (isMounted) {
                 router.replace(
-                  getPostAuthPath(syncResult, fallbackCompleted) || "/onboarding",
+                  getPostAuthPath(syncResult, fallbackCompleted) ||
+                    "/onboarding",
                 );
               }
               return;
@@ -408,7 +435,9 @@ export default function LoginPage() {
                 : "login_session_sync_failed",
             );
             if (isMounted && isMissingAccountSyncResult(syncResult)) {
-              setError("Your previous session no longer exists. Please sign in again.");
+              setError(
+                "Your previous session no longer exists. Please sign in again.",
+              );
             }
           } catch (error) {
             console.error("Session validation error:", error);
@@ -449,7 +478,21 @@ export default function LoginPage() {
   );
 
   const togglePassword = useCallback(() => {
-    setShowPassword((prev) => !prev);
+    if (passwordRef.current) {
+      const cursorStart = passwordRef.current.selectionStart;
+      const cursorEnd = passwordRef.current.selectionEnd;
+
+      setShowPassword((prev) => !prev);
+
+      // Restore cursor position in the next tick after the browser applies the type change
+      requestAnimationFrame(() => {
+        if (passwordRef.current && cursorStart !== null && cursorEnd !== null) {
+          passwordRef.current.setSelectionRange(cursorStart, cursorEnd);
+        }
+      });
+    } else {
+      setShowPassword((prev) => !prev);
+    }
   }, []);
 
   const clearError = useCallback(() => {
@@ -469,7 +512,9 @@ export default function LoginPage() {
         if (!syncResult.ok) {
           if (isMissingAccountSyncResult(syncResult)) {
             await clearMissingAccountSession("login_submit_user_not_found");
-            setError("No active Flowauxi account was found for this login. Please sign up again.");
+            setError(
+              "No active Flowauxi account was found for this login. Please sign up again.",
+            );
             setLoading(false);
             return;
           }
@@ -521,11 +566,13 @@ export default function LoginPage() {
         const idToken = await getIdTokenWithCircuitBreaker(
           result.user.user,
           2,
-          5000
+          5000,
         );
 
         if (!idToken) {
-          setError("Failed to retrieve authentication token. Please try again.");
+          setError(
+            "Failed to retrieve authentication token. Please try again.",
+          );
           setGoogleLoading(false);
           await auth.signOut();
           return;
@@ -535,7 +582,9 @@ export default function LoginPage() {
         if (!syncResult.ok) {
           if (isMissingAccountSyncResult(syncResult)) {
             await clearMissingAccountSession("google_login_user_not_found");
-            setError("No active Flowauxi account was found for this Google login. Please sign up again.");
+            setError(
+              "No active Flowauxi account was found for this Google login. Please sign up again.",
+            );
             setGoogleLoading(false);
             return;
           }
@@ -556,15 +605,27 @@ export default function LoginPage() {
         // STEP 6: Performance logging
         setTimeout(() => {
           performance.mark("navigation-complete");
-          performance.measure("auth-to-nav", "auth-start", "navigation-complete");
-          performance.measure("nav-latency", "navigation-start", "navigation-complete");
+          performance.measure(
+            "auth-to-nav",
+            "auth-start",
+            "navigation-complete",
+          );
+          performance.measure(
+            "nav-latency",
+            "navigation-start",
+            "navigation-complete",
+          );
 
           logPerformanceMetric("auth-to-nav", 750);
           logPerformanceMetric("nav-latency", 400);
-          const totalMeasure = performance.getEntriesByName("auth-to-nav")[0] as PerformanceMeasure;
+          const totalMeasure = performance.getEntriesByName(
+            "auth-to-nav",
+          )[0] as PerformanceMeasure;
           if (totalMeasure) {
             const status = totalMeasure.duration <= 750 ? "SUCCESS" : "SLOW";
-            console.log(`[Auth] ${status}: Login flow completed in ${Math.round(totalMeasure.duration)}ms`);
+            console.log(
+              `[Auth] ${status}: Login flow completed in ${Math.round(totalMeasure.duration)}ms`,
+            );
           }
         }, 100);
       } else {
@@ -581,9 +642,11 @@ export default function LoginPage() {
       let errorMessage = "Failed to sign in with Google";
 
       if (err.code === "auth/popup-closed-by-user") {
-        errorMessage = "Sign-in cancelled. Please try again and complete the Google sign-in process.";
+        errorMessage =
+          "Sign-in cancelled. Please try again and complete the Google sign-in process.";
       } else if (err.code === "auth/popup-blocked") {
-        errorMessage = "Pop-up blocked by browser. Please allow pop-ups for this site and try again.";
+        errorMessage =
+          "Pop-up blocked by browser. Please allow pop-ups for this site and try again.";
       } else if (err.code === "auth/unauthorized-domain") {
         errorMessage = "This domain is not authorized. Please contact support.";
       } else if (err.code === "auth/cancelled-popup-request") {
@@ -591,7 +654,8 @@ export default function LoginPage() {
       } else if (err.code === "auth/network-request-failed") {
         errorMessage = "Network error. Please check your internet connection.";
       } else if (err.message && err.message.includes("initial state")) {
-        errorMessage = "Browser storage issue detected. Please enable cookies and try again, or try using a different browser.";
+        errorMessage =
+          "Browser storage issue detected. Please enable cookies and try again, or try using a different browser.";
       } else {
         errorMessage = handleFirebaseError(err);
       }
@@ -602,7 +666,7 @@ export default function LoginPage() {
 
   // Dynamic left pane content
   const isBooking = domain === "booking";
-  
+
   const marketingContent = {
     quoteLabel: isBooking ? "WHY FLOWAUXI BOOKINGS" : "WHY FLOWAUXI",
     heading: isBooking ? (
@@ -657,12 +721,8 @@ export default function LoginPage() {
   const marketingPanel = (
     <div className={styles.marketingContentPanel}>
       <div className={styles.contentSection}>
-        <h1 className={styles.mainHeading}>
-          {marketingContent.heading}
-        </h1>
-        <p className={styles.subText}>
-          {marketingContent.subText}
-        </p>
+        <h1 className={styles.mainHeading}>{marketingContent.heading}</h1>
+        <p className={styles.subText}>{marketingContent.subText}</p>
         {marketingBenefits}
       </div>
     </div>
@@ -680,14 +740,16 @@ export default function LoginPage() {
           </div>
           <div className={styles.authRight}>
             <div className={styles.formContainer}>
-              <div style={{
-                display: "flex",
-                flexDirection: "column",
-                alignItems: "center",
-                justifyContent: "center",
-                minHeight: "300px",
-                gap: "16px",
-              }}>
+              <div
+                style={{
+                  display: "flex",
+                  flexDirection: "column",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  minHeight: "300px",
+                  gap: "16px",
+                }}
+              >
                 <ButtonSpinner size={32} />
                 <p style={{ color: "#666", fontSize: "14px" }}>
                   Completing sign in...
@@ -712,12 +774,13 @@ export default function LoginPage() {
           {marketingEyebrow}
           {marketingPanel}
         </div>
-
         {/* Right Side - Form */}
         <div className={styles.authRight}>
           <div className={styles.brandTag}>
-            <Image src="/logo.png" alt="Flowauxi Logo" width={24} height={24} />
-            <span>Flowauxi</span>
+            <Image src="/logo.png" alt="Flowauxi Logo" width={32} height={32} />
+            <span style={{ fontSize: "18px", fontWeight: "700" }}>
+              Flowauxi
+            </span>
           </div>
 
           <div className={styles.formContainer}>
@@ -766,6 +829,7 @@ export default function LoginPage() {
                     <label htmlFor="password">Password</label>
                     <div className={styles.passwordWrapper}>
                       <input
+                        ref={passwordRef}
                         type={showPassword ? "text" : "password"}
                         id="password"
                         placeholder="Enter your password"
@@ -824,7 +888,8 @@ export default function LoginPage() {
                 </form>
 
                 <p className={styles.authFooter}>
-                  Don&apos;t have an account? <Link href="/signup">Sign Up</Link>
+                  Don&apos;t have an account?{" "}
+                  <Link href="/signup">Sign Up</Link>
                 </p>
               </>
             )}

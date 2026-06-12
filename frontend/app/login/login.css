@@ -123,6 +123,10 @@ body {
 
 /* Right Side - Form */
 .login-page .auth-right {
+  --text-primary: #000000;
+  --text-secondary: #111111;
+  --text-muted: #4a4a4a;
+  --text-placeholder: #8a8a8a;
   flex: 1;
   background: var(--card-bg);
   display: flex;
@@ -267,12 +271,13 @@ body {
   gap: 7px;
   font-family: var(--font-primary);
   font-size: 13px;
-  color: var(--text-muted);
+  color: #111111;
   cursor: pointer;
   user-select: none;
 }
 
 .login-page .checkbox-label input[type="checkbox"] {
+  accent-color: #000000;
   cursor: pointer;
   width: 16px;
   height: 16px;
@@ -294,7 +299,7 @@ body {
 .login-page .btn-primary {
   font-family: var(--font-primary);
   padding: 13px;
-  background: var(--primary-color);
+  background: #000000;
   color: var(--white);
   border: 1.5px solid black;
   border-radius: 8px;
@@ -308,7 +313,7 @@ body {
 }
 
 .login-page .btn-primary:hover {
-  background: var(--button-hover-bg);
+  background: #000000;
   transform: translateY(-1px);
   box-shadow: none;
 }

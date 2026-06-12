@@ -9,6 +9,16 @@ html[data-theme] {
   --dash-accent: var(--color-accent);
   --dash-accent-hover: var(--color-accent-hover);
   --dash-accent-muted: var(--color-accent-muted);
+  --dash-sidebar-accent: var(--dash-accent);
+  --dash-sidebar-accent-hover: var(--dash-accent-hover);
+  --dash-sidebar-accent-muted: var(--dash-accent-muted);
+  --dash-sidebar-accent-border: var(--color-accent-border);
+  --dash-sidebar-avatar-bg: linear-gradient(
+    135deg,
+    var(--dash-sidebar-accent) 0%,
+    var(--dash-sidebar-accent-hover) 100%
+  );
+  --dash-sidebar-avatar-text: var(--color-accent-foreground);
   --dash-cyan: var(--color-info);
   --dash-text-primary: var(--color-text-primary);
   --dash-text-secondary: var(--color-text-secondary);
@@ -32,11 +42,21 @@ html[data-theme] {
 }
 
 html[data-theme="light"] {
+  --dash-sidebar-accent: #111827;
+  --dash-sidebar-accent-hover: #000000;
+  --dash-sidebar-accent-muted: rgba(17, 24, 39, 0.08);
+  --dash-sidebar-accent-border: rgba(17, 24, 39, 0.24);
+  --dash-sidebar-avatar-text: #ffffff;
   --dash-message-in: #ffffff;
   --dash-message-out: #dcfce7;
 }
 
 html[data-theme="dark"] {
+  --dash-sidebar-accent: #f8fafc;
+  --dash-sidebar-accent-hover: #e5e7eb;
+  --dash-sidebar-accent-muted: rgba(248, 250, 252, 0.1);
+  --dash-sidebar-accent-border: rgba(248, 250, 252, 0.22);
+  --dash-sidebar-avatar-text: #050607;
   --dash-message-in: #161b22;
   --dash-message-out: #123326;
 }

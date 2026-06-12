@@ -225,7 +225,7 @@ export default function WhatsAppConnectionFlow() {
         invalidateOnboardingCheckCache();
         
         // Redirect to dashboard
-        router.push('/dashboard?connection=success');
+        router.push('/home?connection=success');
       } else {
         setError(result.error || 'Failed to connect phone number');
       }

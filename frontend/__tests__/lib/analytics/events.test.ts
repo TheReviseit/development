@@ -58,7 +58,7 @@ describe("Event Schema Validation", () => {
       const event = {
         name: "page_view",
         params: {
-          page_path: "/dashboard",
+          page_path: "/home",
           page_title: "Dashboard",
         },
       };

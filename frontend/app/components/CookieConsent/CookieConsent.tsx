@@ -78,7 +78,7 @@ export default function CookieConsent() {
   if (!showBanner) return null;
 
   return (
-    <div className="cookie-backdrop" onClick={handleRejectAll}>
+    <div className="cookie-backdrop">
       <div className="cookie-card" onClick={(e) => e.stopPropagation()}>
         <button
           className="cookie-close"

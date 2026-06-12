@@ -157,7 +157,7 @@ async function checkOnboardingStatus(): Promise<boolean> {
     const isOnboardingComplete = getOnboardingDestination(
       data,
       product,
-    ).startsWith("/dashboard");
+    ).startsWith("/home");
     console.log("[checkOnboardingStatus] Returning:", isOnboardingComplete);
     return isOnboardingComplete;
   } catch (error) {
@@ -176,7 +176,7 @@ function getPostAuthPath(
 
   if (typeof fallbackOnboardingCompleted === "boolean") {
     return fallbackOnboardingCompleted
-      ? "/dashboard"
+      ? "/home"
       : `/onboarding-embedded?domain=${getProductDomainFromBrowser()}`;
   }
 
@@ -337,6 +337,7 @@ export default function SignupPage() {
   const [emailError, setEmailError] = useState("");
   const [phoneError, setPhoneError] = useState("");
   const [passwordError, setPasswordError] = useState("");
+  const [confirmPasswordError, setConfirmPasswordError] = useState("");
   const [passwordStrength, setPasswordStrength] = useState("");
 
   // Debounced values for validation
@@ -493,12 +494,14 @@ export default function SignupPage() {
   useEffect(() => {
     if (debouncedConfirmPassword && debouncedPassword) {
       if (debouncedPassword !== debouncedConfirmPassword) {
-        setPasswordError("Passwords do not match");
-      } else if (!passwordError || passwordError === "Passwords do not match") {
-        setPasswordError("");
+        setConfirmPasswordError("Passwords do not match");
+      } else if (!confirmPasswordError || confirmPasswordError === "Passwords do not match") {
+        setConfirmPasswordError("");
       }
+    } else if (!debouncedConfirmPassword) {
+      setConfirmPasswordError("");
     }
-  }, [debouncedPassword, debouncedConfirmPassword, passwordError]);
+  }, [debouncedPassword, debouncedConfirmPassword, confirmPasswordError]);
 
   const clearError = useCallback(() => setError(""), []);
 
@@ -542,7 +545,8 @@ export default function SignupPage() {
         );
         await updateProfile(userCredential.user, { displayName: name });
 
-        const idToken = await userCredential.user.getIdToken();
+        // Force a token refresh so the backend receives the new displayName
+        const idToken = await userCredential.user.getIdToken(true);
 
         // Step 2: Provision user + set session cookie (canonical)
         const syncResult = await syncWithRetry(
@@ -906,8 +910,8 @@ const syncResult = await syncWithRetry(idToken, true);
         {/* Right Side - Form */}
         <div className={styles.authRight}>
           <div className={styles.brandTag}>
-            <Image src="/logo.png" alt="Flowauxi Logo" width={24} height={24} />
-            <span>Flowauxi</span>
+            <Image src="/logo.png" alt="Flowauxi Logo" width={32} height={32} />
+            <span style={{ fontSize: "18px", fontWeight: "700" }}>Flowauxi</span>
           </div>
 
           <div className={styles.formContainer}>
@@ -1043,6 +1047,10 @@ const syncResult = await syncWithRetry(idToken, true);
                     onChange={(e) => setConfirmPassword(e.target.value)}
                     required
                     autoComplete="new-password"
+                    className={confirmPasswordError ? styles.inputError : ""}
+                    aria-describedby={
+                      confirmPasswordError ? "confirm-password-error" : undefined
+                    }
                   />
                   <button
                     type="button"
@@ -1056,6 +1064,18 @@ const syncResult = await syncWithRetry(idToken, true);
                     {showConfirmPassword ? <EyeIcon /> : <EyeOffIcon />}
                   </button>
                 </div>
+                {confirmPasswordError && (
+                  <div
+                    id="confirm-password-error"
+                    className={styles.passwordFeedback}
+                    aria-live="polite"
+                    aria-atomic="true"
+                  >
+                    <span className={styles.validationError} role="alert">
+                      {confirmPasswordError}
+                    </span>
+                  </div>
+                )}
               </div>
 
               <div className={styles.formOptions}>
@@ -1067,7 +1087,11 @@ const syncResult = await syncWithRetry(idToken, true);
                       href="/terms"
                       target="_blank"
                       rel="noopener noreferrer"
-                      style={{ color: "#22C15A", textDecoration: "underline" }}
+                      style={{
+                        color: "var(--hero-green-start, #10b981)",
+                        fontWeight: 600,
+                        textDecoration: "underline",
+                      }}
                     >
                       Terms of Service
                     </a>{" "}
@@ -1076,7 +1100,11 @@ const syncResult = await syncWithRetry(idToken, true);
                       href="/privacy"
                       target="_blank"
                       rel="noopener noreferrer"
-                      style={{ color: "#22C15A", textDecoration: "underline" }}
+                      style={{
+                        color: "var(--hero-green-start, #10b981)",
+                        fontWeight: 600,
+                        textDecoration: "underline",
+                      }}
                     >
                       Privacy Policy
                     </a>
@@ -1087,7 +1115,7 @@ const syncResult = await syncWithRetry(idToken, true);
               <button
                 type="submit"
                 className={styles.btnPrimary}
-                disabled={loading || Boolean(emailError || phoneError || passwordError)}
+                disabled={loading || Boolean(emailError || phoneError || passwordError || confirmPasswordError)}
               >
                 {loading ? <ButtonSpinner size={20} /> : "Sign Up"}
               </button>

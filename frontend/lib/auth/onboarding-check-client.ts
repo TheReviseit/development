@@ -3,6 +3,7 @@
 import { getProductDomainFromBrowser } from "@/lib/domain/client";
 import type { ProductDomain } from "@/lib/domain/config";
 import type { AuthDecision } from "@/types/auth.types";
+import { ROUTE_POLICY } from "@/lib/auth/route-policy";
 
 export interface OnboardingCheckResponse {
   onboardingCompleted: boolean;
@@ -80,7 +81,7 @@ function normalizeDestination(
 ) {
   if (data.nextPath) return data.nextPath;
   return data.canEnterDashboard || data.onboardingCompleted
-    ? "/dashboard"
+    ? "/home"
     : `/onboarding-embedded?domain=${product || getProductDomainFromBrowser()}`;
 }
 
@@ -91,10 +92,21 @@ export function getOnboardingDestination(
   return normalizeDestination(data, product);
 }
 
+/**
+ * Check if the current pathname belongs to a dashboard route.
+ * Uses ROUTE_POLICY as the single source of truth.
+ */
+function isDashboardPath(pathname: string): boolean {
+  return Object.entries(ROUTE_POLICY).some(
+    ([prefix, type]) =>
+      type === "normal" && pathname.startsWith(prefix) && prefix !== "/onboarding",
+  );
+}
+
 function getCurrentRouteKind() {
   if (typeof window === "undefined") return "other";
   const pathname = window.location.pathname;
-  if (pathname.startsWith("/dashboard")) return "dashboard";
+  if (isDashboardPath(pathname)) return "dashboard";
   if (
     pathname.startsWith("/onboarding") ||
     pathname.startsWith("/onboarding-embedded")
@@ -105,7 +117,7 @@ function getCurrentRouteKind() {
 }
 
 function getTargetRouteKind(targetPath: string) {
-  if (targetPath.startsWith("/dashboard")) return "dashboard";
+  if (isDashboardPath(targetPath)) return "dashboard";
   if (
     targetPath.startsWith("/onboarding") ||
     targetPath.startsWith("/onboarding-embedded")

@@ -104,7 +104,7 @@ export function OnboardingFlowClient({
         });
         const destination = getOnboardingDestination(data, productInfo.id);
 
-        if (destination.startsWith("/dashboard")) {
+        if (destination.startsWith("/home")) {
           const loop = recordOnboardingRedirect(destination);
           if (loop.suppress) {
             invalidateOnboardingCheckCache(productInfo.id);
@@ -114,7 +114,7 @@ export function OnboardingFlowClient({
             });
             if (
               !getOnboardingDestination(refreshed, productInfo.id).startsWith(
-                "/dashboard",
+                "/home",
               )
             ) {
               return false;

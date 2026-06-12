@@ -48,19 +48,19 @@ export function detectProductFromRequest(request: NextRequest): ProductDomain {
   }
 
   const pathname = request.nextUrl.pathname;
-  if (pathname.startsWith("/dashboard/products") || pathname.startsWith("/dashboard/orders")) {
+  if (pathname.startsWith("/products") || pathname.startsWith("/orders")) {
     return "shop";
   }
-  if (pathname.startsWith("/dashboard/showcase") || pathname.startsWith("/dashboard/pages")) {
+  if (pathname.startsWith("/showcase") || pathname.startsWith("/pages")) {
     return "showcase";
   }
-  if (pathname.startsWith("/dashboard/campaigns") || pathname.startsWith("/dashboard/marketing")) {
+  if (pathname.startsWith("/campaigns") || pathname.startsWith("/marketing")) {
     return "marketing";
   }
-  if (pathname.startsWith("/dashboard/appointments") || pathname.startsWith("/dashboard/services")) {
+  if (pathname.startsWith("/appointments") || pathname.startsWith("/services")) {
     return "booking";
   }
-  if (pathname.startsWith("/dashboard/files") || pathname.startsWith("/files") || pathname.startsWith("/tools")) {
+  if (pathname.startsWith("/files") || pathname.startsWith("/files") || pathname.startsWith("/tools")) {
     return "files";
   }
 

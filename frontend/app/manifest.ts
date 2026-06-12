@@ -85,7 +85,7 @@ export default function manifest(): MetadataRoute.Manifest {
         name: "Dashboard",
         short_name: "Dashboard",
         description: "Go to your Flowauxi dashboard",
-        url: "/dashboard",
+        url: "/home",
         icons: [
           {
             src: "/icon-192.png",

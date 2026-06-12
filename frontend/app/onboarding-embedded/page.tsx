@@ -639,7 +639,7 @@ export default function OnboardingPageEmbedded() {
           reason: onboardingData.reason,
         });
 
-        if (destination.startsWith("/dashboard")) {
+        if (destination.startsWith("/home")) {
           const loop = recordOnboardingRedirect(destination);
           if (loop.suppress) {
             console.warn(
@@ -655,7 +655,7 @@ export default function OnboardingPageEmbedded() {
               domain,
             );
 
-            if (!refreshedDestination.startsWith("/dashboard")) {
+            if (!refreshedDestination.startsWith("/home")) {
               setStep(
                 refreshed.requiresWhatsApp &&
                   refreshed.whatsappConnected !== true
@@ -747,7 +747,7 @@ export default function OnboardingPageEmbedded() {
     });
     const destination = getOnboardingDestination(data, currentDomain);
 
-    if (destination.startsWith("/dashboard")) {
+    if (destination.startsWith("/home")) {
       const loop = recordOnboardingRedirect(destination);
       if (!loop.suppress) {
         setBillingRedirectInProgress(true);

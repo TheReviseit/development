@@ -35,7 +35,7 @@ html:has(.onboarding-container.onboarding-two-step) {
   justify-content: center;
   overflow: hidden;
   background: #f2f2f1;
-  color: #0f172a;
+  color: #000000;
   box-sizing: border-box;
   animation: onboarding-page-fade-in 520ms cubic-bezier(0.22, 1, 0.36, 1) both;
 }

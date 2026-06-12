@@ -25,6 +25,7 @@ interface Plan {
     hard_limit?: number | null;
     display: string;
   }>;
+  features_json?: string[];
   // Proration fields (attached by backend when user has active subscription)
   proration_charge_paise?: number;
   proration_percentage?: number;
@@ -192,7 +193,7 @@ export default function PlanCard({
             } catch {
               // Non-fatal: webhook will apply the change eventually
             }
-            window.location.href = "/dashboard?upgrade=success";
+            window.location.href = "/home?upgrade=success";
           },
           modal: {
             ondismiss: function () {
@@ -215,7 +216,7 @@ export default function PlanCard({
           name: "Flowauxi",
           description: `${plan.display_name} - ${billingCycle}`,
           handler: function () {
-            window.location.href = "/dashboard?upgrade=success";
+            window.location.href = "/home?upgrade=success";
           },
           modal: {
             ondismiss: function () {
@@ -253,18 +254,12 @@ export default function PlanCard({
       className={`
         relative rounded-lg border-2 bg-white p-6 shadow-sm hover:shadow-md transition-shadow duration-200
         ${isCurrent ? "border-black" : "border-gray-200"}
-        ${isRecommended ? "ring-2 ring-black ring-offset-2" : ""}
       `}
     >
       {/* Badges */}
-      <div className="absolute -top-3 left-6 flex space-x-2">
-        {isCurrent && (
-          <span className="inline-flex px-3 py-1 text-xs font-bold bg-black text-white rounded-full">
-            Current Plan
-          </span>
-        )}
+      <div className="absolute -top-3 right-4 z-10 flex space-x-2">
         {isRecommended && !isCurrent && (
-          <span className="inline-flex px-3 py-1 text-xs font-bold bg-black text-white rounded-full">
+          <span className="inline-flex px-3 py-1 text-xs font-bold bg-black text-white rounded-full shadow-sm">
             Recommended
           </span>
         )}
@@ -335,7 +330,7 @@ export default function PlanCard({
               ${
                 plan.requires_sales_call
                   ? "border-2 border-black text-black bg-white hover:bg-gray-50"
-                  : "bg-black text-white hover:bg-gray-800"
+                  : "bg-black text-white hover:bg-black"
               }
               disabled:opacity-50 disabled:cursor-not-allowed
             `}
@@ -373,10 +368,10 @@ export default function PlanCard({
       </div>
 
       {/* Features List */}
-      {plan.features && plan.features.length > 0 && (
+      {plan.features_json && plan.features_json.length > 0 && (
         <ul className="mt-6 space-y-3">
-          {plan.features.slice(0, 5).map((feature) => (
-            <li key={feature.feature_key} className="flex items-start text-sm">
+          {plan.features_json.slice(0, 5).map((featureText, idx) => (
+            <li key={idx} className="flex items-start text-sm">
               <svg
                 className="h-5 w-5 text-black mr-2 flex-shrink-0"
                 fill="none"
@@ -390,12 +385,12 @@ export default function PlanCard({
                   d="M5 13l4 4L19 7"
                 />
               </svg>
-              <span className="text-gray-700">{feature.display}</span>
+              <span className="text-gray-700">{featureText}</span>
             </li>
           ))}
-          {plan.features.length > 5 && (
+          {plan.features_json.length > 5 && (
             <li className="text-sm text-gray-600 pl-7">
-              +{plan.features.length - 5} more features
+              +{plan.features_json.length - 5} more features
             </li>
           )}
         </ul>

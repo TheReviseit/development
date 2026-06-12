@@ -136,7 +136,7 @@ export default function OnboardingPage() {
         const whatsappSatisfied =
           !whatsappRequired || data.whatsappConnected === true;
         if (hasProductAccess && whatsappSatisfied) {
-          router.push("/dashboard");
+          router.push("/home");
           return;
         }
         setLoading(false);
@@ -279,7 +279,7 @@ export default function OnboardingPage() {
       invalidateOnboardingCheckCache();
 
       // Redirect to dashboard
-      router.push("/dashboard");
+      router.push("/home");
     } catch (error) {
       console.error("Error completing onboarding:", error);
       alert("Failed to complete onboarding. Please try again.");

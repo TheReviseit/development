@@ -134,7 +134,7 @@ function PaymentStatusContent() {
 
           // Wait 2 seconds to show success state, then redirect
           setTimeout(() => {
-            router.push("/dashboard");
+            router.push("/home");
           }, 2000);
           return true; // Payment complete
         }

@@ -33,7 +33,7 @@ export default async function robots(): Promise<MetadataRoute.Robots> {
   const sharedDisallowPaths = [
     // Admin & Dashboard (private, not indexable)
     "/admin/",
-    "/dashboard/",
+    "/",
     "/settings/",
     "/onboarding/",
     "/onboarding-embedded/",

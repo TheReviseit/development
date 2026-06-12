@@ -337,7 +337,7 @@ export default function EmbeddedSignupButton({
         // Success - redirect to dashboard
         console.log("[EmbeddedSignup] Redirecting to dashboard...");
         onSuccess?.();
-        window.location.href = "/dashboard?connection=success";
+        window.location.href = "/home?connection=success";
       } else {
         const errorMsg = data.error || "Failed to complete setup";
         console.error("❌ [EmbeddedSignup] Backend error:", errorMsg);

@@ -52,7 +52,7 @@ function ActivatePageContent() {
   }
 
   if (!productToActivate || productToActivate === "dashboard") {
-    router.push("/dashboard");
+    router.push("/home");
     return null;
   }
 
@@ -69,17 +69,17 @@ function ActivatePageContent() {
 
       if (success) {
         const productUrls: Record<ProductDomain, string> = {
-          shop: "/dashboard/products",
-          showcase: "/dashboard/showcase",
-          marketing: "/dashboard/campaigns",
-          dashboard: "/dashboard",
-          api: "/dashboard/api",
-          booking: "/dashboard/appointments",
-          files: "/dashboard/files",
+          shop: "/products",
+          showcase: "/showcase",
+          marketing: "/campaigns",
+          dashboard: "/home",
+          api: "/api",
+          booking: "/appointments",
+          files: "/files",
         };
 
         setTimeout(() => {
-          router.push(productUrls[productToActivate] || "/dashboard");
+          router.push(productUrls[productToActivate] || "/home");
         }, 500);
       } else {
         setError(
@@ -96,7 +96,7 @@ function ActivatePageContent() {
 
   useEffect(() => {
     if (authState === "AUTHENTICATED") {
-      router.push("/dashboard");
+      router.push("/home");
     }
   }, [authState, router]);
 
@@ -175,7 +175,7 @@ function ActivatePageContent() {
           </button>
 
           <button
-            onClick={() => router.push("/dashboard")}
+            onClick={() => router.push("/home")}
             className="w-full mt-4 text-gray-600 hover:text-gray-900 font-medium py-2 rounded-lg hover:bg-gray-100 transition-colors flex items-center justify-center text-sm"
           >
             Back to Dashboard

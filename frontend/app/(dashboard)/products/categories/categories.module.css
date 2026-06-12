@@ -1,0 +1,246 @@
+/* ============================================
+   Categories Management Page - Premium UI
+   ============================================ */
+
+.container {
+  padding: 2.5rem;
+  max-width: 1280px;
+  margin: 0 auto;
+  min-height: 100vh;
+  font-family: var(--font-jakarta), sans-serif;
+}
+
+.loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 60vh;
+  color: #6b7280;
+  font-size: 1.125rem;
+  font-weight: 500;
+}
+
+/* Header */
+.header {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+  margin-bottom: 2.5rem;
+}
+
+.backLink {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: #6b7280;
+  font-size: 0.95rem;
+  font-weight: 500;
+  text-decoration: none;
+  transition: all 0.2s ease;
+  width: fit-content;
+}
+
+.backLink:hover {
+  color: #000000;
+  transform: translateX(-4px);
+}
+
+.titleWrapper {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.title {
+  font-size: 2rem;
+  font-weight: 700;
+  color: #000000;
+  letter-spacing: -0.02em;
+  margin: 0;
+}
+
+.subtitle {
+  color: #6b7280;
+  font-size: 1rem;
+  margin: 0;
+}
+
+.addCard {
+  background: transparent;
+  padding: 0;
+  border: none;
+  box-shadow: none;
+  margin-bottom: 2.5rem;
+}
+
+.addSectionWrapper {
+  max-width: 600px;
+  margin-bottom: 2.5rem;
+}
+
+.sectionSubtitle {
+  font-size: 1rem;
+  font-weight: 600;
+  color: #6b7280;
+  margin-top: 0;
+  margin-bottom: 1rem;
+}
+
+.inputWithIcon {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.inputIcon {
+  position: absolute;
+  left: 1.25rem;
+  pointer-events: none;
+}
+
+.sleekInput {
+  width: 100%;
+  padding: 1.125rem 1.25rem 1.125rem 3.5rem;
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
+  border-radius: 14px;
+  color: #111827;
+  font-size: 1rem;
+  font-family: inherit;
+  transition: all 0.2s ease;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.02);
+}
+
+.sleekInput:focus {
+  outline: none;
+  border-color: #d1d5db;
+  box-shadow: 0 0 0 3px rgba(0, 0, 0, 0.03);
+}
+
+.sleekInput::placeholder {
+  color: #9ca3af;
+}
+
+.divider {
+  height: 1px;
+  background: #f3f4f6;
+  margin: 2.5rem 0;
+  width: 100%;
+}
+
+/* Two Column Grid */
+.twoColumnGrid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 1.5rem 2rem;
+  margin-top: 1.5rem;
+}
+
+.sleekListItem {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.75rem 1.25rem;
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  transition: all 0.2s ease;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.02);
+}
+
+.sleekListItem:hover {
+  border-color: #d1d5db;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+}
+
+.listItemContent {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.itemBullet {
+  width: 20px;
+  height: 20px;
+  border-radius: 6px;
+  background: #f3f4f6;
+  border: 1px solid #e5e7eb;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.categoryName {
+  font-weight: 500;
+  font-size: 1rem;
+  color: #111827;
+}
+
+.deleteIconBtn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  background: #f9fafb;
+  color: #9ca3af;
+  border: none;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.deleteIconBtn:hover {
+  background: #fef2f2;
+  color: #ef4444;
+}
+
+/* Empty State */
+.emptyState {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 4rem 2rem;
+  text-align: center;
+  background: transparent;
+}
+
+.emptyStateIcon {
+  width: 64px;
+  height: 64px;
+  background: #f9fafb;
+  border-radius: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #9ca3af;
+  margin-bottom: 1.5rem;
+}
+
+.emptyState h3 {
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: #000000;
+  margin: 0 0 0.5rem 0;
+}
+
+.emptyState p {
+  color: #6b7280;
+  margin: 0;
+  max-width: 400px;
+  font-size: 0.95rem;
+  line-height: 1.5;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .container {
+    padding: 1.5rem;
+  }
+  
+  .desktopOnlyTitle {
+    display: none !important;
+  }
+}

@@ -14,8 +14,8 @@ export default function ToolToolbar({ mode, authenticated, basePath = "/tools" }
   const breadcrumbItems =
     mode === "dashboard"
       ? [
-          { label: t("dashboard"), href: "/dashboard" },
-          { label: t("files"), href: "/dashboard/files" },
+          { label: t("dashboard"), href: "/home" },
+          { label: t("files"), href: "/files" },
           { label: t("title") },
         ]
       : [

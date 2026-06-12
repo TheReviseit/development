@@ -63,6 +63,32 @@ export async function POST(request: NextRequest) {
         `${Object.keys(businessData).length} field(s)`,
     );
 
+    // ── ENTERPRISE CACHE INVALIDATION (FAANG LEVEL) ───────────────────
+    // Aggressively invalidate all related caches immediately on successful save
+    if (response.ok) {
+      try {
+        const { invalidateByUserId } = await import("@/lib/cache/store-cache");
+        const { revalidatePath } = await import("next/cache");
+        
+        // 1. Bust in-memory LRU cache
+        invalidateByUserId(userId);
+        
+        // 2. Bust Next.js App Router Cache (ISR + Data Cache) for the store
+        // Use slug from response or request
+        const slug = data.slug || data.canonicalSlug || businessData.url_slug || businessData.canonicalSlug;
+        if (slug) {
+          revalidatePath(`/store/${slug}`, "layout");
+          console.log(`[Business Save Proxy] Revalidated layout for /store/${slug}`);
+        } else {
+          // If we don't have a direct slug, we can't reliably revalidatePath,
+          // but invalidateByUserId handles the LRU memory cache.
+          console.warn("[Business Save Proxy] No slug found for Next.js ISR revalidation.");
+        }
+      } catch (err) {
+        console.error("[Business Save Proxy] Cache invalidation failed:", err);
+      }
+    }
+
     return NextResponse.json(data, { status: response.status });
   } catch (error: unknown) {
     console.error("[Business Save Proxy] Error:", error);

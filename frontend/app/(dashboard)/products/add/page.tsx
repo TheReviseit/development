@@ -1,0 +1,1752 @@
+"use client";
+
+import { useState, useEffect, useRef, useMemo } from "react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { broadcastStoreUpdate } from "@/app/utils/storeSync";
+import { useAuth } from "@/app/components/auth/AuthProvider";
+import styles from "./add-product.module.css";
+import ProductImageUpload from "../../components/ProductImageUpload";
+import SearchableDropdown from "../../components/SearchableDropdown";
+import type { SearchableOption } from "../../components/SearchableDropdown";
+import Toast from "@/app/components/Toast/Toast";
+
+// Variant type definition
+interface ProductVariant {
+  id: string;
+  color: string;
+  size: string[];
+  price: number;
+  compareAtPrice?: number;
+  stock: number;
+  imageUrl: string;
+  imagePublicId: string;
+  sizeStocks?: Record<string, number>;
+  hasSizePricing?: boolean;
+  sizePrices?: Record<string, number>;
+}
+
+// Default fallback options (used if DB options not available)
+const DEFAULT_COLOR_OPTIONS = [
+  { name: "Black", hex: "#000000" },
+  { name: "White", hex: "#FFFFFF" },
+  { name: "Red", hex: "#EF4444" },
+  { name: "Blue", hex: "#3B82F6" },
+  { name: "Green", hex: "#22C55A" },
+  { name: "Yellow", hex: "#EAB308" },
+  { name: "Gray", hex: "#6B7280" },
+  { name: "Pink", hex: "#EC4899" },
+  { name: "Purple", hex: "#A855F7" },
+  { name: "Orange", hex: "#F97316" },
+];
+
+const DEFAULT_SIZE_OPTIONS = [
+  "XS",
+  "S",
+  "M",
+  "L",
+  "XL",
+  "XXL",
+  "XXXL",
+  "Free Size",
+];
+
+// Color option interface
+interface ColorOption {
+  name: string;
+  hex: string;
+}
+
+// Product type definition
+interface Product {
+  id: string;
+  name: string;
+  category: string;
+  price: number;
+  compareAtPrice?: number;
+  priceUnit: string;
+  duration: string;
+  available: boolean;
+  description: string;
+  sku: string;
+  stockStatus: string;
+  quantity: number;
+  imageUrl: string;
+  imagePublicId: string;
+  originalSize: number;
+  optimizedSize: number;
+  variants: ProductVariant[];
+  sizes: string[];
+  colors: string;
+  brand: string;
+  materials: string[];
+  sellingType: string;
+  weight: number;
+  weightUnit: string;
+  packageLength: number;
+  packageBreadth: number;
+  packageWidth: number;
+  images: string[];
+  hasSizePricing?: boolean;
+  sizePrices?: Record<string, number>;
+  sizeStocks?: Record<string, number>;
+}
+
+// Selling type options (Hidden as per user request, but keeping type for compatibility)
+const SELLING_TYPES = [
+  { value: "in-store", label: "In-store selling only" },
+  { value: "online", label: "Online selling only" },
+  { value: "both", label: "Available both in-store and online" },
+];
+
+// Create empty product
+const createEmptyProduct = (): Product => ({
+  id: Date.now().toString(),
+  name: "",
+  category: "",
+  price: 0,
+  compareAtPrice: undefined,
+  priceUnit: "INR",
+  duration: "",
+  available: true,
+  description: "",
+  sku: "",
+  stockStatus: "in_stock",
+  quantity: 0,
+  imageUrl: "",
+  imagePublicId: "",
+  originalSize: 0,
+  optimizedSize: 0,
+  variants: [],
+  sizes: [],
+  colors: "",
+  brand: "",
+  materials: [],
+  sellingType: "in-store",
+  weight: 0,
+  weightUnit: "kg",
+  packageLength: 0,
+  packageBreadth: 0,
+  packageWidth: 0,
+  images: [],
+  hasSizePricing: false,
+  sizePrices: {},
+  sizeStocks: {},
+});
+
+// Multi-Select Dropdown Component (for colors and sizes)
+function MultiSelectDropdown({
+  options,
+  value,
+  onChange,
+  placeholder,
+  multi = false,
+}: {
+  options: string[];
+  value: string | string[];
+  onChange: (val: string | string[]) => void;
+  placeholder: string;
+  multi?: boolean;
+}) {
+  const [isOpen, setIsOpen] = useState(false);
+  const [searchTerm, setSearchTerm] = useState("");
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (
+        dropdownRef.current &&
+        !dropdownRef.current.contains(event.target as Node)
+      ) {
+        setIsOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  const filteredOptions = useMemo(() => {
+    return options.filter((opt) =>
+      opt.toLowerCase().includes(searchTerm.toLowerCase()),
+    );
+  }, [options, searchTerm]);
+
+  const toggleOption = (option: string) => {
+    if (multi) {
+      const currentValues = Array.isArray(value) ? value : [];
+      if (currentValues.includes(option)) {
+        onChange(currentValues.filter((v) => v !== option));
+      } else {
+        onChange([...currentValues, option]);
+      }
+    } else {
+      onChange(option);
+      setIsOpen(false);
+    }
+  };
+
+  const isSelected = (option: string) => {
+    if (multi) {
+      return Array.isArray(value) && value.includes(option);
+    }
+    return value === option;
+  };
+
+  const displayValue = () => {
+    if (multi) {
+      const vals = Array.isArray(value) ? value : [];
+      return vals.length > 0 ? vals.join(", ") : placeholder;
+    }
+    return value || placeholder;
+  };
+
+  return (
+    <div className={styles.customDropdown} ref={dropdownRef}>
+      <button
+        type="button"
+        className={`${styles.dropdownTrigger} ${isOpen ? styles.open : ""}`}
+        onClick={() => setIsOpen(!isOpen)}
+      >
+        <span className={styles.dropdownValue}>
+          <span
+            style={{
+              color:
+                !value || (Array.isArray(value) && value.length === 0)
+                  ? "rgba(0, 0, 0, 0.7)" // Black with opacity for placeholder
+                  : "#000000", // Black for selected value
+            }}
+          >
+            {displayValue()}
+          </span>
+        </span>
+        <svg
+          className={styles.dropdownArrow}
+          width="18"
+          height="18"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+        >
+          <polyline
+            points="6 9 12 15 18 9"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        </svg>
+      </button>
+
+      {isOpen && (
+        <div className={styles.dropdownMenu}>
+          {/* Search Input */}
+          <div className={styles.dropdownSearchWrapper}>
+            <input
+              type="text"
+              className={styles.dropdownSearchInput}
+              placeholder="Search..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              onClick={(e) => e.stopPropagation()}
+              autoFocus
+            />
+          </div>
+
+          {filteredOptions.length > 0 ? (
+            filteredOptions.map((opt) => (
+              <div
+                key={opt}
+                className={`${styles.dropdownItem} ${isSelected(opt) ? styles.selected : ""}`}
+                onClick={() => toggleOption(opt)}
+              >
+                <span className={styles.dropdownItemText}>{opt}</span>
+                {isSelected(opt) && (
+                  <svg
+                    className={styles.dropdownItemCheck}
+                    width="18"
+                    height="18"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                  >
+                    <polyline
+                      points="20 6 9 17 4 12"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    />
+                  </svg>
+                )}
+              </div>
+            ))
+          ) : (
+            <div className={styles.noCategories}>No matches found.</div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// LocalStorage key for draft product
+const DRAFT_PRODUCT_KEY = "draft_product_add";
+
+// Prevent scroll wheel from changing number input values
+const handleNumberInputWheel = (e: React.WheelEvent<HTMLInputElement>) => {
+  (e.target as HTMLInputElement).blur();
+};
+
+export default function AddProductPage() {
+  const router = useRouter();
+  const { firebaseUser } = useAuth();
+  const [formData, setFormData] = useState<Product>(createEmptyProduct());
+  const [productCategories, setProductCategories] = useState<string[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [message, setMessage] = useState<{
+    type: "success" | "error";
+    text: string;
+  } | null>(null);
+  const [showOfferPrice, setShowOfferPrice] = useState(false);
+  const [productVariants, setProductVariants] = useState<ProductVariant[]>([]);
+  const [customCategory, setCustomCategory] = useState("");
+  const [isDataLoaded, setIsDataLoaded] = useState(false);
+  const [productLimitReached, setProductLimitReached] = useState(false);
+  const [productLimitMax, setProductLimitMax] = useState<number | null>(null);
+  const [productRemaining, setProductRemaining] = useState<number | null>(null);
+  const [noSubscription, setNoSubscription] = useState(false);
+  // Dynamic color and size options from database
+  const [colorOptions, setColorOptions] = useState<ColorOption[]>(
+    DEFAULT_COLOR_OPTIONS,
+  );
+  const [sizeOptions, setSizeOptions] =
+    useState<string[]>(DEFAULT_SIZE_OPTIONS);
+
+  // Add a new variant
+  const addVariant = () => {
+    const newVariant: ProductVariant = {
+      id: Date.now().toString(),
+      color: "",
+      size: [],
+      price: formData.price || 0,
+      compareAtPrice: formData.compareAtPrice,
+      stock: 0,
+      imageUrl: "",
+      imagePublicId: "",
+      sizeStocks: {},
+    };
+    setProductVariants([...productVariants, newVariant]);
+  };
+
+  // Update a variant - using functional update to handle consecutive calls properly
+  const updateVariant = (
+    id: string,
+    field: keyof ProductVariant,
+    value:
+      | string
+      | string[]
+      | number
+      | boolean
+      | undefined
+      | Record<string, number>,
+  ) => {
+    setProductVariants((prevVariants) =>
+      prevVariants.map((v) => {
+        if (v.id === id) {
+          const updated = { ...v, [field]: value };
+
+          // Cleanup sizeStocks if size changed
+          if (field === "size" && updated.sizeStocks) {
+            const newSizeStocks = { ...updated.sizeStocks };
+            const sizes = value as string[];
+            Object.keys(newSizeStocks).forEach((s) => {
+              if (!sizes.includes(s)) {
+                delete newSizeStocks[s];
+              }
+            });
+            updated.sizeStocks = newSizeStocks;
+          }
+
+          return updated;
+        }
+        return v;
+      }),
+    );
+  };
+
+  // Remove a variant
+  const removeVariant = (id: string) => {
+    setProductVariants(productVariants.filter((v) => v.id !== id));
+  };
+
+  // Load categories, color/size options, and restore draft from localStorage on mount
+  useEffect(() => {
+    const loadData = async () => {
+      try {
+        // Load categories from API
+        const response = await fetch("/api/products/categories");
+        if (response.ok) {
+          const result = await response.json();
+          if (result.categories) {
+            setProductCategories(
+              result.categories.map((c: { name: string }) => c.name),
+            );
+          }
+        }
+
+        // Load color and size options from business settings
+        const businessResponse = await fetch("/api/business/get");
+        if (businessResponse.ok) {
+          const businessResult = await businessResponse.json();
+          if (businessResult.data) {
+            if (
+              businessResult.data.colorOptions &&
+              businessResult.data.colorOptions.length > 0
+            ) {
+              setColorOptions(businessResult.data.colorOptions);
+            }
+            if (
+              businessResult.data.sizeOptions &&
+              businessResult.data.sizeOptions.length > 0
+            ) {
+              setSizeOptions(businessResult.data.sizeOptions);
+            }
+          }
+        }
+
+        // Restore draft from localStorage
+        const savedDraft = localStorage.getItem(DRAFT_PRODUCT_KEY);
+        if (savedDraft) {
+          try {
+            const draft = JSON.parse(savedDraft);
+            setFormData(draft.formData || createEmptyProduct());
+            setProductVariants(draft.productVariants || []);
+            setCustomCategory(draft.customCategory || "");
+            setShowOfferPrice(draft.showOfferPrice || false);
+          } catch (e) {
+            console.error("Error parsing saved draft:", e);
+          }
+        }
+        // Check product limit — gate the add page URL
+        // Uses feature check response which is reconciled against actual
+        // product count (mirrors backend _reconcile_product_counter).
+        try {
+          const limitRes = await fetch(
+            "/api/features/check?feature=create_product",
+          );
+          if (limitRes.ok) {
+            const limitData = await limitRes.json();
+
+            // ── Handle denial reasons (no subscription, missing data) ──
+            // These return hard_limit=0 as a sentinel, NOT a real plan limit.
+            if (limitData.denial_reason) {
+              if (
+                limitData.denial_reason === "NO_SUBSCRIPTION" ||
+                limitData.denial_reason === "PLAN_FEATURES_MISSING"
+              ) {
+                setNoSubscription(true);
+              }
+              // Don't process limits for denied responses
+            } else {
+              const currentCount = limitData.used ?? 0;
+              const hardLimit = limitData.hard_limit;
+              const isUnlimited = limitData.is_unlimited;
+              if (
+                !isUnlimited &&
+                hardLimit !== null &&
+                hardLimit !== undefined &&
+                currentCount >= hardLimit
+              ) {
+                setProductLimitReached(true);
+                setProductLimitMax(hardLimit);
+              }
+              // Track remaining for the warning badge
+              if (
+                !isUnlimited &&
+                hardLimit !== null &&
+                hardLimit !== undefined
+              ) {
+                setProductLimitMax(hardLimit);
+                setProductRemaining(
+                  limitData.remaining ?? Math.max(0, hardLimit - currentCount),
+                );
+              }
+            }
+          }
+        } catch {
+          // Non-critical — server-side will still enforce
+        }
+      } catch (error) {
+        console.error("Error loading data:", error);
+      } finally {
+        setLoading(false);
+        setIsDataLoaded(true);
+      }
+    };
+    loadData();
+  }, []);
+
+  // Auto-save draft to localStorage whenever form data changes
+  useEffect(() => {
+    if (!isDataLoaded) return; // Don't save until initial data is loaded
+
+    const draft = {
+      formData,
+      productVariants,
+      customCategory,
+      showOfferPrice,
+      timestamp: Date.now(),
+    };
+    localStorage.setItem(DRAFT_PRODUCT_KEY, JSON.stringify(draft));
+  }, [formData, productVariants, customCategory, showOfferPrice, isDataLoaded]);
+
+  // Update field helper
+  const updateField = (field: keyof Product, value: unknown) => {
+    setFormData((prev) => ({ ...prev, [field]: value }));
+  };
+
+  // Handle save - uses new normalized /api/products endpoint
+  const handleSave = async () => {
+    if (!formData.name.trim()) {
+      setMessage({ type: "error", text: "Product name is required" });
+      return;
+    }
+
+    if (!formData.colors || formData.colors.length === 0) {
+      setMessage({ type: "error", text: "Product color is required" });
+      return;
+    }
+
+    if (!formData.sizes || formData.sizes.length === 0) {
+      setMessage({ type: "error", text: "Product sizes are required" });
+      return;
+    }
+
+    const hasGlobalStock = !!formData.quantity;
+    const hasSizeStocks = formData.sizes.some(
+      (size) => !!formData.sizeStocks?.[size],
+    );
+    const hasVariantStocks = productVariants.length > 0;
+    if (!hasGlobalStock && !hasSizeStocks && !hasVariantStocks) {
+      setMessage({ type: "error", text: "Product stock quantity is required" });
+      return;
+    }
+
+    setSaving(true);
+    try {
+      // If a new custom category was created, add it first
+      if (customCategory && !productCategories.includes(customCategory)) {
+        await fetch("/api/products/categories", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ name: customCategory }),
+        });
+      }
+
+      // Build product data for the new API
+      const productData = {
+        name: formData.name,
+        description: formData.description,
+        sku: formData.sku,
+        brand: formData.brand,
+        price: formData.price,
+        compareAtPrice: formData.compareAtPrice,
+        priceUnit: formData.priceUnit,
+        stockStatus: formData.stockStatus,
+        stockQuantity: formData.quantity,
+        imageUrl: formData.imageUrl,
+        imagePublicId: formData.imagePublicId,
+        duration: formData.duration,
+        sizes: formData.sizes,
+        colors: formData.colors ? [formData.colors] : [],
+        materials: formData.materials,
+        available: formData.available,
+        category: formData.category || customCategory,
+        hasSizePricing: formData.hasSizePricing || false,
+        sizePrices: formData.sizePrices || {},
+        sizeStocks: formData.sizeStocks || {},
+        variants: productVariants.map((v) => ({
+          id: v.id,
+          color: v.color || "",
+          size: Array.isArray(v.size) ? v.size.join(", ") : v.size || "",
+          price: v.price || 0,
+          compareAtPrice:
+            v.compareAtPrice !== undefined ? v.compareAtPrice : undefined,
+          stockQuantity: v.stock || 0,
+          imageUrl: v.imageUrl || "",
+          imagePublicId: v.imagePublicId || "",
+          hasSizePricing: v.hasSizePricing || false,
+          sizePrices: v.sizePrices || {},
+          sizeStocks: v.sizeStocks || {},
+        })),
+      };
+
+      // Create product via new API
+      const response = await fetch("/api/products", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(productData),
+      });
+
+      if (response.ok) {
+        // Clear the draft from localStorage on successful save
+        localStorage.removeItem(DRAFT_PRODUCT_KEY);
+        setMessage({ type: "success", text: "Product added successfully!" });
+
+        // Broadcast store update so other tabs/pages refetch immediately
+        const storeSlug = firebaseUser?.uid || "";
+        if (storeSlug) {
+          broadcastStoreUpdate(storeSlug);
+        }
+
+        setTimeout(() => {
+          // Use router.replace + router.refresh to ensure the products page
+          // refetches fresh data instead of serving stale cached version
+          router.replace("/products");
+          router.refresh();
+        }, 800);
+      } else {
+        const error = await response.json();
+        // Handle structured 403 from product limit enforcement
+        if (response.status === 403 && error.code === "PRODUCT_LIMIT_REACHED") {
+          setMessage({
+            type: "error",
+            text: `Limit reached (${error.limit}). Remove a product to continue.`,
+          });
+        } else if (response.status === 403) {
+          setMessage({
+            type: "error",
+            text: "Limit reached. Remove a product to continue.",
+          });
+        } else {
+          setMessage({
+            type: "error",
+            text: error.error || "Failed to save product",
+          });
+        }
+      }
+    } catch (error) {
+      setMessage({ type: "error", text: "Failed to save product" });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  // Handle discard
+  const handleDiscard = () => {
+    // Clear the draft from localStorage when discarding
+    localStorage.removeItem(DRAFT_PRODUCT_KEY);
+    router.push("/products");
+  };
+
+  // Auto-dismiss message
+  useEffect(() => {
+    if (message) {
+      const timer = setTimeout(() => setMessage(null), 3000);
+      return () => clearTimeout(timer);
+    }
+  }, [message]);
+
+  if (loading) {
+    return (
+      <div className={styles.container}>
+        <div className={styles.loading}>Loading...</div>
+      </div>
+    );
+  }
+
+  // ── No active subscription – show subscribe CTA ──
+  if (noSubscription) {
+    return (
+      <div className={styles.container}>
+        <div className={styles.header}>
+          <div>
+            <h1 className={styles.pageTitle}>Subscription Required</h1>
+          </div>
+        </div>
+        <div
+          style={{
+            padding: "48px 40px",
+            textAlign: "center",
+            background:
+              "linear-gradient(135deg, rgba(139, 92, 246, 0.08), rgba(99, 102, 241, 0.08))",
+            border: "1px solid rgba(139, 92, 246, 0.25)",
+            borderRadius: "16px",
+            marginTop: "24px",
+          }}
+        >
+          <svg
+            width="56"
+            height="56"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="#8b5cf6"
+            strokeWidth="1.5"
+            style={{ margin: "0 auto 20px" }}
+          >
+            <rect x="1" y="4" width="22" height="16" rx="2" ry="2" />
+            <line x1="1" y1="10" x2="23" y2="10" />
+          </svg>
+          <h3
+            style={{
+              color: "#fff",
+              marginBottom: "8px",
+              fontSize: "20px",
+              fontWeight: 700,
+            }}
+          >
+            No Active Subscription
+          </h3>
+          <p
+            style={{
+              color: "rgba(255,255,255,0.6)",
+              marginBottom: "24px",
+              maxWidth: "400px",
+              margin: "0 auto 24px",
+              lineHeight: 1.6,
+            }}
+          >
+            Subscribe to a plan to start adding products to your store. All
+            plans include product catalog management.
+          </p>
+          <Link
+            href="/profile"
+            style={{
+              display: "inline-block",
+              padding: "12px 28px",
+              background: "linear-gradient(135deg, #8b5cf6, #6366f1)",
+              color: "#fff",
+              borderRadius: "10px",
+              textDecoration: "none",
+              fontWeight: 600,
+              fontSize: "15px",
+              transition: "all 0.2s ease",
+            }}
+          >
+            View Plans & Subscribe
+          </Link>
+        </div>
+      </div>
+    );
+  }
+
+  // ── Product limit reached – show upgrade CTA ──
+  if (productLimitReached) {
+    return (
+      <div className={styles.container}>
+        <div className={styles.header}>
+          <div>
+            <h1 className={styles.pageTitle}>Product Limit Reached</h1>
+          </div>
+        </div>
+        <div
+          style={{
+            padding: "48px 40px",
+            textAlign: "center",
+            background: "rgba(239, 68, 68, 0.08)",
+            border: "1px solid rgba(239, 68, 68, 0.25)",
+            borderRadius: "16px",
+            marginTop: "24px",
+          }}
+        >
+          <svg
+            width="56"
+            height="56"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="#ef4444"
+            strokeWidth="1.5"
+            style={{ margin: "0 auto 20px" }}
+          >
+            <circle cx="12" cy="12" r="10" />
+            <line x1="15" y1="9" x2="9" y2="15" />
+            <line x1="9" y1="9" x2="15" y2="15" />
+          </svg>
+          <h3
+            style={{
+              color: "#ef4444",
+              marginBottom: "8px",
+              fontSize: "20px",
+              fontWeight: 700,
+            }}
+          >
+            You&apos;ve reached your plan limit of {productLimitMax} products
+          </h3>
+          <p
+            style={{
+              color: "rgba(255,255,255,0.6)",
+              marginBottom: "24px",
+              maxWidth: "400px",
+              margin: "0 auto 24px",
+              lineHeight: 1.6,
+            }}
+          >
+            Upgrade your plan to add more products to your store.
+          </p>
+          <Link
+            href="/upgrade?recommended=business"
+            style={{
+              display: "inline-block",
+              padding: "12px 28px",
+              background: "linear-gradient(135deg, #8b5cf6, #6366f1)",
+              color: "#fff",
+              borderRadius: "10px",
+              textDecoration: "none",
+              fontWeight: 600,
+              fontSize: "15px",
+            }}
+          >
+            Upgrade Plan
+          </Link>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className={styles.container}>
+      {/* Header */}
+      <div className={styles.header}>
+        <div style={{ 
+          width: "100%", 
+          display: "flex", 
+          justifyContent: "space-between", 
+          alignItems: "center",
+          marginBottom: "32px",
+          flexWrap: "wrap",
+          gap: "16px"
+        }}>
+          <h1 className={`${styles.pageTitle} ${styles.desktopOnlyTitle}`}>Add Product</h1>
+          
+          {productRemaining !== null &&
+            productLimitMax !== null &&
+            !productLimitReached && (
+              <div style={{ display: "flex", alignItems: "center", gap: "12px", marginLeft: "auto" }}>
+                {productRemaining <= 2 && (
+                  <Link
+                    href="/profile"
+                    style={{
+                      display: "inline-flex",
+                      alignItems: "center",
+                      padding: "6px 12px",
+                      background: "linear-gradient(135deg, #8b5cf6, #6366f1)",
+                      color: "#fff",
+                      fontSize: "12px",
+                      fontWeight: 600,
+                      borderRadius: "6px",
+                      textDecoration: "none",
+                      fontFamily: "var(--font-jakarta), sans-serif",
+                    }}
+                  >
+                    Upgrade Plan
+                  </Link>
+                )}
+                <div style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "8px",
+                  padding: "8px 16px",
+                  background: "#000000",
+                  border: "1px solid #333333",
+                  borderRadius: "8px",
+                }}>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#ffffff" strokeWidth="2">
+                    <path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z" />
+                    <line x1="3" y1="6" x2="21" y2="6" />
+                    <path d="M16 10a4 4 0 0 1-8 0" />
+                  </svg>
+                  <div style={{ display: "flex", alignItems: "baseline", gap: "6px", fontFamily: "var(--font-jakarta), sans-serif" }}>
+                    <span style={{ fontSize: "13px", fontWeight: 500, color: "#ffffff" }}>
+                      Products added:
+                    </span>
+                    <span style={{ 
+                      fontSize: "13px", 
+                      color: productRemaining <= 2 ? "#eab308" : "#ffffff",
+                      fontWeight: productRemaining <= 2 ? 600 : 500
+                    }}>
+                      {productLimitMax - productRemaining} of {productLimitMax}
+                    </span>
+                  </div>
+                </div>
+              </div>
+          )}
+        </div>
+      </div>
+
+      {/* Main Content Area (Single Column) */}
+      <div>
+        {/* Combined Details Section */}
+        <div className={styles.section}>
+          <div className={styles.field} style={{ marginBottom: "32px" }}>
+            <label className={styles.label}>Product Images</label>
+            <ProductImageUpload
+              productId={formData.id}
+              imageUrl={formData.imageUrl || ""}
+              imagePublicId={formData.imagePublicId || ""}
+              onUpload={(result) => {
+                updateField("imageUrl", result.secure_url);
+                updateField("imagePublicId", result.public_id);
+                updateField("originalSize", result.original_size || 0);
+                updateField("optimizedSize", result.bytes);
+              }}
+              onDelete={() => {
+                updateField("imageUrl", "");
+                updateField("imagePublicId", "");
+                updateField("originalSize", 0);
+                updateField("optimizedSize", 0);
+              }}
+            />
+          </div>
+
+          <div className={styles.field}>
+            <label className={styles.label}>
+              Product Name <span style={{ color: "#ef4444" }}>*</span>
+            </label>
+            <input
+              type="text"
+              className={styles.input}
+              value={formData.name}
+              onChange={(e) => updateField("name", e.target.value)}
+              placeholder="Product name"
+            />
+          </div>
+
+          {/* Pricing - Moved here from separate card */}
+          <div className={styles.fieldsRow}>
+            <div className={styles.field}>
+              <label className={styles.label}>Price</label>
+              <div className={styles.inputWithPrefix}>
+                <span className={styles.inputPrefix}>₹</span>
+                <input
+                  type="number"
+                  className={`${styles.input} ${styles.inputWithPrefixField}`}
+                  value={formData.price || ""}
+                  onChange={(e) => {
+                    const newPrice = Math.max(0, parseFloat(e.target.value) || 0);
+                    updateField("price", newPrice);
+                    // If offer price is OFF and size pricing is ON, propagate change to sizes
+                    if (
+                      !showOfferPrice &&
+                      formData.hasSizePricing &&
+                      formData.sizes &&
+                      formData.sizes.length > 0
+                    ) {
+                      const updatedPrices: Record<string, number> = {};
+                      formData.sizes.forEach((size) => {
+                        updatedPrices[size] = newPrice;
+                      });
+                      updateField("sizePrices", updatedPrices);
+                    }
+                  }}
+                  placeholder="0.00"
+                  min="0"
+                  onWheel={handleNumberInputWheel}
+                />
+              </div>
+            </div>
+            <div className={styles.field}>
+              <div
+                className={styles.fieldHeader}
+                style={{ marginBottom: "8px" }}
+              >
+                <label className={styles.label} style={{ margin: 0 }}>
+                  Offer Price
+                </label>
+              </div>
+              <div style={{ position: "relative" }}>
+                <div className={styles.inputWithPrefix}>
+                  <span className={styles.inputPrefix}>₹</span>
+                  <input
+                    type="number"
+                    className={`${styles.input} ${styles.inputWithPrefixField}`}
+                    value={formData.compareAtPrice ?? ""}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      const parsed = parseFloat(val);
+                      const newOfferPrice = val === "" || isNaN(parsed) ? undefined : Math.max(0, parsed);
+                      updateField("compareAtPrice", newOfferPrice);
+                      // If size pricing is ON, propagate change to sizes
+                      if (
+                        formData.hasSizePricing &&
+                        formData.sizes &&
+                        formData.sizes.length > 0
+                      ) {
+                        const updatedPrices: Record<string, number> = {};
+                        if (newOfferPrice !== undefined) {
+                          formData.sizes.forEach((size) => {
+                            updatedPrices[size] = newOfferPrice;
+                          });
+                        } else {
+                          formData.sizes.forEach((size) => {
+                            updatedPrices[size] = formData.price ?? 0;
+                          });
+                        }
+                        updateField("sizePrices", updatedPrices);
+                      }
+                    }}
+                    placeholder="0.00"
+                    min="0"
+                    onWheel={handleNumberInputWheel}
+                    style={{ paddingRight: "16px" }}
+                  />
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Color and Size Fields */}
+          <div className={styles.fieldsRow}>
+            <div className={styles.field}>
+              <label className={styles.label}>
+                Color <span style={{ color: "#ef4444" }}>*</span>
+              </label>
+              <MultiSelectDropdown
+                options={colorOptions.map((c) => c.name)}
+                value={formData.colors || ""}
+                onChange={(val) => updateField("colors", val)}
+                placeholder="Select color"
+                multi={false}
+              />
+            </div>
+            <div className={styles.field}>
+              <label className={styles.label}>
+                Sizes <span style={{ color: "#ef4444" }}>*</span>
+              </label>
+              <MultiSelectDropdown
+                options={sizeOptions}
+                value={formData.sizes || []}
+                onChange={(val) => {
+                  const sizes = val as string[];
+                  updateField("sizes", sizes);
+                  // Clean up sizePrices for removed sizes
+                  if (formData.sizePrices) {
+                    const newSizePrices = { ...formData.sizePrices };
+                    Object.keys(newSizePrices).forEach((size) => {
+                      if (!sizes.includes(size)) {
+                        delete newSizePrices[size];
+                      }
+                    });
+                    updateField("sizePrices", newSizePrices);
+                  }
+                  // Clean up sizeStocks for removed sizes
+                  if (formData.sizeStocks) {
+                    const newSizeStocks = { ...formData.sizeStocks };
+                    Object.keys(newSizeStocks).forEach((size) => {
+                      if (!sizes.includes(size)) {
+                        delete newSizeStocks[size];
+                      }
+                    });
+                    updateField("sizeStocks", newSizeStocks);
+                  }
+                }}
+                placeholder="Select sizes"
+                multi={true}
+              />
+            </div>
+          </div>
+
+          {/* Size-Based Pricing Toggle - Only show when 2 or more sizes are selected */}
+          {formData.sizes && formData.sizes.length > 1 && (
+            <div className={styles.sizePricingSection}>
+              <div className={styles.sizePricingToggle}>
+                <div className={styles.toggleInfo}>
+                  <span className={styles.toggleLabel}>
+                    Different price for each size
+                  </span>
+                  <span className={styles.toggleHint}>
+                    Enable to set individual prices per size
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  className={`${styles.toggleSwitch} ${formData.hasSizePricing ? styles.toggleActive : ""}`}
+                  onClick={() => {
+                    const newValue = !formData.hasSizePricing;
+                    updateField("hasSizePricing", newValue);
+                    // Initialize sizePrices with current base price when enabling
+                    if (newValue && formData.sizes) {
+                      const initialPrices: Record<string, number> = {};
+                      // Use offer price if enabled, otherwise use regular price
+                      const basePrice =
+                        showOfferPrice && formData.compareAtPrice
+                          ? formData.compareAtPrice
+                          : formData.price;
+                      formData.sizes.forEach((size) => {
+                        // Always reset to current base price when toggling ON to ensure it gets the latest global price
+                        initialPrices[size] = basePrice ?? 0;
+                      });
+                      updateField("sizePrices", initialPrices);
+                    }
+                  }}
+                  aria-pressed={formData.hasSizePricing}
+                >
+                  <span className={styles.toggleKnob} />
+                </button>
+              </div>
+
+              {/* Size-Specific Price Inputs */}
+              {formData.hasSizePricing && (
+                <div className={styles.sizePricesContainer}>
+                  <div className={styles.sizePricesGrid}>
+                    {formData.sizes.map((size) => (
+                      <div key={size} className={styles.sizePriceItem}>
+                        <label className={styles.sizePriceLabel}>{size}</label>
+                        <div className={styles.sizePriceInputWrapper}>
+                          <span className={styles.currencySymbol}>₹</span>
+                          <input
+                            type="number"
+                            className={styles.sizePriceInput}
+                            value={
+                              formData.sizePrices?.[size] ??
+                              (showOfferPrice && formData.compareAtPrice
+                                ? formData.compareAtPrice
+                                : formData.price) ??
+                              ""
+                            }
+                            onChange={(e) => {
+                              const newPrice = Math.max(0, parseFloat(e.target.value) || 0);
+                              updateField("sizePrices", {
+                                ...(formData.sizePrices || {}),
+                                [size]: newPrice,
+                              });
+                            }}
+                            placeholder="0"
+                            min="0"
+                            step="1"
+                            onWheel={handleNumberInputWheel}
+                          />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          <div className={styles.field}>
+            <div className={styles.fieldHeader}>
+              <label className={styles.label}>Business Description</label>
+            </div>
+            <textarea
+              className={styles.textarea}
+              value={formData.description}
+              onChange={(e) => updateField("description", e.target.value)}
+              placeholder="Describe your product..."
+            />
+          </div>
+        </div>
+
+        {/* Category Section */}
+        <div className={styles.section}>
+          <h2 className={styles.sectionTitle}>Category</h2>
+
+          <div className={styles.field}>
+            <label className={styles.label}>Product Category</label>
+            <SearchableDropdown
+              options={productCategories.map((cat) => ({
+                id: cat,
+                label: cat,
+              }))}
+              value={formData.category}
+              customValue={customCategory}
+              onChange={(value, customValue) => {
+                updateField("category", value);
+                setCustomCategory(customValue || "");
+              }}
+              placeholder="Search or add category"
+            />
+          </div>
+        </div>
+
+        {/* Inventory Section */}
+        <div className={styles.section}>
+          <h2 className={styles.sectionTitle}>
+            Inventory <span style={{ color: "#ef4444" }}>*</span>
+          </h2>
+
+          {formData.sizes && formData.sizes.length > 0 ? (
+            <div className={styles.sizeInventoryGrid}>
+              {formData.sizes.map((size) => (
+                <div key={size} className={styles.field}>
+                  <label className={styles.label}>Quantity for {size}</label>
+                  <input
+                    type="number"
+                    className={styles.input}
+                    value={
+                      formData.sizeStocks?.[size] === 0
+                        ? ""
+                        : (formData.sizeStocks?.[size] ?? "")
+                    }
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      const newQuantity = val === "" ? 0 : Math.max(0, parseInt(val, 10));
+                      updateField("sizeStocks", {
+                        ...(formData.sizeStocks || {}),
+                        [size]: newQuantity,
+                      });
+                    }}
+                    placeholder="0"
+                    min="0"
+                    onWheel={handleNumberInputWheel}
+                  />
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className={styles.field}>
+              <label className={styles.label}>
+                Quantity <span style={{ color: "#ef4444" }}>*</span>
+              </label>
+              <input
+                type="number"
+                className={styles.input}
+                value={formData.quantity === 0 ? "" : formData.quantity}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  updateField("quantity", val === "" ? 0 : Math.max(0, parseInt(val, 10)));
+                }}
+                placeholder="0"
+                min="0"
+                onWheel={handleNumberInputWheel}
+              />
+            </div>
+          )}
+        </div>
+
+        {/* Variant Section */}
+        <div className={styles.section}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+            <h2 className={styles.sectionTitle} style={{ margin: 0 }}>Variants</h2>
+            <button
+              type="button"
+              className={styles.addVariantBtn}
+              onClick={addVariant}
+            >
+              <svg
+                width="14"
+                height="14"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+              >
+                <line x1="12" y1="5" x2="12" y2="19" />
+                <line x1="5" y1="12" x2="19" y2="12" />
+              </svg>
+              Add Variant
+            </button>
+          </div>
+
+          {productVariants.length > 0 && (
+            <div style={{ marginBottom: "16px", display: "flex", flexDirection: "column", gap: "16px" }}>
+              {productVariants.map((variant, index) => (
+                <div
+                  key={variant.id}
+                  style={{
+                    position: "relative",
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: "16px",
+                    padding: "20px",
+                    background: "#fafafa",
+                    borderRadius: "12px",
+                    border: "1px solid #e5e7eb",
+                    alignItems: "center",
+                  }}
+                >
+                  {/* Remove variant button - top right */}
+                  <button
+                    type="button"
+                    onClick={() => removeVariant(variant.id)}
+                    style={{
+                      position: "absolute",
+                      top: "12px",
+                      right: "12px",
+                      width: "14px",
+                      height: "14px",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      background: "#ff5f56",
+                      border: "1px solid #e0443e",
+                      borderRadius: "50%",
+                      color: "transparent",
+                      cursor: "pointer",
+                      fontSize: "9px",
+                      fontWeight: "bold",
+                      lineHeight: 1,
+                      transition: "all 0.1s ease",
+                      zIndex: 2,
+                    }}
+                    title="Remove variant"
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.color = "#4c0000";
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.color = "transparent";
+                    }}
+                  >
+                    ✕
+                  </button>
+                  {/* Top Center: Variant Photo */}
+                  <div
+                    style={{
+                      width: "100%",
+                      textAlign: "center",
+                    }}
+                  >
+                    <label
+                      className={styles.label}
+                      style={{
+                        marginBottom: "12px",
+                        fontSize: "12px",
+                        display: "block",
+                      }}
+                    >
+                      Variant Photo
+                    </label>
+                    <ProductImageUpload
+                      productId={`${formData.id}-v-${variant.id}`}
+                      imageUrl={variant.imageUrl || ""}
+                      imagePublicId={variant.imagePublicId || ""}
+                      onUpload={(result) => {
+                        updateVariant(
+                          variant.id,
+                          "imageUrl",
+                          result.secure_url,
+                        );
+                        updateVariant(
+                          variant.id,
+                          "imagePublicId",
+                          result.public_id,
+                        );
+                      }}
+                      onDelete={() => {
+                        updateVariant(variant.id, "imageUrl", "");
+                        updateVariant(variant.id, "imagePublicId", "");
+                      }}
+                    />
+                  </div>
+
+                  {/* Bottom: Inputs */}
+                  <div
+                    style={{
+                      display: "flex",
+                      flexWrap: "wrap",
+                      gap: "12px",
+                      alignItems: "center",
+                      width: "100%",
+                      paddingTop: "20px",
+                      borderTop: "1px solid rgba(255,255,255,0.05)",
+                    }}
+                  >
+                    <div style={{ flex: "1 1 200px", minWidth: "150px" }}>
+                      <MultiSelectDropdown
+                        options={colorOptions.map((c) => c.name)}
+                        value={variant.color}
+                        onChange={(val) =>
+                          updateVariant(variant.id, "color", val as string)
+                        }
+                        placeholder="Color"
+                        multi={false}
+                      />
+                    </div>
+
+                    <div style={{ flex: "1 1 200px", minWidth: "150px" }}>
+                      <MultiSelectDropdown
+                        options={sizeOptions}
+                        value={variant.size || []}
+                        onChange={(val) =>
+                          updateVariant(variant.id, "size", val as string[])
+                        }
+                        placeholder="Sizes"
+                        multi={true}
+                      />
+                    </div>
+
+                    <div
+                      style={{
+                        position: "relative",
+                        flex: "1 1 100px",
+                        minWidth: "100px",
+                      }}
+                    >
+                      <span
+                        style={{
+                          position: "absolute",
+                          left: "10px",
+                          top: "50%",
+                          transform: "translateY(-50%)",
+                          color: "#6b7280",
+                          fontSize: "14px",
+                        }}
+                      >
+                        ₹
+                      </span>
+                      <input
+                        type="number"
+                        className={styles.input}
+                        value={variant.price || ""}
+                        onChange={(e) =>
+                          updateVariant(
+                            variant.id,
+                            "price",
+                            Math.max(0, parseFloat(e.target.value) || 0),
+                          )
+                        }
+                        placeholder="Price"
+                        min="0"
+                        onWheel={handleNumberInputWheel}
+                        style={{ margin: 0, paddingLeft: "24px" }}
+                      />
+                    </div>
+                    <div
+                      style={{
+                        position: "relative",
+                        flex: "1 1 100px",
+                        minWidth: "100px",
+                      }}
+                    >
+                      <span
+                        style={{
+                          position: "absolute",
+                          left: "10px",
+                          top: "50%",
+                          transform: "translateY(-50%)",
+                          color: "#6b7280",
+                          fontSize: "14px",
+                        }}
+                      >
+                        ₹
+                      </span>
+                      <input
+                        type="number"
+                        className={styles.input}
+                        value={variant.compareAtPrice ?? ""}
+                        onChange={(e) => {
+                          const value = e.target.value;
+                          const parsed = parseFloat(value);
+                          updateVariant(
+                            variant.id,
+                            "compareAtPrice",
+                            value === ""
+                              ? undefined
+                              : parsed >= 0 ? parsed : undefined,
+                          );
+                        }}
+                        placeholder="Offer Price"
+                        min="0"
+                        onWheel={handleNumberInputWheel}
+                        style={{ margin: 0, paddingLeft: "24px" }}
+                      />
+                    </div>
+
+                    {/* Size-Based Pricing Toggle - Only show when multiple sizes are selected */}
+                    {variant.size && variant.size.length > 1 && (
+                      <div style={{ width: "100%", marginTop: "16px" }}>
+                        <div
+                          style={{
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "space-between",
+                            padding: "14px 16px",
+                            background:
+                              "linear-gradient(135deg, rgba(34, 193, 90, 0.08) 0%, rgba(34, 193, 90, 0.02) 100%)",
+                            border: "1px solid rgba(34, 193, 90, 0.2)",
+                            borderRadius: "10px",
+                            marginBottom: variant.hasSizePricing ? "12px" : 0,
+                          }}
+                        >
+                          <div
+                            style={{
+                              display: "flex",
+                              flexDirection: "column",
+                              gap: "2px",
+                            }}
+                          >
+                            <span
+                              style={{
+                                fontSize: "13px",
+                                fontWeight: 600,
+                                color: "#111827",
+                              }}
+                            >
+                              Different price for each size
+                            </span>
+                            <span
+                              style={{
+                                fontSize: "11px",
+                                color: "#6b7280",
+                              }}
+                            >
+                              Set individual prices per size
+                            </span>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const newValue = !variant.hasSizePricing;
+                              updateVariant(
+                                variant.id,
+                                "hasSizePricing",
+                                newValue,
+                              );
+                              if (newValue && variant.size) {
+                                const initialPrices: Record<string, number> =
+                                  {};
+                                // Use offer price if available, otherwise use base price
+                                const basePrice =
+                                  variant.compareAtPrice !== undefined &&
+                                  variant.compareAtPrice > 0
+                                    ? variant.compareAtPrice
+                                    : variant.price || 0;
+                                variant.size.forEach((sz) => {
+                                  initialPrices[sz] =
+                                    variant.sizePrices?.[sz] ?? basePrice;
+                                });
+                                updateVariant(
+                                  variant.id,
+                                  "sizePrices",
+                                  initialPrices,
+                                );
+                              }
+                            }}
+                            style={{
+                              position: "relative",
+                              width: "48px",
+                              height: "26px",
+                              background: variant.hasSizePricing
+                                ? "linear-gradient(135deg, #22c15a 0%, #1fa850 100%)"
+                                : "rgba(255, 255, 255, 0.12)",
+                              border: variant.hasSizePricing
+                                ? "1px solid #22c15a"
+                                : "1px solid rgba(255, 255, 255, 0.15)",
+                              borderRadius: "13px",
+                              cursor: "pointer",
+                              transition: "all 0.3s ease",
+                              flexShrink: 0,
+                            }}
+                          >
+                            <span
+                              style={{
+                                position: "absolute",
+                                top: "3px",
+                                left: variant.hasSizePricing ? "24px" : "3px",
+                                width: "18px",
+                                height: "18px",
+                                background: "#fff",
+                                borderRadius: "50%",
+                                transition: "all 0.3s ease",
+                                boxShadow: "0 2px 6px rgba(0, 0, 0, 0.2)",
+                              }}
+                            />
+                          </button>
+                        </div>
+
+                        {/* Size-Specific Price Inputs */}
+                        {variant.hasSizePricing && (
+                          <div
+                            style={{
+                              display: "grid",
+                              gridTemplateColumns:
+                                "repeat(auto-fill, minmax(100px, 1fr))",
+                              gap: "12px",
+                              padding: "14px",
+                              background: "#ffffff",
+                              border: "1px solid #d1d5db",
+                              borderRadius: "10px",
+                            }}
+                          >
+                            {variant.size.map((sz) => (
+                              <div
+                                key={sz}
+                                style={{
+                                  display: "flex",
+                                  flexDirection: "column",
+                                  gap: "6px",
+                                }}
+                              >
+                                <label
+                                  style={{
+                                    fontSize: "12px",
+                                    fontWeight: 600,
+                                    color: "#111827",
+                                    textTransform: "uppercase",
+                                    padding: "3px 8px",
+                                    background: "rgba(34, 193, 90, 0.15)",
+                                    borderRadius: "5px",
+                                    textAlign: "center",
+                                    border: "1px solid rgba(34, 193, 90, 0.25)",
+                                  }}
+                                >
+                                  {sz}
+                                </label>
+                                <div style={{ position: "relative" }}>
+                                  <span
+                                    style={{
+                                      position: "absolute",
+                                      left: "10px",
+                                      top: "50%",
+                                      transform: "translateY(-50%)",
+                                      color: "#6b7280",
+                                      fontSize: "13px",
+                                    }}
+                                  >
+                                    ₹
+                                  </span>
+                                  <input
+                                    type="number"
+                                    value={
+                                      variant.sizePrices?.[sz] ??
+                                      (variant.compareAtPrice !== undefined &&
+                                      variant.compareAtPrice > 0
+                                        ? variant.compareAtPrice
+                                        : variant.price) ??
+                                      ""
+                                    }
+                                    onChange={(e) => {
+                                      const newPrice =
+                                        Math.max(0, parseFloat(e.target.value) || 0);
+                                      updateVariant(variant.id, "sizePrices", {
+                                        ...(variant.sizePrices || {}),
+                                        [sz]: newPrice,
+                                      });
+                                    }}
+                                    placeholder="0"
+                                    min="0"
+                                    onWheel={handleNumberInputWheel}
+                                    style={{
+                                      width: "100%",
+                                      padding: "8px 10px 8px 24px",
+                                      background: "#ffffff",
+                                      border:
+                                        "1px solid #d1d5db",
+                                      borderRadius: "6px",
+                                      fontSize: "13px",
+                                      color: "#111827",
+                                      textAlign: "right",
+                                    }}
+                                  />
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Variant Stock Section */}
+                    <div style={{ width: "100%", marginTop: "12px" }}>
+                      {variant.size && variant.size.length > 0 ? (
+                        <div className={styles.sizeInventoryGrid}>
+                          {variant.size.map((sz) => (
+                            <div
+                              key={sz}
+                              className={styles.field}
+                              style={{ marginBottom: 0 }}
+                            >
+                              <label
+                                className={styles.label}
+                                style={{ fontSize: "11px" }}
+                              >
+                                Stock for {sz}
+                              </label>
+                              <input
+                                type="number"
+                                className={styles.input}
+                                value={
+                                  variant.sizeStocks?.[sz] === 0
+                                    ? ""
+                                    : (variant.sizeStocks?.[sz] ?? "")
+                                }
+                                onChange={(e) => {
+                                  const val = e.target.value;
+                                  const newQty =
+                                    val === "" ? 0 : Math.max(0, parseInt(val, 10));
+                                  updateVariant(variant.id, "sizeStocks", {
+                                    ...(variant.sizeStocks || {}),
+                                    [sz]: newQty,
+                                  });
+                                }}
+                                placeholder="0"
+                                min="0"
+                                onWheel={handleNumberInputWheel}
+                              />
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <div
+                          className={styles.field}
+                          style={{ maxWidth: "200px" }}
+                        >
+                          <label className={styles.label}>Stock</label>
+                          <input
+                            type="number"
+                            className={styles.input}
+                            value={
+                              variant.stock === 0 ? "" : (variant.stock ?? "")
+                            }
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              updateVariant(
+                                variant.id,
+                                "stock",
+                                val === "" ? 0 : Math.max(0, parseInt(val, 10)),
+                              );
+                            }}
+                            placeholder="Stock"
+                            min="0"
+                            onWheel={handleNumberInputWheel}
+                          />
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {productVariants.length === 0 && (
+            <div className={styles.variantRow}>
+              <span className={styles.variantLabel}>
+                Add variants for different sizes, colors, or options
+              </span>
+            </div>
+          )}
+        </div>
+
+        {/* Footer Actions - Discard left, Schedule & Add Product right */}
+        <div className={styles.footer}>
+          <button
+            type="button"
+            className={styles.discardBtn}
+            onClick={handleDiscard}
+          >
+            Discard
+          </button>
+          <div className={styles.footerRight}>
+            <button
+              type="button"
+              className={styles.addProductBtn}
+              onClick={handleSave}
+              disabled={saving}
+            >
+              {saving ? "Adding..." : "Add Product"}
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Toast */}
+      {message && (
+        <Toast
+          message={message.text}
+          type={message.type}
+          onClose={() => setMessage(null)}
+        />
+      )}
+    </div>
+  );
+}

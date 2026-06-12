@@ -140,9 +140,9 @@ export default function FilesProductChrome({ children }: FilesProductChromeProps
             </div>
             <div className={styles.footerColumn}>
               <h2 className={styles.footerHeading} style={{ color: "#ffffff" }}>{footer("columns.workspace")}</h2>
-              <Link href="/dashboard/files" style={footerLinkStyle}>{footer("links.dashboard")}</Link>
-              <Link href="/dashboard/files/history" style={footerLinkStyle}>{footer("links.history")}</Link>
-              <Link href="/dashboard/files/settings" style={footerLinkStyle}>{footer("links.settings")}</Link>
+              <Link href="/files" style={footerLinkStyle}>{footer("links.dashboard")}</Link>
+              <Link href="/files/history" style={footerLinkStyle}>{footer("links.history")}</Link>
+              <Link href="/files/settings" style={footerLinkStyle}>{footer("links.settings")}</Link>
             </div>
           </div>
         </div>

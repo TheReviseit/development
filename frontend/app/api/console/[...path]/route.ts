@@ -2,7 +2,7 @@
  * Next.js API Route - Console API Proxy
  * Proxies console API requests to backend
  *
- * Routes handled: /api/console/dashboard/*, /api/console/projects/*, etc.
+ * Routes handled: /api/console/*, /api/console/projects/*, etc.
  * (excludes /api/console/auth/* which has its own route)
  *
  * AUTH STRATEGY:

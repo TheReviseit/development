@@ -297,19 +297,7 @@ body {
   animation: shimmer 2s linear infinite;
 }
 
-/* ============================================================================
-   SELECTION COLORS
-   ============================================================================ */
 
-::selection {
-  background-color: var(--color-selection-bg);
-  color: inherit;
-}
-
-::-moz-selection {
-  background-color: var(--color-selection-bg);
-  color: inherit;
-}
 
 /* ============================================================================
    FOCUS VISIBLE STATES
@@ -365,4 +353,15 @@ body:has(.onboarding-container.onboarding-stage-pricing)
   *::-webkit-scrollbar-thumb {
   display: none !important;
   background: transparent !important;
+}
+
+/* Global Scrollbar Suppression */
+* {
+  scrollbar-width: none !important; /* Firefox */
+  -ms-overflow-style: none !important; /* IE/Edge */
+}
+*::-webkit-scrollbar {
+  display: none !important;
+  width: 0 !important;
+  height: 0 !important;
 }

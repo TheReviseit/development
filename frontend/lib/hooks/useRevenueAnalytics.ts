@@ -164,7 +164,7 @@ export function useRevenueAnalytics(
         range: result.range,
         currency: result.currency || "INR",
         buckets: result.buckets || [],
-        totalRevenue: result.totalRevenue || 0,
+        totalRevenue: result.total || result.totalRevenue || 0,
         comparison: result.comparison || { previousPeriod: 0, deltaPercent: 0 },
         metadata: result.metadata,
       };
@@ -202,8 +202,6 @@ export function useRevenueAnalytics(
       setLoading(false);
     }
   }, [cacheKey, request]);
-
-  // Fetch on mount / range change — only when enabled
   useEffect(() => {
     if (!enabled) {
       setLoading(false);

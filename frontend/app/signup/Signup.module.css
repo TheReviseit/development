@@ -211,6 +211,10 @@
 
 /* Right Side - Form */
 .authRight {
+  --text-primary: #000000;
+  --text-secondary: #111111;
+  --text-muted: #4a4a4a;
+  --text-placeholder: #8a8a8a;
   flex: 1;
   background: var(--card-bg);
   display: flex;
@@ -219,9 +223,14 @@
   position: relative;
   overflow-y: auto;
   overflow-x: hidden;
-  scrollbar-gutter: stable;
   overscroll-behavior: contain;
   max-height: 100%;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.authRight::-webkit-scrollbar {
+  display: none;
 }
 
 .brandTag {
@@ -277,13 +286,13 @@
 .authForm {
   display: flex;
   flex-direction: column;
-  gap: 7px;
+  gap: 16px;
 }
 
 .formGroup {
   display: flex;
   flex-direction: column;
-  gap: 3px;
+  gap: 6px;
 }
 
 .formGroup label {
@@ -405,27 +414,56 @@
 .checkboxLabel {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
   font-family: var(--font-primary);
-  font-size: 11.5px;
-  color: var(--text-muted);
+  font-size: 13.5px;
+  color: var(--text-secondary);
   cursor: pointer;
   user-select: none;
-  line-height: 1.28;
 }
 
 .checkboxLabel input[type="checkbox"] {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 18px;
+  height: 18px;
+  border: 1.5px solid var(--text-placeholder);
+  border-radius: 4px;
+  background-color: transparent;
   cursor: pointer;
-  width: 14px;
-  height: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+  position: relative;
   flex-shrink: 0;
+}
+
+.checkboxLabel input[type="checkbox"]:hover {
+  border-color: var(--text-secondary);
+}
+
+.checkboxLabel input[type="checkbox"]:checked {
+  background-color: #000000;
+  border-color: #000000;
+}
+
+.checkboxLabel input[type="checkbox"]:checked::after {
+  content: "";
+  position: absolute;
+  width: 5px;
+  height: 10px;
+  border: solid white;
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg);
+  margin-top: -2px;
 }
 
 .btnPrimary {
   font-family: var(--font-primary);
   min-height: 40px;
   padding: 8px;
-  background: var(--primary-color);
+  background: #000000;
   color: var(--card-bg);
   border: 1.5px solid black;
   border-radius: 8px;
@@ -439,7 +477,7 @@
 }
 
 .btnPrimary:hover:not(:disabled) {
-  background: var(--button-hover-bg);
+  background: #000000;
   transform: translateY(-1px);
 }
 
@@ -559,25 +597,29 @@
 @media (max-width: 768px) {
   .authContainer {
     --auth-shell-padding: 0px;
-    position: relative;
+    position: fixed;
+    inset: 0;
     padding: 0;
-    min-height: 100vh;
-    min-height: 100svh;
-    height: 100svh;
+    width: 100%;
+    height: 100%;
     align-items: stretch;
     justify-content: flex-start;
-    overflow: hidden;
+    overflow-y: auto;
+    overflow-x: hidden;
+    -webkit-overflow-scrolling: touch;
+    background: var(--card-bg);
+    z-index: 10;
   }
 
   .authSplit {
     border-radius: 0;
-    min-height: 100vh;
-    min-height: 100svh;
-    height: 100svh;
+    min-height: 100%;
+    height: max-content;
     max-height: none;
     flex-direction: column;
-    overflow: hidden;
+    overflow: visible;
     box-shadow: none;
+    width: 100%;
   }
 
   .authLeft {
@@ -592,10 +634,11 @@
       max(18px, env(safe-area-inset-bottom))
       max(26px, env(safe-area-inset-left));
     justify-content: flex-start;
-    min-height: 0;
-    height: 100svh;
+    min-height: 100%;
+    height: max-content;
     max-height: none;
-    overflow: hidden;
+    overflow: visible;
+    width: 100%;
   }
 
   .brandTag {

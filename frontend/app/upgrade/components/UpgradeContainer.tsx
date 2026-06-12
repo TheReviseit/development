@@ -84,6 +84,47 @@ export default function UpgradeContainer({
     usage_summary,
   } = data || {};
 
+  // ── Resolve effective current plan ────────────────────────────────────────
+  // If the user has no active subscription in the DB (current_plan is null),
+  // they are inherently on the base/free tier (Starter), so we default to the
+  // lowest tier plan (available_plans[0]) to ensure the UI shows the black
+  // border and "Current Plan" badge.
+  const effectiveCurrentPlan = current_plan || (available_plans?.length ? available_plans[0] : null);
+
+  // ── Resolve effective recommended plan ──────────────────────────────────────
+  // `recommended_plan` from the API is a full Plan object (or null).
+  // `recommendedPlan` (prop) is a slug string from the URL query param — it must
+  // be resolved to a Plan object for PlanComparisonTable's type contract.
+  //
+  // Safety guard: NEVER mark the user's current plan as recommended — that
+  // would show a "Recommended" badge on the plan they already own, which is
+  // the bug reported in the screenshot.
+  const effectiveRecommendedPlan = (() => {
+    // 1. API result takes precedence
+    const apiRecommended = recommended_plan ?? null;
+    if (apiRecommended) {
+      // Guard: strip if it's the current plan
+      if (effectiveCurrentPlan && apiRecommended.plan_slug === effectiveCurrentPlan.plan_slug) {
+        return null;
+      }
+      return apiRecommended;
+    }
+
+    // 2. Fallback: resolve URL slug to a Plan object
+    if (recommendedPlan && available_plans?.length) {
+      const matched = available_plans.find(
+        (p: { plan_slug: string }) => p.plan_slug === recommendedPlan
+      ) ?? null;
+      // Guard: don't recommend the current plan
+      if (matched && effectiveCurrentPlan && matched.plan_slug === effectiveCurrentPlan.plan_slug) {
+        return null;
+      }
+      return matched;
+    }
+
+    return null;
+  })();
+
   return (
     <div className="space-y-8">
       {/* Billing Cycle Toggle — hidden for now (monthly only) */}
@@ -96,15 +137,15 @@ export default function UpgradeContainer({
       </div> */}
 
       {/* Usage Summary (if user has current plan) */}
-      {current_plan && usage_summary && (
-        <UsageSummary currentPlan={current_plan} usage={usage_summary} />
+      {effectiveCurrentPlan && usage_summary && (
+        <UsageSummary currentPlan={effectiveCurrentPlan} usage={usage_summary} />
       )}
 
       {/* Plan Comparison Table */}
       <PlanComparisonTable
-        currentPlan={current_plan}
+        currentPlan={effectiveCurrentPlan}
         availablePlans={available_plans || []}
-        recommendedPlan={recommended_plan || recommendedPlan}
+        recommendedPlan={effectiveRecommendedPlan}
         featureDifferences={feature_differences || {}}
         billingCycle={billingCycle}
         domain={initialDomain}
@@ -118,7 +159,7 @@ export default function UpgradeContainer({
       {/* Enterprise Contact CTA — Professional Card */}
       <div className="mt-12 rounded-2xl border border-gray-200 bg-white p-8 text-center shadow-sm">
         <div className="mx-auto max-w-md">
-          <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-gray-900">
+          <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-black">
             <svg
               className="h-6 w-6 text-white"
               fill="none"
@@ -144,7 +185,7 @@ export default function UpgradeContainer({
             href="https://wa.me/916383634873?text=Hi%2C%20I%27m%20interested%20in%20a%20custom%20plan%20for%20Flowauxi"
             target="_blank"
             rel="noopener noreferrer"
-            className="mt-5 inline-flex items-center gap-2 rounded-lg bg-gray-900 px-6 py-3 text-sm font-semibold text-white shadow-sm hover:bg-gray-800 transition-colors duration-150"
+            className="mt-5 inline-flex items-center gap-2 rounded-lg bg-black px-6 py-3 text-sm font-semibold text-white shadow-sm hover:bg-black/90 transition-colors duration-150"
           >
             <svg className="h-4 w-4" viewBox="0 0 24 24" fill="currentColor">
               <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347z" />

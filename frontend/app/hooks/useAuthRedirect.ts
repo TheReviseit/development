@@ -31,7 +31,7 @@ async function checkOnboardingStatus(): Promise<boolean> {
   try {
     const data = await getOnboardingCheck();
     const product = getProductDomainFromBrowser();
-    return getOnboardingDestination(data, product).startsWith("/dashboard");
+    return getOnboardingDestination(data, product).startsWith("/home");
   } catch (error) {
     console.error("Error checking onboarding status:", error);
     return false; // Default to onboarding required on error
@@ -139,7 +139,7 @@ export function useAuthRedirect() {
       if (authState.isAuthenticated) {
         // User is already logged in
         if (authState.onboardingCompleted) {
-          router.push("/dashboard");
+          router.push("/home");
         } else {
           router.push(
             `/onboarding-embedded?domain=${getProductDomainFromBrowser()}`,
@@ -170,7 +170,7 @@ export function useAuthRedirect() {
       if (authState.isAuthenticated) {
         // User is already logged in
         if (authState.onboardingCompleted) {
-          router.push("/dashboard");
+          router.push("/home");
         } else {
           router.push(
             `/onboarding-embedded?domain=${getProductDomainFromBrowser()}`,

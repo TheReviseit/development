@@ -27,7 +27,7 @@ export default function ConsoleDashboardPage() {
 
   const fetchStats = useCallback(async () => {
     try {
-      const response = await fetch("/api/console/dashboard/stats", {
+      const response = await fetch("/api/console/stats", {
         credentials: "include",
       });
       const data = await response.json();

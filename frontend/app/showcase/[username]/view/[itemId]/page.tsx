@@ -3,11 +3,11 @@
 import React, { useState, useEffect, use } from "react";
 import { motion } from "framer-motion";
 import styles from "../../page.module.css"; // Reuse existing styles
-import { ConfigurableCard } from "../../../../dashboard/showcase/settings/ConfigurableCard";
+import { ConfigurableCard } from "@/app/(dashboard)/showcase-manager/settings/ConfigurableCard";
 import {
   PresentationConfig,
   ShowcaseItem,
-} from "../../../../dashboard/showcase/settings/config.schema";
+} from "@/app/(dashboard)/showcase-manager/settings/config.schema";
 import ShowcaseHeader from "../../components/ShowcaseHeader";
 import { ShowcaseFooter } from "../../components/ShowcaseFooter";
 import ShowcaseSearchOverlay from "../../components/ShowcaseSearchOverlay";

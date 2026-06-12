@@ -372,7 +372,7 @@ export default async function PaymentPage({ searchParams }: PaymentPageProps) {
 
   // If they already have an active subscription, redirect to dashboard
   if (subscriptionState.hasSubscription) {
-    redirect('/dashboard');
+    redirect('/home');
   }
 
   // If they have an active trial and aren't expired, still allow payment page.

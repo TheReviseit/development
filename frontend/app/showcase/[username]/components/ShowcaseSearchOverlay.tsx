@@ -6,8 +6,8 @@ import styles from "../page.module.css";
 import {
   ShowcaseItem,
   PresentationConfig,
-} from "../../../dashboard/showcase/settings/config.schema";
-import { ConfigurableCard } from "../../../dashboard/showcase/settings/ConfigurableCard";
+} from "@/app/(dashboard)/showcase-manager/settings/config.schema";
+import { ConfigurableCard } from "@/app/(dashboard)/showcase-manager/settings/ConfigurableCard";
 
 interface ShowcaseSearchOverlayProps {
   isOpen: boolean;

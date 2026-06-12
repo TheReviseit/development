@@ -87,8 +87,28 @@ export async function POST(request: NextRequest) {
           path: "/",
           sameSite: "lax",
         });
-      } catch (cookieError) {
+      } catch (cookieError: any) {
         console.error(`[AUTH_SYNC] Failed to create session cookie:`, cookieError);
+
+        // If the token is > 5 minutes old, createSessionCookie throws auth/invalid-id-token
+        // or a specific message. We should return 401 so the client gracefully refreshes it.
+        const isExpiredError = cookieError?.code === 'auth/id-token-expired' || 
+                               cookieError?.message?.includes('5 minutes');
+                               
+        if (isExpiredError) {
+          return NextResponse.json<SyncUserResponse>(
+            {
+              success: false,
+              error: "Token too old for session cookie creation",
+              code: AuthErrorCode.INVALID_TOKEN, // Client will intercept and refresh
+              requestId: requestContext.request_id,
+              idempotencyKey,
+              traceId,
+            },
+            { status: 401 },
+          );
+        }
+
         return NextResponse.json<SyncUserResponse>(
           {
             success: false,

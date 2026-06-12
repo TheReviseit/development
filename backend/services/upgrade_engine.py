@@ -828,9 +828,19 @@ class UpgradeEngine:
         2. Identify ALL blocked features (user tried, but not in plan)
         3. Find CHEAPEST plan that resolves ALL bottlenecks
         4. Ensure new limits provide breathing room (150% of current usage)
+
+        IMPORTANT: Never recommends the user's current plan.
+        When user has no current plan, recommends the middle-tier plan (not the
+        lowest/starter tier — that would be misleading as "Recommended").
         """
         if not current_plan:
-            return available_plans[0] if available_plans else None
+            # No subscription yet — recommend the middle-tier plan (index 1),
+            # not the lowest (Starter). Recommending Starter as "Recommended"
+            # is confusing UX since it's the cheapest entry-level option.
+            # If there are fewer than 2 plans, fall back to None (no badge).
+            if len(available_plans) >= 2:
+                return available_plans[1]
+            return None
 
         current_tier = current_plan['tier_level']
         higher_tiers = [p for p in available_plans if p['tier_level'] > current_tier]

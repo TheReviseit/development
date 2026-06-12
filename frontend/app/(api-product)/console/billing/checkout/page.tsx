@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
+import { Shield } from "lucide-react";
 import "../../console.css";
 import "../billing.css";
 
@@ -235,8 +236,8 @@ export default function CheckoutPage() {
             ← Back to Plans
           </button>
 
-          <p className="checkout-security">
-            🔒 Secure payment powered by Razorpay
+          <p className="checkout-security" style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "6px" }}>
+            <Shield size={16} /> Secure payment powered by Razorpay
           </p>
         </div>
       </div>

@@ -43,7 +43,7 @@ function ErrorContent() {
     if (expected === "console") return "/console/login";
     if (expected === "normal") return "/login";
     if (current === "console") return "/console";
-    if (current === "normal") return "/dashboard";
+    if (current === "normal") return "/home";
     return "/login";
   };
 
@@ -177,7 +177,7 @@ function ErrorContent() {
         {/* Secondary Link */}
         {code === "WRONG_PORTAL" && current && (
           <Link
-            href={current === "console" ? "/console" : "/dashboard"}
+            href={current === "console" ? "/console" : "/home"}
             style={{
               display: "block",
               color: "#666666",

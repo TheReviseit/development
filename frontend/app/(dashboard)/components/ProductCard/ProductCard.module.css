@@ -1,0 +1,1557 @@
+/* ============================================
+   ProductCard Component Styles
+   Premium, Professional Design
+   ============================================ */
+
+/* CSS Variables for consistency */
+.card {
+  --card-bg: linear-gradient(
+    145deg,
+    rgba(0, 0, 0, 0.04) 0%,
+    rgba(255, 255, 255, 0.01) 100%
+  );
+  --card-border: rgba(0, 0, 0, 0.04);
+  --card-border-hover: rgba(0, 0, 0, 0.3);
+  --accent-primary: #111827;
+  --accent-primary-light: rgba(0, 0, 0, 0.1);
+  --text-primary: #111827;
+  --text-secondary: rgba(255, 255, 255, 0.85);
+  --text-muted: rgba(255, 255, 255, 0.5);
+  --text-placeholder: rgba(255, 255, 255, 0.35);
+  --input-bg: rgba(255, 255, 255, 0.03);
+  --input-border: rgba(0, 0, 0, 0.08);
+  --input-border-focus: #111827;
+  --danger: #ef4444;
+
+  background: var(--card-bg);
+  border: 1px solid var(--card-border);
+  border-radius: 20px;
+  overflow: hidden;
+  transition: all 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow:
+    0 4px 24px rgba(0, 0, 0, 0.12),
+    0 1px 2px rgba(0, 0, 0, 0.08);
+}
+
+/* Removed hover effect as per design */
+
+/* ============================================
+   Header Section
+   ============================================ */
+.header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 24px;
+  background: black;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.379);
+}
+
+.productNumber {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 13px;
+  font-weight: 700;
+  color: white;
+  text-transform: uppercase;
+  letter-spacing: 1.2px;
+}
+
+.numberIndicator {
+  width: 10px;
+  height: 10px;
+  background: var(--accent-green);
+  border-radius: 50%;
+  box-shadow: 0 0 12px rgba(34, 193, 90, 0.6);
+  animation: pulse 2s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%,
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.7;
+    transform: scale(0.9);
+  }
+}
+
+.removeButton {
+  width: 36px;
+  height: 36px;
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  background: white;
+  color: black;
+  border-radius: 10px;
+  cursor: pointer;
+  font-size: 16px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+}
+
+/* .removeButton:hover {
+  background: black;
+  border-color: var(--danger);
+  transform: scale(1.05);
+} */
+
+/* ============================================
+   Main Content Layout
+   ============================================ */
+.mainContent {
+  display: grid;
+  grid-template-columns: 200px 1fr;
+  gap: 32px;
+  padding: 28px;
+}
+
+/* ============================================
+   Image Section - Improved
+   ============================================ */
+.imageSection {
+  display: flex;
+  flex-direction: column;
+}
+
+.imageWrapper {
+  position: relative;
+  width: 200px;
+  height: 200px;
+  border-radius: 16px;
+  overflow: hidden;
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  transition: all 0.3s ease;
+}
+
+/* Override for child ProductImageUpload styles */
+.imageWrapper :global(.uploadZone) {
+  min-height: 196px !important;
+  height: auto;
+  border: none !important;
+  border-radius: 14px;
+}
+
+.imageWrapper :global(.imagePreviewContainer) {
+  width: 100%;
+  height: auto;
+  min-height: 120px;
+  max-height: 280px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.imageWrapper :global(.imagePreview) {
+  max-width: 100%;
+  width: 100%;
+  height: auto;
+  max-height: 280px;
+  object-fit: contain;
+  border-radius: 14px;
+}
+
+/* ============================================
+   Details Section
+   ============================================ */
+.detailsSection {
+  display: flex;
+  flex-direction: column;
+}
+
+.detailsGrid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 20px;
+}
+
+.detailItem {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.detailItem.fullWidth {
+  grid-column: 1 / -1;
+}
+
+.detailLabel {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+}
+
+.detailInput,
+.detailSelect {
+  width: 100%;
+  padding: 14px 16px;
+  border: 1px solid var(--input-border);
+  border-radius: 12px;
+  font-size: 14px;
+  font-weight: 500;
+  background: var(--input-bg);
+  color: var(--text-primary);
+  transition: all 0.25s ease;
+  min-height: 48px;
+}
+
+.detailInput::placeholder {
+  color: var(--text-placeholder);
+  font-weight: 400;
+}
+
+.detailInput:focus,
+.detailSelect:focus {
+  outline: none;
+  border-color: var(--input-border-focus);
+  background: rgba(0, 0, 0, 0.04);
+  box-shadow: 0 0 0 4px rgba(0, 0, 0, 0.04);
+}
+
+.detailInput:hover:not(:focus),
+.detailSelect:hover:not(:focus) {
+  border-color: rgba(0, 0, 0, 0.12);
+  background: rgba(0, 0, 0, 0.04);
+}
+
+/* Select styling */
+.detailSelect {
+  cursor: pointer;
+  background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='rgba(255,255,255,0.5)' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e");
+  background-repeat: no-repeat;
+  background-position: right 14px center;
+  background-size: 16px;
+  padding-right: 44px;
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+.detailSelect option {
+  background: #1a1a2e;
+  color: var(--text-primary);
+  padding: 10px;
+}
+
+/* ============================================
+   Category Dropdown
+   ============================================ */
+.categoryDropdown {
+  width: 100%;
+}
+
+.colorSearchDropdown {
+  width: 100%;
+}
+
+/* ============================================
+   Size Multi-Select (matching utility Dropdown style)
+   ============================================ */
+.sizeMultiSelect {
+  position: relative;
+  display: inline-block;
+  width: 100%;
+}
+
+.sizeSelectTrigger {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0.5rem 0.75rem;
+  width: 100%;
+  min-height: 48px;
+  background: #f3f4f6;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  border-radius: 8px;
+  color: #111827;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.sizeSelectTrigger:hover {
+  background: #e5e7eb;
+  border-color: rgba(255, 255, 255, 0.25);
+}
+
+.sizeSelectTrigger.open {
+  border-color: #e5e5e5;
+  background: #e5e7eb;
+}
+
+.selectedSizes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  flex: 1;
+}
+
+.sizeTag {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 12px;
+  background: #ffffff;
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #f3f4f6;
+}
+
+.sizeTagRemove {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  border: none;
+  background: rgba(0, 0, 0, 0.1);
+  border-radius: 50%;
+  color: #666666;
+  cursor: pointer;
+  font-size: 12px;
+  line-height: 1;
+  transition: all 0.15s ease;
+}
+
+.sizeTagRemove:hover {
+  background: rgba(239, 68, 68, 0.8);
+  color: white;
+}
+
+.sizePlaceholder {
+  flex: 1;
+  text-align: left;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: #6b7280;
+}
+
+.sizeDropdownIcon {
+  flex-shrink: 0;
+  color: #6b7280;
+  transition: transform 0.2s ease;
+}
+
+.iconRotated {
+  transform: rotate(180deg);
+}
+
+.sizeDropdown {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  min-width: 100%;
+  background: #f3f4f6;
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+  z-index: 100;
+  overflow: hidden;
+  animation: dropdownFadeIn 0.15s ease;
+}
+
+@keyframes dropdownFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.sizeOption {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0.625rem 0.75rem;
+  font-size: 0.8125rem;
+  color: #4b5563;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.sizeOption:hover {
+  background: #e5e7eb;
+  color: #111827;
+}
+
+.sizeOption.selected {
+  background: rgba(0, 0, 0, 0.04);
+  color: #111827;
+}
+
+.checkIcon {
+  color: #22c15a;
+  flex-shrink: 0;
+}
+
+.dropdownSearch {
+  padding: 8px;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.04);
+  background: #f3f4f6;
+}
+
+.dropdownSearch input {
+  width: 100%;
+  padding: 8px 12px;
+  background: rgba(0, 0, 0, 0.04);
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  border-radius: 6px;
+  color: #111827;
+  font-size: 13px;
+  outline: none;
+}
+
+.dropdownSearch input:focus {
+  border-color: rgba(0, 0, 0, 0.2);
+  background: rgba(0, 0, 0, 0.04);
+}
+
+.optionsList {
+  max-height: 250px;
+  overflow-y: auto;
+}
+
+.noOptions {
+  padding: 16px;
+  text-align: center;
+  color: rgba(0, 0, 0, 0.3);
+  font-size: 13px;
+}
+
+/* ============================================
+   Description Section
+   ============================================ */
+.descriptionSection {
+  padding: 0 28px 28px;
+}
+
+.descriptionBox {
+  background: linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 0.03) 0%,
+    rgba(255, 255, 255, 0.01) 100%
+  );
+  border: 1px solid var(--card-border);
+  border-radius: 16px;
+  padding: 20px;
+}
+
+.descriptionLabel {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  margin-bottom: 12px;
+}
+
+.descriptionIcon {
+  font-size: 14px;
+}
+
+.descriptionInput {
+  width: 100%;
+  min-height: 100px;
+  padding: 14px 16px;
+  border: 1px solid var(--input-border);
+  border-radius: 12px;
+  font-size: 14px;
+  line-height: 1.6;
+  background: var(--input-bg);
+  color: var(--text-primary);
+  resize: vertical;
+  transition: all 0.25s ease;
+  font-family: inherit;
+}
+
+.descriptionInput::placeholder {
+  color: var(--text-placeholder);
+}
+
+.descriptionInput:focus {
+  outline: none;
+  border-color: var(--input-border-focus);
+  background: rgba(0, 0, 0, 0.04);
+  box-shadow: 0 0 0 4px rgba(0, 0, 0, 0.04);
+}
+
+/* ============================================
+   Responsive Styles
+   ============================================ */
+@media (max-width: 900px) {
+  .mainContent {
+    grid-template-columns: 180px 1fr;
+    gap: 24px;
+    padding: 24px;
+  }
+
+  .imageWrapper {
+    width: 180px;
+    height: 180px;
+  }
+
+  .imageWrapper :global(.uploadZone),
+  .imageWrapper :global(.imagePreviewContainer),
+  .imageWrapper :global(.imagePreview) {
+    min-height: 176px !important;
+    height: 176px;
+    max-height: 176px;
+  }
+}
+
+@media (max-width: 768px) {
+  /* ============================================
+     Compact Mobile Card Layout
+     Optimized for many products (100+)
+     ============================================ */
+  .card {
+    border-radius: 12px;
+  }
+
+  /* Compact header for mobile */
+  .header {
+    padding: 10px 14px;
+  }
+
+  .productNumber {
+    font-size: 11px;
+    gap: 8px;
+  }
+
+  .numberIndicator {
+    width: 8px;
+    height: 8px;
+  }
+
+  /* Compact horizontal layout for VIEW mode */
+  .mainContent {
+    grid-template-columns: 70px 1fr;
+    gap: 12px;
+    padding: 12px;
+  }
+
+  /* When editing: vertical stack with image on top, full width */
+  .card:not(.viewMode) .mainContent {
+    grid-template-columns: 1fr;
+    gap: 16px;
+    padding: 16px;
+    width: 100%;
+  }
+
+  /* Small square thumbnail in view mode */
+  .imageSection {
+    display: flex;
+    justify-content: center;
+    align-items: flex-start;
+  }
+
+  .imageWrapper {
+    width: 70px;
+    height: 70px;
+    border-radius: 10px;
+    overflow: hidden;
+  }
+
+  /* Larger image when editing - full width */
+  .card:not(.viewMode) .imageWrapper {
+    width: 100%;
+    max-width: 200px;
+    height: auto;
+    aspect-ratio: 1;
+    border-radius: 12px;
+  }
+
+  .imageWrapper :global(.uploadZone),
+  .imageWrapper :global(.imagePreviewContainer),
+  .imageWrapper :global(.imagePreview) {
+    min-height: 66px !important;
+    height: 66px;
+    max-height: 66px;
+  }
+
+  .card:not(.viewMode) .imageWrapper :global(.uploadZone),
+  .card:not(.viewMode) .imageWrapper :global(.imagePreviewContainer),
+  .card:not(.viewMode) .imageWrapper :global(.imagePreview) {
+    min-height: 196px !important;
+    height: auto;
+    max-height: none;
+  }
+
+  .viewImage {
+    width: 70px;
+    height: 70px;
+    border-radius: 10px;
+    object-fit: contain;
+    background: rgba(0, 0, 0, 0.2);
+  }
+
+  .noImage {
+    width: 70px;
+    height: 70px;
+    border-radius: 10px;
+  }
+
+  .card:not(.viewMode) .viewImage {
+    width: 100%;
+    max-width: 200px;
+    height: auto;
+    aspect-ratio: 1;
+    border-radius: 12px;
+    object-fit: cover;
+  }
+
+  .card:not(.viewMode) .noImage {
+    width: 100%;
+    max-width: 200px;
+    height: auto;
+    aspect-ratio: 1;
+    border-radius: 12px;
+  }
+
+  .noImage svg {
+    width: 24px;
+    height: 24px;
+  }
+
+  .card:not(.viewMode) .noImage svg {
+    width: 40px;
+    height: 40px;
+  }
+
+  .noImage span {
+    display: none;
+  }
+
+  .card:not(.viewMode) .noImage span {
+    display: block;
+  }
+
+  /* Compact details - show only essential info in view mode */
+  .detailsSection {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    min-height: 70px;
+    width: 100%;
+  }
+
+  .card:not(.viewMode) .detailsSection {
+    min-height: auto;
+  }
+
+  .detailsGrid {
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+
+  /* Only show name and price on mobile in VIEW mode, show all when editing */
+  .detailItem {
+    gap: 4px;
+  }
+
+  /* Hide extra fields ONLY in view mode (not editing) */
+  .viewMode .detailItem:nth-child(n + 3) {
+    display: none;
+  }
+
+  .detailLabel {
+    font-size: 10px;
+    letter-spacing: 0.5px;
+  }
+
+  .detailInput,
+  .detailSelect,
+  .sizeSelectTrigger {
+    padding: 8px 10px;
+    font-size: 13px;
+    min-height: 36px;
+    border-radius: 8px;
+  }
+
+  /* Hide description section on mobile in view mode */
+  .viewMode .descriptionSection {
+    display: none;
+  }
+
+  .descriptionSection {
+    padding: 0 12px 12px;
+  }
+
+  .descriptionBox {
+    padding: 12px;
+    border-radius: 10px;
+  }
+
+  .descriptionInput {
+    min-height: 60px;
+    padding: 10px 12px;
+    font-size: 13px;
+    border-radius: 8px;
+  }
+
+  /* Compact header actions */
+  .headerActions {
+    gap: 6px;
+  }
+
+  .editButton,
+  .removeButton,
+  .cancelButton {
+    width: 30px;
+    height: 30px;
+    border-radius: 8px;
+  }
+
+  .editButton svg,
+  .removeButton svg {
+    width: 14px;
+    height: 14px;
+  }
+
+  /* Compact variants section */
+  .variantsSection {
+    padding: 0 12px 12px;
+  }
+
+  .variantsToggle {
+    padding: 10px 14px;
+    border-radius: 10px;
+  }
+
+  .variantsLabel {
+    font-size: 12px;
+  }
+
+  .variantItem {
+    gap: 10px;
+    padding: 10px 12px;
+    border-radius: 8px;
+  }
+
+  .variantImage,
+  .variantImagePlaceholder {
+    width: 40px;
+    height: 40px;
+    border-radius: 6px;
+  }
+
+  .variantColor,
+  .variantSize,
+  .variantPrice,
+  .variantStock {
+    padding: 3px 10px;
+    font-size: 11px;
+  }
+}
+
+@media (max-width: 480px) {
+  .card {
+    border-radius: 10px;
+  }
+
+  .header {
+    padding: 8px 12px;
+  }
+
+  .productNumber {
+    font-size: 10px;
+    gap: 6px;
+  }
+
+  .numberIndicator {
+    width: 6px;
+    height: 6px;
+  }
+
+  .mainContent {
+    grid-template-columns: 60px 1fr;
+    gap: 10px;
+    padding: 10px;
+  }
+
+  .imageWrapper {
+    width: 60px;
+    height: 60px;
+  }
+
+  .imageWrapper :global(.uploadZone),
+  .imageWrapper :global(.imagePreviewContainer),
+  .imageWrapper :global(.imagePreview) {
+    min-height: 56px !important;
+    height: 56px;
+    max-height: 56px;
+  }
+
+  .viewImage,
+  .noImage {
+    width: 60px;
+    height: 60px;
+  }
+
+  .noImage svg {
+    width: 20px;
+    height: 20px;
+  }
+
+  .detailsSection {
+    min-height: 60px;
+  }
+
+  .detailInput,
+  .detailSelect,
+  .sizeSelectTrigger {
+    padding: 6px 8px;
+    font-size: 14px;
+    min-height: 32px;
+  }
+
+  .descriptionSection {
+    padding: 0 10px 10px;
+  }
+
+  .descriptionBox {
+    padding: 10px;
+  }
+
+  .editButton,
+  .removeButton,
+  .cancelButton {
+    width: 28px;
+    height: 28px;
+  }
+
+  .editButton svg,
+  .removeButton svg {
+    width: 12px;
+    height: 12px;
+  }
+}
+
+/* ============================================
+   Variants Section
+   ============================================ */
+/* .variantsSection {
+  padding: 0 28px 28px;
+} */
+
+.variantsToggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: 14px 18px;
+  background: linear-gradient(
+    180deg,
+    rgba(0, 0, 0, 0.04) 0%,
+    rgba(255, 255, 255, 0.02) 100%
+  );
+  border: 1px solid rgba(0, 0, 0, 0.04);
+  border-radius: 12px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.variantsToggle:hover {
+  background: rgba(0, 0, 0, 0.04);
+  border-color: rgba(0, 0, 0, 0.1);
+}
+
+.variantsLabel {
+  font-size: 13px;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.85);
+}
+
+.variantsArrow {
+  color: rgba(255, 255, 255, 0.5);
+  transition: transform 0.2s ease;
+}
+
+.variantsArrow.expanded {
+  transform: rotate(180deg);
+}
+
+.variantsList {
+  margin-top: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.variantItem {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 12px 16px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(0, 0, 0, 0.04);
+  border-radius: 10px;
+}
+
+.variantImage {
+  width: 48px;
+  height: 48px;
+  object-fit: cover;
+  border-radius: 8px;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+}
+
+.variantImagePlaceholder {
+  width: 48px;
+  height: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.04);
+  border-radius: 8px;
+  border: 1px solid rgba(0, 0, 0, 0.04);
+  color: rgba(0, 0, 0, 0.2);
+}
+
+.variantDetails {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+}
+
+.variantColor,
+.variantSize {
+  padding: 4px 12px;
+  background: rgba(0, 0, 0, 0.04);
+  border-radius: 16px;
+  font-size: 12px;
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.85);
+}
+
+.variantPrice {
+  padding: 4px 12px;
+  background: rgba(34, 193, 90, 0.15);
+  border-radius: 16px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #22c15a;
+}
+
+.variantStock {
+  padding: 4px 12px;
+  background: rgba(59, 130, 246, 0.15);
+  border-radius: 16px;
+  font-size: 12px;
+  font-weight: 500;
+  color: #60a5fa;
+}
+
+/* ============================================
+   Header Actions Container
+   ============================================ */
+.headerActions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.editButton {
+  width: 36px;
+  height: 36px;
+  border: 1px solid rgba(0, 0, 0, 0.12);
+  background: transparent;
+  color: rgba(255, 255, 255, 0.7);
+  border-radius: 10px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+}
+
+.editButton:hover {
+  background: rgba(0, 0, 0, 0.08);
+  border-color: rgba(0, 0, 0, 0.2);
+  color: white;
+}
+
+.editButton.editing {
+  background: #ffffff;
+  border-color: #e5e5e5;
+  color: #111827;
+}
+
+.editButton.editing:hover {
+  background: #e0e0e0;
+}
+
+/* Cancel Button */
+.cancelButton {
+  width: 36px;
+  height: 36px;
+  border: 1px solid rgba(239, 68, 68, 0.4);
+  background: transparent;
+  color: rgba(239, 68, 68, 0.8);
+  border-radius: 10px;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+}
+
+.cancelButton:hover {
+  background: rgba(239, 68, 68, 0.15);
+  border-color: rgba(239, 68, 68, 0.6);
+  color: #ef4444;
+}
+
+/* ============================================
+   View Mode - Fixed Square Image
+   ============================================ */
+.viewImage {
+  width: 200px;
+  height: 200px;
+  object-fit: cover;
+  border-radius: 14px;
+  display: block;
+}
+
+.noImage {
+  width: 200px;
+  height: 200px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: 14px;
+  border: 2px dashed rgba(0, 0, 0, 0.1);
+  color: rgba(0, 0, 0, 0.2);
+  font-size: 12px;
+}
+
+/* ============================================
+   Disabled Input Styles
+   ============================================ */
+.inputDisabled {
+  cursor: not-allowed;
+  opacity: 0.7;
+  background: rgba(255, 255, 255, 0.02) !important;
+  border-color: rgba(0, 0, 0, 0.04) !important;
+}
+
+.inputDisabled:hover {
+  border-color: rgba(0, 0, 0, 0.04) !important;
+  background: rgba(255, 255, 255, 0.02) !important;
+}
+
+.disabledWrapper {
+  pointer-events: none;
+  opacity: 0.7;
+}
+
+.disabledWrapper .sizeSelectTrigger {
+  cursor: not-allowed;
+  background: rgba(255, 255, 255, 0.02);
+  border-color: rgba(0, 0, 0, 0.04);
+}
+
+/* ============================================
+   Responsive - View Mode
+   ============================================ */
+@media (max-width: 768px) {
+  .viewImage,
+  .noImage {
+    width: 180px;
+    height: 180px;
+  }
+}
+
+@media (max-width: 480px) {
+  .viewImage,
+  .noImage {
+    width: 160px;
+    height: 160px;
+  }
+
+  .headerActions {
+    gap: 8px;
+  }
+
+  .editButton {
+    width: 32px;
+    height: 32px;
+  }
+}
+
+/* ============================================
+   Variant Edit Feature Styles
+   ============================================ */
+
+/* Variant Item with Edit Button */
+.variantItemWrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 12px 16px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(0, 0, 0, 0.04);
+  border-radius: 10px;
+  transition: all 0.2s ease;
+}
+
+.variantItemWrapper:hover {
+  background: rgba(0, 0, 0, 0.04);
+  border-color: rgba(0, 0, 0, 0.08);
+}
+
+.variantItemContent {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex: 1;
+}
+
+.variantActions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+}
+
+.variantEditButton {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  background: rgba(0, 0, 0, 0.04);
+  border-radius: 8px;
+  color: rgba(255, 255, 255, 0.5);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  opacity: 0;
+}
+
+.variantItemWrapper:hover .variantEditButton {
+  opacity: 1;
+}
+
+.variantEditButton:hover {
+  background: rgba(0, 0, 0, 0.08);
+  border-color: rgba(255, 255, 255, 0.25);
+  color: #111827;
+  transform: scale(1.05);
+}
+
+.variantEditButton:active {
+  transform: scale(0.95);
+}
+
+.variantDeleteButton {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border: 1px solid rgba(239, 68, 68, 0.2);
+  background: rgba(239, 68, 68, 0.06);
+  border-radius: 8px;
+  color: rgba(239, 68, 68, 0.5);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  opacity: 0;
+  flex-shrink: 0;
+}
+
+.variantItemWrapper:hover .variantDeleteButton {
+  opacity: 1;
+}
+
+.variantDeleteButton:hover {
+  background: rgba(239, 68, 68, 0.18);
+  border-color: rgba(239, 68, 68, 0.5);
+  color: #ef4444;
+  transform: scale(1.05);
+}
+
+.variantDeleteButton:active {
+  transform: scale(0.95);
+}
+
+/* ============================================
+   Variant Edit Panel Content
+   ============================================ */
+.variantEditPanelContent {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.variantEditImageSection {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.variantEditImageLabel {
+  font-size: 12px;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.5);
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+}
+
+.variantEditImageWrapper {
+  width: 100%;
+  max-width: 200px;
+  aspect-ratio: 1;
+  border-radius: 12px;
+  overflow: hidden;
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid rgba(0, 0, 0, 0.08);
+}
+
+.variantEditCurrentImage {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 12px;
+}
+
+.variantEditNoImage {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  color: rgba(0, 0, 0, 0.2);
+  font-size: 12px;
+}
+
+/* Form Grid */
+.variantEditForm {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 20px;
+}
+
+.variantEditField {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.variantEditField.fullWidth {
+  grid-column: 1 / -1;
+}
+
+.variantEditFieldLabel {
+  font-size: 11px;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.5);
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+}
+
+.variantEditInput {
+  width: 100%;
+  padding: 14px 16px;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  border-radius: 12px;
+  font-size: 14px;
+  font-weight: 500;
+  background: rgba(255, 255, 255, 0.03);
+  color: #111827;
+  transition: all 0.25s ease;
+}
+
+.variantEditInput::placeholder {
+  color: rgba(255, 255, 255, 0.35);
+}
+
+.variantEditInput:focus {
+  outline: none;
+  border-color: #e5e5e5;
+  background: rgba(0, 0, 0, 0.04);
+  box-shadow: 0 0 0 4px rgba(0, 0, 0, 0.04);
+}
+
+.variantEditInput:hover:not(:focus) {
+  border-color: rgba(0, 0, 0, 0.12);
+  background: rgba(0, 0, 0, 0.04);
+}
+
+/* Action Buttons */
+.variantEditActions {
+  display: flex;
+  gap: 12px;
+  margin-top: 8px;
+}
+
+.variantEditSaveBtn {
+  flex: 1;
+  padding: 14px 24px;
+  background: #ffffff;
+  border: none;
+  border-radius: 12px;
+  font-size: 14px;
+  font-weight: 600;
+  color: #111827;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.variantEditSaveBtn:hover {
+  background: #e8e8e8;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+.variantEditSaveBtn:active {
+  transform: translateY(0);
+}
+
+.variantEditCancelBtn {
+  padding: 14px 24px;
+  background: transparent;
+  border: 1px solid rgba(0, 0, 0, 0.12);
+  border-radius: 12px;
+  font-size: 14px;
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.7);
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.variantEditCancelBtn:hover {
+  background: rgba(0, 0, 0, 0.04);
+  border-color: rgba(0, 0, 0, 0.2);
+  color: #111827;
+}
+
+/* Responsive for Variant Edit */
+@media (max-width: 560px) {
+  .variantEditForm {
+    grid-template-columns: 1fr;
+  }
+
+  .variantEditImageWrapper {
+    max-width: 160px;
+  }
+
+  .variantEditActions {
+    flex-direction: column;
+  }
+
+  .variantEditButton {
+    opacity: 1;
+  }
+}
+
+/* ============================================
+   Size-Based Pricing Toggle (for Variant Edit)
+   ============================================ */
+.sizePricingToggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+  background: linear-gradient(
+    135deg,
+    rgba(34, 193, 90, 0.08) 0%,
+    rgba(34, 193, 90, 0.02) 100%
+  );
+  border: 1px solid rgba(34, 193, 90, 0.2);
+  border-radius: 12px;
+  transition: all 0.3s ease;
+}
+
+.sizePricingToggle:hover {
+  border-color: rgba(34, 193, 90, 0.35);
+  background: linear-gradient(
+    135deg,
+    rgba(34, 193, 90, 0.12) 0%,
+    rgba(34, 193, 90, 0.04) 100%
+  );
+}
+
+.toggleInfo {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.toggleLabel {
+  font-size: 14px;
+  font-weight: 600;
+  color: #111827;
+  letter-spacing: -0.01em;
+}
+
+.toggleHint {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.5);
+  font-weight: 400;
+}
+
+.toggleSwitch {
+  position: relative;
+  width: 52px;
+  height: 28px;
+  background: rgba(0, 0, 0, 0.08);
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  border-radius: 14px;
+  cursor: pointer;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  flex-shrink: 0;
+}
+
+.toggleSwitch:hover {
+  background: rgba(255, 255, 255, 0.18);
+}
+
+.toggleSwitch.toggleActive {
+  background: linear-gradient(135deg, #22c15a 0%, #1fa850 100%);
+  border-color: #22c15a;
+  box-shadow: 0 0 16px rgba(34, 193, 90, 0.35);
+}
+
+.toggleKnob {
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 20px;
+  height: 20px;
+  background: #ffffff;
+  border-radius: 50%;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
+}
+
+.toggleSwitch.toggleActive .toggleKnob {
+  transform: translateX(24px);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
+}
+
+/* Size Prices Container */
+.sizePricesContainer {
+  background: linear-gradient(
+    180deg,
+    rgba(0, 0, 0, 0.04) 0%,
+    rgba(255, 255, 255, 0.01) 100%
+  );
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  border-radius: 16px;
+  padding: 16px;
+  animation: slideDown 0.3s ease-out;
+}
+
+@keyframes slideDown {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.sizePricesGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
+  gap: 12px;
+}
+
+.sizePriceItem {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.sizePriceLabel {
+  font-size: 13px;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.85);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 4px 10px;
+  background: rgba(34, 193, 90, 0.15);
+  border-radius: 6px;
+  text-align: center;
+  border: 1px solid rgba(34, 193, 90, 0.25);
+}
+
+.sizePriceInputWrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.currencySymbol {
+  position: absolute;
+  left: 12px;
+  font-size: 14px;
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.5);
+  z-index: 1;
+  pointer-events: none;
+}
+
+.sizePriceInput {
+  width: 100%;
+  padding: 10px 12px 10px 28px;
+  background: rgba(0, 0, 0, 0.25);
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 500;
+  color: #111827;
+  text-align: right;
+  transition: all 0.2s ease;
+  appearance: textfield;
+  -moz-appearance: textfield;
+}
+
+.sizePriceInput::-webkit-outer-spin-button,
+.sizePriceInput::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.sizePriceInput:focus {
+  outline: none;
+  border-color: #22c15a;
+  background: rgba(0, 0, 0, 0.35);
+  box-shadow: 0 0 0 3px rgba(34, 193, 90, 0.15);
+}
+
+.sizePriceInput::placeholder {
+  color: rgba(255, 255, 255, 0.25);
+}

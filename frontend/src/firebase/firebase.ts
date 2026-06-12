@@ -18,8 +18,10 @@ import { initializeApp, FirebaseApp, getApps, getApp } from "firebase/app";
 import {
   getAuth,
   Auth,
+  initializeAuth,
   browserLocalPersistence,
-  setPersistence,
+  indexedDBLocalPersistence,
+  browserSessionPersistence,
   connectAuthEmulator,
 } from "firebase/auth";
 import { getFirestore, Firestore } from "firebase/firestore";
@@ -160,41 +162,39 @@ const app = initializeFirebaseApp();
 // SERVICE INITIALIZATION
 // =============================================================================
 
-export const auth: Auth = getAuth(app);
+/**
+ * Initialize Firebase Auth with optimal multi-layered persistence.
+ * Solves the "Duplicate Tab Logout" race condition by synchronously
+ * providing all persistence layers during initialization.
+ */
+function initializeFirebaseAuth(firebaseApp: FirebaseApp): Auth {
+  if (typeof window === "undefined") {
+    // Server-side initialization
+    return getAuth(firebaseApp);
+  }
+
+  try {
+    // Synchronously initialize with all fallback layers.
+    // Firebase will search these in order for an existing session.
+    // This prevents onAuthStateChanged from firing with 'null' 
+    // before an async setPersistence call can complete.
+    return initializeAuth(firebaseApp, {
+      persistence: [indexedDBLocalPersistence, browserLocalPersistence, browserSessionPersistence],
+    });
+  } catch (error: any) {
+    // If auth is already initialized (e.g., during React Fast Refresh),
+    // we safely fall back to getAuth.
+    if (error.code === "auth/already-initialized") {
+      return getAuth(firebaseApp);
+    }
+    console.error("[Firebase] Failed to initialize auth:", error);
+    return getAuth(firebaseApp);
+  }
+}
+
+export const auth: Auth = initializeFirebaseAuth(app);
 export const db: Firestore = getFirestore(app);
 export const storage: FirebaseStorage = getStorage(app);
-
-// =============================================================================
-// AUTH PERSISTENCE
-// =============================================================================
-
-/**
- * Set auth persistence to LOCAL (survives browser restarts)
- * 
- * This is important for:
- * - Maintaining login state across sessions
- * - Supporting redirect auth flows (the redirect loses in-memory state)
- * - Better UX (users stay logged in)
- */
-if (typeof window !== "undefined") {
-  setPersistence(auth, browserLocalPersistence)
-    .then(() => {
-      console.log("[Firebase] Auth persistence set to LOCAL");
-    })
-    .catch((error) => {
-      console.error("[Firebase] Error setting auth persistence:", error);
-      
-      // If local persistence fails (e.g., private browsing), try session
-      if (error.code === "auth/storage-unauthorized") {
-        console.warn("[Firebase] Local storage not available, using session persistence");
-        import("firebase/auth").then(({ browserSessionPersistence, setPersistence }) => {
-          setPersistence(auth, browserSessionPersistence).catch((err) => {
-            console.error("[Firebase] Session persistence also failed:", err);
-          });
-        });
-      }
-    });
-}
 
 // =============================================================================
 // EMULATOR SUPPORT (Development Only)
@@ -208,9 +208,15 @@ if (
   typeof window !== "undefined" &&
   process.env.NEXT_PUBLIC_USE_FIREBASE_EMULATOR === "true"
 ) {
-  const emulatorHost = process.env.NEXT_PUBLIC_FIREBASE_AUTH_EMULATOR_HOST || "localhost:9099";
-  connectAuthEmulator(auth, `http://${emulatorHost}`);
-  console.log(`[Firebase] Connected to Auth Emulator at ${emulatorHost}`);
+  try {
+    const emulatorHost = process.env.NEXT_PUBLIC_FIREBASE_AUTH_EMULATOR_HOST || "localhost:9099";
+    connectAuthEmulator(auth, `http://${emulatorHost}`, { disableWarnings: true });
+    console.log(`[Firebase] Connected to Auth Emulator at ${emulatorHost}`);
+  } catch (error: any) {
+    if (error.code !== "auth/emulator-config-failed") {
+      console.error("[Firebase] Emulator connection failed:", error);
+    }
+  }
 }
 
 // =============================================================================

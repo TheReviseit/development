@@ -33,7 +33,7 @@ export function useRoutePreload() {
  * Enhanced button with hover preloading
  * Usage example:
  *
- * const handleMouseEnter = useHoverPreload('/dashboard');
+ * const handleMouseEnter = useHoverPreload('/home');
  * <a onMouseEnter={handleMouseEnter}>Dashboard</a>
  */
 export function useHoverPreload(route: string) {
@@ -76,7 +76,7 @@ export function usePredictivePreload(
       if (isAuthenticated) {
         // User is logged in - preload dashboard or onboarding
         if (onboardingCompleted) {
-          router.prefetch("/dashboard");
+          router.prefetch("/home");
         } else {
           router.prefetch("/onboarding");
         }

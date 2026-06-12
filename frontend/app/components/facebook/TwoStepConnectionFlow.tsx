@@ -101,7 +101,7 @@ export default function TwoStepConnectionFlow() {
       if (connectionData.connected && connectionData.whatsappAccount) {
         setStep2Completed(true);
         // Redirect to dashboard
-        router.push("/dashboard?connection=success");
+        router.push("/home?connection=success");
       }
     } catch (err) {
       console.error("Error checking connection status:", err);

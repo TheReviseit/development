@@ -136,7 +136,7 @@ export default function WhatsAppAdmin() {
       <header className={styles.header}>
         <div className={styles.headerContent}>
           <button
-            onClick={() => router.push("/dashboard")}
+            onClick={() => router.push("/home")}
             className={styles.backButton}
           >
             <svg

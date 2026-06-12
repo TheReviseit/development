@@ -16,7 +16,6 @@ import { redirect } from "next/navigation";
 import Image from "next/image";
 import Link from "next/link";
 import UpgradeContainer from "./components/UpgradeContainer";
-import ShopFooter from "../shop/components/ShopFooter";
 import logo from "@/public/logo.png";
 
 // Domain-specific metadata
@@ -92,7 +91,7 @@ export default async function UpgradePage({
             <span className="text-base font-bold text-gray-900">Flowauxi</span>
           </Link>
           <Link
-            href="/dashboard"
+            href="/home"
             className="inline-flex items-center gap-1.5 px-4 py-2 text-sm font-medium text-white bg-gray-900 rounded-lg hover:bg-gray-800 transition-colors duration-150"
           >
             <svg
@@ -133,9 +132,6 @@ export default async function UpgradePage({
           recommendedPlan={recommendedPlan}
         />
       </div>
-
-      {/* Footer — Dark variant */}
-      <ShopFooter dark />
     </div>
   );
 }

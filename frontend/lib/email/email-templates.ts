@@ -94,7 +94,7 @@ export const welcomeTemplate: EmailTemplate = {
       <p style="font-size: 16px; line-height: 1.8;">We're absolutely <strong>thrilled</strong> to have you here! You've just taken the first step towards revolutionizing how you manage customer conversations. Let's make magic happen! ✨</p>
       
       <p style="font-size: 16px; margin-top: 24px;">Ready to dive in? Your journey starts here!</p>
-      <a href="https://flowauxi.com/dashboard" class="button" style="display: inline-block; padding: 12px 24px; background-color: #000000; color: #ffffff !important; text-decoration: none; border-radius: 6px; margin: 20px 0;">Go to Dashboard ❤️</a>
+      <a href="https://flowauxi.com/home" class="button" style="display: inline-block; padding: 12px 24px; background-color: #000000; color: #ffffff !important; text-decoration: none; border-radius: 6px; margin: 20px 0;">Go to Dashboard ❤️</a>
       
       <p style="font-size: 14px; color: #666; margin-top: 32px;">Got questions? We're here to help! Shoot us an email at <a href="mailto:contact@flowauxi.com" style="color: #22c15a; text-decoration: none;">contact@flowauxi.com</a> - we'd love to hear from you! 💚</p>
     `;

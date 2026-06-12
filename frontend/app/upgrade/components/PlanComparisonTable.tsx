@@ -25,6 +25,7 @@ interface Plan {
     hard_limit?: number | null;
     display: string;
   }>;
+  features_json?: string[];
   // Proration fields (attached by backend when user has active subscription)
   proration_charge_paise?: number;
   proration_percentage?: number;
@@ -96,7 +97,10 @@ export default function PlanComparisonTable({
             sortedPlans.find((p) => p.plan_slug === selectedPlanForDiff)
               ?.display_name || ""
           }
-          differences={featureDifferences[selectedPlanForDiff]}
+          features={
+            sortedPlans.find((p) => p.plan_slug === selectedPlanForDiff)
+              ?.features_json || []
+          }
           onClose={() => setSelectedPlanForDiff(null)}
           domain={domain}
         />

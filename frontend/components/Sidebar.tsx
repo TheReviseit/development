@@ -3,11 +3,31 @@
 import { useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import styles from "./Sidebar.module.css";
+import {
+  TrendingUp,
+  Inbox,
+  Megaphone,
+  Send,
+  FileText,
+  Users,
+  FileEdit,
+  Wrench,
+  Bot,
+  Play,
+  Settings,
+  ChevronDown,
+  ChevronRight,
+  ChevronLeft,
+  Briefcase,
+  Package,
+  Layers,
+  LayoutGrid
+} from "lucide-react";
 
 interface NavItem {
   id: string;
   label: string;
-  icon: string;
+  icon: React.ReactNode;
   path: string;
   badge?: number;
   subItems?: NavItem[];
@@ -23,175 +43,175 @@ export default function Sidebar() {
     {
       id: "dashboard",
       label: "Dashboard",
-      icon: "📊",
-      path: "/dashboard",
+      icon: <TrendingUp size={18} />,
+      path: "/home",
     },
     {
       id: "conversations",
       label: "Conversations",
-      icon: "💬",
-      path: "/dashboard/conversations",
+      icon: <Inbox size={18} />,
+      path: "/conversations",
       badge: 12,
     },
     {
       id: "messages",
       label: "Messages",
-      icon: "📨",
-      path: "/dashboard/messages",
+      icon: <Send size={18} />,
+      path: "/messages",
       subItems: [
         {
           id: "quick-replies",
           label: "Quick Replies",
-          icon: "⚡",
-          path: "/dashboard/messages/quick-replies",
+          icon: <FileText size={16} />,
+          path: "/messages/quick-replies",
         },
         {
           id: "templates",
           label: "Templates",
-          icon: "📝",
-          path: "/dashboard/messages/templates",
+          icon: <FileText size={16} />,
+          path: "/messages/templates",
         },
       ],
     },
     {
       id: "automation",
       label: "Automation",
-      icon: "🤖",
-      path: "/dashboard/automation",
+      icon: <Bot size={18} />,
+      path: "/automation",
       subItems: [
         {
           id: "workflows",
           label: "Workflows",
-          icon: "🔄",
-          path: "/dashboard/automation/workflows",
+          icon: <Play size={16} />,
+          path: "/automation/workflows",
         },
         {
           id: "chatbots",
           label: "Chatbots",
-          icon: "🤖",
-          path: "/dashboard/automation/chatbots",
+          icon: <Bot size={16} />,
+          path: "/automation/chatbots",
         },
         {
           id: "triggers",
           label: "Triggers",
-          icon: "⚡",
-          path: "/dashboard/automation/triggers",
+          icon: <Play size={16} />,
+          path: "/automation/triggers",
         },
       ],
     },
     {
       id: "campaigns",
       label: "Campaigns",
-      icon: "📢",
-      path: "/dashboard/campaigns",
+      icon: <Megaphone size={18} />,
+      path: "/campaigns",
       subItems: [
         {
           id: "broadcast",
           label: "Broadcast",
-          icon: "📡",
-          path: "/dashboard/campaigns/broadcast",
+          icon: <Send size={16} />,
+          path: "/campaigns/broadcast",
         },
         {
           id: "scheduled",
           label: "Scheduled",
-          icon: "⏰",
-          path: "/dashboard/campaigns/scheduled",
+          icon: <Play size={16} />,
+          path: "/campaigns/scheduled",
         },
         {
           id: "drip",
           label: "Drip Campaigns",
-          icon: "💧",
-          path: "/dashboard/campaigns/drip",
+          icon: <Layers size={16} />,
+          path: "/campaigns/drip",
         },
       ],
     },
     {
       id: "contacts",
       label: "Contacts",
-      icon: "👥",
-      path: "/dashboard/contacts",
+      icon: <Users size={18} />,
+      path: "/contacts",
       subItems: [
         {
           id: "all-contacts",
           label: "All Contacts",
-          icon: "📋",
-          path: "/dashboard/contacts/all",
+          icon: <Users size={16} />,
+          path: "/contacts/all",
         },
         {
           id: "segments",
           label: "Segments",
-          icon: "🏷️",
-          path: "/dashboard/contacts/segments",
+          icon: <Layers size={16} />,
+          path: "/contacts/segments",
         },
         {
           id: "import",
           label: "Import",
-          icon: "📥",
-          path: "/dashboard/contacts/import",
+          icon: <FileEdit size={16} />,
+          path: "/contacts/import",
         },
       ],
     },
     {
       id: "analytics",
       label: "Analytics",
-      icon: "📈",
-      path: "/dashboard/analytics",
+      icon: <TrendingUp size={18} />,
+      path: "/analytics",
       subItems: [
         {
           id: "overview",
           label: "Overview",
-          icon: "📊",
-          path: "/dashboard/analytics/overview",
+          icon: <TrendingUp size={16} />,
+          path: "/analytics/overview",
         },
         {
           id: "messages-stats",
           label: "Messages",
-          icon: "💬",
-          path: "/dashboard/analytics/messages",
+          icon: <Send size={16} />,
+          path: "/analytics/messages",
         },
         {
           id: "campaigns-stats",
           label: "Campaigns",
-          icon: "📢",
-          path: "/dashboard/analytics/campaigns",
+          icon: <Megaphone size={16} />,
+          path: "/analytics/campaigns",
         },
       ],
     },
     {
       id: "integrations",
       label: "Integrations",
-      icon: "🔌",
-      path: "/dashboard/integrations",
+      icon: <LayoutGrid size={18} />,
+      path: "/integrations",
     },
     {
       id: "settings",
       label: "Settings",
-      icon: "⚙️",
-      path: "/dashboard/settings",
+      icon: <Settings size={18} />,
+      path: "/settings",
       subItems: [
         {
           id: "profile",
           label: "Profile",
-          icon: "👤",
-          path: "/dashboard/settings/profile",
+          icon: <Users size={16} />,
+          path: "/settings/profile",
         },
         {
           id: "whatsapp",
           label: "WhatsApp",
-          icon: "📱",
-          path: "/dashboard/settings/whatsapp",
+          icon: <Send size={16} />,
+          path: "/settings/whatsapp",
         },
         {
           id: "team",
           label: "Team",
-          icon: "👥",
-          path: "/dashboard/settings/team",
+          icon: <Users size={16} />,
+          path: "/settings/team",
         },
         {
           id: "billing",
           label: "Billing",
-          icon: "💳",
-          path: "/dashboard/settings/billing",
+          icon: <Package size={16} />,
+          path: "/settings/billing",
         },
       ],
     },
@@ -232,7 +252,7 @@ export default function Sidebar() {
           onClick={() => setIsCollapsed(!isCollapsed)}
           title={isCollapsed ? "Expand sidebar" : "Collapse sidebar"}
         >
-          {isCollapsed ? "→" : "←"}
+          {isCollapsed ? <ChevronRight size={16} /> : <ChevronLeft size={16} />}
         </button>
       </div>
 
@@ -255,7 +275,15 @@ export default function Sidebar() {
                   )}
                   {item.subItems && (
                     <span className={styles.expandIcon}>
-                      {expandedItems.includes(item.id) ? "▼" : "▶"}
+                      <ChevronDown
+                        size={14}
+                        style={{
+                          transform: expandedItems.includes(item.id)
+                            ? "rotate(180deg)"
+                            : "rotate(0deg)",
+                          transition: "transform 0.2s ease",
+                        }}
+                      />
                     </span>
                   )}
                 </>

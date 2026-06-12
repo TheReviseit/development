@@ -110,7 +110,7 @@ export function PricingClient({
             console.log("[Pricing] Payment verified successfully");
 
             // Redirect to dashboard
-            window.location.href = "/dashboard";
+            window.location.href = "/home";
           } catch (error) {
             console.error("[Pricing] Payment verification failed:", error);
             setPaymentError(

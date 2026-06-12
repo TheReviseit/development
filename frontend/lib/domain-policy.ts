@@ -48,7 +48,7 @@ export const DOMAIN_CONFIG: Record<string, DomainConfig> = {
     product: "api",
     allowedRoutes: ["/apis", "/console", "/docs", "/pricing"],
     blockedRoutes: [
-      "/dashboard",
+      "/home",
       "/onboarding",
       "/settings",
       "/whatsapp-admin",
@@ -61,7 +61,7 @@ export const DOMAIN_CONFIG: Record<string, DomainConfig> = {
     product: "dashboard",
     allowedRoutes: [
       "/",
-      "/dashboard",
+      "/home",
       "/login",
       "/signup",
       "/onboarding",

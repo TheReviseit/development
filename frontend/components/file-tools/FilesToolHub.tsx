@@ -87,10 +87,10 @@ export default function FilesToolHub({
           </div>
           {showDashboardActions && (
             <div className={styles.actions}>
-              <Link className={styles.actionLink} href="/dashboard/files/history">
+              <Link className={styles.actionLink} href="/files/history">
                 {t("actions.history")}
               </Link>
-              <Link className={styles.actionLink} href="/dashboard/files/settings">
+              <Link className={styles.actionLink} href="/files/settings">
                 {t("actions.settings")}
               </Link>
             </div>
