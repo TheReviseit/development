@@ -24,6 +24,7 @@ interface Conversation {
   phone: string;
   profilePic?: string;
   lastMessage: string;
+  lastMessageDirection?: string;
   lastMessageType?: string;
   time: string;
   timestamp: string;
@@ -871,23 +872,24 @@ function formatPhoneNumber(phone: string): string {
 
 // Generate consistent random color based on string (name)
 const avatarColors = [
-  "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
-  "linear-gradient(135deg, #f093fb 0%, #f5576c 100%)",
-  "linear-gradient(135deg, #4facfe 0%, #00f2fe 100%)",
-  "linear-gradient(135deg, #43e97b 0%, #38f9d7 100%)",
-  "linear-gradient(135deg, #fa709a 0%, #fee140 100%)",
-  "linear-gradient(135deg, #a8edea 0%, #fed6e3 100%)",
-  "linear-gradient(135deg, #ff9a9e 0%, #fecfef 100%)",
-  "linear-gradient(135deg, #ffecd2 0%, #fcb69f 100%)",
-  "linear-gradient(135deg, #667eea 0%, #f093fb 100%)",
-  "linear-gradient(135deg, #5ee7df 0%, #b490ca 100%)",
+  "#2563eb", // Blue
+  "#db2777", // Pink
+  "#059669", // Green
+  "#7c3aed", // Purple
+  "#ea580c", // Orange
 ];
 
 function getAvatarColor(name: string): string {
+  if (!name) return avatarColors[0];
   let hash = 0;
   for (let i = 0; i < name.length; i++) {
-    hash = name.charCodeAt(i) + ((hash << 5) - hash);
+    hash = (hash << 5) - hash + name.charCodeAt(i);
+    hash |= 0; // Convert to 32bit integer
   }
+  // Add an extra pseudo-random step to break common name collisions
+  hash = (hash ^ (hash >> 16)) * 0x85ebca6b;
+  hash = hash ^ (hash >> 13);
+  
   const index = Math.abs(hash) % avatarColors.length;
   return avatarColors[index];
 }
@@ -915,7 +917,7 @@ const MessageBubble = memo(function MessageBubble({
       className={`${styles.messageWrapper} ${
         msg.sender === "user" ? styles.messageOut : styles.messageIn
       }`}
-      style={{ marginBottom: "0.75rem" }}
+      style={{ marginBottom: "0.25rem" }}
     >
       <div
         className={isImageMessage ? undefined : styles.messageBubble}
@@ -1086,14 +1088,14 @@ const MessageBubble = memo(function MessageBubble({
                   <svg width="18" height="11" viewBox="0 0 18 11" fill="none">
                     <path
                       d="M1 5.5L4 8.5L9 2.5"
-                      stroke="#53bdeb"
+                      stroke="#000000"
                       strokeWidth="1.5"
                       strokeLinecap="round"
                       strokeLinejoin="round"
                     />
                     <path
                       d="M6 5.5L9 8.5L14 2.5"
-                      stroke="#53bdeb"
+                      stroke="#000000"
                       strokeWidth="1.5"
                       strokeLinecap="round"
                       strokeLinejoin="round"
@@ -1812,9 +1814,12 @@ export default function MessagesView() {
   useEffect(() => {
     console.log("🔌 Setting up Supabase realtime subscription...");
 
+    // Use unique channel names to prevent conflicts on re-mount
+    const channelId = Date.now().toString(36);
+
     // Subscribe to messages table for new messages
     const messagesChannel = supabase
-      .channel("whatsapp-messages-realtime")
+      .channel(`whatsapp-messages-rt-${channelId}`)
       .on(
         "postgres_changes",
         {
@@ -1987,11 +1992,14 @@ export default function MessagesView() {
       )
       .subscribe((status) => {
         console.log("🔌 Messages realtime subscription status:", status);
+        if (status === "CHANNEL_ERROR") {
+          console.error("❌ Messages channel error - will auto-reconnect");
+        }
       });
 
     // Subscribe to conversations table for stats updates (last message, unread count, etc.)
     const conversationsChannel = supabase
-      .channel("whatsapp-conversations-realtime")
+      .channel(`whatsapp-conversations-rt-${channelId}`)
       .on(
         "postgres_changes",
         {
@@ -2018,6 +2026,7 @@ export default function MessagesView() {
                 formatPhoneNumber(updatedConv.customer_phone),
               phone: updatedConv.customer_phone,
               lastMessage: updatedConv.last_message_preview || "",
+              lastMessageDirection: updatedConv.last_message_direction,
               time: formatRelativeTime(
                 updatedConv.last_message_at || updatedConv.created_at,
               ),
@@ -2049,6 +2058,7 @@ export default function MessagesView() {
                 lastMessage:
                   updatedConv.last_message_preview ||
                   updated[index].lastMessage,
+                lastMessageDirection: updatedConv.last_message_direction || updated[index].lastMessageDirection,
                 time: formatRelativeTime(
                   updatedConv.last_message_at || updated[index].timestamp,
                 ),
@@ -2093,14 +2103,91 @@ export default function MessagesView() {
       )
       .subscribe((status) => {
         console.log("🔌 Conversations realtime subscription status:", status);
+        if (status === "CHANNEL_ERROR") {
+          console.error("❌ Conversations channel error - will auto-reconnect");
+        }
       });
+
+    // Reconnect realtime when tab becomes visible again (handles browser throttling)
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        console.log("👁️ Tab visible - checking realtime connection...");
+        // Force a re-subscribe to handle browser throttling of background WebSocket connections
+        messagesChannel.subscribe();
+        conversationsChannel.subscribe();
+      }
+    };
+    document.addEventListener("visibilitychange", handleVisibilityChange);
 
     return () => {
       console.log("🔌 Cleaning up realtime subscriptions...");
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
       supabase.removeChannel(messagesChannel);
       supabase.removeChannel(conversationsChannel);
     };
   }, []);
+
+  // FALLBACK POLLING: Safety net for when Supabase Realtime silently fails
+  // Checks for new messages every 5 seconds for the active conversation
+  // This is lightweight — only fetches messages newer than the latest in state
+  useEffect(() => {
+    if (!selectedConversation) return;
+
+    const convPhone = selectedConversation.phone;
+    const convId = selectedConversation.id;
+
+    const pollInterval = setInterval(async () => {
+      // Only poll when tab is visible
+      if (document.hidden) return;
+
+      try {
+        // Get the latest message timestamp from current state
+        const currentMessages = messagesRef.current;
+        const latestTimestamp = currentMessages.length > 0
+          ? currentMessages[currentMessages.length - 1].timestamp
+          : null;
+
+        // Build URL with after parameter to only get new messages
+        let url = `/api/whatsapp/messages?contactPhone=${encodeURIComponent(convPhone)}`;
+        if (latestTimestamp) {
+          url += `&after=${encodeURIComponent(latestTimestamp)}`;
+        }
+
+        const response = await fetch(url, { cache: "no-store" });
+        const data = await response.json();
+
+        // Guard: check we're still viewing the same conversation
+        if (selectedConversationRef.current?.id !== convId) return;
+
+        if (data.success && data.data?.messages?.length > 0) {
+          const newMsgs = data.data.messages as Message[];
+
+          setMessages((prev) => {
+            // Filter out any messages we already have (dedup by id and messageId)
+            const existingIds = new Set(prev.map((m) => m.id));
+            const existingWamids = new Set(prev.filter((m) => m.messageId).map((m) => m.messageId));
+
+            const truly_new = newMsgs.filter(
+              (m) => !existingIds.has(m.id) && (!m.messageId || !existingWamids.has(m.messageId)),
+            );
+
+            if (truly_new.length > 0) {
+              console.log(
+                `🔄 [Poll] Found ${truly_new.length} new message(s) via polling fallback`,
+              );
+              return [...prev, ...truly_new];
+            }
+            return prev;
+          });
+        }
+      } catch (err) {
+        // Silent fail - this is just a fallback
+        console.debug("[Poll] Error:", err);
+      }
+    }, 5000);
+
+    return () => clearInterval(pollInterval);
+  }, [selectedConversation?.id, selectedConversation?.phone]);
 
   // Send message
   const handleSendMessage = async () => {
@@ -2726,7 +2813,7 @@ export default function MessagesView() {
               >
                 <div
                   className={styles.conversationAvatar}
-                  style={{ background: getAvatarColor(conv.name) }}
+                  style={{ background: getAvatarColor(conv.name), color: "#ffffff" }}
                 >
                   {getInitials(conv.name)}
                   {conv.online && <span className={styles.onlineIndicator} />}
@@ -2746,6 +2833,9 @@ export default function MessagesView() {
                             gap: "4px",
                           }}
                         >
+                          {conv.lastMessageDirection === "outbound" && (
+                            <span style={{ fontWeight: 500, color: "var(--dash-text-primary, #111)" }}>You: </span>
+                          )}
                           <svg
                             width="14"
                             height="14"
@@ -2775,6 +2865,9 @@ export default function MessagesView() {
                             gap: "4px",
                           }}
                         >
+                          {conv.lastMessageDirection === "outbound" && (
+                            <span style={{ fontWeight: 500, color: "var(--dash-text-primary, #111)" }}>You: </span>
+                          )}
                           <svg
                             width="14"
                             height="14"
@@ -2796,7 +2889,12 @@ export default function MessagesView() {
                           Video
                         </span>
                       ) : (
-                        conv.lastMessage
+                        <>
+                          {conv.lastMessageDirection === "outbound" && (
+                            <span style={{ fontWeight: 500, color: "var(--dash-text-primary, #111)" }}>You: </span>
+                          )}
+                          {conv.lastMessage}
+                        </>
                       )}
                     </span>
                     {/* {conv.unread > 0 && (
@@ -2838,7 +2936,10 @@ export default function MessagesView() {
                     </svg>
                   </button>
                 )}
-                <div className={styles.chatAvatar}>
+                <div 
+                  className={styles.chatAvatar}
+                  style={{ background: getAvatarColor(selectedConversation.name), color: "#ffffff" }}
+                >
                   {getInitials(selectedConversation.name)}
                 </div>
                 <div
@@ -3795,7 +3896,10 @@ export default function MessagesView() {
           </div>
 
           <div className={styles.contactProfile}>
-            <div className={styles.contactAvatarLarge}>
+            <div 
+              className={styles.contactAvatarLarge}
+              style={{ background: getAvatarColor(selectedConversation.name), color: "#ffffff" }}
+            >
               {getInitials(selectedConversation.name)}
             </div>
             <h4 className={styles.contactName}>{selectedConversation.name}</h4>

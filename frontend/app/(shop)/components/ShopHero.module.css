@@ -336,8 +336,8 @@
   padding: 4px 10px;
   border-radius: 100px;
   border: none;
-  color: #000;
-  background: #e1f5fe;
+  color: #fff;
+  background: #000;
 }
 
 .tagPlus {
@@ -698,7 +698,7 @@
   /* Show tags card */
   .cardTags {
     display: block;
-    bottom: 80px;
+    bottom: 40px;
     left: -40px;
     padding: 16px 20px;
     width: auto;

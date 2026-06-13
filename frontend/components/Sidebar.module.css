@@ -169,6 +169,11 @@
   line-height: 1.2;
 }
 
+.navItem.active .badge {
+  background: #ffffff !important;
+  color: #000000 !important;
+}
+
 .expandIcon {
   font-size: 0.75rem;
   color: var(--sb-text-muted);

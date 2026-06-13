@@ -24,14 +24,14 @@
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  background-color: rgba(16, 185, 129, 0.1);
-  color: #059669;
+  background-color: #f3f4f6;
+  color: #111827; 
   padding: 8px 16px;
   border-radius: 9999px;
   font-size: 0.875rem;
   font-weight: 500;
   margin-bottom: 24px;
-  border: 1px solid rgba(16, 185, 129, 0.2);
+  border: 1px solid #e5e7eb;
 }
 
 .title {
@@ -44,10 +44,7 @@
 }
 
 .titleAccent {
-  background: linear-gradient(to right, #059669, #10b981);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
+  color: #111827;
 }
 
 .subtitle {
@@ -70,7 +67,8 @@
   background: #ffffff;
   border-radius: 24px;
   padding: 24px;
-  border: 1px solid rgba(0, 0, 0, 0.06);
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.04);
   transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
   position: relative;
   overflow: hidden;
@@ -80,15 +78,15 @@
   content: '';
   position: absolute;
   inset: 0;
-  background: linear-gradient(to bottom right, rgba(16, 185, 129, 0.03), transparent);
+  background: linear-gradient(to bottom right, rgba(0, 0, 0, 0.02), transparent);
   opacity: 0;
   transition: opacity 0.3s ease;
 }
 
 .featureCard:hover {
   transform: translateY(-4px);
-  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
-  border-color: rgba(16, 185, 129, 0.2);
+  box-shadow: 0 12px 24px rgba(0, 0, 0, 0.08);
+  border-color: rgba(0, 0, 0, 0.2);
 }
 
 .featureCard:hover::before {
@@ -167,7 +165,7 @@
 
 .statSuffix {
   font-size: 0.75rem;
-  color: #059669;
+  color: #111827;
   font-weight: 500;
   margin-top: 2px;
 }
@@ -220,7 +218,7 @@
 .ctaTagIcon {
   width: 16px;
   height: 16px;
-  color: #10b981;
+  color: #111827;
 }
 
 .ctaButtons {

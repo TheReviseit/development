@@ -1,5 +1,7 @@
 "use client";
 
+// Force Next.js recompile to bust CSS module cache
+
 import { useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
@@ -117,13 +119,13 @@ export default function ShopHero() {
           <div className={`${styles.floatingCard} ${styles.cardTags}`}>
             <div className={styles.cardTagsTitle}>Add tags to your video</div>
             <div className={styles.tagsRow}>
-              <span className={styles.tag}>
+              <span className={styles.tag} style={{ background: '#000', color: '#fff' }}>
                 <span className={styles.tagPlus}>+</span> Black
               </span>
-              <span className={styles.tag}>
+              <span className={styles.tag} style={{ background: '#000', color: '#fff' }}>
                 <span className={styles.tagPlus}>+</span> Trouser
               </span>
-              <span className={styles.tag}>
+              <span className={styles.tag} style={{ background: '#000', color: '#fff' }}>
                 <span className={styles.tagPlus}>+</span> Fashion
               </span>
             </div>
@@ -142,7 +144,7 @@ export default function ShopHero() {
               SABINE Backless Maxi Dress in Black
             </div>
             <div className={styles.cardInfoPrice}>$ 159.00 USD</div>
-            <div className={styles.cardInfoBtn}>Shop Now</div>
+            <div className={styles.cardInfoBtn} style={{ background: '#000', color: '#fff' }}>Shop Now</div>
           </div>
         </div>
       </div>

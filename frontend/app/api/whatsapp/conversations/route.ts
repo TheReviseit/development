@@ -125,6 +125,7 @@ export async function GET(request: NextRequest) {
       phone: conv.customer_phone,
       profilePic: conv.customer_profile_pic,
       lastMessage: conv.last_message_preview || "",
+      lastMessageDirection: conv.last_message_direction,
       lastMessageType: conv.last_message_type,
       time: formatRelativeTime(conv.last_message_at),
       timestamp: conv.last_message_at,

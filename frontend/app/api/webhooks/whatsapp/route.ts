@@ -179,29 +179,49 @@ export async function POST(request: NextRequest) {
                 }
 
                 // Get or create conversation for this contact
+                // Use customer_phone to match the schema used by the conversations API
                 const contactNumber = message.from;
-                const { data: existingConversation } = await supabaseAdmin
+                const contactName = value.contacts?.[0]?.profile?.name || null;
+
+                // Try customer_phone first (canonical column), fall back to contact_phone for legacy schemas
+                let existingConversation: { id: string } | null = null;
+                
+                const { data: convByCustomer } = await supabaseAdmin
                   .from("whatsapp_conversations")
                   .select("id")
                   .eq("phone_number_id", phoneNumber.id)
-                  .eq("contact_phone", contactNumber)
+                  .eq("customer_phone", contactNumber)
                   .single();
+                
+                if (convByCustomer) {
+                  existingConversation = convByCustomer;
+                } else {
+                  // Fallback: try contact_phone column (legacy schema support)
+                  const { data: convByContact } = await supabaseAdmin
+                    .from("whatsapp_conversations")
+                    .select("id")
+                    .eq("phone_number_id", phoneNumber.id)
+                    .eq("contact_phone", contactNumber)
+                    .single();
+                  existingConversation = convByContact;
+                }
 
                 let conversationId: string;
                 if (existingConversation) {
                   conversationId = existingConversation.id;
                 } else {
-                  // Create new conversation
+                  // Create new conversation using canonical column names
                   const { data: newConversation, error: convError } =
                     await supabaseAdmin
                       .from("whatsapp_conversations")
                       .insert({
                         phone_number_id: phoneNumber.id,
                         business_id: phoneNumber.business_manager_id,
-                        contact_phone: contactNumber,
-                        contact_name:
-                          value.contacts?.[0]?.profile?.name || null,
+                        customer_phone: contactNumber,
+                        customer_name: contactName,
                         status: "active",
+                        total_messages: 0,
+                        unread_count: 0,
                       })
                       .select("id")
                       .single();
@@ -213,6 +233,7 @@ export async function POST(request: NextRequest) {
                   conversationId = newConversation.id;
                 }
 
+                // Store the message in whatsapp_messages table
                 await createMessage({
                   conversation_id: conversationId,
                   business_id: phoneNumber.business_manager_id,
@@ -223,6 +244,55 @@ export async function POST(request: NextRequest) {
                   media_id: mediaId,
                   status: "delivered",
                 });
+
+                // CRITICAL: Update whatsapp_conversations table for real-time updates
+                // This triggers Supabase Realtime on the conversations channel,
+                // which updates the conversation list (last message preview, unread badge, etc.)
+                try {
+                  // Get current conversation stats
+                  const { data: currentConv } = await supabaseAdmin
+                    .from("whatsapp_conversations")
+                    .select("total_messages, unread_count, customer_name")
+                    .eq("id", conversationId)
+                    .single();
+
+                  // Build the message preview text
+                  const messagePreview =
+                    message.type === "text"
+                      ? (message.text?.body || "").slice(0, 100)
+                      : `[${message.type}]`;
+
+                  // Prepare update payload
+                  const updatePayload: Record<string, any> = {
+                    total_messages: ((currentConv?.total_messages || 0) + 1),
+                    unread_count: ((currentConv?.unread_count || 0) + 1),
+                    last_message_at: new Date().toISOString(),
+                    last_message_preview: messagePreview,
+                    last_message_direction: "inbound",
+                    last_message_type: message.type,
+                    updated_at: new Date().toISOString(),
+                  };
+
+                  // Update customer_name if we have it and it's not already set
+                  if (contactName && !currentConv?.customer_name) {
+                    updatePayload.customer_name = contactName;
+                  }
+
+                  await supabaseAdmin
+                    .from("whatsapp_conversations")
+                    .update(updatePayload)
+                    .eq("id", conversationId);
+
+                  console.log(
+                    `✅ Updated conversation ${conversationId} (unread: ${updatePayload.unread_count}, preview: "${messagePreview.slice(0, 30)}...")`,
+                  );
+                } catch (convUpdateError) {
+                  // Non-fatal: message was stored, conversation stats just won't update
+                  console.error(
+                    "Error updating conversation stats:",
+                    convUpdateError,
+                  );
+                }
 
                 console.log(`Stored incoming message ${message.id}`);
               } catch (error) {

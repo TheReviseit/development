@@ -1,8 +1,12 @@
 "use client";
 
+// Force Next.js recompile to bust CSS module cache
+
+import { useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
-import { Check } from "lucide-react";
+import { Check, ShoppingBag } from "lucide-react";
+import DemoModal from "./DemoModal";
 import styles from "./ShopHero.module.css";
 
 /**
@@ -11,6 +15,8 @@ import styles from "./ShopHero.module.css";
  * Right: hero photo with tightly composed floating UI cards
  */
 export default function ShopHero() {
+  const [demoOpen, setDemoOpen] = useState(false);
+
   return (
     <section className={styles.hero}>
       <div className={styles.heroInner}>
@@ -45,9 +51,12 @@ export default function ShopHero() {
             <Link href="/signup" className={styles.btnPrimary}>
               Try Now
             </Link>
-            <Link href="/login" className={styles.btnSecondary}>
-              Login
-            </Link>
+            <button
+              className={styles.btnSecondary}
+              onClick={() => setDemoOpen(true)}
+            >
+              See Demo
+            </button>
           </div>
         </div>
 
@@ -110,13 +119,13 @@ export default function ShopHero() {
           <div className={`${styles.floatingCard} ${styles.cardTags}`}>
             <div className={styles.cardTagsTitle}>Add tags to your video</div>
             <div className={styles.tagsRow}>
-              <span className={styles.tag}>
+              <span className={styles.tag} style={{ background: '#000', color: '#fff' }}>
                 <span className={styles.tagPlus}>+</span> Black
               </span>
-              <span className={styles.tag}>
+              <span className={styles.tag} style={{ background: '#000', color: '#fff' }}>
                 <span className={styles.tagPlus}>+</span> Trouser
               </span>
-              <span className={styles.tag}>
+              <span className={styles.tag} style={{ background: '#000', color: '#fff' }}>
                 <span className={styles.tagPlus}>+</span> Fashion
               </span>
             </div>
@@ -135,10 +144,13 @@ export default function ShopHero() {
               SABINE Backless Maxi Dress in Black
             </div>
             <div className={styles.cardInfoPrice}>$ 159.00 USD</div>
-            <div className={styles.cardInfoBtn}>Shop Now</div>
+            <div className={styles.cardInfoBtn} style={{ background: '#000', color: '#fff' }}>Shop Now</div>
           </div>
         </div>
       </div>
+
+      {/* Demo Video Modal */}
+      <DemoModal open={demoOpen} onClose={() => setDemoOpen(false)} />
     </section>
   );
 }

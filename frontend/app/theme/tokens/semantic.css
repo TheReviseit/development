@@ -26,7 +26,7 @@
   --color-accent-border: rgba(22, 163, 74, 0.32);
 
   --color-focus-ring: rgba(22, 163, 74, 0.48);
-  --color-selection-bg: rgba(22, 163, 74, 0.22);
+  --color-selection-bg: transparent;
 
   --color-success: #16a34a;
   --color-success-bg: #dcfce7;

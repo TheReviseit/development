@@ -46,6 +46,7 @@ export async function GET(request: NextRequest) {
     const conversationId = searchParams.get("conversationId");
     const contactPhone = searchParams.get("contactPhone");
     const before = searchParams.get("before"); // Cursor for loading older messages
+    const after = searchParams.get("after"); // Cursor for polling new messages (realtime fallback)
     const limit = parseInt(searchParams.get("limit") || "50");
     const offset = parseInt(searchParams.get("offset") || "0");
     const markAsRead = searchParams.get("markAsRead") !== "false";
@@ -174,6 +175,14 @@ export async function GET(request: NextRequest) {
           .order("created_at", { ascending: false })
           .limit(MAX_MESSAGES);
       }
+    } else if (after) {
+      // POLLING MODE: Fetch messages newer than the given timestamp
+      // Used by the realtime fallback poller to catch missed messages
+      messagesQuery = messagesQuery
+        .gt("created_at", after)
+        .order("created_at", { ascending: true })
+        .order("id", { ascending: true })
+        .limit(50);
     } else {
       // Initial load: fetch latest 1000 messages
       messagesQuery = messagesQuery
@@ -185,7 +194,8 @@ export async function GET(request: NextRequest) {
     let { data: messages, error } = await messagesQuery;
 
     // Reverse to get chronological order (oldest first) for display
-    if (messages) {
+    // Skip reverse for 'after' queries since they're already in ascending order
+    if (messages && !after) {
       messages = messages.reverse();
     }
 

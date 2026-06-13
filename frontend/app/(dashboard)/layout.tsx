@@ -608,7 +608,7 @@ export default function DashboardLayout({
                 />
               )}
 
-              <main className={styles.mainContent}>
+              <main className={`${styles.mainContent} ${activeSection === 'messages' ? styles.messagesMainContent : ''}`}>
                 {/* Mobile Header for all views */}
                 {isMobile && (
                   <div className={styles.mobileHeader}>

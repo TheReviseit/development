@@ -29,7 +29,7 @@ html.dark {
   --color-accent-border: rgba(34, 197, 94, 0.36);
 
   --color-focus-ring: rgba(34, 197, 94, 0.48);
-  --color-selection-bg: rgba(34, 197, 94, 0.28);
+  --color-selection-bg: transparent;
 
   --color-success: #22c55e;
   --color-success-bg: rgba(34, 197, 94, 0.14);
