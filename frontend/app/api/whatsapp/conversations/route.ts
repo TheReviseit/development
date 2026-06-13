@@ -119,30 +119,33 @@ export async function GET(request: NextRequest) {
     }
 
     // Format for frontend
-    const formattedConversations = conversations.map((conv) => ({
-      id: conv.id,
-      name: conv.customer_name || formatPhoneNumber(conv.customer_phone),
-      phone: conv.customer_phone,
-      profilePic: conv.customer_profile_pic,
-      lastMessage: conv.last_message_preview || "",
-      lastMessageDirection: conv.last_message_direction,
-      lastMessageType: conv.last_message_type,
-      time: formatRelativeTime(conv.last_message_at),
-      timestamp: conv.last_message_at,
-      unread: conv.unread_count || 0,
-      totalMessages: conv.total_messages || 0,
-      status: conv.status,
-      priority: conv.priority,
-      tags: conv.tags || [],
-      // AI stats
-      aiReplies: conv.ai_replies_count || 0,
-      humanReplies: conv.human_replies_count || 0,
-      language: conv.detected_language,
-      // AI enabled toggle (default to true if not set)
-      aiEnabled: conv.ai_enabled ?? true,
-      // Online status (not available from WhatsApp API)
-      online: false,
-    }));
+    const formattedConversations = conversations.map((conv) => {
+      const normalizedDate = normalizeTimezone(conv.last_message_at);
+      return {
+        id: conv.id,
+        name: conv.customer_name || formatPhoneNumber(conv.customer_phone),
+        phone: conv.customer_phone,
+        profilePic: conv.customer_profile_pic,
+        lastMessage: conv.last_message_preview || "",
+        lastMessageDirection: conv.last_message_direction,
+        lastMessageType: conv.last_message_type,
+        time: formatRelativeTime(normalizedDate),
+        timestamp: normalizedDate,
+        unread: conv.unread_count || 0,
+        totalMessages: conv.total_messages || 0,
+        status: conv.status,
+        priority: conv.priority,
+        tags: conv.tags || [],
+        // AI stats
+        aiReplies: conv.ai_replies_count || 0,
+        humanReplies: conv.human_replies_count || 0,
+        language: conv.detected_language,
+        // AI enabled toggle (default to true if not set)
+        aiEnabled: conv.ai_enabled ?? true,
+        // Online status (not available from WhatsApp API)
+        online: false,
+      };
+    });
 
     return NextResponse.json(
       {
@@ -195,13 +198,14 @@ async function fallbackToOldMethod(businessId: string, filter: string) {
     if (!convId) continue;
 
     if (!conversationsMap.has(convId)) {
+      const normalizedDate = normalizeTimezone(msg.created_at);
       conversationsMap.set(convId, {
         id: convId,
         name: formatPhoneNumber(convId), // Will be updated from conversation table
         phone: convId,
         lastMessage: msg.content || `[${msg.message_type}]`, // Schema uses 'content'
-        time: formatRelativeTime(msg.created_at),
-        timestamp: msg.created_at,
+        time: formatRelativeTime(normalizedDate),
+        timestamp: normalizedDate,
         unread: msg.direction === "inbound" && msg.status !== "read" ? 1 : 0,
         online: false,
       });
@@ -225,6 +229,15 @@ async function fallbackToOldMethod(businessId: string, filter: string) {
     total: conversations.length,
     fallback: true,
   });
+}
+
+// Helper to ensure timezone is set to UTC if missing
+function normalizeTimezone(dateString: string | null): string {
+  if (!dateString) return "";
+  if (!dateString.endsWith("Z") && !dateString.includes("+")) {
+    return dateString + "Z";
+  }
+  return dateString;
 }
 
 // Helper to format relative time

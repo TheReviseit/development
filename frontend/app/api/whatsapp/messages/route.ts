@@ -240,21 +240,24 @@ export async function GET(request: NextRequest) {
     }
 
     // Format messages for frontend
-    const formattedMessages = (messages || []).map((msg) => ({
-      id: msg.id,
-      messageId: msg.wamid, // Schema uses 'wamid' not 'message_id'
-      sender: msg.direction === "inbound" ? "contact" : "user",
-      content: msg.content || "", // Schema uses 'content' not 'message_body'
-      time: formatTime(msg.created_at),
-      timestamp: msg.created_at,
-      type: msg.message_type,
+    const formattedMessages = (messages || []).map((msg) => {
+      const normalizedTimestamp = normalizeTimezone(msg.created_at);
+      return {
+        id: msg.id,
+        messageId: msg.wamid, // Schema uses 'wamid' not 'message_id'
+        sender: msg.direction === "inbound" ? "contact" : "user",
+        content: msg.content || "", // Schema uses 'content' not 'message_body'
+        time: formatTime(normalizedTimestamp),
+        timestamp: normalizedTimestamp,
+        type: msg.message_type,
       status: msg.status,
       mediaUrl: msg.media_url,
       mediaId: msg.media_id,
       // AI info
       isAiGenerated: msg.is_ai_generated || false,
       intent: msg.intent_detected,
-    }));
+    };
+  });
 
     // Build contact info from conversation
     const contactInfo = conversation
@@ -369,18 +372,21 @@ async function fallbackToOldMethod(
   }
 
   // Format messages
-  const formattedMessages = (messages || []).map((msg) => ({
-    id: msg.id,
-    messageId: msg.wamid, // Schema uses 'wamid'
-    sender: msg.direction === "inbound" ? "contact" : "user",
-    content: msg.content || "", // Schema uses 'content'
-    time: formatTime(msg.created_at),
-    timestamp: msg.created_at,
-    type: msg.message_type,
-    status: msg.status,
-    mediaUrl: msg.media_url,
-    mediaId: msg.media_id,
-  }));
+  const formattedMessages = (messages || []).map((msg) => {
+    const normalizedDate = normalizeTimezone(msg.created_at);
+    return {
+      id: msg.id,
+      messageId: msg.wamid, // Schema uses 'wamid'
+      sender: msg.direction === "inbound" ? "contact" : "user",
+      content: msg.content || "", // Schema uses 'content'
+      time: formatTime(normalizedDate),
+      timestamp: normalizedDate,
+      type: msg.message_type,
+      status: msg.status,
+      mediaUrl: msg.media_url,
+      mediaId: msg.media_id,
+    };
+  });
 
   const firstInbound = (messages || []).find((m) => m.direction === "inbound");
   const contactInfo = {
@@ -398,6 +404,14 @@ async function fallbackToOldMethod(
     },
     fallback: true,
   });
+}
+
+function normalizeTimezone(dateString: string | null): string {
+  if (!dateString) return "";
+  if (!dateString.endsWith("Z") && !dateString.includes("+")) {
+    return dateString + "Z";
+  }
+  return dateString;
 }
 
 function formatTime(dateString: string): string {

@@ -1297,12 +1297,12 @@ export default function MessagesView() {
   const phoneAutoSelectedRef = useRef<string | null>(null);
 
   // Fetch conversations on mount
-  const fetchConversations = useCallback(async () => {
+  const fetchConversations = useCallback(async (isBackground = false) => {
     try {
-      setLoading(true);
-      setError(null);
+      if (!isBackground) setLoading(true);
+      if (!isBackground) setError(null);
       const response = await fetch(
-        `/api/whatsapp/conversations?filter=${filter}`,
+        `/api/whatsapp/conversations?filter=${filter}&_t=${Date.now()}`,
         { cache: "no-store" },
       );
       const data = await response.json();
@@ -1310,19 +1310,29 @@ export default function MessagesView() {
       if (data.success) {
         setConversations(data.data);
       } else {
-        setError(data.error || "Failed to load conversations");
+        if (!isBackground) setError(data.error || "Failed to load conversations");
       }
     } catch (err) {
       console.error("Error fetching conversations:", err);
-      setError("Failed to load conversations");
+      if (!isBackground) setError("Failed to load conversations");
     } finally {
-      setLoading(false);
+      if (!isBackground) setLoading(false);
     }
   }, [filter]);
 
   useEffect(() => {
     fetchConversations();
   }, [filter, fetchConversations]);
+
+  // Fallback Polling: Sync conversations sidebar every 3 seconds for FAANG-level realtime feel
+  useEffect(() => {
+    const pollInterval = setInterval(() => {
+      if (!document.hidden) {
+        fetchConversations(true);
+      }
+    }, 3000);
+    return () => clearInterval(pollInterval);
+  }, [fetchConversations]);
 
   // Auto-select conversation from ?phone= deep link (separate effect for timing)
   useEffect(() => {
@@ -2127,9 +2137,9 @@ export default function MessagesView() {
     };
   }, []);
 
-  // FALLBACK POLLING: Safety net for when Supabase Realtime silently fails
-  // Checks for new messages every 5 seconds for the active conversation
-  // This is lightweight — only fetches messages newer than the latest in state
+  // FALLBACK POLLING: FAANG-level realtime polling safety net
+  // Checks for new messages every 2 seconds for the active conversation
+  // Ignores optimistic (temp) messages to avoid timestamp race conditions
   useEffect(() => {
     if (!selectedConversation) return;
 
@@ -2141,17 +2151,9 @@ export default function MessagesView() {
       if (document.hidden) return;
 
       try {
-        // Get the latest message timestamp from current state
-        const currentMessages = messagesRef.current;
-        const latestTimestamp = currentMessages.length > 0
-          ? currentMessages[currentMessages.length - 1].timestamp
-          : null;
-
-        // Build URL with after parameter to only get new messages
-        let url = `/api/whatsapp/messages?contactPhone=${encodeURIComponent(convPhone)}`;
-        if (latestTimestamp) {
-          url += `&after=${encodeURIComponent(latestTimestamp)}`;
-        }
+        // Build URL without after parameter to fetch the latest 50 messages window
+        // This allows us to catch both NEW messages and STATUS UPDATES (e.g., delivered, read)
+        let url = `/api/whatsapp/messages?contactPhone=${encodeURIComponent(convPhone)}&conversationId=${encodeURIComponent(convId)}&_t=${Date.now()}`;
 
         const response = await fetch(url, { cache: "no-store" });
         const data = await response.json();
@@ -2163,20 +2165,48 @@ export default function MessagesView() {
           const newMsgs = data.data.messages as Message[];
 
           setMessages((prev) => {
-            // Filter out any messages we already have (dedup by id and messageId)
-            const existingIds = new Set(prev.map((m) => m.id));
-            const existingWamids = new Set(prev.filter((m) => m.messageId).map((m) => m.messageId));
+            let updated = false;
+            let nextState = [...prev];
 
-            const truly_new = newMsgs.filter(
-              (m) => !existingIds.has(m.id) && (!m.messageId || !existingWamids.has(m.messageId)),
-            );
-
-            if (truly_new.length > 0) {
-              console.log(
-                `🔄 [Poll] Found ${truly_new.length} new message(s) via polling fallback`,
+            newMsgs.forEach((serverMsg) => {
+              const existingIdx = nextState.findIndex(
+                (m) =>
+                  (serverMsg.id && m.id === serverMsg.id) ||
+                  (serverMsg.messageId && m.messageId === serverMsg.messageId)
               );
-              return [...prev, ...truly_new];
+
+              if (existingIdx !== -1) {
+                // Update status if it changed
+                if (nextState[existingIdx].status !== serverMsg.status) {
+                  nextState[existingIdx] = { ...nextState[existingIdx], status: serverMsg.status };
+                  updated = true;
+                }
+              } else {
+                // RACE CONDITION FIX: check if this matches an optimistic message
+                const optimisticIdx = nextState.findIndex(
+                  (m) => m.id?.startsWith("temp-") && m.sender === "user" && m.content === serverMsg.content
+                );
+
+                if (optimisticIdx !== -1) {
+                  nextState[optimisticIdx] = serverMsg;
+                  updated = true;
+                } else {
+                  // Add entirely new message
+                  nextState.push(serverMsg);
+                  updated = true;
+                }
+              }
+            });
+
+            if (updated) {
+              console.log("🔄 [Poll] Synced statuses and new messages via polling fallback");
+              // Also update the conversation list when changes happen
+              fetchConversations(true);
+              
+              // Ensure chronological order
+              return nextState.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
             }
+
             return prev;
           });
         }
@@ -2184,10 +2214,10 @@ export default function MessagesView() {
         // Silent fail - this is just a fallback
         console.debug("[Poll] Error:", err);
       }
-    }, 5000);
+    }, 2000); // 2-second interval for FAANG-level realtime feel
 
     return () => clearInterval(pollInterval);
-  }, [selectedConversation?.id, selectedConversation?.phone]);
+  }, [selectedConversation?.id, selectedConversation?.phone, fetchConversations]);
 
   // Send message
   const handleSendMessage = async () => {
@@ -2692,7 +2722,7 @@ export default function MessagesView() {
             {error}
             <br />
             <button
-              onClick={fetchConversations}
+              onClick={() => fetchConversations()}
               style={{
                 marginTop: "1rem",
                 color: "var(--dash-accent)",
@@ -2813,14 +2843,22 @@ export default function MessagesView() {
               >
                 <div
                   className={styles.conversationAvatar}
-                  style={{ background: getAvatarColor(conv.name), color: "#ffffff" }}
+                  style={{
+                    background: `linear-gradient(135deg, hsl(${
+                      (conv.name.charCodeAt(0) * 137) % 360
+                    }, 70%, 50%), hsl(${
+                      (conv.name.charCodeAt(0) * 137 + 40) % 360
+                    }, 80%, 40%))`,
+                    color: "white",
+                    boxShadow: "0 2px 4px rgba(0,0,0,0.1)",
+                  }}
                 >
                   {getInitials(conv.name)}
                   {conv.online && <span className={styles.onlineIndicator} />}
                 </div>
                 <div className={styles.conversationInfo}>
                   <div className={styles.conversationTop}>
-                    <span className={styles.conversationName}>{conv.name}</span>
+                    <span className={styles.conversationName} style={{ fontWeight: 600 }}>{conv.name}</span>
                     <span className={styles.conversationTime}>{conv.time}</span>
                   </div>
                   <div className={styles.conversationBottom}>
@@ -2834,7 +2872,7 @@ export default function MessagesView() {
                           }}
                         >
                           {conv.lastMessageDirection === "outbound" && (
-                            <span style={{ fontWeight: 500, color: "var(--dash-text-primary, #111)" }}>You: </span>
+                            <span style={{ fontWeight: 600, color: "var(--dash-text-primary, #111)" }}>You: </span>
                           )}
                           <svg
                             width="14"
@@ -2866,7 +2904,7 @@ export default function MessagesView() {
                           }}
                         >
                           {conv.lastMessageDirection === "outbound" && (
-                            <span style={{ fontWeight: 500, color: "var(--dash-text-primary, #111)" }}>You: </span>
+                            <span style={{ fontWeight: 600, color: "var(--dash-text-primary, #111)" }}>You: </span>
                           )}
                           <svg
                             width="14"
@@ -2891,7 +2929,7 @@ export default function MessagesView() {
                       ) : (
                         <>
                           {conv.lastMessageDirection === "outbound" && (
-                            <span style={{ fontWeight: 500, color: "var(--dash-text-primary, #111)" }}>You: </span>
+                            <span style={{ fontWeight: 600, color: "var(--dash-text-primary, #111)" }}>You: </span>
                           )}
                           {conv.lastMessage}
                         </>
