@@ -175,23 +175,6 @@ export default function OptionsPage() {
       {/* Header */}
       <div className={styles.header}>
         <div>
-          <Link href="/products" className={styles.backLink}>
-            <svg
-              width="16"
-              height="16"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-            >
-              <path
-                d="M19 12H5M12 19l-7-7 7-7"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
-            </svg>
-            Back to products
-          </Link>
           <h1 className={styles.pageTitle}>Manage Sizes & Colors</h1>
         </div>
       </div>
