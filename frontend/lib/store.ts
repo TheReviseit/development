@@ -270,6 +270,11 @@ async function fetchStoreFromDB(
       return null;
     }
 
+    // REQUIREMENT: Store must have a name saved before it is publicly accessible
+    if (!businessData.business_name && !businessData.url_slug) {
+      return null;
+    }
+
     // Extract plan tier
     let planTier: "starter" | "business" | "pro" = "starter";
     try {

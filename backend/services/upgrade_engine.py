@@ -453,7 +453,7 @@ class UpgradeEngine:
                     current_sub = self._get_subscription(user_id, domain)
                     current_plan = self._resolve_plan_metadata(current_sub) if current_sub else None
 
-                elif sub_status in ('suspended', 'cancelled', 'expired', 'halted', 'past_due'):
+                elif sub_status in ('suspended', 'cancelled', 'expired', 'halted', 'past_due', 'pending'):
                     # Billing-recovery path: treat expired/suspended/cancelled subs
                     # as "no active subscription" so the user can choose a new plan.
                     # This enables the /payment page checkout flow for lapsed users.
@@ -619,7 +619,7 @@ class UpgradeEngine:
             'product_domain': domain,
         }).in_('status', [
             'active', 'trialing', 'grace_period', 'pending_upgrade',
-            'suspended', 'cancelled', 'expired', 'halted', 'past_due',
+            'suspended', 'cancelled', 'expired', 'halted', 'past_due', 'pending'
         ]).order(
             'created_at', desc=True
         ).limit(1).execute()

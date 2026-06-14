@@ -9,8 +9,9 @@
  * Features: Domain detection, billing cycle toggle, loading states
  */
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { onAuthStateChanged } from "firebase/auth";
 import { auth } from "@/src/firebase/firebase";
 import BillingCycleToggle from "./BillingCycleToggle";
 import PlanComparisonTable from "./PlanComparisonTable";
@@ -32,15 +33,28 @@ export default function UpgradeContainer({
     "monthly",
   );
 
+  // Wait for Firebase auth state to settle before firing API calls.
+  // Without this, useQuery fires immediately on mount/HMR and
+  // auth.currentUser may be null or hold a stale token → 401.
+  const [authReady, setAuthReady] = useState(false);
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, () => {
+      setAuthReady(true);
+    });
+    return () => unsubscribe();
+  }, []);
+
   // Fetch upgrade options from API
   const { data, isLoading, error, refetch } = useQuery({
     queryKey: ["upgrade-options", initialDomain, billingCycle],
     queryFn: async () => {
-      // Get Firebase auth user ID
+      // Get Firebase auth ID token (server-verified, not forgeable X-User-Id)
       const user = auth.currentUser;
       if (!user) {
         throw new Error("Not authenticated");
       }
+
+      const idToken = await user.getIdToken(false);
 
       const res = await fetch(
         `/api/upgrade/options?domain=${initialDomain}&billing_cycle=${billingCycle}`,
@@ -48,7 +62,7 @@ export default function UpgradeContainer({
           credentials: "include",
           headers: {
             "Content-Type": "application/json",
-            "X-User-Id": user.uid, // Send Firebase UID, not JWT token
+            "Authorization": `Bearer ${idToken}`,
           },
         },
       );
@@ -60,6 +74,7 @@ export default function UpgradeContainer({
 
       return res.json();
     },
+    enabled: authReady, // Only fire after Firebase auth state is confirmed
     staleTime: 5 * 60 * 1000, // 5 min cache
     retry: 2,
   });

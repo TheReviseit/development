@@ -37,13 +37,13 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Verify webhook signature using HMAC-SHA256
+    // Verify webhook signature using timing-safe comparison
     const expectedSignature = crypto
       .createHmac("sha256", WEBHOOK_SECRET)
       .update(body)
       .digest("hex");
 
-    if (expectedSignature !== signature) {
+    if (!crypto.timingSafeEqual(Buffer.from(expectedSignature), Buffer.from(signature))) {
       console.error("[Razorpay Webhook] Signature verification failed");
       return NextResponse.json({ error: "Invalid signature" }, { status: 401 });
     }
@@ -54,25 +54,28 @@ export async function POST(request: NextRequest) {
 
     console.log(`[Razorpay Webhook] Received: ${eventType}, ID: ${eventId}`);
 
-    // Check for replay attack - store processed event IDs
-    const { data: existingEvent } = await supabase
+    // Atomic dedup: INSERT with ON CONFLICT DO NOTHING
+    // Prevents TOCTOU race between SELECT check and INSERT.
+    // Records AFTER processing in the success branch below.
+    const { error: insertError } = await supabase
       .from("webhook_events")
-      .select("id")
-      .eq("id", eventId)
-      .maybeSingle();
+      .insert({
+        id: eventId,
+        event_type: eventType,
+        payload: event,
+        processing_result: 'processing',
+        created_at: new Date().toISOString(),
+      });
 
-    if (existingEvent) {
+    if (insertError?.message?.includes('duplicate key') || insertError?.code === '23505') {
       console.log(`[Razorpay Webhook] Duplicate event ${eventId}, skipping`);
       return NextResponse.json({ received: true, replay: true });
     }
 
-    // Store event ID BEFORE processing to prevent race conditions
-    await supabase.from("webhook_events").insert({
-      id: eventId,
-      event_type: eventType,
-      payload: event,
-      processed_at: new Date().toISOString(),
-    });
+    if (insertError) {
+      console.error(`[Razorpay Webhook] DB error on event insert: ${insertError.message}`);
+      return NextResponse.json({ error: "Database error" }, { status: 503 });
+    }
 
     // Extract order ID from payment entity
     const payment = event.payload?.payment?.entity;
@@ -217,6 +220,12 @@ export async function POST(request: NextRequest) {
       default:
         console.log(`[Razorpay Webhook] Unhandled event type: ${eventType}`);
     }
+
+    // Mark event processed on success
+    await supabase
+      .from("webhook_events")
+      .update({ processing_result: 'processed', processed_at: new Date().toISOString() })
+      .eq("id", eventId);
 
     return NextResponse.json({ received: true, processed: eventType });
   } catch (error) {

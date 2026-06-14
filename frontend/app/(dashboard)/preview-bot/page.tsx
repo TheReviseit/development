@@ -392,8 +392,8 @@ export default function PreviewBotPage() {
           alignItems: "center",
           justifyContent: "center",
           height: "calc(100vh - 60px)",
-          background: "#0a0a0a",
-          color: "#888",
+          background: "transparent",
+          color: "#4b5563",
         }}
       >
         <div style={{ textAlign: "center" }}>
@@ -401,8 +401,8 @@ export default function PreviewBotPage() {
             style={{
               width: "40px",
               height: "40px",
-              border: "3px solid #333",
-              borderTop: "3px solid #25D366",
+              border: "3px solid #e5e7eb",
+              borderTop: "3px solid #111111",
               borderRadius: "50%",
               animation: "spin 1s linear infinite",
               margin: "0 auto 1rem",
@@ -422,8 +422,8 @@ export default function PreviewBotPage() {
           alignItems: "center",
           justifyContent: "center",
           height: "calc(100vh - 60px)",
-          background: "#0a0a0a",
-          color: "#888",
+          background: "transparent",
+          color: "#4b5563",
           padding: "2rem",
           textAlign: "center",
         }}
@@ -447,7 +447,7 @@ export default function PreviewBotPage() {
         height: "calc(100dvh - 80px)",
         maxHeight: "calc(100dvh - 80px)",
         padding: "0",
-        background: "#0a0a0a",
+        background: "transparent",
         overflow: "hidden",
       }}
     >
@@ -464,15 +464,15 @@ export default function PreviewBotPage() {
         <div
           style={{
             padding: "1rem",
-            borderBottom: "1px solid rgba(255,255,255,0.1)",
-            background: "#111",
+            borderBottom: "1px solid rgba(0,0,0,0.1)",
+            background: "#ffffff",
           }}
         >
           <h1
             style={{
               fontSize: "1.25rem",
               fontWeight: 600,
-              color: "#fff",
+              color: "#111111",
               margin: 0,
               display: "flex",
               alignItems: "center",
@@ -527,7 +527,7 @@ export default function PreviewBotPage() {
                       display: "inline-block",
                       width: "2px",
                       height: "1em",
-                      background: "#25D366",
+                      background: "#111111",
                       marginLeft: "2px",
                       animation: "blink 0.7s infinite",
                       verticalAlign: "text-bottom",
@@ -590,8 +590,8 @@ export default function PreviewBotPage() {
             className={styles.chatFooter}
             style={{
               padding: "0.75rem 1rem",
-              borderTop: "1px solid rgba(255,255,255,0.1)",
-              background: "#111",
+              borderTop: "1px solid rgba(0,0,0,0.1)",
+              background: "#ffffff",
               display: "flex",
               flexDirection: "row",
               alignItems: "center",
@@ -612,9 +612,9 @@ export default function PreviewBotPage() {
                 minWidth: 0,
                 padding: "0.75rem 1rem",
                 borderRadius: "8px",
-                border: "1px solid rgba(255,255,255,0.1)",
-                background: "#1a1a1a",
-                color: "#fff",
+                border: "1px solid rgba(0,0,0,0.15)",
+                background: "#ffffff",
+                color: "#111111",
                 fontSize: "0.9rem",
               }}
             />
@@ -625,8 +625,8 @@ export default function PreviewBotPage() {
               style={{
                 padding: "0.75rem 1.25rem",
                 borderRadius: "8px",
-                background: "#fff",
-                color: "#000",
+                background: "#111111",
+                color: "#ffffff",
                 fontWeight: 600,
                 border: "none",
                 cursor: "pointer",

@@ -311,7 +311,7 @@
 .formGroup input:-webkit-autofill:focus,
 .formGroup input:-webkit-autofill:active {
   -webkit-text-fill-color: #111111 !important;
-  caret-color: #111111;
+  caret-color: #000000 !important;
   background-color: var(--card-bg) !important;
   -webkit-box-shadow: 0 0 0 1000px var(--card-bg) inset !important;
   box-shadow: 0 0 0 1000px var(--card-bg) inset !important;

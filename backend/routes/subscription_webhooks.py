@@ -82,6 +82,9 @@ def handle_subscription_webhook():
 
     except Exception as e:
         logger.error(f"webhook_unhandled_error: {e}", exc_info=True)
-        # Return 200 even on errors to prevent infinite Razorpay retries.
-        # The billing monitor will catch any missed state transitions.
-        return jsonify({'status': 'error', 'message': 'Internal error'}), 200
+        # CRITICAL: Return 500 so Razorpay retries unprocessed events.
+        # Previously returned 200 which caused SILENT EVENT LOSS.
+        # If processing fails (DB down, Razorpay API error), Razorpay will retry
+        # with exponential backoff up to 24 hours. Duplicate detection via
+        # webhook_events table prevents double-processing on retry.
+        return jsonify({'status': 'error', 'message': 'Internal error'}), 500

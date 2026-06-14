@@ -56,7 +56,7 @@ def get_user_from_token() -> Optional[str]:
         
         # Try session cookie first
         try:
-            decoded_token = firebase_auth.verify_session_cookie(token, check_revoked=True)
+            decoded_token = firebase_auth.verify_session_cookie(token, check_revoked=False)
             firebase_uid = decoded_token.get('uid')
         except firebase_auth.InvalidSessionCookieError:
             pass  # Try ID token next
@@ -68,7 +68,7 @@ def get_user_from_token() -> Optional[str]:
         # Try ID token
         if not firebase_uid:
             try:
-                decoded_token = firebase_auth.verify_id_token(token, check_revoked=True)
+                decoded_token = firebase_auth.verify_id_token(token, check_revoked=False)
                 firebase_uid = decoded_token.get('uid')
             except Exception as e:
                 logger.error(f'Token verification failed: {type(e).__name__}')

@@ -118,7 +118,11 @@ VALID_TRANSITIONS: Dict[SubscriptionState, Set[SubscriptionState]] = {
     SubscriptionState.PENDING_UPGRADE: {
         SubscriptionState.ACTIVE,
         SubscriptionState.UPGRADE_FAILED,
+        SubscriptionState.CANCELLED,
     },
+    # FAANG-level: upgrades create NEW subscription rows (PENDING→PENDING_UPGRADE),
+    # never mutate the active subscription. The old sub stays ACTIVE and gets
+    # cancelled atomically when the new upgrade sub activates.
     SubscriptionState.ACTIVE: {
         SubscriptionState.PAST_DUE,
         SubscriptionState.GRACE_PERIOD,
@@ -127,11 +131,10 @@ VALID_TRANSITIONS: Dict[SubscriptionState, Set[SubscriptionState]] = {
         SubscriptionState.PAUSED,
         SubscriptionState.EXPIRED,
         SubscriptionState.SUSPENDED,
-        SubscriptionState.PENDING_UPGRADE,
     },
     SubscriptionState.UPGRADE_FAILED: {
-        SubscriptionState.ACTIVE,
         SubscriptionState.PENDING_UPGRADE,
+        SubscriptionState.ACTIVE,
     },
     SubscriptionState.TRIALING: {
         SubscriptionState.ACTIVE,

@@ -1,11 +1,12 @@
 .container {
   display: flex;
   flex-direction: column;
-  padding: 32px 48px;
+  padding: 24px 32px;
   max-width: 1200px;
   width: 100%;
   animation: fadeIn 0.3s ease-out;
-  background: #ffffff; /* light theme */
+  background: transparent;
+  box-sizing: border-box;
 }
 
 @keyframes fadeIn {
@@ -14,10 +15,12 @@
 }
 
 .header {
-  margin-bottom: 24px;
+  margin-bottom: 32px;
   display: flex;
   justify-content: space-between;
-  align-items: flex-end;
+  align-items: center;
+  padding-bottom: 24px;
+  border-bottom: 1px solid #e5e7eb;
 }
 
 .title {
@@ -49,6 +52,8 @@
   gap: 8px;
   width: 250px;
   flex-shrink: 0;
+  position: sticky;
+  top: 24px;
 }
 
 .navItem {
@@ -91,7 +96,7 @@
 
 /* Card Styling */
 .card {
-  background: #ffffff;
+  background: transparent;
   border: 1px solid #e5e7eb;
   border-radius: 12px;
   overflow: hidden;
@@ -102,7 +107,7 @@
 .cardHeader {
   padding: 24px;
   border-bottom: 1px solid #e5e7eb;
-  background: #f9fafb;
+  background: transparent;
 }
 
 .cardTitle {
@@ -119,7 +124,7 @@
 }
 
 .cardBody {
-  padding: 24px;
+  padding: 16px 24px;
 }
 
 .cardFooter {
@@ -133,28 +138,26 @@
 
 /* Buttons */
 .primaryButton {
-  background: #ffffff;
-  color: #111827;
+  background: #111111;
+  color: #ffffff;
   border: none;
-  border-radius: 6px;
+  border-radius: 8px;
   padding: 8px 16px;
   font-size: 14px;
-  font-weight: 500;
+  font-weight: 600;
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: background 0.2s ease;
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
 }
 
 .primaryButton:hover:not(:disabled) {
-  background: #374151;
-  transform: translateY(-1px);
+  background: #333333;
 }
 
 .primaryButton:active:not(:disabled) {
-  transform: translateY(0);
+  transform: scale(0.98);
 }
 
 .primaryButton:disabled {

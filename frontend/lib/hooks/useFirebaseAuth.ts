@@ -79,7 +79,6 @@ export function useFirebaseAuth() {
             setIsRedirectPending(false);
           }
         } else if (result.error) {
-          // Redirect auth failed
           const errorAnalysis = classifyAuthError(result.error);
           console.error("[useFirebaseAuth] Redirect result error:", errorAnalysis);
           setError(errorAnalysis.userMessage);

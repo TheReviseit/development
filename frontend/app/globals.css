@@ -366,4 +366,13 @@ body:has(.onboarding-container.onboarding-stage-pricing)
   height: 0 !important;
 }
 
+/* Force Default Selection Colors */
+::selection {
+  background-color: Highlight !important;
+  color: HighlightText !important;
+}
 
+::-moz-selection {
+  background-color: Highlight !important;
+  color: HighlightText !important;
+}

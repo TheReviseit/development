@@ -6,7 +6,10 @@ Connects to Firestore to fetch business data for AI context
 import os
 import json
 import base64
+import logging
 from typing import Optional, Dict, Any
+
+logger = logging.getLogger(__name__)
 
 # Firebase Admin SDK
 try:
@@ -17,7 +20,7 @@ try:
 except ImportError:
     FIREBASE_AVAILABLE = False
     FieldFilter = None
-    print("[WARN] firebase-admin not installed. Run: pip install firebase-admin")
+    logger.warning("firebase-admin not installed. Run: pip install firebase-admin")
 
 # Singleton for Firebase app
 _firebase_initialized = False
@@ -35,6 +38,7 @@ def initialize_firebase():
         return True
     
     if not FIREBASE_AVAILABLE:
+        logger.error("firebase_admin module not available")
         return False
     
     try:
@@ -46,11 +50,10 @@ def initialize_firebase():
             service_account_json = base64.b64decode(service_account_base64).decode('utf-8')
             service_account = json.loads(service_account_json)
             cred = credentials.Certificate(service_account)
-            print("[FIREBASE] Using service account from environment variable")
+            logger.info("Using Firebase service account from environment variable")
         else:
             # Option 2: Look for credential file in common locations
             credential_paths = [
-                # UPDATED: Use flowauxi credentials (correct project)
                 os.path.join(os.path.dirname(__file__), 'flowauxi-659d62acabdc.json'),
                 os.path.join(os.path.dirname(__file__), 'credentials', 'firebase-credentials.json'),
                 os.getenv('FIREBASE_CREDENTIALS_PATH', ''),
@@ -63,21 +66,21 @@ def initialize_firebase():
                     break
             
             if not cred_path:
-                print("[WARN] Firebase: No credentials found. Set FIREBASE_SERVICE_ACCOUNT_KEY env var.")
+                logger.warning("No Firebase credentials found. Set FIREBASE_SERVICE_ACCOUNT_KEY env var.")
                 return False
             
             cred = credentials.Certificate(cred_path)
-            print(f"[FIREBASE] Using credential file: {os.path.basename(cred_path)}")
+            logger.info(f"Using Firebase credential file: {os.path.basename(cred_path)}")
         
         # Initialize the app
         firebase_admin.initialize_app(cred)
         _firestore_client = firestore.client()
         _firebase_initialized = True
-        print("[OK] Firebase Admin SDK initialized successfully")
+        logger.info("Firebase Admin SDK initialized successfully")
         return True
         
     except Exception as e:
-        print(f"[ERROR] Firebase initialization failed: {e}")
+        logger.error(f"Firebase initialization failed: {e}")
         return False
 
 

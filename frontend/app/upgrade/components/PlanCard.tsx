@@ -8,9 +8,14 @@
  * Features: Current plan badge, recommended badge, pricing display, upgrade button
  */
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { auth } from "@/src/firebase/firebase";
+import {
+  generateCheckoutIdempotencyKey,
+  generateSubscriptionModifyKey,
+  generatePaymentRetryKey,
+} from "@/lib/billing/idempotency";
 
 interface Plan {
   plan_slug: string;
@@ -53,30 +58,73 @@ export default function PlanCard({
   onViewDifferences,
 }: PlanCardProps) {
   const [isProcessing, setIsProcessing] = useState(false);
-  const [razorpayLoaded, setRazorpayLoaded] = useState(false);
+  const processingRef = useRef(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [elapsedSeconds, setElapsedSeconds] = useState(0);
+  const [showRetry, setShowRetry] = useState(false);
+  const pollStartRef = useRef(0);
 
-  // Load Razorpay SDK on mount
+  // Track elapsed seconds during checkout polling
+  useEffect(() => {
+    if (!isProcessing || errorMessage) return;
+    pollStartRef.current = Date.now();
+    setElapsedSeconds(0);
+    const interval = setInterval(() => {
+      setElapsedSeconds(Math.floor((Date.now() - pollStartRef.current) / 1000));
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [isProcessing, errorMessage]);
+
+  // Load Razorpay SDK on mount with cleanup and 10s timeout
   useEffect(() => {
     if (typeof window === "undefined") return;
-    if ((window as any).Razorpay) {
-      setRazorpayLoaded(true);
-      return;
-    }
+    if ((window as any).Razorpay) return;
+
+    let mounted = true;
+    const timeout = setTimeout(() => {
+      if (!mounted) return;
+      console.error("[PlanCard] Razorpay SDK load timeout (10s)");
+      setErrorMessage("Payment gateway is taking too long to load. Please refresh and try again.");
+    }, 10000);
+
     if (document.getElementById("razorpay-sdk")) {
-      // Script tag exists but hasn't loaded yet — wait for it
       const existing = document.getElementById(
         "razorpay-sdk",
       ) as HTMLScriptElement;
-      existing.addEventListener("load", () => setRazorpayLoaded(true));
-      return;
+      const handler = () => { if (mounted) clearTimeout(timeout); };
+      existing.addEventListener("load", handler);
+      return () => { existing.removeEventListener("load", handler); clearTimeout(timeout); mounted = false; };
     }
+
+    // Preconnect to Razorpay origins for faster SDK load
+    const origins = [
+      "https://checkout.razorpay.com",
+      "https://api.razorpay.com",
+    ];
+    for (const origin of origins) {
+      if (!document.querySelector(`link[rel="preconnect"][href="${origin}"]`)) {
+        const link = document.createElement("link");
+        link.rel = "preconnect";
+        link.href = origin;
+        document.head.appendChild(link);
+      }
+    }
+
     const script = document.createElement("script");
     script.id = "razorpay-sdk";
     script.src = "https://checkout.razorpay.com/v1/checkout.js";
     script.async = true;
-    script.onload = () => setRazorpayLoaded(true);
-    script.onerror = () => console.error("Failed to load Razorpay SDK");
+    script.onload = () => { if (mounted) clearTimeout(timeout); };
+    script.onerror = () => {
+      if (mounted) {
+        console.error("[PlanCard] Failed to load Razorpay SDK");
+        setErrorMessage("Failed to load payment gateway. Please check your internet and refresh.");
+        clearTimeout(timeout);
+      }
+    };
     document.body.appendChild(script);
+
+    return () => { clearTimeout(timeout); mounted = false; };
   }, []);
 
   // Calculate display price
@@ -101,40 +149,57 @@ export default function PlanCard({
     : 0;
 
   // Upgrade mutation — two paths:
-  // 1. Existing subscription (hasProration) → POST /api/subscriptions/change-plan
+  // 1. Existing subscription (hasProration) → POST /api/billing/change-plan
   //    → creates Razorpay ONE-TIME ORDER for prorated difference
-  // 2. New subscription → POST /api/upgrade/checkout
+  // 2. New subscription → POST /api/upgrade/checkout (synchronous)
   //    → creates Razorpay SUBSCRIPTION at full plan price
-  const upgradeMutation = useMutation({
+
+const upgradeMutation = useMutation({
     mutationFn: async () => {
+      if (processingRef.current) {
+        throw new Error("Already processing a payment");
+      }
+      processingRef.current = true;
+
       const user = auth.currentUser;
       if (!user) throw new Error("Not authenticated");
 
+      // Get token with conditional refresh — only force-refresh if expired
+      const idToken = await user.getIdToken(false);
+      const bearer = `Bearer ${idToken}`;
+
       // ── Path 1: Prorated upgrade (existing subscription) ──────────
       if (hasProration) {
-        const res = await fetch("/api/subscriptions/change-plan", {
+        const idemKey = await generateSubscriptionModifyKey(user.uid, plan.plan_slug, 'upgrade');
+        const res = await fetch("/api/billing/change-plan", {
           method: "POST",
           credentials: "include",
           headers: {
             "Content-Type": "application/json",
-            "X-User-Id": user.uid,
+            "Authorization": bearer,
+            "Idempotency-Key": idemKey,
           },
           body: JSON.stringify({ new_plan_slug: plan.plan_slug }),
         });
         if (!res.ok) {
-          const err = await res.json();
-          throw new Error(err.message || "Plan change failed");
+          const err = await res.json().catch(() => ({}));
+          throw new Error((err as any).message || "Plan change failed");
         }
         return res.json();
       }
 
-      // ── Path 2: New subscription (no existing plan) ───────────────
-      const res = await fetch("/api/upgrade/checkout", {
+      // ── Path 2: New subscription (async checkout — no blocking) ──
+      // POST /api/upgrade/checkout returns immediately with a checkout_id.
+      // The background worker creates the Razorpay subscription asynchronously.
+      // We poll GET /api/upgrade/checkout-status/<id> until completed (max 60s).
+      const checkoutIdemKey = await generateCheckoutIdempotencyKey(user.uid, plan.plan_slug, domain);
+      const initRes = await fetch("/api/upgrade/checkout", {
         method: "POST",
         credentials: "include",
         headers: {
           "Content-Type": "application/json",
-          "X-User-Id": user.uid,
+          "Authorization": bearer,
+          "Idempotency-Key": checkoutIdemKey,
         },
         body: JSON.stringify({
           domain,
@@ -142,21 +207,65 @@ export default function PlanCard({
           billing_cycle: billingCycle,
         }),
       });
-      if (!res.ok) {
-        const error = await res.json();
-        throw new Error(error.message || "Upgrade failed");
+      if (!initRes.ok) {
+        const error = await initRes.json().catch(() => ({}));
+        throw new Error((error as any).message || "Upgrade failed");
       }
-      return res.json();
+      const initData = await initRes.json();
+      const checkoutId = initData.checkout_id;
+      if (!checkoutId) {
+        throw new Error("No checkout_id in response");
+      }
+
+      // Poll for completion (max 60s — matches worker max execution with 3 retries)
+      const pollStart = Date.now();
+      const POLL_TIMEOUT = 60000;
+      const POLL_INTERVAL = 2000;
+      let lastStatus = "initiated";
+      while (Date.now() - pollStart < POLL_TIMEOUT) {
+        await new Promise((r) => setTimeout(r, POLL_INTERVAL));
+        const pollRes = await fetch(`/api/upgrade/checkout-status/${checkoutId}`, {
+          headers: { "Authorization": bearer },
+        });
+        if (!pollRes.ok) {
+          const err = await pollRes.json().catch(() => ({}));
+          throw new Error((err as any).message || "Status check failed");
+        }
+        const pollData = await pollRes.json();
+        lastStatus = pollData.status;
+        if (pollData.status === "completed") {
+          return pollData;
+        }
+        if (pollData.status === "failed") {
+          throw new Error(pollData.error_message || "Payment setup failed");
+        }
+      }
+      throw new Error(
+        `Payment setup timed out (status: ${lastStatus}). Please try again.`
+      );
     },
-    onMutate: () => setIsProcessing(true),
-    onSuccess: (data) => {
+    onMutate: () => {
+      setIsProcessing(true);
+      setErrorMessage(null);
+    },
+    onSuccess: async (data) => {
       if (typeof window === "undefined" || !(window as any).Razorpay) {
+        console.error("[PlanCard] Razorpay SDK not loaded at checkout time");
+        setErrorMessage("Payment gateway failed to load. Please refresh and try again.");
         setIsProcessing(false);
-        alert("Payment gateway failed to load. Please refresh and try again.");
+        processingRef.current = false;
         return;
       }
 
-      sessionStorage.setItem("flowauxi_upgrade_pending", "1");
+      const bearerUser = auth.currentUser;
+      if (!bearerUser) {
+        setErrorMessage("Session expired. Please refresh and try again.");
+        setIsProcessing(false);
+        processingRef.current = false;
+        return;
+      }
+      const idToken = await bearerUser.getIdToken(false);
+      const bearer = `Bearer ${idToken}`;
 
       let options: Record<string, any>;
 
@@ -173,31 +282,51 @@ export default function PlanCard({
             razorpay_payment_id: string;
             razorpay_order_id: string;
           }) {
-            // Immediately verify & apply the plan change server-side
-            // so the user sees upgraded features without waiting for
-            // the Razorpay webhook (can be delayed in sandbox).
             try {
               const user = auth.currentUser;
-              await fetch("/api/subscriptions/verify-proration", {
+              const idemKey = await generatePaymentRetryKey(
+                user?.uid || '', response.razorpay_payment_id
+              );
+              const verifyRes = await fetch("/api/billing/verify-proration", {
                 method: "POST",
                 credentials: "include",
                 headers: {
                   "Content-Type": "application/json",
-                  ...(user ? { "X-User-Id": user.uid } : {}),
+                  "Authorization": bearer,
+                  "Idempotency-Key": idemKey,
                 },
                 body: JSON.stringify({
                   razorpay_payment_id: response.razorpay_payment_id,
                   razorpay_order_id: response.razorpay_order_id,
                 }),
               });
-            } catch {
-              // Non-fatal: webhook will apply the change eventually
+
+              if (!verifyRes.ok) {
+                const errData = await verifyRes.json().catch(() => ({}));
+                console.error("[PlanCard] Proration verification failed:", errData);
+                setErrorMessage("Payment succeeded but verification failed. Please contact support.");
+                setIsProcessing(false);
+                processingRef.current = false;
+                sessionStorage.removeItem("flowauxi_upgrade_pending");
+                return;
+              }
+            } catch (err) {
+              console.error("[PlanCard] Proration verification network error:", err);
+              setErrorMessage("Verification network error. Your payment may have succeeded — please contact support.");
+              setIsProcessing(false);
+              processingRef.current = false;
+              sessionStorage.removeItem("flowauxi_upgrade_pending");
+              return;
             }
+
+            processingRef.current = false;
+            sessionStorage.removeItem("flowauxi_upgrade_pending");
             window.location.href = "/home?upgrade=success";
           },
           modal: {
             ondismiss: function () {
               setIsProcessing(false);
+              processingRef.current = false;
               sessionStorage.removeItem("flowauxi_upgrade_pending");
             },
           },
@@ -206,38 +335,127 @@ export default function PlanCard({
         // ── Razorpay SUBSCRIPTION checkout (full price, new sub) ───
         const razorpaySubId = data.razorpay_subscription_id;
         if (!razorpaySubId) {
+          console.error("[PlanCard] No razorpay_subscription_id in checkout response:", data);
+          setErrorMessage("Missing subscription ID from server. Please try again.");
           setIsProcessing(false);
-          alert("Missing subscription ID from server. Please try again.");
+          processingRef.current = false;
           return;
         }
+
+        const razorpayKeyId = data.razorpay_key_id || process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID;
+        if (!razorpayKeyId) {
+          console.error("[PlanCard] Missing Razorpay key ID — no API response value and no env fallback");
+          setErrorMessage("Payment gateway configuration error. Please contact support.");
+          setIsProcessing(false);
+          processingRef.current = false;
+          return;
+        }
+
         options = {
-          key: data.razorpay_key_id,
+          key: razorpayKeyId,
           subscription_id: razorpaySubId,
           name: "Flowauxi",
           description: `${plan.display_name} - ${billingCycle}`,
-          handler: function () {
-            window.location.href = "/home?upgrade=success";
+          handler: async function (response: any) {
+            try {
+              const user = auth.currentUser;
+              const idemKey = await generatePaymentRetryKey(
+                user?.uid || '', razorpaySubId
+              );
+              const verifyRes = await fetch("/api/upgrade/verify-payment", {
+                method: "POST",
+                credentials: "include",
+                headers: {
+                  "Content-Type": "application/json",
+                  "Authorization": bearer,
+                  "Idempotency-Key": idemKey,
+                },
+                body: JSON.stringify({
+                  razorpay_subscription_id: response.razorpay_subscription_id || razorpaySubId,
+                }),
+              });
+
+              if (!verifyRes.ok) {
+                const errData = await verifyRes.json().catch(() => ({}));
+                console.error("[PlanCard] Verify-payment failed:", errData);
+                setIsProcessing(false);
+                processingRef.current = false;
+                sessionStorage.removeItem("flowauxi_upgrade_pending");
+                setErrorMessage(errData.message || "Payment verification failed. Please check your payment status.");
+                return;
+              }
+            } catch (err) {
+              console.error("[PlanCard] Verify-payment network error:", err);
+              setIsProcessing(false);
+              processingRef.current = false;
+              sessionStorage.removeItem("flowauxi_upgrade_pending");
+              setErrorMessage("Payment verification failed. Please check your subscription status.");
+              return;
+            }
+
+            processingRef.current = false;
+            sessionStorage.removeItem("flowauxi_upgrade_pending");
+            window.location.href = "/payment-success?source=subscription";
           },
           modal: {
             ondismiss: function () {
               setIsProcessing(false);
+              processingRef.current = false;
               sessionStorage.removeItem("flowauxi_upgrade_pending");
             },
           },
         };
       }
 
-      const rzp = new (window as any).Razorpay(options);
-      rzp.on("payment.failed", function () {
+      // Defensive guard: never pass undefined/null key to Razorpay SDK
+      if (!options.key) {
+        console.error("[PlanCard] Razorpay key is missing — aborting checkout open");
+        setErrorMessage("Payment gateway configuration error. Please contact support.");
         setIsProcessing(false);
+        processingRef.current = false;
         sessionStorage.removeItem("flowauxi_upgrade_pending");
-      });
-      rzp.open();
+        return;
+      }
+
+      // Set pending flag ONLY after Razorpay opens successfully
+      try {
+        const rzp = new (window as any).Razorpay(options);
+        rzp.on("payment.failed", function (response: any) {
+          const error = response?.error || {};
+          console.error("[PlanCard] Razorpay payment failed:", {
+            code: error.code,
+            description: error.description,
+            source: error.source,
+            step: error.step,
+            reason: error.reason,
+          });
+          setErrorMessage(
+            error.description
+              ? `Payment failed: ${error.description}`
+              : "Payment failed. Please try a different card or payment method."
+          );
+          setIsProcessing(false);
+          processingRef.current = false;
+          sessionStorage.removeItem("flowauxi_upgrade_pending");
+        });
+        rzp.open();
+        sessionStorage.setItem("flowauxi_upgrade_pending", "1");
+      } catch (e) {
+        console.error("[PlanCard] Failed to open Razorpay checkout:", e);
+        setErrorMessage("Failed to open payment window. Please try again.");
+        setIsProcessing(false);
+        processingRef.current = false;
+        sessionStorage.removeItem("flowauxi_upgrade_pending");
+      }
     },
     onError: (error: Error) => {
+      console.error("[PlanCard] Upgrade mutation error:", error);
+      setErrorMessage(error.message);
       setIsProcessing(false);
-      alert(error.message);
+      processingRef.current = false;
+      setShowRetry(true);
     },
+
   });
 
   const handleUpgrade = () => {
@@ -246,6 +464,10 @@ export default function PlanCard({
       return;
     }
 
+    setShowRetry(false);
+    setErrorMessage(null);
+    setElapsedSeconds(0);
+    processingRef.current = false;
     upgradeMutation.mutate();
   };
 
@@ -312,6 +534,21 @@ export default function PlanCard({
         )}
       </div>
 
+      {/* Error Banner */}
+      {errorMessage && (
+        <div className="mt-4 p-3 bg-red-50 border border-red-200 rounded-lg">
+          <p className="text-sm text-red-700">{errorMessage}</p>
+          {showRetry && (
+            <button
+              onClick={handleUpgrade}
+              className="mt-2 w-full px-3 py-2 text-sm font-semibold bg-black text-white rounded-lg hover:opacity-90 transition-opacity"
+            >
+              Try Again
+            </button>
+          )}
+        </div>
+      )}
+
       {/* CTA Button */}
       <div className="mt-6">
         {isCurrent ? (
@@ -326,7 +563,7 @@ export default function PlanCard({
             onClick={handleUpgrade}
             disabled={isProcessing}
             className={`
-              w-full px-4 py-3 text-sm font-semibold rounded-lg transition-colors duration-200
+              w-full px-4 py-3 text-sm font-semibold rounded-lg transition-colors duration-200 cursor-pointer
               ${
                 plan.requires_sales_call
                   ? "border-2 border-black text-black bg-white hover:bg-gray-50"
@@ -356,7 +593,7 @@ export default function PlanCard({
                     d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
                   />
                 </svg>
-                Processing...
+                Checking... ({elapsedSeconds}s)
               </span>
             ) : plan.requires_sales_call ? (
               "Contact Sales"

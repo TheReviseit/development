@@ -16,7 +16,7 @@ import {
   FileEdit,
   Wrench,
   Bot,
-  Play,
+  // Play,
   Calendar,
   Briefcase,
   Package,
@@ -340,18 +340,7 @@ export default function DashboardSidebar({
           },
         ]
       : []),
-    ...(productDomain === "shop" && storeUsername
-      ? [
-          {
-            id: "view-store",
-            label: "View Store",
-            icon: <ExternalLink size={20} strokeWidth={2.25} />,
-            href: `/store/${storeUsername}`,
-            section: "favorites" as const,
-            target: "_blank",
-          },
-        ]
-      : []),
+
     ...(visibility.appointments && aiCapabilities.appointment_booking_enabled
       ? [
           {
@@ -412,7 +401,7 @@ export default function DashboardSidebar({
           },
         ]
       : []),
-    ...(visibility.previewBot
+    /* ...(visibility.previewBot
       ? [
           {
             id: "preview-bot",
@@ -422,7 +411,7 @@ export default function DashboardSidebar({
             section: "favorites" as const,
           },
         ]
-      : []),
+      : []), */
   ];
 
   const displayName = userName || userEmail?.split("@")[0] || "User";

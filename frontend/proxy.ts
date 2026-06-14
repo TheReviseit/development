@@ -78,13 +78,79 @@ const BILLING_CONFIG = {
   },
   csp: {
     'default-src': "'self'",
-    'script-src': "'self' 'unsafe-inline' https://checkout.razorpay.com https://cdn.razorpay.com https://apis.google.com https://*.googleapis.com https://*.gstatic.com https://*.firebaseapp.com https://*.firebase.com",
-    'style-src': "'self' 'unsafe-inline' https://fonts.googleapis.com",
+    'script-src': [
+      "'self'",
+      "'unsafe-eval'",
+      "'unsafe-inline'",
+      'https://www.googletagmanager.com',
+      'https://vercel.live',
+      'https://apis.google.com',
+      'https://accounts.google.com',
+      'https://www.gstatic.com',
+      'https://connect.facebook.net',
+      'https://va.vercel-scripts.com',
+      'https://checkout.razorpay.com',
+      'https://cdn.razorpay.com',
+      'https://*.razorpay.com',
+      'https://*.googleapis.com',
+      'https://*.gstatic.com',
+      'https://*.firebaseapp.com',
+      'https://*.firebase.com',
+    ].join(' '),
+    'style-src': "'self' 'unsafe-inline' https://fonts.googleapis.com https://accounts.google.com",
     'img-src': "'self' data: https: blob:",
     'media-src': "'self' blob: data: https:",
-    'font-src': "'self' https://fonts.gstatic.com",
-    'frame-src': "'self' https://checkout.razorpay.com https://*.firebaseapp.com https://*.google.com https://accounts.google.com",
-    'connect-src': "'self' https://api.flowauxi.com https://lumberjack.razorpay.com https://*.googleapis.com https://*.google.com https://*.firebaseio.com wss://*.firebaseio.com",
+    'font-src': "'self' https://fonts.gstatic.com https://vercel.live",
+    'frame-src': [
+      "'self'",
+      'https://vercel.live',
+      'https://accounts.google.com',
+      'https://*.firebaseapp.com',
+      'https://www.facebook.com',
+      'https://web.facebook.com',
+      'https://checkout.razorpay.com',
+      'https://api.razorpay.com',
+      'https://*.razorpay.com',
+      'https://www.youtube.com',
+      'https://www.youtube-nocookie.com',
+    ].join(' '),
+    'connect-src': [
+      "'self'",
+      'http://localhost:5000',
+      'http://127.0.0.1:5000',
+      'https://revsieit.onrender.com',
+      'https://*.onrender.com',
+      'https://*.supabase.co',
+      'wss://*.supabase.co',
+      'https://*.firebase.googleapis.com',
+      'https://identitytoolkit.googleapis.com',
+      'https://securetoken.googleapis.com',
+      'https://api.cloudinary.com',
+      'https://res.cloudinary.com',
+      'https://firebaseinstallations.googleapis.com',
+      'https://fcmregistrations.googleapis.com',
+      'https://fcm.googleapis.com',
+      'https://accounts.google.com',
+      'https://*.firebaseapp.com',
+      'wss://*.pusher.com',
+      'https://*.pusher.com',
+      'https://connect.facebook.net',
+      'https://graph.facebook.com',
+      'https://*.facebook.com',
+      'https://fonts.googleapis.com',
+      'https://fonts.gstatic.com',
+      'https://va.vercel-scripts.com',
+      'https://api.web3forms.com',
+      'https://api.razorpay.com',
+      'https://*.razorpay.com',
+      'https://lumberjack.razorpay.com',
+      'https://*.r2.dev',
+      'https://www.google-analytics.com',
+      'https://analytics.google.com',
+      'https://www.googletagmanager.com',
+      'https://apis.google.com',
+      'https://*.googleapis.com',
+    ].join(' '),
     'frame-ancestors': "'none'",
     'base-uri': "'self'",
     'form-action': "'self' https://*.google.com",
@@ -1058,8 +1124,9 @@ async function processRequest(
     }
 
     if (targetLanding === "/" || targetLanding === pathname) {
+      const landingHeaders = new Headers(request.headers);
       return addProductHeaders(
-        NextResponse.next(),
+        NextResponse.next({ request: { headers: landingHeaders } }),
         resolvedDomain,
         domainDecision.seo.canonical,
         hostname,
@@ -1077,42 +1144,17 @@ async function processRequest(
   }
 
   if (isApiPath) {
-    const isPublicApiRoute = [
-      "/api/auth/login",
-      "/api/auth/logout",
-      "/api/auth/create-user",
-      "/api/auth/check-user-exists",
-      "/api/auth/send-verification",
-      "/api/webhooks",
-      "/api/facebook/deauthorize",
-      "/api/facebook/data-deletion",
-      "/api/ai-appointment-book",
-      "/api/store",
-      "/api/orders/track",
-      "/api/console",
-      "/api/v1",
-      "/api/whatsapp",
-      "/api/booking",
-      "/api/file-tools",
-      "/api/showcase",
-      "/api/forms/public",
-      "/api/forms/workspace",
-    ].some(route => pathname.startsWith(route));
-
-    if (isPublicApiRoute) {
-      return addProductHeaders(
-        NextResponse.next(),
-        resolvedDomain,
-        domainDecision.seo.canonical,
-        hostname,
-        port,
-      );
-    }
-
-    // For non-public API routes (like /api/billing/*), still add product headers
-    // This ensures domain context is available for all API handlers
+    // API routes receive the modified request with domain context headers
+    // (x-signed-context, x-tenant-domain) injected by STEP 0 above at line 960.
+    // We must pass { request: { headers } } to NextResponse.next() so those
+    // headers survive into the API route handler and the Flask fallback rewrite.
+    // The API route handler must also forward these headers when proxying to Flask.
+    //
+    // Without { request: { headers } }, NextResponse.next() forwards the
+    // ORIGINAL request headers — the modified domain context is silently dropped.
+    const apiRequestHeaders = new Headers(request.headers);
     return addProductHeaders(
-      NextResponse.next(),
+      NextResponse.next({ request: { headers: apiRequestHeaders } }),
       resolvedDomain,
       domainDecision.seo.canonical,
       hostname,
@@ -1223,8 +1265,9 @@ async function processRequest(
       return redirectToOnboardingGate();
     }
 
+    const publicHeaders = new Headers(request.headers);
     return addProductHeaders(
-      NextResponse.next(),
+      NextResponse.next({ request: { headers: publicHeaders } }),
       resolvedDomain,
       domainDecision.seo.canonical,
       hostname,
@@ -1247,8 +1290,9 @@ async function processRequest(
     return NextResponse.redirect(url);
   }
 
+  const fallbackHeaders = new Headers(request.headers);
   return addProductHeaders(
-    NextResponse.next(),
+    NextResponse.next({ request: { headers: fallbackHeaders } }),
     resolvedDomain,
     domainDecision.seo.canonical,
     hostname,

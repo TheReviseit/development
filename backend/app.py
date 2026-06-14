@@ -27,6 +27,7 @@ import asyncio
 from flask import Flask, request, jsonify, g
 from flask_cors import CORS
 from dotenv import load_dotenv
+import atexit
 from functools import wraps
 
 
@@ -342,6 +343,14 @@ try:
 except ImportError as e:
     logger.warning(f"Domain middleware not available: {e}")
 
+# Register CSRF protection middleware (blocks cross-origin mutation requests)
+try:
+    from middleware.csrf import protect_mutations
+    app.before_request(protect_mutations)
+    logger.info("🛡️ CSRF protection middleware registered")
+except ImportError as e:
+    logger.warning(f"CSRF middleware not available: {e}")
+
 # Register modular routes
 if ROUTES_AVAILABLE and register_routes:
     register_routes(app)
@@ -531,6 +540,17 @@ try:
         logger.info("⚡ Messaging Celery tasks registered (8 tasks)")
 except Exception as e:
     logger.warning(f"Messaging Celery tasks not registered: {e}")
+
+# =============================================================================
+# Checkout Background Worker (zero-dependency async Razorpay processing)
+# =============================================================================
+try:
+    from services.checkout_worker import get_checkout_worker
+    _checkout_worker = get_checkout_worker()
+    _checkout_worker.start()
+    logger.info("✅ Checkout background worker started (2 workers, max 10 queued)")
+except Exception as e:
+    logger.warning(f"⚠️ Checkout worker not started (non-fatal): {e}")
 
 
 # =============================================================================
@@ -2269,6 +2289,16 @@ if __name__ == '__main__':
         print(f'📦 Database Outbox Processor: Started ✅ (Polling events_outbox)')
     except Exception as e:
         print(f'❌ Failed to start outbox processor: {e}')
+
+    # Start Checkout Background Worker (ThreadPoolExecutor, no Celery needed)
+    try:
+        from services.checkout_worker import get_checkout_worker
+        _checkout_worker = get_checkout_worker()
+        _checkout_worker.start()
+        atexit.register(lambda: _checkout_worker.stop())
+        print(f'💳 Checkout Worker: Started ✅ (workers=2, max_queued=10)')
+    except Exception as e:
+        print(f'❌ Failed to start checkout worker: {e}')
 
     print()
     

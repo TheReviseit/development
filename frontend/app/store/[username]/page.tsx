@@ -103,7 +103,10 @@ export default async function StorePage({ params }: StorePageProps) {
   const storeData = await getStoreBySlugCached(username);
   console.log(`[StorePage SSR] Result: ${storeData ? "FOUND" : "NULL"}`);
 
-  // If store data doesn't exist yet, we don't 404. We render the client page in demo mode.
+  // Enforce 404 if the store does not exist or has not been set up yet.
+  if (!storeData) {
+    notFound();
+  }
 
   // ── CANONICAL REDIRECT ─────────────────────────────────────────────
   // If the URL slug doesn't match the canonical slug, redirect.

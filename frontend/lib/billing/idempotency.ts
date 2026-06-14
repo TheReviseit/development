@@ -12,8 +12,6 @@
  * @securityLevel FAANG-Production
  */
 
-import { createHash } from 'crypto';
-
 /**
  * Generate deterministic idempotency key for checkout.
  * 
@@ -29,108 +27,67 @@ import { createHash } from 'crypto';
  * @param tenantDomain - Domain context (e.g., 'shop')
  * @returns Deterministic idempotency key
  */
-export function generateCheckoutIdempotencyKey(
+export async function generateCheckoutIdempotencyKey(
   userId: string,
   planSlug: string,
   tenantDomain: string
-): string {
-  // Time bucket: 1-hour window
-  // Same user trying same plan within 1 hour = same key (prevents duplicates)
-  // After 1 hour = new key (allows re-subscription)
-  const timeBucket = getTimeBucket(1); // 1-hour buckets
-  
-  // Deterministic components
-  const components = [
-    userId,
-    tenantDomain,
-    planSlug,
-    timeBucket,
-  ].join(':');
-  
-  // Hash for fixed length and format
-  const hash = createHash('sha256')
-    .update(components)
-    .digest('hex')
-    .substring(0, 32); // 32 chars is enough
-  
-  // Prefix for readability
-  return `chk_${hash}`;
+): Promise<string> {
+  const timeBucket = getTimeBucket(1);
+  const hash = await sha256Hex([userId, tenantDomain, planSlug, timeBucket].join(':'));
+  return `chk_${hash.substring(0, 32)}`;
 }
 
 /**
  * Generate idempotency key for subscription modification.
  */
-export function generateSubscriptionModifyKey(
+export async function generateSubscriptionModifyKey(
   userId: string,
   subscriptionId: string,
   action: 'cancel' | 'upgrade' | 'downgrade'
-): string {
-  const timeBucket = getTimeBucket(1); // 1-hour window
-  
-  const components = [
-    userId,
-    subscriptionId,
-    action,
-    timeBucket,
-  ].join(':');
-  
-  const hash = createHash('sha256')
-    .update(components)
-    .digest('hex')
-    .substring(0, 32);
-  
-  return `mod_${hash}`;
+): Promise<string> {
+  const timeBucket = getTimeBucket(1);
+  const hash = await sha256Hex([userId, subscriptionId, action, timeBucket].join(':'));
+  return `mod_${hash.substring(0, 32)}`;
 }
 
 /**
  * Generate idempotency key for payment retry.
  */
-export function generatePaymentRetryKey(
+export async function generatePaymentRetryKey(
   userId: string,
   invoiceId: string
-): string {
-  // Shorter bucket for retries (5 minutes)
-  const timeBucket = getTimeBucket(0.083); // 5-minute buckets
-  
-  const components = [
-    userId,
-    invoiceId,
-    timeBucket,
-  ].join(':');
-  
-  const hash = createHash('sha256')
-    .update(components)
-    .digest('hex')
-    .substring(0, 32);
-  
-  return `retry_${hash}`;
+): Promise<string> {
+  const timeBucket = getTimeBucket(0.083);
+  const hash = await sha256Hex([userId, invoiceId, timeBucket].join(':'));
+  return `retry_${hash.substring(0, 32)}`;
 }
 
-/**
- * Get time bucket for grouping operations.
- * 
- * @param hours - Bucket size in hours (1 = 1-hour buckets)
- * @returns Time bucket string (e.g., "2024-07-26-14" for 2pm hour)
- */
+async function sha256Hex(input: string): Promise<string> {
+  const enc = new TextEncoder();
+  const data = enc.encode(input);
+  const digest = await crypto.subtle.digest('SHA-256', data);
+  return Array.from(new Uint8Array(digest))
+    .map((b) => b.toString(16).padStart(2, '0'))
+    .join('');
+}
+
 function getTimeBucket(hours: number): string {
   const now = new Date();
   const bucketMs = hours * 60 * 60 * 1000;
   const bucketTime = Math.floor(now.getTime() / bucketMs) * bucketMs;
-  return new Date(bucketTime).toISOString().slice(0, 13); // YYYY-MM-DD-HH
+  return new Date(bucketTime).toISOString().slice(0, 13);
 }
 
 /**
  * Validate idempotency key format.
  */
 export function isValidIdempotencyKey(key: string): boolean {
-  // Pattern: prefix_32hexchars
   const pattern = /^(chk|mod|retry)_[a-f0-9]{32}$/;
   return pattern.test(key);
 }
 
 /**
  * Extract components from idempotency key (for debugging).
- * Note: One-way hash, cannot reverse. Just validates format.
  */
 export function parseIdempotencyKey(key: string): {
   type: string;
@@ -139,14 +96,12 @@ export function parseIdempotencyKey(key: string): {
   if (!isValidIdempotencyKey(key)) {
     return { type: 'invalid', valid: false };
   }
-  
   const prefix = key.split('_')[0];
   const typeMap: Record<string, string> = {
     'chk': 'checkout',
     'mod': 'modify',
     'retry': 'retry',
   };
-  
   return {
     type: typeMap[prefix] || 'unknown',
     valid: true,

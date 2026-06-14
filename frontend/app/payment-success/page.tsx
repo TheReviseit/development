@@ -17,6 +17,36 @@ function PaymentSuccessContent() {
     const paymentStatus = searchParams.get("razorpay_payment_link_status");
     const signature = searchParams.get("razorpay_signature");
     const referenceId = searchParams.get("razorpay_payment_link_reference_id");
+    const source = searchParams.get("source");
+
+    // Handle subscription upgrades (from PlanCard.tsx Razorpay modal)
+    if (source === "subscription") {
+      setStatus("success");
+      setMessage("Payment successful! Your subscription is being activated. This usually takes a few seconds.");
+      
+      const countdownInterval = setInterval(() => {
+        setCountdown((prev) => {
+          if (prev <= 1) {
+            clearInterval(countdownInterval);
+            return 0;
+          }
+          return prev - 1;
+        });
+      }, 1000);
+      
+      const redirectTimer = setTimeout(() => {
+        if (window.opener) {
+          window.close();
+        } else {
+          window.location.href = "/home";
+        }
+      }, 3000);
+
+      return () => {
+        clearInterval(countdownInterval);
+        clearTimeout(redirectTimer);
+      };
+    }
 
     // Check if we have the required parameters
     if (!paymentId || !paymentLinkId) {
@@ -47,7 +77,7 @@ function PaymentSuccessContent() {
         if (window.opener) {
           window.close();
         } else {
-          router.push("/");
+          window.location.href = "/home";
         }
       }, 5000);
 
@@ -120,7 +150,7 @@ function PaymentSuccessContent() {
                   if (window.opener) {
                     window.close();
                   } else {
-                    router.push("/");
+                    window.location.href = "/home";
                   }
                 }}
                 className={styles.button}
@@ -159,7 +189,7 @@ function PaymentSuccessContent() {
               </p>
               <div className={styles.pendingActions}>
                 <button 
-                  onClick={() => router.push("/")}
+                  onClick={() => window.location.href = "/home"}
                   className={styles.buttonSecondary}
                 >
                   Go to Home
@@ -193,7 +223,7 @@ function PaymentSuccessContent() {
             <p className={styles.message}>{message}</p>
             <div className={styles.failedActions}>
               <button 
-                onClick={() => router.push("/")}
+                onClick={() => window.location.href = "/home"}
                 className={styles.button}
               >
                 Try Again
@@ -226,7 +256,7 @@ function PaymentSuccessContent() {
             <p className={styles.message}>{message}</p>
             <div className={styles.errorActions}>
               <button 
-                onClick={() => router.push("/")}
+                onClick={() => window.location.href = "/home"}
                 className={styles.button}
               >
                 Go to Home

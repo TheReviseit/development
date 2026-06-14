@@ -50,7 +50,7 @@ class BillingSecurityConfig:
     ABUSE_BLOCK_THRESHOLD = 80
     
     # Firebase
-    FIREBASE_CHECK_REVOKED = True
+    FIREBASE_CHECK_REVOKED = False
     
     # Headers
     USER_ID_HEADER = 'X-User-Id'

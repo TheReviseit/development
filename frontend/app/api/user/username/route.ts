@@ -41,8 +41,24 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // Get username from Supabase users table
     const supabase = getSupabase();
+
+    // 1. Try to get the business url_slug (Primary canonical slug)
+    const { data: bizData } = await supabase
+      .from("businesses")
+      .select("url_slug")
+      .eq("user_id", userId)
+      .maybeSingle();
+
+    if (bizData?.url_slug) {
+      return NextResponse.json({
+        success: true,
+        username: bizData.url_slug,
+        hasCustomUsername: true,
+      });
+    }
+
+    // 2. Get username from Supabase users table (Legacy fallback)
     const { data, error } = await supabase
       .from("users")
       .select("username")
@@ -50,10 +66,10 @@ export async function GET(request: NextRequest) {
       .single();
 
     if (error || !data?.username) {
-      // Fallback: If no username, return UID
+      // 3. Fallback: If no username, return the first 8 chars of UID (shop visibility logic)
       return NextResponse.json({
         success: true,
-        username: userId,
+        username: userId.substring(0, 8),
         hasCustomUsername: false,
       });
     }

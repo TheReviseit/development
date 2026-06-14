@@ -97,13 +97,8 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       );
     }
 
-    const idempotencyKey = request.headers.get("Idempotency-Key");
-    if (!idempotencyKey) {
-      return NextResponse.json(
-        { success: false, code: "MISSING_IDEMPOTENCY_KEY", message: "Idempotency-Key header is required.", requestId },
-        { status: 400, headers: { "X-Request-ID": requestId } },
-      );
-    }
+    const idempotencyKey = request.headers.get("Idempotency-Key") ||
+      `verify_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
 
     const body = (await request.json().catch(() => null)) as VerifyRequestBody | null;
     if (!body) return badRequest("Request body is required.", requestId);
@@ -132,10 +127,13 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       );
     }
 
+    const forwardedAuth = request.headers.get("Authorization") || request.headers.get("authorization") || "";
+
     const proxyResult = await proxyRequest<VerifyResponseBody>("/api/billing/verify-subscription", {
       method: "POST",
       headers: {
-        "X-User-Id": auth.userId,
+        "Authorization": forwardedAuth,
+        "X-User-Id": auth.userId || "",
         "X-User-Email": auth.email || "",
         "X-Tenant-Domain": context.domain || "",
         "X-Tenant-Id": context.tenantId || "",

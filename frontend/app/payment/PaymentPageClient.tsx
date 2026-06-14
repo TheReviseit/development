@@ -248,25 +248,43 @@ export default function PaymentPageClient({
       setRazorpayLoaded(true);
       return;
     }
+
+    let mounted = true;
+
+    // Timeout: detect ad-blockers or CDN failures
+    const timeout = setTimeout(() => {
+      if (!window.Razorpay && mounted) {
+        setError('Payment system blocked. Please disable ad blockers or try a different browser.');
+        setRazorpayLoaded(false);
+      }
+    }, 15000);
+
     if (document.getElementById('razorpay-sdk')) {
       const check = setInterval(() => {
-        if (window.Razorpay) {
+        if (window.Razorpay && mounted) {
           setRazorpayLoaded(true);
           clearInterval(check);
+          clearTimeout(timeout);
         }
-      }, 100);
-      return () => clearInterval(check);
+      }, 200);
+      return () => { clearInterval(check); clearTimeout(timeout); mounted = false; };
     }
+
     const script = document.createElement('script');
     script.id = 'razorpay-sdk';
     script.src = 'https://checkout.razorpay.com/v1/checkout.js';
     script.async = true;
-    script.onload = () => setRazorpayLoaded(true);
+    script.onload = () => { if (mounted) { setRazorpayLoaded(true); clearTimeout(timeout); } };
     script.onerror = () => {
-      setError('Failed to load payment system. Please refresh and try again.');
-      setRazorpayLoaded(false);
+      if (mounted) {
+        setError('Failed to load payment system. Please refresh and try again.');
+        setRazorpayLoaded(false);
+        clearTimeout(timeout);
+      }
     };
     document.body.appendChild(script);
+
+    return () => { mounted = false; clearTimeout(timeout); };
   }, []);
 
   const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -338,7 +356,7 @@ export default function PaymentPageClient({
     setFallbackCheckoutUrl(null);
 
     // Generate idempotency key
-    const idempotencyKey = `${user.userId}_${plan.slug}_${tenant.productDomain}_${Date.now()}`;
+    const idempotencyKey = `${user.userId}_${plan.slug}_${tenant.productDomain}_${typeof crypto !== 'undefined' && 'randomUUID' in crypto ? crypto.randomUUID() : `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`}`;
 
     const result = await createCheckoutSession(plan.slug, idempotencyKey);
 

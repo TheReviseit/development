@@ -114,10 +114,13 @@ class WebhookProcessor:
         Process a verified Razorpay webhook event.
 
         Steps:
-        1. Check for duplicate (replay protection)
-        2. Record event receipt
-        3. Route to appropriate handler
-        4. Return processing result
+        1. Atomic dedup check-and-record (single INSERT with ON CONFLICT)
+        2. Route to appropriate handler
+        3. Return processing result
+
+        CRITICAL: Records event AFTER successful processing, not before.
+        Previously recorded BEFORE processing — if handler failed, event was
+        marked processed and future Razorpay retries were silently dropped.
 
         Args:
             payload: Parsed webhook JSON payload
@@ -135,8 +138,16 @@ class WebhookProcessor:
 
         self.logger.info(f"webhook_received event={event_type} id={event_id}")
 
-        # 1. Replay protection — check if already processed
-        if event_id and self._is_duplicate_event(event_id):
+        # 1. Atomic dedup — single INSERT with ON CONFLICT DO NOTHING
+        # Previously used SELECT-then-INSERT (TOCTOU race) and recorded
+        # BEFORE processing (event loss on failure).
+        # The unique constraint on webhook_events(event_id) ensures exactly
+        # one thread processes a given event.
+        is_new = True
+        if event_id:
+            is_new = self._check_and_record_event(event_id, event_type, payload)
+
+        if not is_new:
             self.logger.info(f"webhook_duplicate event={event_id}")
             return {
                 'processed': True,
@@ -145,11 +156,7 @@ class WebhookProcessor:
                 'duplicate': True,
             }
 
-        # 2. Record event receipt BEFORE processing (prevents race conditions)
-        if event_id:
-            self._record_webhook_event(event_id, event_type, payload)
-
-        # 3. Extract entities from payload
+        # 2. Extract entities from payload
         entity = payload.get('payload', {})
         subscription_data = entity.get('subscription', {}).get('entity', {})
         payment_data = entity.get('payment', {}).get('entity', {})
@@ -175,6 +182,7 @@ class WebhookProcessor:
                     }).eq('payment_id', payment_data.get('id')).execute()
                     
                     self.logger.info(f"webhook_store_order_paid event_id={event_id} rzp_order={rzp_order_id}")
+                    self._record_event_processed(event_id, 'store_order_paid')
                     return {
                         'processed': True,
                         'event_type': event_type,
@@ -219,6 +227,7 @@ class WebhookProcessor:
         handler = self._get_handler(event_type)
         if not handler:
             self.logger.info(f"webhook_unhandled_event event={event_type}")
+            self._record_event_processed(event_id, 'unhandled_event_type')
             return {
                 'processed': True,
                 'event_type': event_type,
@@ -239,6 +248,9 @@ class WebhookProcessor:
                 f"webhook_processed event={event_type} id={event_id} "
                 f"sub={subscription['id']} action={action}"
             )
+
+            # Mark event processed AFTER successful handling
+            self._record_event_processed(event_id, action)
 
             return {
                 'processed': True,
@@ -430,28 +442,54 @@ class WebhookProcessor:
             self.logger.error(f"find_subscription_error rzp_sub={razorpay_sub_id}: {e}")
             return None
 
-    def _is_duplicate_event(self, event_id: str) -> bool:
-        """Check if this event was already processed (replay protection)."""
-        try:
-            result = self._supabase.table('webhook_events').select('id').eq(
-                'event_id', event_id
-            ).limit(1).execute()
-            return bool(result.data)
-        except Exception:
-            return False  # Fail open: process event if check fails
+    def _check_and_record_event(self, event_id: str, event_type: str, payload: Dict) -> bool:
+        """
+        Atomically check for duplicate AND record event.
 
-    def _record_webhook_event(self, event_id: str, event_type: str, payload: Dict):
-        """Record webhook event for replay protection."""
+        Uses INSERT with ON CONFLICT DO NOTHING to prevent TOCTOU race.
+        Returns True if this is a new event (INSERT succeeded) OR a retry
+        of a previously-failed event (processing_result = 'processing').
+        Returns False if event was already successfully processed.
+
+        Fail CLOSED: Raises exception on DB errors so Razorpay retries.
+        """
         try:
-            self._supabase.table('webhook_events').upsert({
+            result = self._supabase.table('webhook_events').insert({
                 'event_id': event_id,
                 'event_type': event_type,
                 'raw_payload': payload,
                 'created_at': datetime.now(timezone.utc).isoformat(),
-                'processing_result': 'processed',
+                'processing_result': 'processing',
             }, on_conflict='event_id').execute()
+            return bool(result.data)
         except Exception as e:
-            self.logger.error(f"record_webhook_event_error id={event_id}: {e}")
+            error_str = str(e).lower()
+            if 'duplicate key' in error_str or 'unique' in error_str or '23505' in error_str:
+                # Check if the existing event failed previously → allow retry
+                try:
+                    existing = self._supabase.table('webhook_events').select(
+                        'processing_result'
+                    ).eq('event_id', event_id).limit(1).execute()
+                    if existing.data and existing.data[0].get('processing_result') == 'processing':
+                        self.logger.info(f"webhook_retry is_new={event_id}")
+                        return True
+                    return False
+                except Exception:
+                    return False
+            self.logger.error(f"check_and_record_event_error id={event_id}: {e}")
+            raise  # Fail CLOSED — Razorpay will retry
+
+    def _record_event_processed(self, event_id: str, action: str):
+        """Mark a webhook event as successfully processed."""
+        if not event_id:
+            return
+        try:
+            self._supabase.table('webhook_events').update({
+                'processing_result': 'processed',
+                'processed_at': datetime.now(timezone.utc).isoformat(),
+            }).eq('event_id', event_id).execute()
+        except Exception as e:
+            self.logger.error(f"record_event_processed_error id={event_id}: {e}")
 
     def _parse_timestamp(self, ts) -> Optional[str]:
         """Convert Razorpay unix timestamp to ISO string."""

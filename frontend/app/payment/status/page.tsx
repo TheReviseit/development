@@ -11,11 +11,14 @@
  * Status flow:
  * - pending → processing → completed (active)
  * - processing → completed (after webhook confirms)
+ *
+ * Auth: Uses Firebase Bearer token + /api/upgrade/get-subscription for auth.
+ *        Does NOT rely on X-Signed-Context (which may not be available here).
  */
 
 "use client";
 
-import { Suspense, useCallback, useEffect, useId, useRef, useState } from "react";
+import { Suspense, useEffect, useId, useRef, useState } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { onAuthStateChanged, User } from "firebase/auth";
 import { auth } from "@/src/firebase/firebase";
@@ -44,192 +47,101 @@ interface SubscriptionData {
   current_period_end: string;
 }
 
-interface StatusCheckResult {
-  success: boolean;
-  hasSubscription: boolean;
-  subscription: SubscriptionData | null;
-  requestId?: string;
-  code?: string;
-  message?: string;
-}
-
 // Polling configuration
-const PHASE_1_INTERVAL = 2000; // 2 seconds
-const PHASE_1_DURATION = 30000; // 30 seconds
-const PHASE_2_INTERVAL = 5000; // 5 seconds
-const PHASE_2_DURATION = 120000; // 2 minutes total
+const PHASE_1_INTERVAL = 2000;
+const PHASE_1_DURATION = 30000;
+const PHASE_2_INTERVAL = 5000;
+const PHASE_2_DURATION = 120000;
 const MAX_POLL_TIME = PHASE_2_DURATION;
+const MAX_UNSUCCESSFUL_POLLS = 60;
 
-// Move all logic to a content component
 function PaymentStatusContent() {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
-  const [subscription, setSubscription] = useState<SubscriptionData | null>(
-    null,
-  );
+  const [subscription, setSubscription] = useState<SubscriptionData | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [pollCount, setPollCount] = useState(0);
   const [elapsedTime, setElapsedTime] = useState(0);
   const [showManualRefresh, setShowManualRefresh] = useState(false);
 
   const searchParams = useSearchParams();
   const router = useRouter();
-  const pollStartTime = useRef<number>(0);
+  const pollStartTime = useRef(0);
   const pollIntervalRef = useRef<NodeJS.Timeout | null>(null);
-  const reactRequestId = useId();
-  const requestId = `req_${reactRequestId.replace(/:/g, "")}`;
+  const pollCountRef = useRef(0);
+  const isMountedRef = useRef(true);
+  const requestId = useId().replace(/:/g, "");
 
   const subscriptionId = searchParams.get("subscription_id");
-  const authTokenRef = useRef<string | null>(null);
 
   /**
-   * Fetch subscription status from backend
+   * Check subscription status via /api/upgrade/verify-payment (read-like, Bearer auth).
+   * Returns { completed: true } when subscription is active, or false to keep polling.
    */
-  const checkStatus = useCallback(async (): Promise<boolean> => {
-    if (!user) return false;
-
+  const checkStatus = async (user: User, bearer: string): Promise<boolean> => {
     try {
-      // Use Next.js domain-scoped proxy (signed context server-side)
-      if (!authTokenRef.current) {
-        try {
-          authTokenRef.current = await user.getIdToken();
-        } catch {
-          authTokenRef.current = null;
-        }
-      }
-
-      const response = await fetch(`/api/billing/subscription-status`, {
-        method: "GET",
+      const response = await fetch("/api/upgrade/verify-payment", {
+        method: "POST",
+        credentials: "include",
         headers: {
           "Content-Type": "application/json",
-          ...(authTokenRef.current
-            ? { Authorization: `Bearer ${authTokenRef.current}` }
-            : {}),
-          "X-Request-Id": requestId,
+          "Authorization": bearer,
+          "X-Request-Id": `ps_${requestId}_${pollCountRef.current}`,
         },
+        body: JSON.stringify({
+          razorpay_subscription_id: subscriptionId || undefined,
+        }),
       });
 
-      const data: StatusCheckResult = await response.json();
-      setPollCount((c) => c + 1);
+      const data = await response.json();
+      pollCountRef.current += 1;
 
-      if (data.success && data.subscription) {
-        setSubscription(data.subscription);
+      if (!isMountedRef.current) return true;
 
-        const status = data.subscription.status;
-
-        // If completed/active, stop polling and redirect
-        if (
-          status === "completed" ||
-          status === "active" ||
-          status === "trialing" ||
-          status === "grace_period"
-        ) {
-          setLoading(false);
-          invalidateOnboardingCheckCache();
-
-          // Explicitly mark onboarding as complete
-          fetch("/api/onboarding/complete", { method: "POST" }).catch((err) =>
-            console.error("Error marking onboarding complete:", err),
-          );
-
-          // Wait 2 seconds to show success state, then redirect
-          setTimeout(() => {
-            router.push("/home");
-          }, 2000);
-          return true; // Payment complete
+      if (response.ok && data.activated) {
+        setLoading(false);
+        if (data.subscription) {
+          setSubscription({ status: 'active', ...data.subscription } as any);
         }
+        invalidateOnboardingCheckCache();
+        fetch("/api/onboarding/complete", { method: "POST" }).catch(() => {});
+        setTimeout(() => { if (isMountedRef.current) router.push("/home"); }, 2000);
+        return true;
+      }
 
-        // If failed/cancelled/expired, stop polling
-        if (
-          status === "failed" ||
-          status === "cancelled" ||
-          status === "expired"
-        ) {
-          setLoading(false);
-          return true; // Terminal state
-        }
-
-        // Still processing
-        return false;
-      } else {
-        // If the backend can't find it yet, keep polling for a bit.
-        // This happens when the DB write/webhook is delayed.
-        if (elapsedTime < MAX_POLL_TIME) {
+      if (!response.ok && data.error) {
+        if (data.error === 'NOT_FOUND') {
+          const elapsed = Date.now() - pollStartTime.current;
+          if (elapsed >= 30000) {
+            setError("Your payment could not be verified. Please go back and check your subscription.");
+            setLoading(false);
+            return true;
+          }
           return false;
         }
-        setError(data?.message || "Could not find subscription");
+        if (data.error === 'RAZORPAY_TIMEOUT') {
+          return false;
+        }
+        if (data.error === 'PAYMENT_INCOMPLETE') {
+          return false;
+        }
+        setError(data.message || "Payment verification failed");
         setLoading(false);
         return true;
       }
-    } catch (err) {
-      console.error("Error checking payment status:", err);
-      // Don't stop polling on network errors
+
+      return false;
+    } catch {
+      if (!isMountedRef.current) return true;
       return false;
     }
-  }, [user, router, elapsedTime, requestId]);
-
-  /**
-   * Progressive polling with backoff
-   */
-  const startPolling = useCallback(() => {
-    pollStartTime.current = Date.now();
-
-    const poll = async () => {
-      const elapsed = Date.now() - pollStartTime.current;
-      setElapsedTime(elapsed);
-
-      // Check if max time exceeded
-      if (elapsed >= MAX_POLL_TIME) {
-        setShowManualRefresh(true);
-        setLoading(false);
-        if (pollIntervalRef.current) {
-          clearInterval(pollIntervalRef.current);
-        }
-        return;
-      }
-
-      const isComplete = await checkStatus();
-      if (isComplete) {
-        if (pollIntervalRef.current) {
-          clearInterval(pollIntervalRef.current);
-        }
-        return;
-      }
-
-      // Calculate next interval based on phase
-      const nextInterval =
-        elapsed < PHASE_1_DURATION ? PHASE_1_INTERVAL : PHASE_2_INTERVAL;
-
-      // Clear current and set new interval with potentially different timing
-      if (pollIntervalRef.current) {
-        clearInterval(pollIntervalRef.current);
-      }
-      pollIntervalRef.current = setInterval(poll, nextInterval);
-    };
-
-    // Start immediately
-    poll();
-  }, [checkStatus]);
-
-  /**
-   * Manual refresh handler
-   */
-  const handleManualRefresh = async () => {
-    setLoading(true);
-    setShowManualRefresh(false);
-    setError(null);
-    pollStartTime.current = Date.now();
-    startPolling();
   };
 
-  /**
-   * Retry payment handler
-   */
-  const handleRetry = () => {
-    router.push("/onboarding-embedded");
-  };
+  useEffect(() => {
+    isMountedRef.current = true;
+    const cleanup = () => { isMountedRef.current = false; };
+    return cleanup;
+  }, []);
 
-  // Auth state listener
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
       if (currentUser) {
@@ -238,93 +150,71 @@ function PaymentStatusContent() {
         router.push("/login");
       }
     });
-
     return () => unsubscribe();
   }, [router]);
 
-  // Start polling when user is available
   useEffect(() => {
-    if (user) {
-      startPolling();
-    }
+    if (!user) return;
 
-    return () => {
-      if (pollIntervalRef.current) {
-        clearInterval(pollIntervalRef.current);
+    pollStartTime.current = Date.now();
+    let cancelled = false;
+
+    const poll = async () => {
+      if (cancelled || !isMountedRef.current) return;
+
+      const elapsed = Date.now() - pollStartTime.current;
+      setElapsedTime(elapsed);
+
+      if (elapsed >= MAX_POLL_TIME) {
+        setShowManualRefresh(true);
+        setLoading(false);
+        return;
       }
+
+      if (pollCountRef.current >= MAX_UNSUCCESSFUL_POLLS) {
+        setShowManualRefresh(true);
+        setLoading(false);
+        return;
+      }
+
+      let bearer: string;
+      try {
+        bearer = await user.getIdToken();
+      } catch {
+        setTimeout(poll, PHASE_1_INTERVAL);
+        return;
+      }
+
+      const done = await checkStatus(user, `Bearer ${bearer}`);
+      if (done || cancelled) return;
+
+      const nextInterval = elapsed < PHASE_1_DURATION ? PHASE_1_INTERVAL : PHASE_2_INTERVAL;
+      setTimeout(poll, nextInterval);
     };
-  }, [user, startPolling]);
 
-  /**
-   * Get status display info
-   */
-  const getStatusInfo = () => {
-    if (!subscription) {
-      return {
-        icon: "⏳",
-        title: "Checking Payment Status...",
-        message: "Please wait while we verify your payment.",
-        color: "#f59e0b",
-      };
-    }
+    poll();
 
-    switch (subscription.status) {
-      case "completed":
-      case "active":
-        return {
-          icon: "✅",
-          title: "Payment Successful!",
-          message:
-            "Your subscription is now active. Redirecting to dashboard...",
-          color: "#22c55e",
-        };
-      case "processing":
-        return {
-          icon: "⏳",
-          title: "Processing Payment...",
-          message:
-            "Your payment is being confirmed. This usually takes a few seconds.",
-          color: "#3b82f6",
-        };
-      case "pending":
-        return {
-          icon: "⏳",
-          title: "Payment Pending...",
-          message: "Waiting for payment confirmation from your bank.",
-          color: "#f59e0b",
-        };
-      case "failed":
-        return {
-          icon: "❌",
-          title: "Payment Failed",
-          message: "Your payment could not be processed. Please try again.",
-          color: "#ef4444",
-        };
-      case "expired":
-        return {
-          icon: "⏰",
-          title: "Session Expired",
-          message: "Your payment session has expired. Please try again.",
-          color: "#6b7280",
-        };
-      case "cancelled":
-        return {
-          icon: "🚫",
-          title: "Payment Cancelled",
-          message: "Your payment was cancelled.",
-          color: "#6b7280",
-        };
-      default:
-        return {
-          icon: "⏳",
-          title: "Checking Status...",
-          message: "Please wait...",
-          color: "#6b7280",
-        };
-    }
+    return () => { cancelled = true; };
+  }, [user, router, subscriptionId, requestId]);
+
+  const handleManualRefresh = () => {
+    pollCountRef.current = 0;
+    setLoading(true);
+    setShowManualRefresh(false);
+    setError(null);
+    pollStartTime.current = Date.now();
+    const user = auth.currentUser;
+    if (user) setUser(user);
   };
 
-  const statusInfo = getStatusInfo();
+  const handleRetry = () => {
+    router.push("/onboarding-embedded");
+  };
+
+  const isActive = subscription?.status === "active" || subscription?.status === "completed";
+  const isFailed = subscription?.status === "failed" || subscription?.status === "expired" || subscription?.status === "cancelled";
+  const isProcessing = loading && !showManualRefresh && !error && !isActive && !isFailed;
+
   const progressPercent = Math.min((elapsedTime / MAX_POLL_TIME) * 100, 100);
 
   if (!user) {
@@ -338,100 +228,88 @@ function PaymentStatusContent() {
   return (
     <div className="payment-status-container">
       <div className="payment-status-card">
-        {/* Status Icon */}
-        <div
-          className="status-icon"
-          style={{ backgroundColor: `${statusInfo.color}20` }}
-        >
-          <span style={{ fontSize: "48px" }}>{statusInfo.icon}</span>
-        </div>
-
-        {/* Status Title */}
-        <h1 className="status-title">{statusInfo.title}</h1>
-        <p className="status-message">{statusInfo.message}</p>
-
-        {/* Progress Bar (for processing states) */}
-        {loading && !showManualRefresh && (
-          <div className="progress-container">
-            <div className="progress-bar">
-              <div
-                className="progress-fill"
-                style={{
-                  width: `${progressPercent}%`,
-                  backgroundColor: statusInfo.color,
-                }}
-              />
+        {isActive ? (
+          <>
+            <div className="status-icon" style={{ backgroundColor: "#22c55e20" }}>
+              <span style={{ fontSize: "48px" }}>✅</span>
             </div>
-            <p className="progress-text">
-              Checking... ({Math.ceil(elapsedTime / 1000)}s)
-            </p>
-          </div>
-        )}
-
-        {/* Manual Refresh (after 2 min) */}
-        {showManualRefresh && (
-          <div className="manual-refresh-section">
-            <p className="still-processing">
-              Payment is still being processed. This may take longer than usual.
-            </p>
-            <button className="refresh-button" onClick={handleManualRefresh}>
-              Check Again
-            </button>
-          </div>
-        )}
-
-        {/* Error State */}
-        {error && (
-          <div className="error-section">
-            <p className="error-text">{error}</p>
-          </div>
-        )}
-
-        {/* Retry Button (for failed/expired) */}
-        {(subscription?.status === "failed" ||
-          subscription?.status === "expired") && (
-          <button className="retry-button" onClick={handleRetry}>
-            Try Again
-          </button>
-        )}
-
-        {/* Subscription Details (for success) */}
-        {(subscription?.status === "completed" ||
-          subscription?.status === "active") && (
-          <div className="subscription-details">
-            <div className="detail-item">
-              <span className="detail-label">Plan</span>
-              <span className="detail-value">
-                {subscription.plan_name.charAt(0).toUpperCase() +
-                  subscription.plan_name.slice(1)}
-              </span>
+            <h1 className="status-title">Payment Successful!</h1>
+            <p className="status-message">Your subscription is now active. Redirecting to dashboard...</p>
+            <div className="subscription-details">
+              <div className="detail-item">
+                <span className="detail-label">Plan</span>
+                <span className="detail-value">
+                  {(subscription?.plan_name || "Unknown").charAt(0).toUpperCase() +
+                   (subscription?.plan_name || "Unknown").slice(1)}
+                </span>
+              </div>
+              <div className="detail-item">
+                <span className="detail-label">AI Responses</span>
+                <span className="detail-value">
+                  {Number(subscription?.ai_responses_limit ?? 0).toLocaleString()} / month
+                </span>
+              </div>
             </div>
-	            <div className="detail-item">
-	              <span className="detail-label">AI Responses</span>
-	              <span className="detail-value">
-	                {Number(subscription.ai_responses_limit ?? 0).toLocaleString()}{" "}
-	                / month
-	              </span>
-	            </div>
-          </div>
+          </>
+        ) : isFailed ? (
+          <>
+            <div className="status-icon" style={{ backgroundColor: "#ef444420" }}>
+              <span style={{ fontSize: "48px" }}>❌</span>
+            </div>
+            <h1 className="status-title">Payment Failed</h1>
+            <p className="status-message">{error || "Your payment could not be processed. Please try again."}</p>
+            <button className="retry-button" onClick={handleRetry}>Try Again</button>
+          </>
+        ) : error ? (
+          <>
+            <div className="status-icon" style={{ backgroundColor: "#ef444420" }}>
+              <span style={{ fontSize: "48px" }}>❌</span>
+            </div>
+            <h1 className="status-title">Verification Error</h1>
+            <p className="status-message">{error}</p>
+            <button className="retry-button" onClick={handleRetry}>Back to Upgrade</button>
+          </>
+        ) : (
+          <>
+            <div className="status-icon" style={{ backgroundColor: "#3b82f620" }}>
+              <span style={{ fontSize: "48px" }}>⏳</span>
+            </div>
+            <h1 className="status-title">
+              {showManualRefresh ? "Still Processing..." : "Verifying Payment..."}
+            </h1>
+            <p className="status-message">
+              {showManualRefresh
+                ? "Payment is taking longer than expected. You can check again or contact support."
+                : "Please wait while we confirm your payment with Razorpay."}
+            </p>
+            {!showManualRefresh && (
+              <div className="progress-container">
+                <div className="progress-bar">
+                  <div className="progress-fill" style={{ width: `${progressPercent}%`, backgroundColor: "#3b82f6" }} />
+                </div>
+                <p className="progress-text">Checking... ({Math.ceil(elapsedTime / 1000)}s)</p>
+              </div>
+            )}
+            {showManualRefresh && (
+              <div className="manual-refresh-section">
+                <button className="refresh-button" onClick={handleManualRefresh}>Check Again</button>
+              </div>
+            )}
+          </>
         )}
 
-        {/* Debug Info (development only) */}
         {process.env.NODE_ENV === "development" && (
           <div className="debug-info">
             <small>
-              Request ID: {requestId} | Polls: {pollCount} |
+              Request ID: ps_{requestId} | Polls: {pollCountRef.current} |
               Subscription ID: {subscriptionId || "N/A"}
             </small>
           </div>
         )}
       </div>
 
-      {/* Footer */}
       <div className="status-footer">
-        <p>
-          Secure payment by Razorpay • Questions? Contact support@flowauxi.com
-        </p>
+        <p>Secure payment by Razorpay • Questions? Contact support@flowauxi.com</p>
       </div>
     </div>
   );

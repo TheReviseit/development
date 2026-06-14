@@ -84,10 +84,13 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       );
     }
 
+    const forwardedAuth = request.headers.get("Authorization") || request.headers.get("authorization") || "";
+
     const proxyResult = await proxyRequest<any>("/api/billing/subscription-status", {
       method: "GET",
       headers: {
-        "X-User-Id": auth.userId,
+        "Authorization": forwardedAuth,
+        "X-User-Id": auth.userId || "",
         "X-User-Email": auth.email || "",
         "X-Tenant-Domain": context.domain || "",
         "X-Tenant-Id": context.tenantId || "",

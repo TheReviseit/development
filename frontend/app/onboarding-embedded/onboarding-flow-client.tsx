@@ -266,6 +266,11 @@ export function OnboardingFlowClient({
         return;
       }
 
+      if ((order as any).already_active) {
+        window.location.href = `/payment/status?subscription_id=${order.subscription_id}`;
+        return;
+      }
+
       console.log("[Onboarding] Subscription created:", order.subscription_id);
 
       // Open Razorpay checkout

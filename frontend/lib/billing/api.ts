@@ -69,15 +69,15 @@ const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
 
 /**
  * Get current Firebase ID token.
- * Forces refresh if token is about to expire.
+ * Uses conditional refresh — only hits network if token is near expiry.
  */
 async function getAuthToken(): Promise<string | null> {
   const user = auth.currentUser;
   if (!user) return null;
   
   try {
-    // Force refresh to ensure token is valid
-    return await user.getIdToken(true);
+    // false = use cached token if still valid (avoids unnecessary network call)
+    return await user.getIdToken(false);
   } catch (error) {
     console.error('Failed to get auth token:', error);
     return null;
@@ -85,7 +85,7 @@ async function getAuthToken(): Promise<string | null> {
 }
 
 /**
- * Handle 401 responses by refreshing token and retrying.
+ * Handle 401 responses by refreshing token and retrying once.
  */
 async function handleAuthError<T>(
   requestFn: () => Promise<T>
@@ -94,10 +94,9 @@ async function handleAuthError<T>(
     return await requestFn();
   } catch (error: any) {
     if (error.status === 401) {
-      // Token expired, refresh and retry
       const user = auth.currentUser;
       if (user) {
-        await user.getIdToken(true); // Force refresh
+        await user.getIdToken(true);
         return await requestFn();
       }
     }
@@ -114,31 +113,41 @@ class BillingApiClient {
     endpoint: string,
     options: RequestInit = {}
   ): Promise<T> {
+    if (!billingCircuitBreaker.canExecute()) {
+      throw new Error('Billing service temporarily unavailable. Please try again later.');
+    }
+    
     const token = await getAuthToken();
     
     if (!token) {
       throw new Error('Not authenticated');
     }
     
-    const response = await fetch(`${API_BASE_URL}${endpoint}`, {
-      ...options,
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}`,
-        ...options.headers,
-      },
-    });
-    
-    if (!response.ok) {
-      const error = await response.json().catch(() => ({}));
-      const apiError: any = new Error(error.message || 'API request failed');
-      apiError.status = response.status;
-      apiError.code = error.error || 'UNKNOWN_ERROR';
-      apiError.data = error;
-      throw apiError;
+    try {
+      const response = await fetch(`${API_BASE_URL}${endpoint}`, {
+        ...options,
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+          ...options.headers,
+        },
+      });
+      
+      if (!response.ok) {
+        const error = await response.json().catch(() => ({}));
+        const apiError: any = new Error(error.message || 'API request failed');
+        apiError.status = response.status;
+        apiError.code = error.error || 'UNKNOWN_ERROR';
+        apiError.data = error;
+        throw apiError;
+      }
+      
+      billingCircuitBreaker.recordSuccess();
+      return response.json();
+    } catch (error) {
+      billingCircuitBreaker.recordFailure();
+      throw error;
     }
-    
-    return response.json();
   }
   
   /**

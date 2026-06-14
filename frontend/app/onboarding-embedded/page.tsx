@@ -1015,6 +1015,12 @@ export default function OnboardingPageEmbedded() {
         },
       });
 
+      if ((order as any).already_active) {
+        setBillingRedirectInProgress(true);
+        router.push(`/payment/status?subscription_id=${order.subscription_id}`);
+        return;
+      }
+
       await openRazorpayCheckout({
         subscriptionId: order.subscription_id,
         keyId: order.key_id,

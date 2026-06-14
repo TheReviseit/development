@@ -1905,12 +1905,13 @@ export default function BotSettingsView() {
                 <input
                   type="tel"
                   value={data.contact.phone}
-                  onChange={(e) =>
+                  onChange={(e) => {
+                    const value = e.target.value.replace(/\D/g, '').slice(0, 10);
                     setData({
                       ...data,
-                      contact: { ...data.contact, phone: e.target.value },
-                    })
-                  }
+                      contact: { ...data.contact, phone: value },
+                    });
+                  }}
                   placeholder="e.g., 9876543210"
                 />
               </div>
@@ -1919,12 +1920,13 @@ export default function BotSettingsView() {
                 <input
                   type="tel"
                   value={data.contact.whatsapp}
-                  onChange={(e) =>
+                  onChange={(e) => {
+                    const value = e.target.value.replace(/\D/g, '').slice(0, 10);
                     setData({
                       ...data,
-                      contact: { ...data.contact, whatsapp: e.target.value },
-                    })
-                  }
+                      contact: { ...data.contact, whatsapp: value },
+                    });
+                  }}
                   placeholder="e.g., 9876543210"
                 />
               </div>
@@ -2042,7 +2044,7 @@ export default function BotSettingsView() {
                     location: { ...data.location, address: e.target.value },
                   })
                 }
-                placeholder="e.g., 123, MG Road"
+                placeholder="e.g., 123, Anna Salai"
               />
             </div>
             <div className={styles.formGrid}>
@@ -2057,7 +2059,7 @@ export default function BotSettingsView() {
                       location: { ...data.location, city: e.target.value },
                     })
                   }
-                  placeholder="e.g., Mumbai"
+                  placeholder="e.g., Chennai"
                 />
               </div>
               <div className={styles.formGroup}>
@@ -2071,7 +2073,7 @@ export default function BotSettingsView() {
                       location: { ...data.location, state: e.target.value },
                     })
                   }
-                  placeholder="e.g., Maharashtra"
+                  placeholder="e.g., Tamil Nadu"
                 />
               </div>
               <div className={styles.formGroup}>
@@ -2079,13 +2081,14 @@ export default function BotSettingsView() {
                 <input
                   type="text"
                   value={data.location.pincode}
-                  onChange={(e) =>
+                  onChange={(e) => {
+                    const value = e.target.value.replace(/\D/g, '').slice(0, 6);
                     setData({
                       ...data,
-                      location: { ...data.location, pincode: e.target.value },
-                    })
-                  }
-                  placeholder="e.g., 400001"
+                      location: { ...data.location, pincode: value },
+                    });
+                  }}
+                  placeholder="e.g., 600002"
                 />
               </div>
             </div>

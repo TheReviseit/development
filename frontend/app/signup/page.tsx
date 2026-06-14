@@ -416,7 +416,6 @@ export default function SignupPage() {
             getPostAuthPath(syncResult, fallbackCompleted) || "/onboarding",
           );
         } else if (result.error) {
-          // Handle redirect error
           const errorAnalysis = classifyAuthError(result.error);
           console.error("[Signup] Redirect auth error:", errorAnalysis);
           setError(errorAnalysis.userMessage);

@@ -83,6 +83,17 @@ export function PricingClient({
         2, // maxRetries
       );
 
+      if (!order.success) {
+        setPaymentError(order.error || "Failed to create subscription");
+        setPaymentLoading(null);
+        return;
+      }
+
+      if ((order as any).already_active) {
+        window.location.href = `/payment/status?subscription_id=${order.subscription_id}`;
+        return;
+      }
+
       console.log("[Pricing] Subscription created:", order.subscription_id);
 
       // Open Razorpay checkout

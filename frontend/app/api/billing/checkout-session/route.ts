@@ -358,10 +358,15 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     // -------------------------------------------------------------------------
     // STEP 6: PROXY TO BACKEND
     // -------------------------------------------------------------------------
+    // Forward the original Authorization header to Flask for server-side Firebase token verification.
+    // The validateAuth() above only decodes the JWT payload for rate-limiting/user lookup;
+    // actual token verification (signature, expiry, revocation) happens in Flask.
+    const forwardedAuth = request.headers.get("Authorization") || request.headers.get("authorization") || "";
+
     const proxyResult = await proxyRequest<CheckoutSessionResponse>('/api/billing/checkout-session', {
       method: 'POST',
       headers: {
-        'X-User-Id': authResult.userId || '',
+        'Authorization': forwardedAuth,
         'X-User-Email': authResult.email || '',
         'X-Tenant-Domain': context.domain!,
         'X-Tenant-Id': context.tenantId!,

@@ -4,8 +4,15 @@ Fetches customer credentials from the database based on phone_number_id
 """
 
 import os
-from typing import Dict, Any, Optional
+import time
+import logging
+from typing import Dict, Any, Optional, Callable, TypeVar
+from functools import wraps
 from supabase import create_client, Client
+from supabase.lib.client_options import ClientOptions
+
+T = TypeVar('T')
+logger = logging.getLogger('flowauxi.supabase')
 
 # Import decryption utility
 try:
@@ -16,15 +23,70 @@ except ImportError:
     CRYPTO_AVAILABLE = False
     decrypt_token = None
 
-# Initialize Supabase client
+# Initialize Supabase client with connection pooling
 supabase_url = os.getenv('NEXT_PUBLIC_SUPABASE_URL') or os.getenv('SUPABASE_URL')
 supabase_key = os.getenv('SUPABASE_SERVICE_ROLE_KEY') or os.getenv('NEXT_PUBLIC_SUPABASE_ANON_KEY')
 
 _supabase_client: Optional[Client] = None
 
 
+# =============================================================================
+# Retry Wrapper for Supabase Queries (Reliability)
+# =============================================================================
+# Transient DB errors (connection pool exhaustion, replica lag) should not
+# cause request failures. This wrapper retries with exponential backoff.
+
+def with_retry(
+    max_retries: int = 3,
+    base_delay: float = 0.1,
+    max_delay: float = 2.0,
+):
+    """Decorator that retries Supabase queries on transient errors.
+
+    Usage:
+        @with_retry()
+        def query_user(firebase_uid):
+            return client.table('users').select('id').eq(...).execute()
+    """
+    def decorator(func: Callable[..., T]) -> Callable[..., T]:
+        @wraps(func)
+        def wrapper(*args, **kwargs):
+            last_error = None
+            for attempt in range(max_retries):
+                try:
+                    return func(*args, **kwargs)
+                except Exception as e:
+                    last_error = e
+                    error_str = str(e).lower()
+
+                    # Non-retryable: constraint violations, not found
+                    if any(x in error_str for x in ['23505', '23503', '23502', 'PGRST116']):
+                        raise
+
+                    # Transient: pool timeout, connection refused, timeout
+                    if any(x in error_str for x in [
+                        'timeout', 'pool', 'connection', 'refused',
+                        'reset', 'closed', 'unavailable', 'too many',
+                    ]):
+                        if attempt < max_retries - 1:
+                            delay = min(base_delay * (2 ** attempt), max_delay)
+                            logger.warning(
+                                f"Supabase retry {attempt + 1}/{max_retries} "
+                                f"after {delay:.1f}s: {e}"
+                            )
+                            time.sleep(delay)
+                            continue
+
+                    # Non-retryable errors or last attempt
+                    raise
+
+            raise last_error
+        return wrapper
+    return decorator
+
+
 def get_supabase_client() -> Optional[Client]:
-    """Get or create Supabase client instance."""
+    """Get or create Supabase client instance with connection pooling."""
     global _supabase_client
     
     if _supabase_client is not None:
@@ -35,8 +97,15 @@ def get_supabase_client() -> Optional[Client]:
         return None
     
     try:
-        _supabase_client = create_client(supabase_url, supabase_key)
-        print("✅ Supabase client initialized")
+        _supabase_client = create_client(
+            supabase_url,
+            supabase_key,
+            options=ClientOptions(
+                postgrest_client_timeout=10,
+                schema='public',
+            )
+        )
+        print("✅ Supabase client initialized (pooled, 10s timeout)")
         return _supabase_client
     except Exception as e:
         print(f"❌ Failed to initialize Supabase client: {e}")

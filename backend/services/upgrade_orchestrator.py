@@ -179,46 +179,77 @@ class UpgradeOrchestrator:
             # 2. Get current subscription
             current_sub = self._get_active_subscription(user_id, domain)
 
-            if current_sub and current_sub['status'] == 'pending_upgrade':
-                # Always reset pending_upgrade so user can retry.
-                # The previous Razorpay subscription was never completed (no webhook
-                # arrived), so creating a new one is safe and idempotent.
+            # FAANG-level: separate row pattern — search for stale pending_upgrade
+            # (the pending_upgrade row is a separate row, NOT the active sub)
+            stale_pending = self._supabase.table('subscriptions').select('*').match({
+                'user_id': user_id,
+                'product_domain': domain,
+                'status': 'pending_upgrade',
+            }).order('created_at', desc=True).limit(1).execute()
+            stale_pending = stale_pending.data[0] if stale_pending.data else None
+
+            if stale_pending:
+                # Cancel the stale pending_upgrade row so the user can retry.
                 self.logger.warning(
                     "orchestrator_recovering_pending_upgrade",
                     extra={
                         "user_id": user_id, "domain": domain,
-                        "subscription_id": current_sub['id'],
-                        "initiated_at": current_sub.get('upgrade_initiated_at')
+                        "subscription_id": stale_pending['id'],
+                        "upgrade_initiated_at": stale_pending.get('upgrade_initiated_at')
                     }
                 )
                 self._supabase.table('subscriptions').update({
-                    'status': 'active',
-                    'pending_upgrade_to_plan_id': None,
-                    'pending_upgrade_razorpay_subscription_id': None,
+                    'status': 'cancelled',
                     'upgrade_failure_reason': 'Reset on new upgrade attempt',
                     'updated_at': datetime.now(timezone.utc).isoformat()
-                }).eq('id', current_sub['id']).execute()
-
-                # Re-fetch after recovery
-                current_sub = self._get_active_subscription(user_id, domain)
+                }).eq('id', stale_pending['id']).execute()
 
             # 3. Get target plan details
             target_plan = self._pricing_service.get_plan_by_id(target_plan_id)
             if not target_plan:
                 raise UpgradeOrchestratorError(f"Plan not found: {target_plan_id}")
 
-            # 4. Create Razorpay subscription
+            # 4. Get or create Razorpay customer for card reuse
+            # FAANG-level: reuse existing customer so saved payment methods
+            # persist across subscriptions and upgrades.
+            import os as _os
+            import requests as _requests
+
+            RAZORPAY_KEY_ID = _os.getenv('RAZORPAY_KEY_ID')
+            RAZORPAY_KEY_SECRET = _os.getenv('RAZORPAY_KEY_SECRET')
+
+            _customer_id = None
+            try:
+                _cust_result = self._supabase.table('razorpay_customers').select(
+                    'razorpay_customer_id'
+                ).eq('user_id', user_id).limit(1).execute()
+                if _cust_result.data:
+                    _customer_id = _cust_result.data[0].get('razorpay_customer_id')
+                    self.logger.info(
+                        "initiate_upgrade_reusing_customer",
+                        extra={"customer_id": _customer_id, "user_id": user_id}
+                    )
+            except Exception as _cust_err:
+                # Non-fatal: subscription can be created without customer_id
+                self.logger.warning(
+                    "initiate_upgrade_customer_lookup_failed",
+                    extra={"error": str(_cust_err)[:100]}
+                )
+
             subscription_data = {
                 'plan_id': target_plan['razorpay_plan_id'],
                 'total_count': 12,  # 12 billing cycles
                 'quantity': 1,
-                'customer_notify': 1,
+                'customer_notify': 0,
                 'notes': {
                     'user_id': user_id,
                     'domain': domain,
                     'plan_name': target_plan.get('plan_slug', ''),
                 }
             }
+
+            if _customer_id:
+                subscription_data['customer_id'] = _customer_id
 
             # Add add-on items if provided
             if addons:
@@ -234,52 +265,80 @@ class UpgradeOrchestrator:
                 if addon_items:
                     subscription_data['addons'] = addon_items
 
-            razorpay_sub = self._razorpay.subscription.create(data=subscription_data)
+            # Generate deterministic idempotency key: user+domain+plan+hourly bucket
+            # Same inputs within the same hour produce the same key (retry-safe).
+            # Different plans/domains always produce different keys.
+            _hour_bucket = datetime.now(timezone.utc).strftime('%Y-%m-%dT%H')
+            _idem_raw = f"{user_id}:{domain}:{target_plan['razorpay_plan_id']}:{_hour_bucket}"
+            _idem_hash = hashlib.sha256(_idem_raw.encode()).hexdigest()[:24]
+            idempotency_key = f"upg_{_idem_hash}"
+
+            _url = 'https://api.razorpay.com/v1/subscriptions'
+            _headers = {
+                'Content-Type': 'application/json',
+                'X-Razorpay-Idempotency-Key': idempotency_key,
+            }
+
+            _response = _requests.post(
+                _url,
+                auth=(RAZORPAY_KEY_ID, RAZORPAY_KEY_SECRET),
+                json=subscription_data,
+                headers=_headers,
+                timeout=(30, 25),
+            )
+
+            if _response.status_code == 409:
+                # Idempotency hit — existing subscription returned by Razorpay
+                _error_data = _response.json()
+                _existing_id = _error_data.get('error', {}).get('field', '')
+                self.logger.info(
+                    "initiate_upgrade_idempotency_hit",
+                    extra={
+                        "existing_id": _existing_id,
+                        "key_prefix": idempotency_key[:12],
+                        "user_id": user_id, "domain": domain,
+                    }
+                )
+                razorpay_sub = {'id': _existing_id, 'idempotency_hit': True, **subscription_data}
+            else:
+                _response.raise_for_status()
+                razorpay_sub = {**_response.json(), 'idempotency_hit': False}
 
             # 5. Record pending upgrade in DB (atomic)
+            # FAANG-level: upgrades always create a NEW subscription row.
+            # The old ACTIVE subscription is NOT mutated — it stays active
+            # and gets cancelled atomically when the new row activates
+            # (see _activate_upgrade_atomic).
+            insert_data = {
+                'user_id': user_id,
+                'product_domain': domain,
+                'pricing_plan_id': target_plan_id,
+                'plan_id': target_plan['razorpay_plan_id'],
+                'plan_name': target_plan.get('plan_slug', ''),
+                'amount_paise': target_plan.get('amount_paise', 0),
+                'currency': target_plan.get('currency', 'INR'),
+                'razorpay_subscription_id': razorpay_sub['id'],
+                'pending_upgrade_to_plan_id': target_plan_id,
+                'pending_upgrade_razorpay_subscription_id': razorpay_sub['id'],
+                'status': 'pending_upgrade',
+                'upgrade_initiated_at': datetime.now(timezone.utc).isoformat(),
+                'created_at': datetime.now(timezone.utc).isoformat(),
+                'updated_at': datetime.now(timezone.utc).isoformat()
+            }
             if current_sub:
-                # Existing subscription → mark as pending_upgrade
-                self._supabase.table('subscriptions').update({
-                    'status': 'pending_upgrade',
-                    'pending_upgrade_to_plan_id': target_plan_id,
-                    'pending_upgrade_razorpay_subscription_id': razorpay_sub['id'],
-                    'upgrade_initiated_at': datetime.now(timezone.utc).isoformat(),
-                    'updated_at': datetime.now(timezone.utc).isoformat()
-                }).eq('id', current_sub['id']).execute()
+                insert_data['previous_subscription_id'] = current_sub['id']
 
-                self.logger.info(
-                    "upgrade_pending_existing_sub",
-                    extra={
-                        "user_id": user_id,
-                        "subscription_id": current_sub['id'],
-                        "razorpay_subscription_id": razorpay_sub['id']
-                    }
-                )
-            else:
-                # New subscription → create with pending_upgrade status
-                self._supabase.table('subscriptions').insert({
-                    'user_id': user_id,
-                    'product_domain': domain,
-                    'pricing_plan_id': target_plan_id,
-                    'plan_id': target_plan['razorpay_plan_id'],
-                    'plan_name': target_plan.get('plan_slug', ''),
-                    'amount_paise': target_plan.get('amount_paise', 0),
-                    'currency': target_plan.get('currency', 'INR'),
-                    'razorpay_subscription_id': razorpay_sub['id'],
-                    'status': 'pending_upgrade',
-                    'upgrade_initiated_at': datetime.now(timezone.utc).isoformat(),
-                    'created_at': datetime.now(timezone.utc).isoformat(),
-                    'updated_at': datetime.now(timezone.utc).isoformat()
-                }).execute()
+            self._supabase.table('subscriptions').insert(insert_data).execute()
 
-                self.logger.info(
-                    "upgrade_pending_new_sub",
-                    extra={
-                        "user_id": user_id,
-                        "domain": domain,
-                        "razorpay_subscription_id": razorpay_sub['id']
-                    }
-                )
+            log_action = "upgrade_pending_existing_sub" if current_sub else "upgrade_pending_new_sub"
+            log_data = {
+                "user_id": user_id,
+                "domain": domain,
+                "razorpay_subscription_id": razorpay_sub['id']
+            }
+            if current_sub:
+                log_data["previous_subscription_id"] = current_sub['id']
+            self.logger.info(log_action, extra=log_data)
 
             # 6. Return Razorpay details for frontend checkout
             import os
@@ -330,6 +389,8 @@ class UpgradeOrchestrator:
         )
 
         # 1. Find subscription by razorpay ID
+        # FAANG-level: new rows store razorpay_subscription_id directly;
+        # legacy pending_upgrade rows store it in pending_upgrade_razorpay_subscription_id
         sub_result = self._supabase.table('subscriptions').select('*').or_(
             f"razorpay_subscription_id.eq.{razorpay_subscription_id},"
             f"pending_upgrade_razorpay_subscription_id.eq.{razorpay_subscription_id}"
@@ -379,13 +440,24 @@ class UpgradeOrchestrator:
             extra={"razorpay_subscription_id": razorpay_subscription_id, "reason": failure_reason}
         )
 
+        # FAANG-level: new row pattern stores razorpay_subscription_id directly
         result = self._supabase.table('subscriptions').update({
             'status': 'upgrade_failed',
             'upgrade_failure_reason': failure_reason,
-            'pending_upgrade_to_plan_id': None,
-            'pending_upgrade_razorpay_subscription_id': None,
+            'razorpay_subscription_id': None,
             'updated_at': datetime.now(timezone.utc).isoformat()
-        }).eq('pending_upgrade_razorpay_subscription_id', razorpay_subscription_id).execute()
+        }).eq('razorpay_subscription_id', razorpay_subscription_id).in_(
+            'status', ['pending_upgrade', 'pending']
+        ).execute()
+
+        if not result.data:
+            # Fallback: search pending_upgrade_razorpay_subscription_id (legacy)
+            result = self._supabase.table('subscriptions').update({
+                'status': 'upgrade_failed',
+                'upgrade_failure_reason': failure_reason,
+                'pending_upgrade_razorpay_subscription_id': None,
+                'updated_at': datetime.now(timezone.utc).isoformat()
+            }).eq('pending_upgrade_razorpay_subscription_id', razorpay_subscription_id).execute()
 
         if result.data:
             subscription = result.data[0]
@@ -400,19 +472,17 @@ class UpgradeOrchestrator:
 
     def cleanup_stale_upgrades(self) -> int:
         """
-        Cleanup job: Reset pending upgrades older than 30 minutes.
+        Cleanup job: Cancel stale pending/upgrade subscriptions older than 30 minutes.
 
-        If payment not confirmed in 30 mins, likely abandoned.
-        Resets subscription to active state (old plan).
+        If payment not confirmed in 30 mins, likely abandoned:
+          - Cancels the Razorpay subscription (no orphaned subs in Razorpay)
+          - Marks the DB row as cancelled
+          - Old ACTIVE subscription stays untouched (new row pattern)
 
         Should be called by Celery cron job every 10 minutes.
 
         Returns:
-            Number of stale upgrades cleaned up
-
-        Example:
-            >>> cleaned = orchestrator.cleanup_stale_upgrades()
-            >>> print(f"Cleaned {cleaned} stale upgrades")
+            Number of stale subscriptions cleaned up
         """
         stale_threshold = datetime.now(timezone.utc) - timedelta(
             minutes=self.STALE_THRESHOLD_MINUTES
@@ -423,32 +493,63 @@ class UpgradeOrchestrator:
             extra={"threshold": stale_threshold.isoformat()}
         )
 
-        # Find stale pending upgrades
-        stale_subs = self._supabase.table('subscriptions').select('*').match({
-            'status': 'pending_upgrade'
-        }).lt('upgrade_initiated_at', stale_threshold.isoformat()).execute()
+        # Find stale pending/upgrade subscriptions
+        stale_subs = self._supabase.table('subscriptions').select('*').in_(
+            'status', ['pending_upgrade', 'pending']
+        ).lt('upgrade_initiated_at', stale_threshold.isoformat()).execute()
 
         cleaned_count = 0
 
         for sub in (stale_subs.data or []):
+            rzp_sub_id = sub.get('razorpay_subscription_id') or sub.get('pending_upgrade_razorpay_subscription_id')
             self.logger.warning(
                 "cleanup_stale_upgrade",
                 extra={
                     "subscription_id": sub['id'],
                     "user_id": sub['user_id'],
                     "domain": sub['product_domain'],
+                    "status": sub['status'],
+                    "razorpay_subscription_id": rzp_sub_id,
                     "pending_duration": (datetime.now(timezone.utc) - datetime.fromisoformat(sub['upgrade_initiated_at'])).total_seconds() / 60
                 }
             )
 
-            # Reset to active (assume payment abandoned)
-            self._supabase.table('subscriptions').update({
-                'status': 'active',
-                'pending_upgrade_to_plan_id': None,
-                'pending_upgrade_razorpay_subscription_id': None,
-                'upgrade_failure_reason': 'Payment abandoned (30 min timeout)',
-                'updated_at': datetime.now(timezone.utc).isoformat()
-            }).eq('id', sub['id']).execute()
+            # FAANG-level: cancel the Razorpay subscription to prevent
+            # orphaned subs OR silent payment capture on abandoned upgrades.
+            # Try/catch because the sub may already be cancelled/expired at Razorpay.
+            if rzp_sub_id:
+                try:
+                    self._razorpay.subscription.cancel(rzp_sub_id)
+                    self.logger.info(
+                        "cleanup_cancelled_razorpay_sub",
+                        extra={"razorpay_subscription_id": rzp_sub_id}
+                    )
+                except Exception as cancel_err:
+                    # Non-fatal — may already be cancelled/expired at Razorpay
+                    self.logger.warning(
+                        "cleanup_razorpay_cancel_failed",
+                        extra={
+                            "razorpay_subscription_id": rzp_sub_id,
+                            "error": str(cancel_err)[:100]
+                        }
+                    )
+
+            # Cancel the DB row (both pending_upgrade and pending subs)
+            # FAANG-level: never set to active — upgrades create separate rows
+            try:
+                self._supabase.table('subscriptions').update({
+                    'status': 'cancelled',
+                    'cancelled_at': datetime.now(timezone.utc).isoformat(),
+                    'cancellation_reason': 'abandoned_checkout',
+                    'upgrade_failure_reason': 'Checkout abandoned (30 min timeout)',
+                    'upgrade_initiated_at': None,
+                    'updated_at': datetime.now(timezone.utc).isoformat()
+                }).eq('id', sub['id']).execute()
+            except Exception as cancel_db_err:
+                self.logger.warning(
+                    "cleanup_stale_upgrades_db_cancel_skipped",
+                    extra={"sub_id": sub['id'], "error": str(cancel_db_err)[:100]}
+                )
 
             cleaned_count += 1
 
@@ -471,57 +572,99 @@ class UpgradeOrchestrator:
         """
         Atomically activate upgraded plan.
 
-        Uses DB function apply_pending_upgrade_atomic() for atomicity.
+        New row pattern (FAANG-level):
+        1. Activate the new PENDING_UPGRADE subscription row
+        2. Cancel the old ACTIVE subscription row (same user+domain)
+        3. Reset caches
 
-        This is the CRITICAL section - must be atomic.
+        This is the CRITICAL section — must be atomic.
         """
         subscription_id = subscription['id']
         user_id = subscription['user_id']
         domain = subscription['product_domain']
+        previous_sub_id = subscription.get('previous_subscription_id')
 
         self.logger.info(
             "activate_upgrade_atomic_start",
-            extra={"subscription_id": subscription_id, "user_id": user_id, "domain": domain}
+            extra={
+                "subscription_id": subscription_id,
+                "user_id": user_id, "domain": domain,
+                "previous_subscription_id": previous_sub_id
+            }
         )
 
         try:
-            # Call atomic DB function (from migration 051)
-            result = self._supabase.rpc('apply_pending_upgrade_atomic', {
-                'p_subscription_id': subscription_id,
-                'p_event_id': event_data.get('id', 'unknown'),
-                'p_period_start': event_data.get('current_period_start'),
-                'p_period_end': event_data.get('current_period_end')
-            }).execute()
+            # 1. Activate the new subscription row atomically
+            # FAANG-level: eq('status', 'pending_upgrade') ensures only one
+            # of {verify-payment, webhook} can win the race. If the other
+            # already activated this row, this UPDATE affects 0 rows.
+            result = self._supabase.table('subscriptions').update({
+                'status': 'active',
+                'current_period_start': event_data.get('current_period_start'),
+                'current_period_end': event_data.get('current_period_end'),
+                'updated_at': datetime.now(timezone.utc).isoformat()
+            }).eq('id', subscription_id).eq('status', 'pending_upgrade').execute()
 
-            if result.data:
-                # Reset usage counters for metered features
-                self._reset_usage_counters(user_id, domain)
+            if not result.data:
+                self.logger.warning(
+                    "activate_upgrade_already_activated",
+                    extra={"subscription_id": subscription_id}
+                )
+                # Already active — return True (idempotent)
+                return True
 
-                # Increment subscription version (invalidate caches)
-                self._increment_subscription_version(user_id, domain)
-
-                # Invalidate all caches (belt + suspenders)
-                self._invalidate_all_caches(user_id, domain)
-
-                # Log success
-                self.logger.info(
-                    "upgrade_activated_success",
+            # 2. Cancel the old active subscription (if linking info exists)
+            try:
+                if previous_sub_id:
+                    self._supabase.table('subscriptions').update({
+                        'status': 'cancelled',
+                        'cancelled_at': datetime.now(timezone.utc).isoformat(),
+                        'cancellation_reason': 'upgraded',
+                        'updated_at': datetime.now(timezone.utc).isoformat()
+                    }).eq('id', previous_sub_id).execute()
+                else:
+                    # Fallback: find and cancel any other ACTIVE sub for same user+domain
+                    self._supabase.table('subscriptions').update({
+                        'status': 'cancelled',
+                        'cancelled_at': datetime.now(timezone.utc).isoformat(),
+                        'cancellation_reason': 'upgraded',
+                        'updated_at': datetime.now(timezone.utc).isoformat()
+                    }).match({
+                        'user_id': user_id,
+                        'product_domain': domain,
+                        'status': 'active',
+                    }).neq('id', subscription_id).execute()
+            except Exception as cancel_old_err:
+                self.logger.warning(
+                    "activate_upgrade_old_sub_cancel_skipped",
                     extra={
                         "subscription_id": subscription_id,
-                        "user_id": user_id,
-                        "domain": domain,
-                        "from_plan": subscription['pricing_plan_id'],
-                        "to_plan": subscription['pending_upgrade_to_plan_id']
+                        "previous_sub_id": previous_sub_id,
+                        "error": str(cancel_old_err)[:100]
                     }
                 )
 
-                return True
-            else:
-                self.logger.error(
-                    "upgrade_activation_failed_db_function",
-                    extra={"subscription_id": subscription_id}
-                )
-                return False
+            # 3. Reset usage counters for metered features
+            self._reset_usage_counters(user_id, domain)
+
+            # 4. Increment subscription version (invalidate caches)
+            self._increment_subscription_version(user_id, domain)
+
+            # 5. Invalidate all caches (belt + suspenders)
+            self._invalidate_all_caches(user_id, domain)
+
+            self.logger.info(
+                "upgrade_activated_success",
+                extra={
+                    "subscription_id": subscription_id,
+                    "user_id": user_id,
+                    "domain": domain,
+                    "previous_subscription_id": previous_sub_id,
+                    "to_plan": subscription.get('pricing_plan_id'),
+                }
+            )
+
+            return True
 
         except Exception as e:
             self.logger.error(
@@ -562,10 +705,12 @@ class UpgradeOrchestrator:
         domain: str
     ) -> Optional[Dict]:
         """Get active subscription for user+domain."""
+        # FAANG-level: pending_upgrade is now a SEPARATE subscription row,
+        # never a state on the active sub. Only match truly active subs.
         result = self._supabase.table('subscriptions').select('*').match({
             'user_id': user_id,
             'product_domain': domain,
-        }).in_('status', ['active', 'trialing', 'grace_period', 'pending_upgrade']).order(
+        }).in_('status', ['active', 'trialing', 'grace_period']).order(
             'created_at', desc=True
         ).limit(1).execute()
 
@@ -649,7 +794,7 @@ def get_upgrade_orchestrator() -> UpgradeOrchestrator:
         from supabase_client import get_supabase_client
         from services.pricing_service import get_pricing_service
         from services.feature_gate_engine import get_feature_gate_engine
-        from routes.payments import razorpay_client as rzp_client
+        from routes.payments import get_razorpay_client
 
         redis_url = os.getenv('REDIS_URL', 'redis://localhost:6379')
         redis_client = redis_lib.from_url(redis_url, decode_responses=True)
@@ -657,7 +802,7 @@ def get_upgrade_orchestrator() -> UpgradeOrchestrator:
         _orchestrator_instance = UpgradeOrchestrator(
             supabase=get_supabase_client(),
             redis_client=redis_client,
-            razorpay_service=rzp_client,
+            razorpay_service=get_razorpay_client(),
             feature_gate_engine=get_feature_gate_engine(),
             pricing_service=get_pricing_service()
         )

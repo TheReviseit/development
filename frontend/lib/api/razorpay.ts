@@ -13,7 +13,43 @@
 import type { ProductDomain } from "../domain/config";
 import { logger, trackRevenue } from "../observability/observability";
 
-const BACKEND_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
+// SECURITY: All payment API calls must route through Next.js (/api/...) proxy,
+// not directly to Flask backend. This ensures:
+// 1. Firebase ID token is properly attached (not X-User-Id which was forgeable)
+// 2. Backend URL is never exposed to the browser
+// 3. Circuit breaker, rate limiting, and domain context resolution happen server-side
+const API_PREFIX = "/api/billing";
+
+// =============================================================================
+// Firebase Auth Token Helper
+// =============================================================================
+
+let authInstance: any = null;
+
+async function getFirebaseIdToken(): Promise<string | null> {
+  if (typeof window === "undefined") return null;
+
+  try {
+    if (!authInstance) {
+      const { auth } = await import("@/src/firebase/firebase");
+      authInstance = auth;
+    }
+    const user = authInstance.currentUser;
+    if (!user) return null;
+    return await user.getIdToken(true);
+  } catch {
+    return null;
+  }
+}
+
+async function authHeaders(): Promise<Record<string, string>> {
+  const token = await getFirebaseIdToken();
+  const headers: Record<string, string> = {};
+  if (token) {
+    headers["Authorization"] = `Bearer ${token}`;
+  }
+  return headers;
+}
 
 // =============================================================================
 // Request ID Generation
@@ -89,6 +125,7 @@ interface RazorpayOrder {
   domain?: string; // NEW: Domain context
   request_id?: string;
   idempotency_hit?: boolean;
+  already_active?: boolean;
   error?: string;
   error_code?: string;
 }
@@ -153,12 +190,13 @@ export async function createSubscription(
     ? getIdempotencyKey(userId, planName)
     : undefined;
 
-  const response = await fetch(`${BACKEND_URL}/api/subscriptions/create`, {
+  const authHdrs = await authHeaders();
+  const response = await fetch(`${API_PREFIX}/create-subscription`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
       "X-Request-Id": requestId,
-      ...(userId && { "X-User-Id": userId }),
+      ...authHdrs,
     },
     body: JSON.stringify({
       plan_name: planName,
@@ -166,7 +204,6 @@ export async function createSubscription(
       customer_name: customerName,
       customer_phone: customerPhone,
       idempotency_key: idempotencyKey,
-      // Domain resolved server-side from Host header — never sent by client
     }),
   });
 
@@ -278,12 +315,13 @@ export async function verifyPayment(
 ): Promise<VerifyPaymentResponse> {
   const requestId = getPaymentRequestId();
 
-  const response = await fetch(`${BACKEND_URL}/api/subscriptions/verify`, {
+  const authHdrs = await authHeaders();
+  const response = await fetch(`${API_PREFIX}/verify-subscription`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
       "X-Request-Id": requestId,
-      ...(userId && { "X-User-Id": userId }),
+      ...authHdrs,
     },
     body: JSON.stringify(params),
   });
@@ -299,12 +337,13 @@ export async function getSubscriptionStatus(
 ): Promise<SubscriptionStatus> {
   const requestId = generateRequestId(); // Fresh ID for status checks
 
-  const response = await fetch(`${BACKEND_URL}/api/subscriptions/status`, {
+  const authHdrs = await authHeaders();
+  const response = await fetch(`${API_PREFIX}/subscription-status`, {
     method: "GET",
     headers: {
       "Content-Type": "application/json",
       "X-Request-Id": requestId,
-      ...(userId && { "X-User-Id": userId }),
+      ...authHdrs,
     },
   });
 
@@ -321,12 +360,13 @@ export async function cancelSubscription(userId?: string): Promise<{
 }> {
   const requestId = generateRequestId();
 
-  const response = await fetch(`${BACKEND_URL}/api/subscriptions/cancel`, {
+  const authHdrs = await authHeaders();
+  const response = await fetch(`${API_PREFIX}/cancel-subscription`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
       "X-Request-Id": requestId,
-      ...(userId && { "X-User-Id": userId }),
+      ...authHdrs,
     },
   });
 
@@ -470,11 +510,12 @@ export async function changePlan(
   newPlanSlug: string,
   authToken: string,
 ): Promise<PlanChangeResult> {
-  const response = await fetch(`${BACKEND_URL}/api/subscriptions/change-plan`, {
+  const authHdrs = await authHeaders();
+  const response = await fetch(`${API_PREFIX}/change-plan`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      "X-User-Id": authToken,
+      ...authHdrs,
     },
     body: JSON.stringify({ new_plan_slug: newPlanSlug }),
   });
@@ -571,13 +612,14 @@ export async function cancelPendingChange(authToken: string): Promise<{
   was_direction?: string;
   was_target?: string;
 }> {
+  const authHdrs = await authHeaders();
   const response = await fetch(
-    `${BACKEND_URL}/api/subscriptions/cancel-change`,
+    `${API_PREFIX}/cancel-change`,
     {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "X-User-Id": authToken,
+        ...authHdrs,
       },
     },
   );
@@ -597,11 +639,12 @@ export async function cancelPendingChange(authToken: string): Promise<{
 export async function getPendingChange(
   authToken: string,
 ): Promise<PendingChange | null> {
+  const authHdrs = await authHeaders();
   const response = await fetch(
-    `${BACKEND_URL}/api/subscriptions/pending-change`,
+    `${API_PREFIX}/pending-change`,
     {
       headers: {
-        "X-User-Id": authToken,
+        ...authHdrs,
       },
     },
   );

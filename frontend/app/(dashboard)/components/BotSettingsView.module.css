@@ -66,11 +66,9 @@
 .container {
   display: flex;
   flex-direction: column;
-  min-height: 100%;
   width: 100%;
   max-width: 100%;
   padding: var(--space-lg);
-  padding-bottom: calc(var(--space-lg) + 80px); /* Space for sticky footer */
   animation: fadeIn 0.4s ease;
   overflow-x: hidden;
   box-sizing: border-box;
@@ -362,7 +360,7 @@
    Section Cards
    ============================================ */
 .section {
-  background: #ffffff;
+  background: transparent;
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-xl);
   padding: var(--space-xl);
@@ -406,7 +404,7 @@
   content: "";
   width: 4px;
   height: 20px;
-  background: linear-gradient(135deg, var(--accent-success) 0%, #2dd4bf 100%);
+  background: #111111;
   border-radius: 2px;
   flex-shrink: 0;
 }
@@ -441,13 +439,13 @@
 .formGroup textarea {
   width: 100%;
   padding: var(--space-lg);
-  border: 1px solid rgba(0, 0, 0, 0.15);
+  border: 1px solid rgba(0, 0, 0, 0.2);
   border-radius: var(--radius-md);
   font-size: 16px; /* Prevents iOS zoom */
-  background: #f9fafb;
-  color: #000000;
+  background: #ffffff;
+  color: #111111;
   font-weight: 500;
-  transition: all var(--transition-base);
+  transition: all var(--transition-fast);
   -webkit-appearance: none;
   appearance: none;
   min-height: 48px; /* Touch-friendly target size */
@@ -464,8 +462,10 @@
 .formGroup input:-webkit-autofill:hover, 
 .formGroup input:-webkit-autofill:focus, 
 .formGroup input:-webkit-autofill:active {
-  -webkit-box-shadow: 0 0 0 30px #f9fafb inset !important;
-  -webkit-text-fill-color: #000000 !important;
+  -webkit-box-shadow: 0 0 0 30px transparent inset !important;
+  -webkit-text-fill-color: #111111 !important;
+  caret-color: #111111 !important;
+  color: #111111 !important;
   transition: background-color 5000s ease-in-out 0s;
 }
 
@@ -473,17 +473,15 @@
 .formGroup select:focus,
 .formGroup textarea:focus {
   outline: none;
-  border-color: var(--border-focus);
-  background: var(--bg-tertiary);
-  box-shadow: var(--shadow-focus);
+  border-color: #111111;
+  background: #ffffff;
 }
 
 /* Focus visible for keyboard navigation */
 .formGroup input:focus-visible,
 .formGroup select:focus-visible,
 .formGroup textarea:focus-visible {
-  outline: 2px solid var(--accent-success);
-  outline-offset: 2px;
+  outline: none;
 }
 
 .formGroup select {
@@ -1175,26 +1173,24 @@
 .saveButton {
   width: 100%;
   padding: var(--space-lg) var(--space-2xl);
-  background: var(--bg-active);
-  color: var(--text-primary);
-  border: 1px solid var(--border-default);
-  border-radius: var(--radius-lg);
+  background: #111111;
+  color: #ffffff;
+  border: none;
+  border-radius: 8px;
   font-size: 16px;
-  font-weight: 700;
+  font-weight: 600;
   cursor: pointer;
-  transition: all var(--transition-base);
+  transition: background 0.2s ease;
   letter-spacing: 0.5px;
   min-height: 52px;
 }
 
 .saveButton:hover:not(:disabled) {
-  transform: translateY(-2px);
-  background: var(--bg-hover);
-  box-shadow: var(--shadow-lg);
+  background: #333333;
 }
 
 .saveButton:active:not(:disabled) {
-  transform: translateY(0);
+  transform: scale(0.98);
 }
 
 .saveButton:disabled {

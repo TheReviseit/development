@@ -18,7 +18,7 @@ import {
   SubscriptionProvider,
   useSubscriptionContext,
 } from "./components/SubscriptionProvider";
-import { Bell, Search } from "lucide-react";
+import { Bell, Search, Store } from "lucide-react";
 import styles from "./dashboard.module.css";
 import CommandPalette from "./components/CommandPalette";
 
@@ -191,14 +191,16 @@ export default function DashboardLayout({
           firebaseUser.uid,
         );
 
+        const idToken = await firebaseUser.getIdToken();
+        const currentDomain = getProductDomainFromBrowser();
         const res = await fetch("/api/upgrade/verify-payment", {
           method: "POST",
           credentials: "include",
           headers: {
             "Content-Type": "application/json",
-            "X-User-Id": firebaseUser.uid,
+            "Authorization": `Bearer ${idToken}`,
           },
-          body: JSON.stringify({ domain: "shop" }),
+          body: JSON.stringify({ domain: currentDomain }),
         });
 
         const result = await res.json();
@@ -546,7 +548,7 @@ export default function DashboardLayout({
                 <header className={styles.topHeader}>
                   <div className={styles.topHeaderLeft}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                      <img src="/logo.png" alt="Flowauxi" className={styles.headerLogo} />
+                      <img src="/logo.png" alt="Flowauxi" className={styles.headerLogo} style={{ width: '28px', height: '28px', objectFit: 'contain' }} />
                       <span style={{ color: '#ffffff', fontSize: '18px', fontWeight: 'bold', letterSpacing: '0.5px' }}>Flowauxi</span>
                     </div>
                   </div>
@@ -573,8 +575,18 @@ export default function DashboardLayout({
                     </div>
                   </div>
                   <div className={styles.topHeaderRight}>
-                    <div style={{ display: 'flex', alignItems: 'center', cursor: 'pointer', opacity: 0.8 }} className="hover:opacity-100 transition-opacity">
-                      <Bell size={20} color="#ffffff" strokeWidth={2} />
+                    {currentDomain === "shop" && storeUsername && (
+                      <div 
+                        style={{ display: 'flex', alignItems: 'center', cursor: 'pointer', marginRight: '24px' }} 
+                        className="hover:opacity-80 transition-opacity"
+                        onClick={() => window.open(`/store/${storeUsername}`, "_blank")}
+                        title="View Store"
+                      >
+                        <Store size={20} color="#ffffff" strokeWidth={2.25} />
+                      </div>
+                    )}
+                    <div style={{ display: 'flex', alignItems: 'center', cursor: 'pointer' }} className="hover:opacity-80 transition-opacity">
+                      <Bell size={20} color="#ffffff" strokeWidth={2.25} />
                     </div>
                   </div>
                 </header>
@@ -1545,7 +1557,7 @@ export default function DashboardLayout({
                             <span>AI Settings</span>
                           </button>
                           {/* Preview Bot - hideable */}
-                          {(mobileHideMode ||
+                          {/* (mobileHideMode ||
                             !mobileHiddenItems.includes("preview-bot")) && (
                             <div className={styles.mobileNavItemWrapper}>
                               {mobileHideMode && canHideItem("preview-bot") && (
@@ -1621,7 +1633,7 @@ export default function DashboardLayout({
                                 <span>Preview Bot</span>
                               </button>
                             </div>
-                          )}
+                          ) */}
 
                           <button
                             className={styles.mobileNavLink}

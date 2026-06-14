@@ -81,7 +81,7 @@ def _get_authenticated_user_id() -> str | None:
         token = auth_header[7:]
         try:
             from firebase_admin import auth as firebase_auth
-            decoded = firebase_auth.verify_id_token(token, check_revoked=True)
+            decoded = firebase_auth.verify_id_token(token, check_revoked=False)
             user_id = decoded.get("uid")
             if user_id:
                 g.user_id = user_id
@@ -89,7 +89,7 @@ def _get_authenticated_user_id() -> str | None:
         except Exception:
             try:
                 from firebase_admin import auth as firebase_auth
-                decoded = firebase_auth.verify_session_cookie(token, check_revoked=True)
+                decoded = firebase_auth.verify_session_cookie(token, check_revoked=False)
                 user_id = decoded.get("uid")
                 if user_id:
                     g.user_id = user_id

@@ -82,29 +82,73 @@ except ImportError:
     RATE_LIMIT_AVAILABLE = False
     logger.warning("⚠️ Rate limiter not available")
 
-# Initialize Razorpay client
+# Razorpay SDK — module-level import so error classes are available everywhere
 try:
     import razorpay
+except ImportError:
+    razorpay = None  # type: ignore
+
+# Razorpay client (lazy initialization)
+razorpay_client = None
+RAZORPAY_AVAILABLE = False
+RAZORPAY_KEY_ID = None
+RAZORPAY_KEY_SECRET = None
+RAZORPAY_WEBHOOK_SECRET = None
+
+
+def get_razorpay_client():
+    """
+    Lazily initialize and return the Razorpay client singleton.
+
+    Returns:
+        razorpay.Client instance, or None if unavailable.
+
+    Thread-safe: the global is set once and returned on subsequent calls.
+    """
+    global razorpay_client, RAZORPAY_AVAILABLE, RAZORPAY_KEY_ID, RAZORPAY_KEY_SECRET, RAZORPAY_WEBHOOK_SECRET
+
+    if razorpay_client is not None:
+        return razorpay_client
+
+    if razorpay is None:
+        logger.error("⚠️ Razorpay SDK not installed — payment features disabled")
+        RAZORPAY_AVAILABLE = False
+        return None
+
     RAZORPAY_KEY_ID = os.getenv('RAZORPAY_KEY_ID')
     RAZORPAY_KEY_SECRET = os.getenv('RAZORPAY_KEY_SECRET')
     RAZORPAY_WEBHOOK_SECRET = os.getenv('RAZORPAY_WEBHOOK_SECRET')
-    
-    if RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET:
+
+    if not RAZORPAY_KEY_ID or not RAZORPAY_KEY_SECRET:
+        logger.warning("⚠️ Razorpay credentials not configured — payment features disabled")
+        RAZORPAY_AVAILABLE = False
+        return None
+
+    try:
         razorpay_client = razorpay.Client(auth=(RAZORPAY_KEY_ID, RAZORPAY_KEY_SECRET))
-        # Configure timeout via the underlying requests session
-        # This ensures we fail fast instead of blocking forever
         if hasattr(razorpay_client, 'session'):
-            razorpay_client.session.timeout = 10  # 10 second timeout
+            _client_session = _get_rzp_client().session
+            _client_session.timeout = 10
         RAZORPAY_AVAILABLE = True
         logger.info("✅ Razorpay client initialized (10s timeout)")
-    else:
-        razorpay_client = None
+        return razorpay_client
+    except Exception as e:
+        logger.error(f"❌ Failed to initialize Razorpay client: {e}")
         RAZORPAY_AVAILABLE = False
-        logger.warning("⚠️ Razorpay credentials not configured")
-except ImportError:
-    razorpay_client = None
-    RAZORPAY_AVAILABLE = False
-    logger.warning("⚠️ Razorpay SDK not installed")
+        return None
+
+def _get_rzp_client():
+    """Get Razorpay client (raises RuntimeError if unavailable).
+
+    FAANG-level: callers don't need None-check since require_razorpay
+    already verified availability. If we reach here without a client,
+    fail fast with a clear error instead of AttributeError.
+    """
+    c = get_razorpay_client()
+    if c is None:
+        raise RuntimeError("Razorpay client not available — check RAZORPAY_KEY_ID/RAZORPAY_KEY_SECRET")
+    return c
+
 
 # Import Supabase client
 try:
@@ -114,6 +158,15 @@ except ImportError:
     SUPABASE_AVAILABLE = False
     get_supabase_client = None
     get_user_id_from_firebase_uid = None
+
+# Import shared authentication middleware (replaces local require_auth)
+try:
+    from middleware.auth import require_auth as _require_auth
+    AUTH_MIDDLEWARE_AVAILABLE = True
+except ImportError:
+    _require_auth = None
+    AUTH_MIDDLEWARE_AVAILABLE = False
+    logger.warning("⚠️ Auth middleware not available — using legacy require_auth")
 
 # Import cache manager (optional)
 try:
@@ -190,10 +243,11 @@ def after_request(response):
 
 
 def require_razorpay(f):
-    """Decorator to check if Razorpay is available."""
+    """Decorator to check if Razorpay is available (lazy init)."""
     @wraps(f)
     def decorated_function(*args, **kwargs):
-        if not RAZORPAY_AVAILABLE:
+        # Trigger lazy init — get_razorpay_client() sets RAZORPAY_AVAILABLE
+        if not get_razorpay_client():
             return error_response(
                 'Payment service not configured',
                 'RAZORPAY_UNAVAILABLE',
@@ -203,29 +257,10 @@ def require_razorpay(f):
     return decorated_function
 
 
-def require_auth(f):
-    """Decorator to require authentication."""
-    @wraps(f)
-    def decorated_function(*args, **kwargs):
-        firebase_uid = get_user_id_from_request()
-        if not firebase_uid:
-            return error_response(
-                'Authentication required',
-                'UNAUTHORIZED',
-                401
-            )
-        g.firebase_uid = firebase_uid
-        # Map Firebase UID → Supabase UUID (required for FK-safe DB writes)
-        supabase_uuid = map_to_supabase_user_id(firebase_uid)
-        if not supabase_uuid:
-            return error_response(
-                'User account not found. Please complete account setup before subscribing.',
-                'USER_NOT_FOUND',
-                404
-            )
-        g.user_id = supabase_uuid
-        return f(*args, **kwargs)
-    return decorated_function
+# Shared auth from middleware.auth — validates Firebase ID tokens with
+# check_revoked=True, returns 401/404 with consistent error format.
+# Replaced the local require_auth/get_user_id_from_request/map_to_supabase_user_id.
+require_auth = _require_auth
 
 
 def retry_api_call(max_retries=3, initial_delay=1):
@@ -322,33 +357,15 @@ def success_response(data: dict, status: int = 200) -> Tuple:
     }), status
 
 
-def get_user_id_from_request() -> Optional[str]:
-    """Extract user_id from request headers."""
-    return request.headers.get('X-User-Id')
+def get_firebase_uid_from_header() -> Optional[str]:
+    """Extract Firebase UID from Authorization header.
 
-
-def map_to_supabase_user_id(firebase_uid: str) -> Optional[str]:
+    SECURITY: Delegates to middleware.auth.get_firebase_uid for token
+    verification. This is a convenience wrapper for routes that need
+    the raw Firebase UID (e.g., Razorpay customer creation).
     """
-    Map Firebase UID to Supabase user UUID.
-
-    Returns the Supabase UUID string, or None if the user does not exist.
-    NEVER falls back to the Firebase UID — that would cause a FK violation
-    when inserting into subscriptions.user_id (which references users.id UUID).
-
-    Callers must check for None and return an appropriate error response.
-    """
-    if SUPABASE_AVAILABLE and get_user_id_from_firebase_uid:
-        supabase_id = get_user_id_from_firebase_uid(firebase_uid)
-        if supabase_id:
-            return supabase_id
-        logger.warning(
-            f"[{getattr(g, 'request_id', 'unknown')}] "
-            f"No Supabase user found for Firebase UID {firebase_uid[:10]}... "
-            f"User must complete account creation before subscribing."
-        )
-        return None
-    # Supabase unavailable — cannot safely continue
-    return None
+    from middleware.auth import get_firebase_uid
+    return get_firebase_uid()
 
 
 def verify_webhook_signature_raw(raw_body: bytes, signature: str) -> bool:
@@ -685,7 +702,7 @@ def create_razorpay_customer(data):
     Customer creation is NOT idempotent in Razorpay (same email = error).
     Fail fast and let caller handle errors.
     """
-    return razorpay_client.customer.create(data=data)
+    return _get_rzp_client().customer.create(data=data)
 
 
 def get_existing_razorpay_customer(user_id: str, email: str) -> Optional[str]:
@@ -746,24 +763,45 @@ def persist_razorpay_customer(user_id: str, customer_id: str) -> bool:
 
 def create_razorpay_subscription(data, idempotency_key=None):
     """
-    Create Razorpay subscription.
+    Create Razorpay subscription with idempotency header support.
     
-    IMPORTANT: NO RETRY - subscription creation is NOT idempotent!
-    Retrying could create duplicate subscriptions in Razorpay.
+    Uses raw requests library instead of razorpay-python SDK to pass
+    the X-Razorpay-Idempotency-Key header. The Python SDK's create()
+    does not support custom headers, making retries dangerous.
     
-    Args:
-        data: Subscription data dict
-        idempotency_key: Optional idempotency key for Razorpay header
+    With this fix, if a subscription is created on Razorpay's side but
+    the HTTP response is lost (network issue), the retry with the same
+    idempotency key will return the existing subscription instead of
+    creating a duplicate.
     """
-    # Future-proofing: Razorpay supports idempotency headers
-    # This prevents duplicate subscriptions if called multiple times with same key
-    headers = {}
+    import requests as _requests
+
+    url = 'https://api.razorpay.com/v1/subscriptions'
+    headers = {
+        'Content-Type': 'application/json',
+    }
     if idempotency_key:
         headers['X-Razorpay-Idempotency-Key'] = idempotency_key
-    
-    # Note: razorpay-python doesn't support custom headers directly yet,
-    # but we're ready when they add support. For now, rely on our DB idempotency.
-    return razorpay_client.subscription.create(data=data)
+
+    response = _requests.post(
+        url,
+        auth=(RAZORPAY_KEY_ID, RAZORPAY_KEY_SECRET),
+        json=data,
+        headers=headers,
+        timeout=(30, 25),
+    )
+
+    if response.status_code == 409:
+        error_data = response.json()
+        existing_id = error_data.get('error', {}).get('field', '')
+        logger.warning(
+            f"Razorpay idempotency hit: {existing_id} "
+            f"(key={idempotency_key[:20] if idempotency_key else 'none'}...)"
+        )
+        return {'id': existing_id, 'idempotency_hit': True, **data}
+
+    response.raise_for_status()
+    return response.json()
 
 
 # =============================================================================
@@ -1063,23 +1101,75 @@ def create_subscription():
         # Only reuse if the subscription is in a truly "waiting for first payment" state.
         # Degraded states (past_due, grace_period, suspended, paused) must NOT be reused
         # because their Razorpay subscription may have stale pricing.
+        #
+        # CRITICAL: Before reusing, verify the subscription still exists on Razorpay.
+        # Stale subscriptions (created but never paid hours ago) may no longer be
+        # recognized by Razorpay, causing BAD_REQUEST_ERROR on payment initiation.
         if (existing_sub
             and existing_sub.get('plan_name') == plan_name
             and existing_sub.get('status') in ('pending', 'created')):
-            logger.info(
-                f"[{request_id}] ♻️ Reusing existing {plan_name} subscription: "
-                f"{existing_sub['razorpay_subscription_id']} "
-                f"(status={existing_sub['status']}, "
-                f"amount=₹{existing_sub.get('amount_paise', 0) / 100:,.0f})"
-            )
-            return success_response({
-                'subscription_id': existing_sub['razorpay_subscription_id'],
-                'key_id': RAZORPAY_KEY_ID,
-                'amount': existing_sub.get('amount_paise', amount_paise),
-                'currency': existing_sub.get('currency', currency),
-                'plan_name': display_name,
-                'idempotency_hit': True
-            })
+            rzp_sub_id = existing_sub['razorpay_subscription_id']
+            try:
+                rzp_check = get_razorpay_client().subscription.fetch(rzp_sub_id)
+                rzp_status = rzp_check.get('status')
+                if rzp_status == 'created':
+                    logger.info(
+                        f"[{request_id}] ♻️ Reusing existing {plan_name} subscription: "
+                        f"{rzp_sub_id} (status={existing_sub['status']}, "
+                        f"razorpay_status={rzp_status})"
+                    )
+                    return success_response({
+                        'subscription_id': rzp_sub_id,
+                        'key_id': RAZORPAY_KEY_ID,
+                        'amount': existing_sub.get('amount_paise', amount_paise),
+                        'currency': existing_sub.get('currency', currency),
+                        'plan_name': display_name,
+                        'idempotency_hit': True
+                    })
+                elif rzp_status in ('authenticated', 'active'):
+                    logger.info(
+                        f"[{request_id}] ♻️ Existing {plan_name} subscription {rzp_sub_id} is already {rzp_status}! Syncing DB and returning already_active."
+                    )
+                    if SUPABASE_AVAILABLE:
+                        try:
+                            supabase = get_supabase_client()
+                            supabase.table('subscriptions').update({
+                                'status': 'active' if rzp_status == 'active' else 'processing',
+                                'updated_at': 'now()',
+                            }).eq('id', existing_sub['id']).execute()
+                        except Exception as db_err:
+                            logger.warning(f"[{request_id}] Failed to sync sub status to active: {db_err}")
+                    return success_response({
+                        'subscription_id': rzp_sub_id,
+                        'key_id': RAZORPAY_KEY_ID,
+                        'amount': existing_sub.get('amount_paise', amount_paise),
+                        'currency': existing_sub.get('currency', currency),
+                        'plan_name': display_name,
+                        'already_active': True,
+                        'status': 'active' if rzp_status == 'active' else 'processing'
+                    })
+                else:
+                    logger.warning(
+                        f"[{request_id}] ⚠️ Razorpay sub {rzp_sub_id} has terminal status "
+                        f"'{rzp_status}' — will create fresh subscription"
+                    )
+                    existing_sub = None
+            except Exception as e:
+                logger.warning(
+                    f"[{request_id}] ⚠️ Razorpay sub {rzp_sub_id} not found on Razorpay "
+                    f"({type(e).__name__}: {e}) — will create fresh subscription"
+                )
+                if SUPABASE_AVAILABLE:
+                    try:
+                        supabase = get_supabase_client()
+                        supabase.table('subscriptions').update({
+                            'status': 'abandoned',
+                            'updated_at': 'now()',
+                        }).eq('id', existing_sub['id']).execute()
+                        logger.info(f"[{request_id}] Marked stale sub {rzp_sub_id} as abandoned in DB")
+                    except Exception as db_err:
+                        logger.warning(f"[{request_id}] Failed to mark sub as abandoned: {db_err}")
+                existing_sub = None
 
         # --- CASE 2: Different plan pending/created → cancel old, UPDATE row ---
         if existing_sub:
@@ -1093,7 +1183,7 @@ def create_subscription():
             
             # Cancel old subscription on Razorpay
             try:
-                razorpay_client.subscription.cancel(old_sub_id)
+                get_razorpay_client().subscription.cancel(old_sub_id)
                 logger.info(f"[{request_id}] ✅ Cancelled old Razorpay sub: {old_sub_id}")
             except Exception as cancel_err:
                 # Non-fatal — may already be cancelled/expired
@@ -1141,7 +1231,7 @@ def create_subscription():
                     # after account deletion, or DB was wiped). Look up by email and reuse.
                     try:
                         logger.info(f"[{request_id}] Looking up existing Razorpay customer by email: {data.customer_email}")
-                        all_customers = razorpay_client.customer.all({'count': 100})
+                        all_customers = _get_rzp_client().customer.all({'count': 100})
                         existing_customer = next(
                             (c for c in all_customers.get('items', []) if c.get('email') == data.customer_email),
                             None
@@ -1186,7 +1276,7 @@ def create_subscription():
                 
                 try:
                     logger.info(f"[{request_id}] Checking Razorpay for existing customer with email: {data.customer_email}")
-                    all_customers = razorpay_client.customer.all({'count': 100})
+                    all_customers = _get_rzp_client().customer.all({'count': 100})
                     existing_customer = next(
                         (c for c in all_customers['items'] if c.get('email') == data.customer_email),
                         None
@@ -1410,7 +1500,7 @@ def verify_subscription():
             return error_response('Invalid payment signature', 'INVALID_SIGNATURE', 400)
         
         # Fetch subscription details from Razorpay
-        subscription = razorpay_client.subscription.fetch(subscription_id)
+        subscription = _get_rzp_client().subscription.fetch(subscription_id)
         
         # Calculate period dates (handle None values safely)
         # Razorpay sets current_start/current_end to None for brand-new subscriptions
@@ -1501,7 +1591,7 @@ def verify_subscription():
 
             # Record payment using UPSERT for idempotency
             # This handles: retry by user, concurrent verify + webhook
-            payment = razorpay_client.payment.fetch(payment_id)
+            payment = _get_rzp_client().payment.fetch(payment_id)
 
             payment_result = upsert_payment_history(
                 user_id=user_id,
@@ -1712,7 +1802,7 @@ def cancel_subscription():
         razorpay_sub_id = result.data[0]['razorpay_subscription_id']
         
         # Cancel at period end
-        razorpay_client.subscription.cancel(razorpay_sub_id, {'cancel_at_cycle_end': 1})
+        _get_rzp_client().subscription.cancel(razorpay_sub_id, {'cancel_at_cycle_end': 1})
         
         # Update local status
         supabase.table('subscriptions').update({
@@ -1767,7 +1857,7 @@ def verify_proration_payment():
 
         # Verify payment with Razorpay API
         try:
-            payment = razorpay_client.payment.fetch(payment_id)
+            payment = _get_rzp_client().payment.fetch(payment_id)
         except Exception as e:
             logger.error(f"[{request_id}] Razorpay payment fetch failed: {e}")
             return error_response(
@@ -2562,6 +2652,77 @@ WEBHOOK_HANDLERS = {
     'payment.captured': process_payment_captured,
     'payment.failed': process_payment_failed,
 }
+
+
+# =============================================================================
+# Health Check Endpoint
+# =============================================================================
+
+@payments_bp.route('/health', methods=['GET'])
+def health_check():
+    """
+    Health check endpoint with DB and Razorpay connectivity checks.
+
+    Returns:
+        200: All systems healthy
+        503: One or more dependencies unhealthy
+    """
+    request_id = getattr(g, 'request_id', generate_request_id())
+    checks = {
+        'status': 'ok',
+        'request_id': request_id,
+        'timestamp': datetime.now(timezone.utc).isoformat(),
+    }
+
+    # Check Supabase connectivity
+    db_healthy = False
+    if SUPABASE_AVAILABLE:
+        try:
+            supabase = get_supabase_client()
+            result = supabase.table('subscriptions').select('id').limit(1).execute()
+            db_healthy = True
+        except Exception as e:
+            logger.error(f"Health check DB failed: {e}")
+            db_healthy = False
+    checks['database'] = {
+        'healthy': db_healthy,
+        'available': SUPABASE_AVAILABLE,
+    }
+
+    # Check Razorpay connectivity
+    rzp_healthy = False
+    if RAZORPAY_AVAILABLE:
+        try:
+            _get_rzp_client().plan.all({'count': 1})
+            rzp_healthy = True
+        except Exception as e:
+            logger.error(f"Health check Razorpay failed: {e}")
+            rzp_healthy = False
+    checks['razorpay'] = {
+        'healthy': rzp_healthy,
+        'available': RAZORPAY_AVAILABLE,
+    }
+
+    # Check pricing service
+    pricing_healthy = PRICING_SERVICE_AVAILABLE
+    checks['pricing_service'] = {
+        'healthy': pricing_healthy,
+        'available': PRICING_SERVICE_AVAILABLE,
+    }
+
+    all_healthy = db_healthy and rzp_healthy and pricing_healthy
+    status_code = 200 if all_healthy else 503
+
+    if all_healthy:
+        return success_response({'health': checks})
+    else:
+        return jsonify({
+            'success': False,
+            'error': 'Service unhealthy',
+            'error_code': 'SERVICE_UNHEALTHY',
+            'request_id': request_id,
+            'health': checks,
+        }), status_code
 
 
 @payments_bp.route('/payments/webhook', methods=['POST'])

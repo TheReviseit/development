@@ -22,7 +22,7 @@
   background: rgba(0, 0, 0, 0.04);
   border: 1px solid rgba(0, 0, 0, 0.08);
   border-radius: 14px;
-  color: white;
+  color: #111827;
   font-size: 15px;
   font-weight: 500;
   cursor: pointer;
@@ -70,7 +70,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  color: rgba(255, 255, 255, 0.5);
+  color: #6b7280;
   transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1);
   flex-shrink: 0;
   margin-left: 8px;
@@ -104,10 +104,10 @@
   list-style: none;
   margin: 0;
   padding: 6px;
-  background: #0d0d0d;
-  border: 1px solid rgba(0, 0, 0, 0.1);
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
   border-radius: 14px;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(0, 0, 0, 0.04);
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
   max-height: 320px;
   overflow-y: auto;
   scrollbar-width: thin;
@@ -136,20 +136,20 @@
   min-height: 48px;
   border-radius: 10px;
   cursor: pointer;
-  color: rgba(255, 255, 255, 0.85);
+  color: #374151;
   font-size: 15px;
   transition: all 0.15s ease;
 }
 
 .option:hover,
 .optionFocused {
-  background: rgba(0, 0, 0, 0.08);
-  color: white;
+  background: #f3f4f6;
+  color: #111827;
 }
 
 .optionSelected {
-  background: #ffffff;
-  color: white;
+  background: #f9fafb;
+  color: #111111;
   font-weight: 600;
 }
 
@@ -175,8 +175,7 @@
 .iconImg,
 .optionIconImg {
   flex-shrink: 0;
-  filter: brightness(0) invert(1);
-  opacity: 0.9;
+  opacity: 0.7;
   transition: opacity 0.15s ease;
 }
 
@@ -187,7 +186,7 @@
 }
 
 .optionSelected .optionIconImg {
-  filter: brightness(0) invert(0.6) sepia(1) saturate(5) hue-rotate(85deg);
+  filter: sepia(1) saturate(5) hue-rotate(85deg);
   opacity: 1;
 }
 

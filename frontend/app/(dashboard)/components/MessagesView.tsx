@@ -2743,6 +2743,7 @@ export default function MessagesView() {
               alignItems: "center",
               justifyContent: "center",
               color: "var(--dash-text-secondary)",
+              backgroundColor: "#ece5dd",
             }}
           >
             Select a conversation to view messages
@@ -3885,6 +3886,7 @@ export default function MessagesView() {
               alignItems: "center",
               justifyContent: "center",
               color: "black",
+              backgroundColor: "#ece5dd",
               gap: "1rem",
             }}
           >

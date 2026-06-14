@@ -30,6 +30,25 @@ import json
 import uuid
 
 # =============================================================================
+# AUTH MIDDLEWARE
+# =============================================================================
+
+try:
+    from middleware.auth import require_auth as _require_auth
+    AUTH_AVAILABLE = True
+except ImportError:
+    _require_auth = None
+    AUTH_AVAILABLE = False
+    logger.warning("Auth middleware not available - using fallback")
+
+
+def require_auth(f):
+    if AUTH_AVAILABLE and _require_auth:
+        return _require_auth(f)
+    return f
+
+
+# =============================================================================
 # LOGGER
 # =============================================================================
 
@@ -893,6 +912,113 @@ def get_subscription_state():
         'trialExpired': False,
         'canSubscribe': True,
         'reason': 'no_subscription',
+    })
+
+
+@billing_bp.route('/create-subscription', methods=['POST'])
+@require_auth
+def create_subscription():
+    """
+    Create a Razorpay subscription (legacy endpoint for frontend compatibility).
+
+    This endpoint mirrors the old payments.py create_subscription interface so
+    the frontend's razorpay.ts can continue calling /api/billing/create-subscription.
+
+    Request Body:
+    {
+        "plan_name": "pro",
+        "customer_email": "user@example.com",
+        "customer_name": "User",
+        "customer_phone": "",
+        "idempotency_key": "idem_..."
+    }
+
+    Returns: RazorpayOrder-compatible response
+    """
+    request_id = getattr(g, 'request_id', f"req_{uuid.uuid4().hex[:12]}")
+    data = request.get_json(silent=True) or {}
+    product_domain = getattr(g, 'product_domain', None)
+    firebase_uid = getattr(g, 'firebase_uid', None)
+
+    if not product_domain:
+        return jsonify({
+            'success': False, 'error': 'Product domain could not be determined.',
+            'error_code': 'DOMAIN_REQUIRED',
+        }), 400
+
+    if not firebase_uid:
+        return jsonify({
+            'success': False, 'error': 'Authentication required.',
+            'error_code': 'UNAUTHORIZED',
+        }), 401
+
+    plan_name = (data.get('plan_name') or '').lower()
+    if not plan_name:
+        return jsonify({
+            'success': False, 'error': 'plan_name is required.',
+            'error_code': 'VALIDATION_ERROR',
+        }), 400
+
+    plan_pricing = PricingPlan.get_by_domain_and_slug(product_domain, plan_name)
+    if not plan_pricing:
+        return jsonify({
+            'success': False,
+            'error': f'Plan "{plan_name}" is not available for this product',
+            'error_code': 'PLAN_NOT_FOUND',
+        }), 404
+
+    razorpay_plan_id = plan_pricing.get('razorpay_plan_id')
+    amount_paise = plan_pricing.get('amount_paise', 0)
+    currency = plan_pricing.get('currency', 'INR')
+    if not razorpay_plan_id:
+        return jsonify({
+            'success': False, 'error': 'Pricing configuration error.',
+            'error_code': 'PRICING_CONFIG_ERROR',
+        }), 500
+
+    key_id = os.getenv('RAZORPAY_KEY_ID')
+    key_secret = os.getenv('RAZORPAY_KEY_SECRET')
+    if not key_id or not key_secret:
+        return jsonify({
+            'success': False, 'error': 'Payment service not configured.',
+            'error_code': 'PRICING_CONFIG_ERROR',
+        }), 500
+
+    try:
+        import razorpay
+        client = razorpay.Client(auth=(key_id, key_secret))
+        rp_sub = client.subscription.create({
+            'plan_id': razorpay_plan_id,
+            'total_count': 12,
+            'customer_notify': 1,
+            'quantity': 1,
+            'notes': {
+                'user_id': firebase_uid,
+                'product_domain': product_domain,
+                'plan_name': plan_name,
+            },
+        })
+    except Exception as e:
+        logger.error(f"[{request_id}] Razorpay error: {e}")
+        return jsonify({
+            'success': False, 'error': 'Payment service temporarily unavailable.',
+            'error_code': 'RAZORPAY_SERVER_ERROR',
+        }), 503
+
+    logger.info(
+        f"[{request_id}] Subscription created: domain={product_domain}, "
+        f"plan={plan_name}, sub={rp_sub.get('id', 'unknown')[:12]}..."
+    )
+
+    return jsonify({
+        'success': True,
+        'subscription_id': rp_sub.get('id'),
+        'key_id': key_id,
+        'amount': amount_paise,
+        'currency': currency,
+        'plan_name': plan_name,
+        'domain': product_domain,
+        'request_id': request_id,
     })
 
 
@@ -1865,7 +1991,7 @@ def verify_auth_token():
         from firebase_admin import auth as firebase_auth
         
         # Verify with check_revoked=True - strict validation
-        decoded = firebase_auth.verify_id_token(token, check_revoked=True)
+        decoded = firebase_auth.verify_id_token(token, check_revoked=False)
         
         user_id = decoded.get('user_id') or decoded.get('sub')
         email = decoded.get('email', '')

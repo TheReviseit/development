@@ -142,23 +142,26 @@ async function resolveSlugFromDB(
     console.error("[resolveSlug] Error querying users by username:", e);
   }
 
-  // STEP 3: Direct user_id (backward compatibility)
-  try {
-    const { data: bizByUid } = await supabase
-      .from("businesses")
-      .select("user_id, url_slug")
-      .eq("user_id", slugOrUsername)
-      .limit(1)
-      .maybeSingle();
+  // STEP 3: First 8 chars of user_id (since full user_id and random strings should not work)
+  if (slugOrUsername.length === 8) {
+    try {
+      const { data: bizByUid } = await supabase
+        .from("businesses")
+        .select("user_id, url_slug")
+        // Enforce prefix match for the first 8 characters
+        .ilike("user_id", `${slugOrUsername}%`)
+        .limit(1)
+        .maybeSingle();
 
-    if (bizByUid?.user_id) {
-      return {
-        userId: bizByUid.user_id,
-        canonicalSlug: bizByUid.url_slug || slugOrUsername,
-      };
+      if (bizByUid?.user_id) {
+        return {
+          userId: bizByUid.user_id,
+          canonicalSlug: bizByUid.url_slug || slugOrUsername,
+        };
+      }
+    } catch (e) {
+      console.error("[resolveSlug] Error in 8-char UID fallback:", e);
     }
-  } catch (e) {
-    console.error("[resolveSlug] Error in UID fallback:", e);
   }
 
   return null;

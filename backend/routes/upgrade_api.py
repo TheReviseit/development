@@ -17,6 +17,9 @@ Author: Claude Code
 Quality: FAANG-level production code
 """
 
+import uuid
+import json
+import os
 from flask import Blueprint, request, jsonify, g
 from typing import Dict, Any, Optional
 import logging
@@ -63,59 +66,10 @@ def get_supabase():
 # Middleware & Helpers
 # =============================================================================
 
-def get_user_id_from_request():
-    """Extract user_id from request headers (set by frontend auth)."""
-    return request.headers.get('X-User-Id')
-
-
-def map_to_supabase_user_id(firebase_uid: str):
-    """
-    Map Firebase UID to Supabase user UUID.
-
-    Returns the Supabase UUID string, or None if the user does not exist.
-    NEVER falls back to the Firebase UID — that would cause lookups against
-    users.id (UUID column) to silently fail, leading to NO_EMAIL / FK errors.
-    """
-    try:
-        from supabase_client import get_user_id_from_firebase_uid
-        supabase_id = get_user_id_from_firebase_uid(firebase_uid)
-        if supabase_id:
-            return supabase_id
-    except Exception as e:
-        logger.warning(f"Could not map Firebase UID {firebase_uid}: {e}")
-    logger.warning(
-        f"No Supabase user found for Firebase UID {firebase_uid[:10]}... "
-        f"Returning None instead of falling back to Firebase UID."
-    )
-    return None
-
-
-def require_auth(f):
-    """Decorator to require authentication (matches payments.py pattern)."""
-    from functools import wraps
-
-    @wraps(f)
-    def decorated_function(*args, **kwargs):
-        # Extract user ID from X-User-Id header
-        user_id = get_user_id_from_request()
-        if not user_id:
-            return error_response(
-                'Authentication required',
-                'UNAUTHORIZED',
-                401
-            )
-
-        # Set Flask global context
-        g.firebase_uid = user_id
-        g.user_id = user_id  # Unified: user_id is now the Firebase UID
-        
-        # Keep Supabase UUID available for legacy tables
-        supabase_user_id = map_to_supabase_user_id(user_id)
-        g.supabase_user_id = supabase_user_id
-
-        return f(*args, **kwargs)
-
-    return decorated_function
+# FAANG-level auth: shared require_auth from middleware.auth
+# Validates Firebase ID tokens (check_revoked=True), maps to Supabase UUID.
+# Sets g.firebase_uid (Firebase UID) and g.user_id (Supabase UUID).
+from middleware.auth import require_auth
 
 
 def validate_domain(domain: str) -> bool:
@@ -213,7 +167,15 @@ def get_upgrade_options():
         500 INTERNAL_ERROR - Database error
     """
     start_time = datetime.now(timezone.utc)
-    user_id = g.user_id
+    # g.user_id and g.firebase_uid set by require_auth (middleware.auth)
+    supabase_user_id = g.user_id
+    firebase_uid = g.firebase_uid
+
+    if not supabase_user_id:
+        return error_response(
+            'User account not found. Please complete account setup.',
+            'NO_DB_USER', 400
+        )
 
     try:
         # 1. Validate query parameters
@@ -243,14 +205,14 @@ def get_upgrade_options():
         # 2. Verify business ownership (optional - allow viewing upgrade options)
         # Users without business can still see upgrade options
         # Business creation happens during onboarding/first purchase
-        has_business = verify_business_ownership(user_id)
+        has_business = verify_business_ownership(supabase_user_id)
         if not has_business:
-            logger.info(f"User {user_id} viewing upgrade options without business profile")
+            logger.info(f"User {supabase_user_id} viewing upgrade options without business profile")
 
         # 3. Get upgrade options from UpgradeEngine
         upgrade_engine = get_upgrade_engine()
         options = upgrade_engine.get_upgrade_options(
-            user_id=user_id,
+            user_id=supabase_user_id,
             domain=domain,
             billing_cycle=billing_cycle
         )
@@ -263,7 +225,7 @@ def get_upgrade_options():
         current = options.current_plan.get('plan_slug') if options.current_plan else None
         recommended = options.recommended_plan.get('plan_slug') if options.recommended_plan else None
         logger.info(
-            f"upgrade_options_fetched user={user_id} domain={domain} "
+            f"upgrade_options_fetched user={supabase_user_id} domain={domain} "
             f"cycle={billing_cycle} current={current} "
             f"plans={len(options.available_plans)} recommended={recommended} "
             f"elapsed={round(elapsed_ms, 2)}ms"
@@ -273,7 +235,7 @@ def get_upgrade_options():
 
     except Exception as e:
         logger.error(
-            f"upgrade_options_error user={user_id} domain={request.args.get('domain')} error={e}",
+            f"upgrade_options_error user={supabase_user_id} domain={request.args.get('domain')} error={e}",
             exc_info=True
         )
         return error_response(
@@ -292,30 +254,31 @@ def get_upgrade_options():
 @require_auth
 def create_upgrade_checkout():
     """
-    Initiate upgrade checkout flow.
+    Initiate upgrade checkout asynchronously (non-blocking).
+
+    Creates a checkout_request row and enqueues it to the background worker.
+    Returns immediately with a checkout_id for polling.
+    NEVER calls Razorpay synchronously — that blocks the Flask worker thread
+    for up to 30 seconds. The background worker handles it.
 
     Request Body:
         {
             "domain": "shop",
             "target_plan_slug": "business",
-            "billing_cycle": "yearly",  // optional, default "monthly"
-            "addon_slugs": ["extra_products_10"]  // optional
+            "billing_cycle": "yearly",
+            "addon_slugs": ["extra_products_10"]
         }
 
-    Returns (200 OK):
+    Returns (202 Accepted):
         {
             "success": true,
-            "upgrade_allowed": true,
-            "razorpay_subscription_id": "sub_xxx",
-            "razorpay_key_id": "rzp_live_xxx",
-            "amount_paise": 3839040,
-            "currency": "INR",
-            "plan_name": "Business Plan (Yearly)",
-            "addon_items": [...],
-            "proration_credit_paise": 150000,
-            "net_amount_paise": 3689040,
-            "effective_date": "2026-02-15T10:30:00Z"
+            "checkout_id": "uuid",
+            "status": "initiated",
+            "poll_url": "/api/upgrade/checkout-status/<id>"
         }
+
+    Poll GET /api/upgrade/checkout-status/<id> until status=completed,
+    then use the returned razorpay_subscription_id to open Razorpay checkout.
 
     Error Codes:
         400 DOWNGRADE_NOT_ALLOWED - Cannot downgrade
@@ -325,239 +288,161 @@ def create_upgrade_checkout():
         400 INVALID_ADDON - Add-on not available
         401 UNAUTHORIZED - No auth token
         403 FORBIDDEN - User doesn't own business for domain
-        500 INTERNAL_ERROR - Database/Razorpay error
+        429 TOO_MANY_REQUESTS - Worker queue full
+        500 INTERNAL_ERROR - Database error
     """
     start_time = datetime.now(timezone.utc)
-    user_id = g.user_id
+    supabase_user_id = g.user_id
+    firebase_uid = g.firebase_uid
+
+    if not supabase_user_id:
+        return error_response(
+            'User account not found. Please complete account setup.',
+            'NO_DB_USER', 400
+        )
 
     try:
-        # 1. Parse request body
         data = request.get_json()
         if not data:
-            return error_response(
-                'Request body required',
-                'MISSING_BODY',
-                400
-            )
+            return error_response('Request body required', 'MISSING_BODY', 400)
 
         domain = data.get('domain')
         target_plan_slug = data.get('target_plan_slug')
         billing_cycle = data.get('billing_cycle', 'monthly')
         addon_slugs = data.get('addon_slugs', [])
 
-        # 2. Validate required fields
         if not domain or not target_plan_slug:
             return error_response(
                 'Missing required fields: domain, target_plan_slug',
-                'MISSING_FIELDS',
-                400
+                'MISSING_FIELDS', 400
             )
 
         if not validate_domain(domain):
-            return error_response(
-                f'Invalid domain: {domain}',
-                'INVALID_DOMAIN',
-                400
-            )
+            return error_response(f'Invalid domain: {domain}', 'INVALID_DOMAIN', 400)
 
         if billing_cycle not in ['monthly', 'yearly']:
             return error_response(
                 'billing_cycle must be "monthly" or "yearly"',
-                'INVALID_BILLING_CYCLE',
-                400
+                'INVALID_BILLING_CYCLE', 400
             )
 
-        # 3. Verify business ownership (required for checkout)
-        if not verify_business_ownership(user_id):
+        supabase = get_supabase()
+
+        if not verify_business_ownership(supabase_user_id):
             return error_response(
                 'Business profile required. Please complete onboarding first.',
-                'BUSINESS_REQUIRED',
-                403
+                'BUSINESS_REQUIRED', 403
             )
 
-        # 4. Get user email for Razorpay
-        #    Fallback chain:
-        #      1. users table by Supabase UUID (g.user_id)
-        #      2. users table by firebase_uid (g.firebase_uid)
-        #      3. businesses table by firebase_uid
-        #      4. Firebase Admin SDK (authoritative source)
-        supabase = get_supabase()
-        firebase_uid = getattr(g, 'firebase_uid', None)
-
-        user_email = None
-
-        # (1) users.id = Supabase UUID
-        try:
-            user_result = supabase.table('users').select('email').eq(
-                'id', user_id
-            ).limit(1).maybe_single().execute()
-            if user_result.data:
-                user_email = user_result.data.get('email')
-        except Exception:
-            pass
-
-        # (2) users.firebase_uid — covers case where (1) matched but email was NULL
-        if not user_email and firebase_uid:
-            try:
-                fb_result = supabase.table('users').select('email').eq(
-                    'firebase_uid', firebase_uid
-                ).limit(1).maybe_single().execute()
-                if fb_result.data:
-                    user_email = fb_result.data.get('email')
-            except Exception:
-                pass
-
-        # (3) businesses table (stores Firebase UID in user_id column)
-        if not user_email and firebase_uid:
-            try:
-                biz_result = supabase.table('businesses').select('email').eq(
-                    'user_id', firebase_uid
-                ).limit(1).execute()
-                if biz_result.data and len(biz_result.data) > 0:
-                    user_email = biz_result.data[0].get('email')
-            except Exception:
-                pass
-
-        # (4) Firebase Admin SDK — authoritative source
-        if not user_email and firebase_uid:
-            try:
-                import firebase_admin
-                from firebase_admin import auth as firebase_auth
-                fb_user = firebase_auth.get_user(firebase_uid)
-                user_email = fb_user.email
-                logger.info(f"Got email from Firebase Admin for {firebase_uid[:10]}...")
-            except Exception as e:
-                logger.warning(f"Firebase Admin email lookup failed: {e}")
-
+        user_email = _resolve_user_email(supabase, supabase_user_id, firebase_uid)
         if not user_email:
-            logger.error(
-                f"NO_EMAIL: user_id={user_id}. All email resolution strategies failed."
-            )
             return error_response(
                 'User email not found. Cannot create subscription.',
-                'NO_EMAIL',
-                400
+                'NO_EMAIL', 400
             )
 
-        # 5. Get target plan details (resolve slug to UUID)
-        plan_result = supabase.table('pricing_plans').select('*').match({
-            'plan_slug': target_plan_slug,
-            'product_domain': domain,
-            'billing_cycle': billing_cycle,
-            'is_active': True
-        }).execute()
-
-        if not plan_result.data:
+        target_plan = _resolve_target_plan(
+            supabase, target_plan_slug, domain, billing_cycle
+        )
+        if not target_plan:
             return error_response(
                 f'Plan not found: {target_plan_slug} ({billing_cycle})',
-                'PLAN_NOT_FOUND',
-                404
+                'PLAN_NOT_FOUND', 404
             )
 
-        target_plan = plan_result.data[0]
-        target_plan_id = target_plan['id']
+        if not target_plan.get('razorpay_plan_id'):
+            return error_response(
+                f'Plan {target_plan_slug} has no Razorpay plan ID configured',
+                'NO_RZP_PLAN_ID', 500
+            )
 
-        # 6. Check upgrade eligibility
         upgrade_engine = get_upgrade_engine()
         eligibility = upgrade_engine.check_upgrade_eligibility(
-            user_id=user_id,
+            user_id=supabase_user_id,
             domain=domain,
-            target_plan_slug=target_plan_slug
+            target_plan_slug=target_plan_slug,
         )
 
         if eligibility.action != 'allowed':
             return error_response(
                 eligibility.message,
                 eligibility.action.value if hasattr(eligibility.action, 'value') else str(eligibility.action),
-                400
+                400,
             )
 
-        # 7. Validate add-ons (if provided)
-        validated_addons = []
-        if addon_slugs:
-            # Get all available add-ons for this domain
-            addons_result = supabase.table('plan_addons').select('*').match({
-                'is_active': True
-            }).or_(
-                f'product_domain.eq.{domain},product_domain.eq.all'
-            ).in_(
-                'addon_slug', addon_slugs
-            ).execute()
+        validated_addons = _resolve_addons(supabase, addon_slugs, domain)
 
-            if not addons_result.data or len(addons_result.data) != len(addon_slugs):
-                # Some add-ons not found
-                return error_response(
-                    'One or more add-ons not found or not available',
-                    'INVALID_ADDON',
-                    400
-                )
+        checkout_token = str(uuid.uuid4())
+        checkout_id = str(uuid.uuid4())
 
-            validated_addons = addons_result.data
+        insert_data = {
+            'id': checkout_id,
+            'user_id': supabase_user_id,
+            'firebase_uid': firebase_uid,
+            'domain': domain,
+            'target_plan_id': target_plan['id'],
+            'target_plan_slug': target_plan_slug,
+            'billing_cycle': billing_cycle,
+            'user_email': user_email,
+            'razorpay_plan_id': target_plan['razorpay_plan_id'],
+            'addon_data': json.dumps(validated_addons) if validated_addons else '[]',
+            'checkout_token': checkout_token,
+            'status': 'initiated',
+        }
 
-        # 8. Initiate upgrade via UpgradeOrchestrator
-        orchestrator = get_upgrade_orchestrator()
-        checkout_data = orchestrator.initiate_upgrade(
-            user_id=user_id,
-            domain=domain,
-            target_plan_id=target_plan_id,  # Pass UUID, not slug
-            user_email=user_email,
-            addons=validated_addons  # Pass full addon objects
-        )
+        supabase.table('checkout_requests').insert(insert_data).execute()
 
-        # 9. Add proration information if upgrading (not new subscription)
-        if eligibility.proration_details:
-            proration = eligibility.proration_details
-            checkout_data['proration_credit_paise'] = proration.unused_credit_paise
-            checkout_data['net_amount_paise'] = max(
-                0,
-                checkout_data.get('amount_paise', 0) - proration.unused_credit_paise
+        from services.checkout_worker import get_checkout_worker
+        worker = get_checkout_worker()
+        enqueued = worker.try_enqueue(checkout_id)
+
+        if not enqueued:
+            supabase.table('checkout_requests').update({
+                'status': 'failed',
+                'error_message': '[QUEUE_FULL] Too many pending checkouts. Try again.',
+                'updated_at': datetime.now(timezone.utc).isoformat(),
+            }).eq('id', checkout_id).execute()
+
+            elapsed_ms = (datetime.now(timezone.utc) - start_time).total_seconds() * 1000
+            logger.warning(
+                f"checkout_queue_full user={supabase_user_id} "
+                f"elapsed={round(elapsed_ms, 2)}ms"
             )
-            checkout_data['proration_details'] = proration.to_dict()
 
-        # 10. Add add-on items to response
-        if validated_addons:
-            checkout_data['addon_items'] = [
-                {
-                    'addon_slug': addon['addon_slug'],
-                    'display_name': addon['display_name'],
-                    'amount_paise': addon['amount_paise']
-                }
-                for addon in validated_addons
-            ]
+            return jsonify({
+                'success': False,
+                'error': 'TOO_MANY_REQUESTS',
+                'message': 'Too many pending checkouts. Please wait and try again.',
+            }), 429
 
-        # 11. Add effective date
-        checkout_data['effective_date'] = datetime.now(timezone.utc).isoformat()
-
-        # 12. Log success
         elapsed_ms = (datetime.now(timezone.utc) - start_time).total_seconds() * 1000
         logger.info(
-            f"upgrade_checkout_initiated user={user_id} domain={domain} "
+            f"checkout_initiated user={supabase_user_id} domain={domain} "
             f"plan={target_plan_slug} cycle={billing_cycle} "
-            f"addons={len(addon_slugs)} sub_id={checkout_data.get('razorpay_subscription_id')} "
-            f"amount={checkout_data.get('amount_paise')} elapsed={round(elapsed_ms, 2)}ms"
+            f"checkout_id={checkout_id} elapsed={round(elapsed_ms, 2)}ms"
         )
 
-        return success_response({
-            'upgrade_allowed': True,
-            **checkout_data
-        })
+        return jsonify({
+            'success': True,
+            'checkout_id': checkout_id,
+            'status': 'initiated',
+            'poll_url': f'/api/upgrade/checkout-status/{checkout_id}',
+        }), 202
 
     except ValueError as ve:
-        # UpgradeEngine/Orchestrator validation errors
-        logger.warning(f"upgrade_checkout_validation_error user={user_id} error={ve}")
+        logger.warning(f"checkout_validation_error user={supabase_user_id} error={ve}")
         return error_response(str(ve), 'VALIDATION_ERROR', 400)
 
     except Exception as e:
         logger.error(
-            f"upgrade_checkout_error user={user_id} "
-            f"domain={data.get('domain') if data else None} "
-            f"plan={data.get('target_plan_slug') if data else None} error={e}",
-            exc_info=True
+            f"checkout_error user={supabase_user_id} "
+            f"plan={data.get('target_plan_slug') if 'data' in dir() and data else None} "
+            f"error={e}",
+            exc_info=True,
         )
         return error_response(
-            'Failed to initiate upgrade checkout',
-            'INTERNAL_ERROR',
-            500
+            'Failed to initiate checkout',
+            'INTERNAL_ERROR', 500,
         )
 
 
@@ -663,7 +548,11 @@ def verify_upgrade_payment():
     The endpoint finds the pending upgrade by user_id + status=pending_upgrade.
     If razorpay_subscription_id is provided, it narrows the search.
     """
-    user_id = g.user_id
+    supabase_user_id = g.user_id
+    firebase_uid = g.firebase_uid
+
+    if not supabase_user_id:
+        return error_response('Could not resolve database user ID', 'NO_DB_USER', 400)
 
     try:
         data = request.get_json() or {}
@@ -673,7 +562,7 @@ def verify_upgrade_payment():
 
         # 1. Find the user's pending upgrade subscription
         query = supabase.table('subscriptions').select('*').eq(
-            'user_id', user_id
+            'user_id', supabase_user_id
         ).in_('status', ['pending_upgrade', 'upgrade_failed']).order(
             'updated_at', desc=True
         ).limit(1)
@@ -687,7 +576,7 @@ def verify_upgrade_payment():
         if not sub_result.data:
             # No pending upgrade — check if already activated (race with webhook)
             active_check = supabase.table('subscriptions').select('id, pricing_plan_id, status').eq(
-                'user_id', user_id
+                'user_id', supabase_user_id
             ).eq('status', 'active').order('updated_at', desc=True).limit(1).execute()
 
             if active_check.data:
@@ -712,9 +601,23 @@ def verify_upgrade_payment():
             return success_response({'activated': True, 'already_active': True})
 
         # 3. Verify with Razorpay API that payment went through
-        from routes.payments import razorpay_client
+        # Use requests with short timeout (5s) instead of SDK to avoid 30s blocks
+        import requests as _rzp_requests
+        import os as _rzp_os
         try:
-            rzp_sub = razorpay_client.subscription.fetch(rzp_sub_id)
+            _rzp_resp = _rzp_requests.get(
+                f'https://api.razorpay.com/v1/subscriptions/{rzp_sub_id}',
+                auth=(_rzp_os.getenv('RAZORPAY_KEY_ID'), _rzp_os.getenv('RAZORPAY_KEY_SECRET')),
+                timeout=(5, 5),
+            )
+            _rzp_resp.raise_for_status()
+            rzp_sub = _rzp_resp.json()
+        except _rzp_requests.exceptions.Timeout:
+            logger.error(f"verify_payment_razorpay_timeout sub={rzp_sub_id}")
+            return error_response(
+                'Payment gateway timed out. Your payment may still be processing — please check back shortly.',
+                'RAZORPAY_TIMEOUT', 202
+            )
         except Exception as e:
             logger.error(f"verify_payment_razorpay_error sub={rzp_sub_id} error={e}")
             return error_response(
@@ -723,16 +626,83 @@ def verify_upgrade_payment():
             )
 
         rzp_status = rzp_sub.get('status', '')
-        logger.info(f"verify_payment razorpay_status={rzp_status} sub={rzp_sub_id} user={user_id}")
+        paid_count = rzp_sub.get('paid_count', 0)
+        logger.info(
+            f"verify_payment razorpay_status={rzp_status} paid_count={paid_count} "
+            f"sub={rzp_sub_id} user={supabase_user_id}"
+        )
 
-        if rzp_status not in ('authenticated', 'active', 'created'):
+        # FAANG-level payment verification:
+        #
+        # Razorpay subscription lifecycle:
+        #   created       → Subscription created, no payment yet (paid_count=0)
+        #   authenticated → Payment 3DS-authenticated, awaiting capture (paid_count≥1)
+        #   active        → First payment captured, subscription live   (paid_count≥1)
+        #
+        # Timing edge case: When the Razorpay modal fires handler(), the
+        # subscription might still show 'created' if the capture webhook
+        # is delayed—BUT the payment DID go through (paid_count=1).
+        # Rejecting 'created' outright causes a false 400 error for paying users.
+        #
+        # SECURITY: We use paid_count from Razorpay's response as the
+        # ground truth instead of relying solely on subscription status.
+        # paid_count=0 + status='created' = no payment made (possible fraud).
+        # paid_count>0 = real payment regardless of status.
+        #
+        # Reference: https://razorpay.com/docs/api/subscriptions/#fetch-a-subscription
+        is_immediately_active = rzp_status == 'active'
+        is_payment_made = (
+            rzp_status == 'authenticated'
+            or rzp_status == 'active'
+            or (rzp_status == 'created' and paid_count > 0)
+        )
+
+        if not is_payment_made:
             return error_response(
                 f'Payment not completed. Razorpay status: {rzp_status}',
                 'PAYMENT_INCOMPLETE', 400
             )
 
+        # Short retry window: if Razorpay is racing from created→active,
+        # wait 1.5s and re-fetch before falling through to the webhook path.
+        # This reduces the "processing" window for most users.
+        if not is_immediately_active and rzp_status in ('created', 'authenticated'):
+            try:
+                import time as _verify_time
+                _verify_time.sleep(1.5)
+                _rzp_retry = _rzp_requests.get(
+                    f'https://api.razorpay.com/v1/subscriptions/{rzp_sub_id}',
+                    auth=(_rzp_os.getenv('RAZORPAY_KEY_ID'), _rzp_os.getenv('RAZORPAY_KEY_SECRET')),
+                    timeout=(5, 5),
+                )
+                _rzp_retry.raise_for_status()
+                rzp_sub = _rzp_retry.json()
+                rzp_status = rzp_sub.get('status', '')
+                is_immediately_active = rzp_status == 'active'
+                logger.info(
+                    f"verify_payment_retry status={rzp_status} sub={rzp_sub_id}"
+                )
+            except Exception as retry_err:
+                logger.warning(f"verify_payment_retry_failed sub={rzp_sub_id}: {retry_err}")
+
+        # If subscription is not yet active (created/authenticated after retry),
+        # payment WAS confirmed via paid_count>0. Don't activate yet — the
+        # Razorpay subscription webhook (subscription.activated) will do it
+        # asynchronously. Return processing status so frontend shows success.
+        if not is_immediately_active:
+            logger.info(
+                f"verify_payment_awaiting_webhook status={rzp_status} paid_count={paid_count} "
+                f"sub={rzp_sub_id} user={supabase_user_id}"
+            )
+            return success_response({
+                'activated': False,
+                'processing': True,
+                'razorpay_status': rzp_status,
+                'message': 'Payment received! Your subscription is being activated. This usually takes a few seconds.',
+            })
+
         # 4. Activate the upgrade — swap to new plan
-        new_plan_id = subscription.get('pending_upgrade_to_plan_id')
+        new_plan_id = subscription.get('pending_upgrade_to_plan_id') or subscription.get('pricing_plan_id')
         if not new_plan_id:
             return error_response('No target plan found', 'NO_TARGET_PLAN', 400)
 
@@ -744,13 +714,18 @@ def verify_upgrade_payment():
         # Razorpay plan ID and returns Starter features even on Business plan.
         new_plan_slug = None
         new_razorpay_plan_id = None
+        new_plan_display_name = None
+        new_plan_ai_limit = None
         try:
-            plan_row = supabase.table('pricing_plans').select('plan_slug, razorpay_plan_id').eq(
-                'id', new_plan_id
-            ).limit(1).execute()
+            plan_row = supabase.table('pricing_plans').select(
+                'plan_slug, razorpay_plan_id, display_name, limits_json'
+            ).eq('id', new_plan_id).limit(1).execute()
             if plan_row.data:
                 new_plan_slug = plan_row.data[0].get('plan_slug')
                 new_razorpay_plan_id = plan_row.data[0].get('razorpay_plan_id')
+                new_plan_display_name = plan_row.data[0].get('display_name') or new_plan_slug
+                limits_json = plan_row.data[0].get('limits_json') or {}
+                new_plan_ai_limit = limits_json.get('ai_responses') or limits_json.get('ai_responses_limit')
         except Exception as slug_err:
             logger.warning(f"verify_payment could not resolve plan details for {new_plan_id}: {slug_err}")
 
@@ -788,11 +763,50 @@ def verify_upgrade_payment():
                 current_end, tz=timezone.utc
             ).isoformat()
 
-        supabase.table('subscriptions').update(update_data).eq(
+        # FAANG-level race prevention: only activate if still pending_upgrade.
+        # The webhook handler also calls _activate_upgrade_atomic with the same
+        # filter — only one can win. If the webhook already activated this row,
+        # this UPDATE affects 0 rows and we fall through to "already_active".
+        result = supabase.table('subscriptions').update(update_data).eq(
             'id', subscription['id']
-        ).execute()
+        ).eq('status', 'pending_upgrade').execute()
 
-        # 5. Invalidate caches.
+        if not result.data:
+            # Webhook already activated this — return success
+            logger.info(
+                f"verify_payment_already_activated_by_webhook user={supabase_user_id} "
+                f"sub={subscription['id']}"
+            )
+            return success_response({'activated': True, 'already_active': True})
+
+        # 5. Cancel the old subscription (upgrade creates a NEW row; old stays ACTIVE)
+        try:
+            previous_sub_id = subscription.get('previous_subscription_id')
+            if previous_sub_id:
+                supabase.table('subscriptions').update({
+                    'status': 'cancelled',
+                    'cancelled_at': datetime.now(timezone.utc).isoformat(),
+                    'cancellation_reason': 'upgraded',
+                    'updated_at': datetime.now(timezone.utc).isoformat()
+                }).eq('id', previous_sub_id).execute()
+            else:
+                # Fallback: cancel any other ACTIVE sub for same user+domain
+                supabase.table('subscriptions').update({
+                    'status': 'cancelled',
+                    'cancelled_at': datetime.now(timezone.utc).isoformat(),
+                    'cancellation_reason': 'upgraded',
+                    'updated_at': datetime.now(timezone.utc).isoformat()
+                }).match({
+                    'user_id': supabase_user_id,
+                    'product_domain': subscription.get('product_domain', ''),
+                    'status': 'active',
+                }).neq('id', subscription['id']).execute()
+        except Exception as cancel_err:
+            logger.warning(
+                f"verify_payment old sub cancellation skipped (non-critical): {cancel_err}"
+            )
+
+        # 7. Invalidate caches.
         # Use increment_subscription_version (not just invalidate_subscription_cache)
         # so the versioned cache key is bumped — all in-flight requests that already
         # hold a reference to the old versioned key will miss and re-fetch from DB.
@@ -800,12 +814,12 @@ def verify_upgrade_payment():
         try:
             from services.feature_gate_engine import get_feature_gate_engine
             engine = get_feature_gate_engine()
-            engine.increment_subscription_version(str(user_id), domain)
-            engine.invalidate_usage_counter_cache(str(user_id), domain, None)
+            engine.increment_subscription_version(str(supabase_user_id), domain)
+            engine.invalidate_usage_counter_cache(str(supabase_user_id), domain, None)
         except Exception as cache_err:
             logger.warning(f"verify_payment cache invalidation failed: {cache_err}")
 
-        # 6. Trigger slug migration for shop domain upgrades.
+        # 8. Trigger slug migration for shop domain upgrades.
         #    When a Starter user upgrades to Business/Pro their slug is still
         #    the forced fallback (user_id[:8]).  We migrate it immediately so
         #    /store/<business-name> works without requiring a manual profile save.
@@ -814,14 +828,13 @@ def verify_upgrade_payment():
         #    g.firebase_uid is set by require_auth and is the correct key.
         if domain == 'shop' and new_plan_slug in ('business', 'pro'):
             try:
-                firebase_uid = getattr(g, 'firebase_uid', None) or user_id
                 _migrate_slug_on_upgrade(firebase_uid, supabase)
             except Exception as slug_err:
                 # Non-critical — user can still trigger migration by re-saving profile
                 logger.warning(f"verify_payment slug migration failed (non-critical): {slug_err}")
 
         logger.info(
-            f"verify_payment_activated user={user_id} sub={subscription['id']} "
+            f"verify_payment_activated user={supabase_user_id} sub={subscription['id']} "
             f"plan={new_plan_id} rzp_sub={rzp_sub_id} domain={domain}"
         )
 
@@ -829,11 +842,176 @@ def verify_upgrade_payment():
             'activated': True,
             'plan_id': new_plan_id,
             'domain': domain,
+            'subscription': {
+                'status': 'active',
+                'plan_name': new_plan_display_name or new_plan_slug or 'Unknown',
+                'razorpay_subscription_id': rzp_sub_id,
+                'ai_responses_limit': new_plan_ai_limit or 0,
+                'current_period_start': update_data.get('current_period_start'),
+                'current_period_end': update_data.get('current_period_end'),
+            },
         })
 
     except Exception as e:
-        logger.error(f"verify_payment_error user={user_id} error={e}", exc_info=True)
+        logger.error(f"verify_payment_error user={supabase_user_id} error={e}", exc_info=True)
         return error_response('Failed to verify payment', 'INTERNAL_ERROR', 500)
+
+
+# =============================================================================
+# POST /api/upgrade/checkout-async
+# =============================================================================
+
+# (async checkout moved to /checkout route above)
+
+
+# =============================================================================
+# GET /api/upgrade/checkout-status/<checkout_id>
+# =============================================================================
+
+@upgrade_bp.route('/checkout-status/<checkout_id>', methods=['GET'])
+@require_auth
+def get_checkout_status(checkout_id):
+    """
+    Poll checkout status.
+
+    Returns checkout result when completed.
+    Handles stale processing (Render sleep recovery): if processing >3min,
+    reverts to initiated and re-enqueues on first poll after wake.
+    """
+    supabase_user_id = g.user_id
+    supabase = get_supabase()
+
+    try:
+        result = supabase.table('checkout_requests').select('*').eq(
+            'id', checkout_id
+        ).limit(1).execute()
+
+        if not result.data:
+            return error_response('Checkout not found', 'NOT_FOUND', 404)
+
+        row = result.data[0]
+
+        if row['user_id'] != supabase_user_id:
+            return error_response('Forbidden', 'FORBIDDEN', 403)
+
+        status = row['status']
+
+        if status == 'processing':
+            updated_at = datetime.fromisoformat(row['updated_at'].replace('Z', '+00:00'))
+            age_seconds = (datetime.now(timezone.utc) - updated_at).total_seconds()
+
+            if age_seconds > 180:
+                reverted = supabase.table('checkout_requests').update({
+                    'status': 'initiated',
+                    'worker_id': None,
+                    'updated_at': datetime.now(timezone.utc).isoformat(),
+                }).eq('id', checkout_id).eq('status', 'processing').execute()
+
+                if reverted.data:
+                    logger.warning(
+                        "checkout_status_stale_reverted",
+                        extra={"checkout_id": checkout_id, "age_seconds": age_seconds}
+                    )
+                    from services.checkout_worker import get_checkout_worker
+                    get_checkout_worker().try_enqueue(checkout_id)
+                    status = 'initiated'
+
+        if status == 'completed':
+            razorpay_key_id = row.get('razorpay_key_id') or os.getenv('RAZORPAY_KEY_ID')
+            return jsonify({
+                'success': True,
+                'status': 'completed',
+                'razorpay_subscription_id': row.get('razorpay_subscription_id'),
+                'razorpay_key_id': razorpay_key_id,
+                'amount_paise': row.get('amount_paise'),
+                'currency': row.get('currency', 'INR'),
+                'plan_name': row.get('target_plan_slug'),
+            })
+
+        if status == 'failed':
+            return jsonify({
+                'success': False,
+                'status': 'failed',
+                'error': 'CHECKOUT_FAILED',
+                'message': row.get('error_message', 'Checkout failed'),
+            }), 400
+
+        return jsonify({
+            'success': True,
+            'status': status,
+            'checkout_id': checkout_id,
+        })
+
+    except Exception as e:
+        logger.error(f"checkout_status_error id={checkout_id} error={e}", exc_info=True)
+        return error_response('Failed to check status', 'INTERNAL_ERROR', 500)
+
+
+# =============================================================================
+# Shared Helpers
+# =============================================================================
+
+def _resolve_user_email(supabase, supabase_user_id, firebase_uid) -> Optional[str]:
+    email = None
+    try:
+        user_result = supabase.table('users').select('email').eq(
+            'id', supabase_user_id
+        ).limit(1).maybe_single().execute()
+        if user_result.data:
+            email = user_result.data.get('email')
+    except Exception:
+        pass
+
+    if not email and firebase_uid:
+        try:
+            biz_result = supabase.table('businesses').select('email').eq(
+                'user_id', firebase_uid
+            ).limit(1).execute()
+            if biz_result.data:
+                email = biz_result.data[0].get('email')
+        except Exception:
+            pass
+
+    if not email and firebase_uid:
+        try:
+            import firebase_admin
+            from firebase_admin import auth as firebase_auth
+            fb_user = firebase_auth.get_user(firebase_uid)
+            email = fb_user.email
+        except Exception:
+            pass
+
+    return email
+
+
+def _resolve_target_plan(supabase, slug, domain, billing_cycle) -> Optional[Dict]:
+    result = supabase.table('pricing_plans').select('*').match({
+        'plan_slug': slug,
+        'product_domain': domain,
+        'billing_cycle': billing_cycle,
+        'is_active': True,
+    }).execute()
+    return result.data[0] if result.data else None
+
+
+def _resolve_addons(supabase, addon_slugs, domain):
+    if not addon_slugs:
+        return []
+    result = supabase.table('plan_addons').select('*').match({
+        'is_active': True,
+    }).or_(
+        f'product_domain.eq.{domain},product_domain.eq.all'
+    ).in_('addon_slug', addon_slugs).execute()
+    if not result.data or len(result.data) != len(addon_slugs):
+        raise ValueError('One or more add-ons not found or not available')
+    return [
+        {
+            'addon_slug': a['addon_slug'],
+            'display_name': a['display_name'],
+            'amount_paise': a['amount_paise'],
+        }
+        for a in result.data
+    ]
 
 
 # =============================================================================

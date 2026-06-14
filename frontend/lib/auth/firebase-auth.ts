@@ -64,14 +64,30 @@ const DEFAULT_CONFIG: AuthConfig = {
 /**
  * Categorizes Firebase auth errors for appropriate handling
  */
-export function classifyAuthError(error: AuthError): {
+const FALLBACK_ERROR = {
+  type: "unknown" as const,
+  shouldRetry: false,
+  shouldFallback: true,
+  userMessage: "Authentication failed. Please try again.",
+};
+
+export function classifyAuthError(
+  error: unknown
+): {
   type: "popup_blocked" | "popup_closed" | "network" | "unauthorized_domain" | "cancelled" | "unknown";
   shouldRetry: boolean;
   shouldFallback: boolean;
   userMessage: string;
 } {
-  const code = error.code || "";
-  const message = error.message || "";
+  if (!error || typeof error !== "object") {
+    return typeof error === "string"
+      ? { ...FALLBACK_ERROR, userMessage: `Authentication failed: ${error}` }
+      : FALLBACK_ERROR;
+  }
+
+  const err = error as Record<string, unknown>;
+  const code = typeof err.code === "string" ? err.code : "";
+  const message = typeof err.message === "string" ? err.message : "";
 
   // Popup blocked by browser
   if (code === "auth/popup-blocked") {
@@ -133,13 +149,7 @@ export function classifyAuthError(error: AuthError): {
     };
   }
 
-  // Default: unknown error
-  return {
-    type: "unknown",
-    shouldRetry: false,
-    shouldFallback: true,
-    userMessage: "Authentication failed. Trying alternative method...",
-  };
+  return FALLBACK_ERROR;
 }
 
 // =============================================================================
