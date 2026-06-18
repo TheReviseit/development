@@ -1373,45 +1373,83 @@ def create_subscription():
         
         if SUPABASE_AVAILABLE:
             supabase = get_supabase_client()
+            skip_payment_attempt = False
             
             if existing_sub:
                 old_rzp_sub_id = existing_sub.get('razorpay_subscription_id')
                 new_rzp_sub_id = subscription['id']
-                
-                # CRITICAL: Reparent payment_attempts before updating subscription.
-                # payment_attempts.razorpay_subscription_id is a FK referencing
-                # subscriptions.razorpay_subscription_id. Changing the sub ID
-                # in the parent row would violate the FK constraint if child
-                # rows still reference the old ID.
+
                 if old_rzp_sub_id and old_rzp_sub_id != new_rzp_sub_id:
-                    try:
-                        supabase.table('payment_attempts').update({
-                            'razorpay_subscription_id': new_rzp_sub_id
-                        }).eq(
-                            'razorpay_subscription_id', old_rzp_sub_id
-                        ).execute()
-                        logger.info(
-                            f"[{request_id}] Reparented payment_attempts: "
-                            f"{old_rzp_sub_id} → {new_rzp_sub_id}"
+                    # ──────────────────────────────────────────────────────
+                    # Atomic RPC: DELETE stale payment_attempts that block
+                    # the FK → UPDATE sub row → INSERT fresh attempt.
+                    #
+                    # WHY RPC: The FK fk_payment_attempts_razorpay_subscription
+                    # references subscriptions.razorpay_subscription_id (a
+                    # mutable business key, not the UUID PK). Changing the
+                    # parent key is blocked while child rows reference the
+                    # old value. The RPC wraps all three operations in a
+                    # single BEGIN/COMMIT with SELECT ... FOR UPDATE for
+                    # concurrency safety.
+                    #
+                    # SAFETY: Deleted payment_attempts have status='initiated',
+                    # zero payment_id, zero amount. Real money lives in
+                    # payment_history (never touched). A fresh attempt is
+                    # inserted by the RPC at the end of the transaction.
+                    # ──────────────────────────────────────────────────────
+                    rpc_result = supabase.rpc('replace_stale_subscription', {
+                        'old_rzp_sub_id': old_rzp_sub_id,
+                        'new_rzp_sub_id': new_rzp_sub_id,
+                        'new_customer_id': customer_id,
+                        'p_user_id': user_id,
+                        'p_subscription_id': existing_sub['id'],
+                        'p_plan_name': plan_name,
+                        'p_plan_id': razorpay_plan_id,
+                        'p_idempotency_key': idempotency_key,
+                        'p_ai_responses_limit': ai_responses_limit,
+                        'p_product_domain': product_domain,
+                        'p_amount_paise': amount_paise,
+                        'p_currency': currency,
+                        'p_pricing_plan_id': str(pricing_plan_id) if pricing_plan_id else None,
+                        'p_request_id': request_id,
+                        'p_client_ip': request.remote_addr or '',
+                        'p_user_agent': request.headers.get('User-Agent', '')[:500],
+                    }).execute()
+
+                    # Extract result — Supabase returns list of rows, take first
+                    rpc_data = rpc_result
+                    if isinstance(rpc_data, list):
+                        rpc_data = rpc_data[0] if rpc_data else {}
+
+                    if not rpc_data.get('success', False):
+                        raise RuntimeError(
+                            f"RPC replace_stale_subscription failed: "
+                            f"{rpc_data.get('error', 'unknown')}"
                         )
-                    except Exception as reparent_err:
-                        logger.warning(
-                            f"[{request_id}] Payment_attempts reparent failed "
-                            f"(non-fatal, continuing): {reparent_err}"
-                        )
-                
-                # UPDATE existing row in place (plan switch — same row, new plan)
-                supabase.table('subscriptions').update(
-                    subscription_fields
-                ).eq(
-                    'id', existing_sub['id']
-                ).execute()
-                
-                logger.info(
-                    f"[{request_id}] 🔄 Updated subscription row {existing_sub['id']}: "
-                    f"{existing_sub.get('plan_name')} → {plan_name} "
-                    f"(razorpay: {old_rzp_sub_id} → {new_rzp_sub_id})"
-                )
+
+                    logger.info(
+                        f"[{request_id}] RPC replace_stale_subscription: "
+                        f"idempotent={rpc_data.get('idempotent', False)}, "
+                        f"deleted={rpc_data.get('deleted_payment_attempts', 0)}"
+                    )
+
+                    # RPC already inserted the payment_attempt — skip the
+                    # separate INSERT below to avoid duplicates.
+                    skip_payment_attempt = True
+                else:
+                    # Same sub ID (idempotency hit returning the old sub
+                    # because Razorpay's idempotency cache still has the
+                    # original response) — UPDATE without FK change since
+                    # razorpay_subscription_id stays the same.
+                    supabase.table('subscriptions').update(
+                        subscription_fields
+                    ).eq('id', existing_sub['id']).execute()
+
+                    logger.info(
+                        f"[{request_id}] 🔄 Updated subscription row "
+                        f"{existing_sub['id']}: plan={plan_name}, "
+                        f"razorpay={new_rzp_sub_id} (idempotency hit, no FK change)"
+                    )
             else:
                 # INSERT fresh row (first subscription for this user+domain)
                 subscription_fields['user_id'] = user_id
@@ -1423,17 +1461,19 @@ def create_subscription():
                     f"[{request_id}] 🆕 Inserted new subscription row for {plan_name}"
                 )
             
-            # Record payment attempt (always insert — audit trail)
-            supabase.table('payment_attempts').insert({
-                'user_id': user_id,
-                'request_id': request_id,
-                'plan_name': plan_name,
-                'idempotency_key': idempotency_key,
-                'status': 'initiated',
-                'razorpay_subscription_id': subscription['id'],
-                'client_ip': request.remote_addr,
-                'user_agent': request.headers.get('User-Agent', '')[:500]
-            }).execute()
+            # Record payment attempt (audit trail).
+            # Skipped when the RPC already inserted it atomically.
+            if not skip_payment_attempt:
+                supabase.table('payment_attempts').insert({
+                    'user_id': user_id,
+                    'request_id': request_id,
+                    'plan_name': plan_name,
+                    'idempotency_key': idempotency_key,
+                    'status': 'initiated',
+                    'razorpay_subscription_id': subscription['id'],
+                    'client_ip': request.remote_addr,
+                    'user_agent': request.headers.get('User-Agent', '')[:500]
+                }).execute()
         
         logger.info(
             f"[{request_id}] ✅ Created subscription {subscription['id']} for user {user_id} "
