@@ -1375,6 +1375,31 @@ def create_subscription():
             supabase = get_supabase_client()
             
             if existing_sub:
+                old_rzp_sub_id = existing_sub.get('razorpay_subscription_id')
+                new_rzp_sub_id = subscription['id']
+                
+                # CRITICAL: Reparent payment_attempts before updating subscription.
+                # payment_attempts.razorpay_subscription_id is a FK referencing
+                # subscriptions.razorpay_subscription_id. Changing the sub ID
+                # in the parent row would violate the FK constraint if child
+                # rows still reference the old ID.
+                if old_rzp_sub_id and old_rzp_sub_id != new_rzp_sub_id:
+                    try:
+                        supabase.table('payment_attempts').update({
+                            'razorpay_subscription_id': new_rzp_sub_id
+                        }).eq(
+                            'razorpay_subscription_id', old_rzp_sub_id
+                        ).execute()
+                        logger.info(
+                            f"[{request_id}] Reparented payment_attempts: "
+                            f"{old_rzp_sub_id} → {new_rzp_sub_id}"
+                        )
+                    except Exception as reparent_err:
+                        logger.warning(
+                            f"[{request_id}] Payment_attempts reparent failed "
+                            f"(non-fatal, continuing): {reparent_err}"
+                        )
+                
                 # UPDATE existing row in place (plan switch — same row, new plan)
                 supabase.table('subscriptions').update(
                     subscription_fields
@@ -1385,7 +1410,7 @@ def create_subscription():
                 logger.info(
                     f"[{request_id}] 🔄 Updated subscription row {existing_sub['id']}: "
                     f"{existing_sub.get('plan_name')} → {plan_name} "
-                    f"(razorpay: {existing_sub['razorpay_subscription_id']} → {subscription['id']})"
+                    f"(razorpay: {old_rzp_sub_id} → {new_rzp_sub_id})"
                 )
             else:
                 # INSERT fresh row (first subscription for this user+domain)
