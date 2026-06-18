@@ -77,6 +77,25 @@ def initialize_firebase():
         _firestore_client = firestore.client()
         _firebase_initialized = True
         logger.info("Firebase Admin SDK initialized successfully")
+
+        # CRITICAL: Verify we initialized the correct Firebase project
+        try:
+            app = firebase_admin.get_app()
+            actual_project_id = app.project_id
+            expected_project_id = os.getenv('EXPECTED_FIREBASE_PROJECT_ID', 'flowauxi')
+            if actual_project_id != expected_project_id:
+                logger.critical(
+                    f"FIREBASE PROJECT MISMATCH! "
+                    f"Backend initialized with project '{actual_project_id}' "
+                    f"but expected '{expected_project_id}'. "
+                    f"Token verification will FAIL for all users. "
+                    f"Update FIREBASE_SERVICE_ACCOUNT_KEY to use the '{expected_project_id}' project."
+                )
+            else:
+                logger.info(f"Firebase project verified: {actual_project_id}")
+        except Exception as e:
+            logger.warning(f"Could not verify Firebase project: {e}")
+
         return True
         
     except Exception as e:

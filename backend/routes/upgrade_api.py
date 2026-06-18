@@ -67,7 +67,7 @@ def get_supabase():
 # =============================================================================
 
 # FAANG-level auth: shared require_auth from middleware.auth
-# Validates Firebase ID tokens (check_revoked=True), maps to Supabase UUID.
+# Validates Firebase ID tokens (check_revoked=False), maps to Supabase UUID.
 # Sets g.firebase_uid (Firebase UID) and g.user_id (Supabase UUID).
 from middleware.auth import require_auth
 

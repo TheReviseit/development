@@ -49,7 +49,7 @@ This document describes the FAANG-grade security architecture for the Flowauxi b
 ├─────────────────────────────────────────────────────────────────────────────┤
 │  ┌─────────────────────────────────────────────────────────────────────┐   │
 │  │ Billing Security Middleware                                          │   │
-│  │ • Firebase verify_id_token(check_revoked=True) - STRICT             │   │
+ │  │ • Firebase verify_id_token(check_revoked=False) - local (cached keys)│   │
 │  │ • Multi-tier rate limiting (IP, User, Tenant)                       │   │
 │  │ • Confidence-based abuse detection (0-100 score)                    │   │
 │  │   - IP reputation (0-30 points)                                     │   │
@@ -88,7 +88,7 @@ This document describes the FAANG-grade security architecture for the Flowauxi b
 ### 1. Authentication (AC #1)
 
 **No Grace Periods - Strict Validation:**
-- Firebase tokens validated with `check_revoked=True`
+- Firebase tokens validated locally with `check_revoked=False` (no blocking HTTPS call)
 - Expired tokens return 401 immediately
 - Client must call `user.getIdToken(true)` to refresh
 - `/api/auth/session` accepts only valid tokens, issues HTTP-only cookies

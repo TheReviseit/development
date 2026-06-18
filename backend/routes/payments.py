@@ -258,8 +258,8 @@ def require_razorpay(f):
 
 
 # Shared auth from middleware.auth — validates Firebase ID tokens with
-# check_revoked=True, returns 401/404 with consistent error format.
-# Replaced the local require_auth/get_user_id_from_request/map_to_supabase_user_id.
+# check_revoked=False (local verification, no blocking HTTPS call to Google).
+# Returns 401/404 with consistent error format.
 require_auth = _require_auth
 
 

@@ -1990,7 +1990,7 @@ def verify_auth_token():
         # Use Firebase Admin SDK to validate token with strict checking
         from firebase_admin import auth as firebase_auth
         
-        # Verify with check_revoked=True - strict validation
+        # Verify with check_revoked=False - local token verification (no HTTPS call)
         decoded = firebase_auth.verify_id_token(token, check_revoked=False)
         
         user_id = decoded.get('user_id') or decoded.get('sub')

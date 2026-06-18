@@ -18,7 +18,6 @@ Usage:
         ...
 """
 
-import concurrent.futures
 import logging
 import time
 from functools import wraps
@@ -144,7 +143,7 @@ def get_firebase_uid() -> Optional[str]:
         Firebase UID string, or None if authentication fails.
 
     SECURITY: Requires valid Firebase ID token in Authorization: Bearer header.
-    Token is verified locally (check_revoked=False) with a 5-second timeout.
+    Token is verified locally with cached public keys (check_revoked=False).
     No X-User-Id header trust — every request must present a valid Firebase token.
     """
     if _is_auth_circuit_open():
@@ -193,7 +192,7 @@ def require_auth(f):
         g.user_id: Supabase UUID of authenticated user
 
     Returns 401 if not authenticated, 404 if user not found in Supabase.
-    Token is verified locally (check_revoked=False) with a 5s timeout.
+    Token is verified locally with cached public keys (check_revoked=False).
     """
     @wraps(f)
     def decorated_function(*args, **kwargs):
