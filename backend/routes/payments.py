@@ -1151,42 +1151,47 @@ def create_subscription():
                 else:
                     logger.warning(
                         f"[{request_id}] ⚠️ Razorpay sub {rzp_sub_id} has terminal status "
-                        f"'{rzp_status}' — will create fresh subscription"
+                        f"'{rzp_status}' — will cancel and create fresh subscription"
                     )
-                    existing_sub = None
+                    # Keep existing_sub so CASE 2 UPDATEs the row in place
+                    # instead of INSERT (which would violate unique constraint).
             except Exception as e:
                 logger.warning(
                     f"[{request_id}] ⚠️ Razorpay sub {rzp_sub_id} not found on Razorpay "
-                    f"({type(e).__name__}: {e}) — will create fresh subscription"
+                    f"({type(e).__name__}: {e}) — will cancel and create fresh subscription"
                 )
-                if SUPABASE_AVAILABLE:
-                    try:
-                        supabase = get_supabase_client()
-                        supabase.table('subscriptions').update({
-                            'status': 'abandoned',
-                            'updated_at': 'now()',
-                        }).eq('id', existing_sub['id']).execute()
-                        logger.info(f"[{request_id}] Marked stale sub {rzp_sub_id} as abandoned in DB")
-                    except Exception as db_err:
-                        logger.warning(f"[{request_id}] Failed to mark sub as abandoned: {db_err}")
-                existing_sub = None
+                # Keep existing_sub so CASE 2 UPDATEs the row in place.
+                # The old Razorpay sub is already gone — CASE 2's cancel
+                # will be a no-op (caught by the except).
 
-        # --- CASE 2: Different plan pending/created → cancel old, UPDATE row ---
+        # --- CASE 2: Existing row found → cancel old Razorpay sub, UPDATE row ---
+        # Handles two scenarios:
+        # 1. Plan switch (user had plan A, now wants plan B)
+        # 2. Stale sub reuse (old Razorpay sub is gone, create fresh one)
+        # In both cases, the DB row is UPDATED in place (never INSERT).
         if existing_sub:
             old_sub_id = existing_sub['razorpay_subscription_id']
             old_plan = existing_sub.get('plan_name', 'unknown')
+            old_status = existing_sub.get('status', 'unknown')
             
-            logger.info(
-                f"[{request_id}] 🔄 Plan switch: {old_plan} → {plan_name} "
-                f"(cancelling {old_sub_id}, will update row {existing_sub['id']})"
-            )
+            if old_plan != plan_name:
+                logger.info(
+                    f"[{request_id}] 🔄 Plan switch: {old_plan} → {plan_name} "
+                    f"(cancelling {old_sub_id}, will update row {existing_sub['id']})"
+                )
+            else:
+                logger.info(
+                    f"[{request_id}] ♻️ Stale sub recreation: same plan {old_plan}, "
+                    f"status={old_status}, Razorpay sub {old_sub_id} is gone — "
+                    f"creating fresh sub and updating row {existing_sub['id']}"
+                )
             
-            # Cancel old subscription on Razorpay
+            # Cancel old subscription on Razorpay (no-op if already gone)
             try:
                 get_razorpay_client().subscription.cancel(old_sub_id)
                 logger.info(f"[{request_id}] ✅ Cancelled old Razorpay sub: {old_sub_id}")
             except Exception as cancel_err:
-                # Non-fatal — may already be cancelled/expired
+                # Non-fatal — may already be cancelled/expired or never existed
                 logger.warning(f"[{request_id}] ⚠️ Cancel {old_sub_id}: {cancel_err}")
         
         # =================================================================
