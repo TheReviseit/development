@@ -65,10 +65,17 @@ export async function GET(
   };
 
   if (data.status === "completed") {
-    response.razorpay_subscription_id = data.razorpay_subscription_id;
-    response.razorpay_key_id =
+    const keyId =
       data.razorpay_key_id || process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID;
-    response.amount_paise = data.amount_paise;
+    const subscriptionId = data.razorpay_subscription_id;
+    const amount = data.amount_paise;
+
+    response.razorpay_subscription_id = subscriptionId;
+    response.razorpay_key_id = keyId;
+    response.amount_paise = amount;
+    response.subscription_id = subscriptionId;
+    response.key_id = keyId;
+    response.amount = amount;
     response.currency = data.currency || "INR";
     response.plan_name = data.target_plan_slug;
   }

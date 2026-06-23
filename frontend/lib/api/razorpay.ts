@@ -247,16 +247,31 @@ async function pollCheckoutCompletion(
     const data = await response.json();
 
     switch (data.status) {
-      case "completed":
+      case "completed": {
+        const subscriptionId =
+          data.subscription_id || data.razorpay_subscription_id;
+        const keyId =
+          data.key_id ||
+          data.razorpay_key_id ||
+          process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID;
+        const amount = data.amount ?? data.amount_paise;
+
+        if (!subscriptionId || !keyId) {
+          throw new Error(
+            "Checkout completed but payment details are missing. Please retry.",
+          );
+        }
+
         logger.info("checkout_completed", { checkout_token: checkoutToken });
         return {
           success: true,
-          subscription_id: data.subscription_id,
-          key_id: data.key_id,
-          amount: data.amount,
+          subscription_id: subscriptionId,
+          key_id: keyId,
+          amount,
           currency: data.currency || "INR",
           plan_name: data.plan_name,
         };
+      }
 
       case "failed":
         logger.error(
@@ -595,8 +610,16 @@ export async function openRazorpayCheckout(options: {
     return;
   }
 
+  const keyId = options.keyId || process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID;
+  if (!keyId) {
+    options.onError(
+      new Error("Payment configuration error: Razorpay key not available"),
+    );
+    return;
+  }
+
   const razorpayOptions: Record<string, any> = {
-    key: options.keyId,
+    key: keyId,
     subscription_id: options.subscriptionId,
     name: "Flowauxi",
     description: `${options.planName} Plan Subscription`,
