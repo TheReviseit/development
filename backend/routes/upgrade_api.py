@@ -565,20 +565,37 @@ def verify_upgrade_payment():
         domain_hint = data.get('domain')
         supabase = get_supabase()
 
-        # 1. Find the user's pending upgrade subscription
-        query = supabase.table('subscriptions').select('*').eq(
-            'user_id', supabase_user_id
-        ).in_('status', ['pending_upgrade', 'upgrade_failed', 'pending']).order(
-            'updated_at', desc=True
-        ).limit(1)
+        subscription = None
 
-        # Narrow by domain if provided
-        if domain_hint:
-            query = query.eq('product_domain', domain_hint)
+        # Prefer exact match when client provides Razorpay subscription id
+        if rzp_sub_id_from_client:
+            rzp_query = supabase.table('subscriptions').select('*').eq(
+                'user_id', supabase_user_id
+            ).eq('razorpay_subscription_id', rzp_sub_id_from_client).order(
+                'updated_at', desc=True
+            ).limit(1)
+            if domain_hint:
+                rzp_query = rzp_query.eq('product_domain', domain_hint)
+            rzp_match = rzp_query.execute()
+            if rzp_match.data:
+                subscription = rzp_match.data[0]
 
-        sub_result = query.execute()
+        # 1. Find the user's pending subscription (onboarding or upgrade)
+        if not subscription:
+            query = supabase.table('subscriptions').select('*').eq(
+                'user_id', supabase_user_id
+            ).in_('status', ['pending_upgrade', 'upgrade_failed', 'pending']).order(
+                'updated_at', desc=True
+            ).limit(1)
 
-        if not sub_result.data:
+            if domain_hint:
+                query = query.eq('product_domain', domain_hint)
+
+            sub_result = query.execute()
+            if sub_result.data:
+                subscription = sub_result.data[0]
+
+        if not subscription:
             # No pending upgrade — check if already activated (race with webhook)
             active_check = supabase.table('subscriptions').select('id, pricing_plan_id, status').eq(
                 'user_id', supabase_user_id
@@ -592,8 +609,11 @@ def verify_upgrade_payment():
                 'NOT_FOUND', 404
             )
 
-        subscription = sub_result.data[0]
-        rzp_sub_id = subscription.get('pending_upgrade_razorpay_subscription_id') or rzp_sub_id_from_client
+        rzp_sub_id = (
+            subscription.get('pending_upgrade_razorpay_subscription_id')
+            or subscription.get('razorpay_subscription_id')
+            or rzp_sub_id_from_client
+        )
 
         if not rzp_sub_id:
             return error_response(
@@ -707,7 +727,11 @@ def verify_upgrade_payment():
             })
 
         # 4. Activate via unified ActivationService
-        from services.activation_service import activate_subscription, reconcile_plan_snapshot
+        from services.activation_service import (
+            activate_subscription,
+            reconcile_plan_snapshot,
+            resolve_expected_activation_status,
+        )
 
         period_start = None
         period_end = None
@@ -722,11 +746,17 @@ def verify_upgrade_payment():
                 current_end, tz=timezone.utc
             ).isoformat()
 
+        expected_status = resolve_expected_activation_status(subscription)
+        logger.info(
+            f"verify_payment_activate sub={subscription['id']} "
+            f"db_status={subscription.get('status')} expected_status={expected_status}"
+        )
+
         activation = activate_subscription(
             supabase,
             subscription,
             source="verify_payment",
-            expected_status="pending_upgrade",
+            expected_status=expected_status,
             period_start=period_start,
             period_end=period_end,
             razorpay_subscription_id=rzp_sub_id,

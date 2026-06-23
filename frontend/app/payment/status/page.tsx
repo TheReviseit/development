@@ -108,6 +108,11 @@ function PaymentStatusContent() {
         return true;
       }
 
+      // Payment confirmed but Razorpay subscription not yet active — webhook will finish
+      if (response.ok && data.processing) {
+        return false;
+      }
+
       if (!response.ok && data.error) {
         if (data.error === 'NOT_FOUND') {
           const elapsed = Date.now() - pollStartTime.current;
@@ -122,6 +127,16 @@ function PaymentStatusContent() {
           return false;
         }
         if (data.error === 'PAYMENT_INCOMPLETE') {
+          return false;
+        }
+        // Race with webhook — keep polling briefly before surfacing error
+        if (data.error === 'ACTIVATION_FAILED') {
+          const elapsed = Date.now() - pollStartTime.current;
+          if (elapsed >= 45000) {
+            setError(data.message || "Payment received but activation is delayed. Please refresh in a moment.");
+            setLoading(false);
+            return true;
+          }
           return false;
         }
         setError(data.message || "Payment verification failed");

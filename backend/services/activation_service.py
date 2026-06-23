@@ -19,6 +19,16 @@ logger = logging.getLogger("reviseit.billing.activation")
 
 ActivationSource = Literal["webhook", "verify_payment", "reconciliation"]
 
+PRE_ACTIVATION_STATUSES = frozenset({"pending", "pending_upgrade", "upgrade_failed"})
+
+
+def resolve_expected_activation_status(subscription: Dict[str, Any]) -> str:
+    """Map DB row status to the optimistic-lock value for activate_subscription."""
+    status = subscription.get("status") or "pending"
+    if status in PRE_ACTIVATION_STATUSES:
+        return status
+    return "pending_upgrade"
+
 
 @dataclass
 class ActivationResult:
