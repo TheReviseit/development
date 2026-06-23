@@ -19,6 +19,8 @@ import Image from 'next/image';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import logo from '@/public/logo.png';
+import { generateCheckoutIdempotencyKey, generateVerifyIdempotencyKey } from '@/lib/billing/idempotency';
+import { auth } from '@/src/firebase/firebase';
 
 declare global {
   interface Window {
@@ -146,77 +148,61 @@ const DOMAIN_CONFIG: Record<string, { displayName: string; themeColor: string }>
 
 async function createCheckoutSession(
   planSlug: string,
-  idempotencyKey: string
+  idempotencyKey: string,
+  bearerToken: string,
 ): Promise<{
   success: boolean;
-  checkoutUrl?: string;
-  sessionId?: string;
+  subscriptionId?: string;
   keyId?: string;
-  pendingSubscriptionId?: string;
   error?: string;
 }> {
-  const maxAttempts = 3;
-  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-    try {
-      const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 15000);
+  const initRes = await fetch('/api/billing/create-subscription', {
+    method: 'POST',
+    credentials: 'include',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: bearerToken,
+      'Idempotency-Key': idempotencyKey,
+    },
+    body: JSON.stringify({ plan_name: planSlug }),
+  });
 
-      const response = await fetch('/api/billing/checkout-session', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          planSlug,
-          idempotencyKey,
-        }),
-        signal: controller.signal,
-      });
+  const initData = await initRes.json().catch(() => ({}));
+  if (!initRes.ok) {
+    return {
+      success: false,
+      error: (initData as any).error || 'Failed to start checkout.',
+    };
+  }
 
-      clearTimeout(timeout);
+  const checkoutToken = (initData as any).checkout_token;
+  if (!checkoutToken) {
+    return { success: false, error: 'No checkout token returned.' };
+  }
 
-      if (!response.ok) {
-        const error = await response.json().catch(() => ({}));
-
-        // Retry only on transient gateway/service errors
-        if ((response.status === 502 || response.status === 503) && attempt < maxAttempts) {
-          await new Promise((r) => setTimeout(r, 500 * 2 ** attempt));
-          continue;
-        }
-
-        if (response.status === 429) {
-          return { success: false, error: 'Too many attempts. Please wait a moment.' };
-        }
-        if (response.status === 409) {
-          return { success: false, error: 'You already have an active subscription.' };
-        }
-        if (response.status === 503) {
-          return { success: false, error: 'Payment service temporarily unavailable. Please try again.' };
-        }
-
-        return { success: false, error: (error as any).message || 'Failed to create checkout session.' };
-      }
-
-      const data = await response.json();
+  const pollStart = Date.now();
+  let pollMs = 300;
+  while (Date.now() - pollStart < 60000) {
+    await new Promise((r) => setTimeout(r, pollMs));
+    pollMs = Math.min(pollMs * 1.5, 2000);
+    const pollRes = await fetch(`/api/billing/checkout-status/${checkoutToken}`);
+    const pollData = await pollRes.json().catch(() => ({}));
+    if (pollData.status === 'completed') {
       return {
         success: true,
-        checkoutUrl: data.checkoutUrl,
-        sessionId: data.sessionId,
-        keyId: data.keyId,
-        pendingSubscriptionId: data.pendingSubscriptionId,
+        subscriptionId: pollData.razorpay_subscription_id,
+        keyId: pollData.razorpay_key_id,
       };
-    } catch (error) {
-      // Retry on network/abort errors
-      if (attempt < maxAttempts) {
-        await new Promise((r) => setTimeout(r, 500 * 2 ** attempt));
-        continue;
-      }
-      console.error('Checkout session error:', error);
-      return { success: false, error: 'Network error. Please try again.' };
+    }
+    if (pollData.status === 'failed') {
+      return {
+        success: false,
+        error: pollData.error_message || 'Checkout setup failed.',
+      };
     }
   }
 
-  return { success: false, error: 'Failed to create checkout session.' };
+  return { success: false, error: 'Payment setup timed out. Please try again.' };
 }
 
 // =============================================================================
@@ -300,10 +286,11 @@ export default function PaymentPageClient({
 
       while (attempt < maxRetries) {
         try {
-          const idempotencyKey =
-            (typeof crypto !== 'undefined' && 'randomUUID' in crypto && crypto.randomUUID())
-              ? crypto.randomUUID()
-              : `${user.userId}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+          const idempotencyKey = await generateVerifyIdempotencyKey(
+            user.userId,
+            payload.razorpay_subscription_id,
+            payload.razorpay_payment_id,
+          );
 
           const res = await fetch('/api/billing/verify-subscription', {
             method: 'POST',
@@ -335,6 +322,7 @@ export default function PaymentPageClient({
 
           // Permanent failure
           setError(data?.message || 'Payment verification failed. Please contact support.');
+          setIsLoading(null);
           router.push(`/payment/status?subscription_id=${encodeURIComponent(sessionId)}`);
           return;
         } catch (e) {
@@ -355,46 +343,31 @@ export default function PaymentPageClient({
     setError(null);
     setFallbackCheckoutUrl(null);
 
-    // Generate idempotency key
-    const idempotencyKey = `${user.userId}_${plan.slug}_${tenant.productDomain}_${typeof crypto !== 'undefined' && 'randomUUID' in crypto ? crypto.randomUUID() : `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`}`;
+    // Generate deterministic idempotency key (same user + plan + hour = same key for retries)
+    const idempotencyKey = await generateCheckoutIdempotencyKey(user.userId, plan.slug, tenant.productDomain);
 
-    const result = await createCheckoutSession(plan.slug, idempotencyKey);
+    const firebaseUser = auth.currentUser;
+    if (!firebaseUser) {
+      setError('Session expired. Please refresh and sign in again.');
+      setIsLoading(null);
+      return;
+    }
+    const bearer = `Bearer ${await firebaseUser.getIdToken(false)}`;
+    const result = await createCheckoutSession(plan.slug, idempotencyKey, bearer);
 
-    if (!result.success || !result.sessionId || !result.keyId) {
+    if (!result.success || !result.subscriptionId || !result.keyId) {
       setError(result.error || 'Failed to start checkout. Please try again.');
       setIsLoading(null);
       return;
     }
 
-    // Store hosted checkout URL as a fallback when Checkout.js is blocked
-    if (result.checkoutUrl) setFallbackCheckoutUrl(result.checkoutUrl);
-
-    // Known issue: Razorpay Checkout.js can break on legacy Android WebViews/older browsers.
-    // When detected, force hosted checkout + status polling (webhook/verify will settle).
-    const ua = typeof navigator !== 'undefined' ? navigator.userAgent || '' : '';
-    const androidMatch = ua.match(/Android\s(\d+)\./i);
-    const androidMajor = androidMatch ? Number(androidMatch[1]) : null;
-    const legacyAndroid = androidMajor !== null && androidMajor <= 7;
-
-    if (legacyAndroid && result.checkoutUrl) {
-      try {
-        window.open(result.checkoutUrl, '_blank', 'noopener,noreferrer');
-      } catch {
-        window.location.href = result.checkoutUrl;
-        return;
-      }
-      router.push(`/payment/status?subscription_id=${encodeURIComponent(result.sessionId)}`);
-      setIsLoading(null);
-      return;
-    }
+    const sessionId = result.subscriptionId;
 
     if (!razorpayLoaded || !window.Razorpay) {
       setError('Payment system is still loading. Please wait a moment and try again.');
       setIsLoading(null);
       return;
     }
-
-    const sessionId = result.sessionId;
 
     const options = {
       key: result.keyId,
@@ -416,11 +389,6 @@ export default function PaymentPageClient({
       modal: {
         ondismiss: function () {
           setIsLoading(null);
-          if (result.checkoutUrl) {
-            setError(
-              'Checkout was closed. If you saw "This content is blocked", disable ad blockers / tracker protection or use the secure checkout page below.',
-            );
-          }
         },
       },
       theme: {

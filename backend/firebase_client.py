@@ -96,11 +96,32 @@ def initialize_firebase():
         except Exception as e:
             logger.warning(f"Could not verify Firebase project: {e}")
 
+        warm_firebase_auth_cache()
+
         return True
         
     except Exception as e:
         logger.error(f"Firebase initialization failed: {e}")
         return False
+
+
+def warm_firebase_auth_cache() -> None:
+    """Prefetch Firebase ID token public keys so first user verify is fast."""
+    try:
+        import requests
+        project_id = os.getenv('EXPECTED_FIREBASE_PROJECT_ID', 'flowauxi')
+        url = (
+            'https://www.googleapis.com/robot/v1/metadata/x509/'
+            f'securetoken@system.gserviceaccount.com'
+        )
+        resp = requests.get(url, timeout=15)
+        resp.raise_for_status()
+        logger.info(
+            f"Firebase auth public keys prefetched for project={project_id} "
+            f"({len(resp.content)} bytes)"
+        )
+    except Exception as e:
+        logger.warning(f"Firebase auth cache prewarm failed (first verify may be slow): {e}")
 
 
 def get_firestore_client():

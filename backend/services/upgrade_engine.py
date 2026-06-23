@@ -610,16 +610,21 @@ class UpgradeEngine:
         return period_start, period_end
 
     def _get_subscription(self, user_id: str, domain: str) -> Optional[Dict]:
-        """Get most recent subscription for user+domain (any status)."""
-        # Include active AND inactive statuses so billing-recovery users
-        # (suspended, cancelled, expired, halted) can view their current plan
-        # context and re-subscribe without losing their plan history.
+        """Get the CURRENT active subscription for user+domain.
+
+        CRITICAL: Only returns subscriptions in states that represent an active
+        billing relationship. Excludes 'pending' (checkout not completed),
+        'suspended', 'cancelled', 'expired', 'halted', 'past_due' — these are
+        NOT current plans and must not be displayed as such in the upgrade UI.
+
+        The UpgradeContainer has a fallback: if this returns None, the UI
+        defaults to showing the Starter/Free plan with the "Current Plan" badge.
+        """
         result = self._supabase.table('subscriptions').select('*').match({
             'user_id': user_id,
             'product_domain': domain,
         }).in_('status', [
             'active', 'trialing', 'grace_period', 'pending_upgrade',
-            'suspended', 'cancelled', 'expired', 'halted', 'past_due', 'pending'
         ]).order(
             'created_at', desc=True
         ).limit(1).execute()
@@ -672,12 +677,14 @@ class UpgradeEngine:
         # plans added after the metadata migration ran).
         inferred_tier = 0
         try:
-            plan_row = self._supabase.table('pricing_plans').select('plan_slug').eq(
+            plan_row = self._supabase.table('pricing_plans').select('plan_slug, product_domain').eq(
                 'id', pricing_plan_id
             ).limit(1).execute()
             if plan_row.data:
                 slug = plan_row.data[0].get('plan_slug', '')
-                inferred_tier = self._SLUG_TIER_MAP.get(slug, 0)
+                from services.plan_resolver import normalize_slug_for_display
+                short = normalize_slug_for_display(slug, plan_row.data[0].get('product_domain', ''))
+                inferred_tier = self._SLUG_TIER_MAP.get(short, self._SLUG_TIER_MAP.get(slug, 0))
         except Exception:
             pass  # Non-fatal — worst case we use tier 0
 

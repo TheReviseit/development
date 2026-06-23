@@ -280,18 +280,42 @@ class SubscriptionLifecycleEngine:
         """
         Atomically transition a subscription from one state to another.
 
-        Uses optimistic locking: only succeeds if current state matches expected_state.
-        Records the transition in both billing_events and subscription_status_history.
+        Feature flag SUBSCRIPTION_EVENT_SOURCING controls the code path:
+          OFF (default) → legacy RPC path (transition_subscription_status)
+          ON           → event-sourced path (subscription_events INSERT first,
+                         then subscriptions.status UPDATE derived from event)
 
         Returns True if transition succeeded, False if state already changed (idempotent).
         """
-        # Validate transition
+        from_state, to_state = self._validate_transition(expected_state, new_state)
+        if from_state is None:
+            return False
+
+        feature_flag = os.getenv('SUBSCRIPTION_EVENT_SOURCING', 'false').lower() == 'true'
+
+        if feature_flag:
+            return self._transition_via_events(
+                subscription_id, from_state, to_state,
+                reason, triggered_by,
+                grace_period_end, suspension_reason,
+                payload, idempotency_key,
+            )
+        else:
+            return self._transition_legacy_rpc(
+                subscription_id, from_state, to_state,
+                reason, triggered_by,
+                grace_period_end, suspension_reason,
+                payload, idempotency_key,
+            )
+
+    def _validate_transition(self, expected_state: str, new_state: str):
+        """Validate state transition and return (from_state, to_state) or (None, None)."""
         try:
             from_state = SubscriptionState(expected_state)
             to_state = SubscriptionState(new_state)
         except ValueError:
             self.logger.error(f"Invalid state: {expected_state} → {new_state}")
-            return False
+            return None, None
 
         valid_targets = VALID_TRANSITIONS.get(from_state, set())
         if to_state not in valid_targets:
@@ -299,14 +323,28 @@ class SubscriptionLifecycleEngine:
                 f"Invalid transition: {from_state.value} → {to_state.value} "
                 f"(valid targets: {[s.value for s in valid_targets]})"
             )
-            return False
+            return None, None
 
-        # Execute atomic transition via DB function
+        return from_state, to_state
+
+    def _transition_legacy_rpc(
+        self,
+        subscription_id: str,
+        from_state: SubscriptionState,
+        to_state: SubscriptionState,
+        reason: str,
+        triggered_by: str,
+        grace_period_end: Optional[datetime],
+        suspension_reason: Optional[str],
+        payload: Optional[Dict],
+        idempotency_key: Optional[str],
+    ) -> bool:
+        """Legacy path: delegate to DB function transition_subscription_status."""
         try:
             result = self._supabase.rpc('transition_subscription_status', {
                 'p_subscription_id': subscription_id,
-                'p_expected_status': expected_state,
-                'p_new_status': new_state,
+                'p_expected_status': from_state.value,
+                'p_new_status': to_state.value,
                 'p_reason': reason,
                 'p_triggered_by': triggered_by,
                 'p_grace_period_end': grace_period_end.isoformat() if grace_period_end else None,
@@ -316,70 +354,28 @@ class SubscriptionLifecycleEngine:
             success = result.data is True if result.data is not None else False
 
             if success:
-                # Record billing event
                 self._record_event(
                     subscription_id=subscription_id,
                     event_type=BillingEventType.STATE_CHANGE,
                     event_source=triggered_by,
-                    previous_state=expected_state,
-                    new_state=new_state,
+                    previous_state=from_state.value,
+                    new_state=to_state.value,
                     payload=payload or {'reason': reason},
                     idempotency_key=idempotency_key,
                 )
-
-                # Invalidate caches
                 self._invalidate_caches_for_subscription(subscription_id)
-
-                # ============================================================
-                # POST-TRANSITION HOOKS
-                # ============================================================
-                # Hook 1: When billing monitor detects expiry and transitions
-                # active/trialing → past_due, schedule the 3-day retry
-                # sequence so Day 3 suspend_account actually fires.
-                # Without this, the billing monitor leaves subs stuck at
-                # past_due forever with no suspension ever scheduled.
-                # ============================================================
-                if new_state == SubscriptionState.PAST_DUE.value and \
-                        expected_state in ('active', 'trialing'):
-                    try:
-                        sub_for_retry = self._get_subscription(subscription_id)
-                        if sub_for_retry:
-                            self._schedule_retry_sequence(
-                                subscription=sub_for_retry,
-                                failure_reason=reason,
-                                razorpay_payment_id=(payload or {}).get(
-                                    'razorpay_payment_id'
-                                ),
-                            )
-                            self.logger.info(
-                                f"retry_sequence_scheduled sub={subscription_id} "
-                                f"reason=billing_monitor_expiry"
-                            )
-                    except Exception as e:
-                        # Fire-and-forget — never block the transition
-                        self.logger.error(
-                            f"retry_schedule_error sub={subscription_id}: {e}"
-                        )
-
-                # ============================================================
-                # Hook 2: Sync otp_console_subscriptions.billing_status so the
-                # console frontend guard reads the correct state immediately.
-                # The console guard reads this separate table, NOT subscriptions.
-                # Without this sync, the UI never shows suspension.
-                # ============================================================
-                self._sync_console_subscription_status(
-                    subscription_id=subscription_id,
-                    new_status=new_state,
+                self._run_post_transition_hooks(
+                    subscription_id, from_state.value, to_state.value,
+                    reason, triggered_by, payload,
                 )
-
                 self.logger.info(
                     f"subscription_state_transition sub={subscription_id} "
-                    f"{expected_state} → {new_state} reason={reason} by={triggered_by}"
+                    f"{from_state.value} → {to_state.value} reason={reason} by={triggered_by}"
                 )
             else:
                 self.logger.info(
                     f"subscription_transition_noop sub={subscription_id} "
-                    f"expected={expected_state} (already transitioned)"
+                    f"expected={from_state.value} (already transitioned)"
                 )
 
             return success
@@ -387,10 +383,201 @@ class SubscriptionLifecycleEngine:
         except Exception as e:
             self.logger.error(
                 f"subscription_transition_error sub={subscription_id} "
-                f"{expected_state} → {new_state} error={e}",
+                f"{from_state.value} → {to_state.value} error={e}",
                 exc_info=True
             )
             return False
+
+    def _transition_via_events(
+        self,
+        subscription_id: str,
+        from_state: SubscriptionState,
+        to_state: SubscriptionState,
+        reason: str,
+        triggered_by: str,
+        grace_period_end: Optional[datetime],
+        suspension_reason: Optional[str],
+        payload: Optional[Dict],
+        idempotency_key: Optional[str],
+    ) -> bool:
+        """
+        FAANG-level: Single atomic RPC call for subscription state transition.
+        
+        Uses `transition_subscription_via_event` Postgres function which:
+        1. Locks the subscription row (FOR UPDATE)
+        2. Verifies current status matches expected
+        3. INSERTs into subscription_events
+        4. UPDATEs subscriptions.status
+        All in ONE database transaction — no race window.
+        
+        Returns True if transition succeeded, False if invalid/duplicate.
+        """
+        try:
+            sub = self._get_subscription(subscription_id)
+            if not sub:
+                self.logger.error(f"transition_via_events sub={subscription_id} not found")
+                return False
+
+            event_type = self._map_transition_to_event_type(
+                from_state.value, to_state.value
+            )
+
+            event_payload = (payload or {}) | {
+                'reason': reason,
+                'previous_status': from_state.value,
+                'new_status': to_state.value,
+            }
+            if grace_period_end:
+                event_payload['grace_period_end'] = grace_period_end.isoformat()
+            if suspension_reason:
+                event_payload['suspension_reason'] = suspension_reason
+
+            result = self._supabase.rpc('transition_subscription_via_event', {
+                'p_subscription_id': subscription_id,
+                'p_new_status': to_state.value,
+                'p_event_type': event_type,
+                'p_user_id': sub.get('user_id'),
+                'p_product_domain': sub.get('product_domain'),
+                'p_previous_status': from_state.value,
+                'p_reason': reason,
+                'p_triggered_by': triggered_by,
+                'p_payload': event_payload,
+                'p_idempotency_key': idempotency_key,
+            }).execute()
+
+            rpc_result = result.data if result.data else {}
+            success = rpc_result.get('success', False)
+            reason_detail = rpc_result.get('reason', 'unknown')
+
+            if success:
+                self._record_event(
+                    subscription_id=subscription_id,
+                    event_type=BillingEventType.STATE_CHANGE,
+                    event_source=triggered_by,
+                    previous_state=from_state.value,
+                    new_state=to_state.value,
+                    payload=payload or {'reason': reason},
+                    idempotency_key=idempotency_key,
+                )
+                self._invalidate_caches_for_subscription(subscription_id)
+                self._run_post_transition_hooks(
+                    subscription_id, from_state.value, to_state.value,
+                    reason, triggered_by, payload,
+                )
+                self.logger.info(
+                    f"subscription_state_transition_atomic sub={subscription_id} "
+                    f"{from_state.value} → {to_state.value} reason={reason} by={triggered_by}"
+                )
+            else:
+                self.logger.info(
+                    f"subscription_transition_noop sub={subscription_id} "
+                    f"expected={from_state.value} reason={reason_detail}"
+                )
+
+            return success
+
+        except Exception as e:
+            self.logger.error(
+                f"transition_via_events_error sub={subscription_id} "
+                f"{from_state.value} → {to_state.value} error={e}",
+                exc_info=True
+            )
+            return False
+
+    def _eager_project_subscription(
+        self,
+        subscription_id: str,
+        new_status: str,
+        new_suspended_at: Optional[str] = None,
+        suspension_reason: Optional[str] = None,
+        grace_period_end: Optional[str] = None,
+    ) -> bool:
+        """
+        Eagerly update subscriptions.status from the event we just inserted.
+        This is a best-effort synchronous projection for critical paths.
+
+        The projection worker will eventually correct any drift even if this fails.
+        """
+        try:
+            update_fields = {
+                'status': new_status,
+                'updated_at': datetime.now(timezone.utc).isoformat(),
+            }
+            if new_suspended_at:
+                update_fields['suspended_at'] = new_suspended_at
+                update_fields['suspension_reason'] = suspension_reason
+            if grace_period_end:
+                update_fields['grace_period_end'] = grace_period_end
+
+            self._supabase.table('subscriptions') \
+                .update(update_fields) \
+                .eq('id', subscription_id) \
+                .execute()
+
+            return True
+
+        except Exception as e:
+            self.logger.error(
+                f"_eager_project_subscription_error sub={subscription_id}: {e}",
+                exc_info=True
+            )
+            return False
+
+    def _run_post_transition_hooks(
+        self,
+        subscription_id: str,
+        from_state: str,
+        to_state: str,
+        reason: str,
+        triggered_by: str,
+        payload: Optional[Dict],
+    ):
+        """Run post-transition hooks common to both code paths."""
+        if to_state == SubscriptionState.PAST_DUE.value and \
+                from_state in ('active', 'trialing'):
+            try:
+                sub_for_retry = self._get_subscription(subscription_id)
+                if sub_for_retry:
+                    self._schedule_retry_sequence(
+                        subscription=sub_for_retry,
+                        failure_reason=reason,
+                        razorpay_payment_id=(payload or {}).get(
+                            'razorpay_payment_id'
+                        ),
+                    )
+                    self.logger.info(
+                        f"retry_sequence_scheduled sub={subscription_id} "
+                        f"reason=billing_monitor_expiry"
+                    )
+            except Exception as e:
+                self.logger.error(
+                    f"retry_schedule_error sub={subscription_id}: {e}"
+                )
+
+        self._sync_console_subscription_status(
+            subscription_id=subscription_id,
+            new_status=to_state,
+        )
+
+    def _map_transition_to_event_type(self, from_state: str, to_state: str) -> str:
+        """Map a subscription state transition to a subscription_event_type enum value."""
+        if from_state == 'pending' and to_state == 'active':
+            return 'subscription.activated'
+        if to_state == 'active':
+            return 'subscription.reactivated'
+        if to_state == 'past_due':
+            return 'subscription.past_due'
+        if to_state == 'grace_period':
+            return 'subscription.grace_period_started'
+        if to_state == 'suspended':
+            return 'subscription.suspended'
+        if to_state == 'cancelled':
+            return 'subscription.cancelled'
+        if to_state == 'expired':
+            return 'subscription.expired'
+        if to_state == 'halted':
+            return 'subscription.halted'
+        return 'subscription.created'
 
     # =========================================================================
     # Payment Failure Handling

@@ -62,6 +62,22 @@ export async function generatePaymentRetryKey(
   return `retry_${hash.substring(0, 32)}`;
 }
 
+/**
+ * Generate deterministic idempotency key for payment verification.
+ * Used by the verify-subscription endpoint retry logic.
+ *
+ * Deterministic: same user + subscription + payment = same key
+ * This ensures network retries hit the Redis idempotency cache.
+ */
+export async function generateVerifyIdempotencyKey(
+  userId: string,
+  razorpaySubscriptionId: string,
+  razorpayPaymentId: string
+): Promise<string> {
+  const hash = await sha256Hex([userId, razorpaySubscriptionId, razorpayPaymentId].join(':'));
+  return `ver_${hash.substring(0, 32)}`;
+}
+
 async function sha256Hex(input: string): Promise<string> {
   const enc = new TextEncoder();
   const data = enc.encode(input);
@@ -82,7 +98,7 @@ function getTimeBucket(hours: number): string {
  * Validate idempotency key format.
  */
 export function isValidIdempotencyKey(key: string): boolean {
-  const pattern = /^(chk|mod|retry)_[a-f0-9]{32}$/;
+  const pattern = /^(chk|mod|retry|ver)_[a-f0-9]{32}$/;
   return pattern.test(key);
 }
 
@@ -101,6 +117,7 @@ export function parseIdempotencyKey(key: string): {
     'chk': 'checkout',
     'mod': 'modify',
     'retry': 'retry',
+    'ver': 'verify',
   };
   return {
     type: typeMap[prefix] || 'unknown',

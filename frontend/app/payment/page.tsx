@@ -318,22 +318,19 @@ export default async function PaymentPage({ searchParams }: PaymentPageProps) {
   const reason = typeof params.reason === 'string' ? params.reason : 'expired';
 
   // =============================================================================
-  // SERVER-SIDE AUTH GUARD
+  // SERVER-SIDE AUTH & TENANT RESOLUTION (PARALLEL)
   // =============================================================================
   
-  const userSession = await validateSession();
+  const [userSession, tenant] = await Promise.all([
+    validateSession(),
+    resolveTenant()
+  ]);
 
   if (!userSession) {
     // Not authenticated - redirect to login with return URL
     const returnUrl = encodeURIComponent(`/payment?reason=${reason}`);
     redirect(`/login?returnUrl=${returnUrl}`);
   }
-
-  // =============================================================================
-  // TENANT RESOLUTION
-  // =============================================================================
-  
-  const tenant = await resolveTenant();
 
   if (!tenant) {
     // Invalid tenant - this should not happen if middleware is working
@@ -348,10 +345,13 @@ export default async function PaymentPage({ searchParams }: PaymentPageProps) {
   }
 
   // =============================================================================
-  // SERVER-SIDE PRICING FETCH
+  // SERVER-SIDE PRICING & SUBSCRIPTION STATE (PARALLEL)
   // =============================================================================
   
-  const pricingData = await fetchPricing(tenant, userSession);
+  const [pricingData, subscriptionState] = await Promise.all([
+    fetchPricing(tenant, userSession),
+    checkSubscriptionState(userSession, tenant)
+  ]);
 
   if (!pricingData) {
     return (
@@ -363,12 +363,6 @@ export default async function PaymentPage({ searchParams }: PaymentPageProps) {
       </div>
     );
   }
-
-  // =============================================================================
-  // SUBSCRIPTION STATE VALIDATION
-  // =============================================================================
-  
-  const subscriptionState = await checkSubscriptionState(userSession, tenant);
 
   // If they already have an active subscription, redirect to dashboard
   if (subscriptionState.hasSubscription) {
@@ -404,4 +398,7 @@ export const metadata = {
     index: false,
     follow: false,
   },
+  other: {
+    'Link': '<https://checkout.razorpay.com/v1/checkout.js>; rel="preload"; as="script"',
+  }
 };

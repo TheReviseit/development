@@ -16,6 +16,7 @@ import { redirect } from "next/navigation";
 import Image from "next/image";
 import Link from "next/link";
 import UpgradeContainer from "./components/UpgradeContainer";
+import { BillingErrorBoundary } from "@/components/BillingErrorBoundary";
 import logo from "@/public/logo.png";
 
 // Domain-specific metadata
@@ -127,10 +128,12 @@ export default async function UpgradePage({
 
       {/* Main Content */}
       <div className="flex-1 w-full max-w-6xl mx-auto px-6 py-8">
-        <UpgradeContainer
-          initialDomain={domain}
-          recommendedPlan={recommendedPlan}
-        />
+        <BillingErrorBoundary>
+          <UpgradeContainer
+            initialDomain={domain}
+            recommendedPlan={recommendedPlan}
+          />
+        </BillingErrorBoundary>
       </div>
     </div>
   );

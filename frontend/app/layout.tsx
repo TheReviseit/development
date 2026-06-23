@@ -364,6 +364,11 @@ export default async function RootLayout({
       <body
         className={`${inter.variable} ${jakarta.variable} ${outfit.variable} ${dancingScript.variable} antialiased`}
       >
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `addEventListener("error",e=>{if(e.message?.includes("releasePointerCapture"))e.preventDefault()})`,
+          }}
+        />
         <I18nProvider>
           <ThemeProvider>
             <QueryProvider>

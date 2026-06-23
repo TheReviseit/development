@@ -58,6 +58,7 @@ export function PricingClient({
   const [selectedPlan, setSelectedPlan] = useState<string | null>(null);
   const [paymentLoading, setPaymentLoading] = useState<string | null>(null);
   const [paymentError, setPaymentError] = useState<string | null>(null);
+  const [paymentStage, setPaymentStage] = useState<string>("");
 
   const handleSelectPlan = async (plan: SerializedPlan) => {
     // Reset stale payment state for fresh idempotency keys
@@ -66,6 +67,7 @@ export function PricingClient({
     setSelectedPlan(plan.planId);
     setPaymentLoading(plan.planId);
     setPaymentError(null);
+    setPaymentStage("Connecting to payment server...");
 
     try {
       console.log(`[Pricing] Creating subscription for plan: ${plan.planId}`);
@@ -95,6 +97,7 @@ export function PricingClient({
       }
 
       console.log("[Pricing] Subscription created:", order.subscription_id);
+      setPaymentStage("Opening payment gateway...");
 
       // Open Razorpay checkout
       await openRazorpayCheckout({
@@ -108,8 +111,8 @@ export function PricingClient({
           console.log("[Razorpay] Payment successful:", response);
 
           try {
-            // Verify payment
-            await verifyPayment(
+            // Verify payment — check response, not just exception
+            const verification = await verifyPayment(
               {
                 razorpay_subscription_id: response.razorpay_subscription_id,
                 razorpay_payment_id: response.razorpay_payment_id,
@@ -118,12 +121,17 @@ export function PricingClient({
               userId,
             );
 
-            console.log("[Pricing] Payment verified successfully");
-
-            // Redirect to dashboard
-            window.location.href = "/home";
+            if (verification.success) {
+              console.log("[Pricing] Payment verified successfully");
+              // Redirect to dashboard
+              window.location.href = "/home";
+            } else {
+              console.error("[Pricing] Payment verification failed:", verification.error);
+              setPaymentError(verification.error || "Payment verification failed. Please contact support.");
+              setPaymentLoading(null);
+            }
           } catch (error) {
-            console.error("[Pricing] Payment verification failed:", error);
+            console.error("[Pricing] Payment verification error:", error);
             setPaymentError(
               "Payment verification failed. Please contact support.",
             );
@@ -166,6 +174,13 @@ export function PricingClient({
         </div>
       )}
 
+      {paymentLoading && paymentStage && (
+        <div className="payment-progress">
+          <span className="spinner"></span>
+          <span className="payment-stage-text">{paymentStage}</span>
+        </div>
+      )}
+
       <div className="pricing-cards-grid">
         {plans.map((plan) => (
           <div
@@ -200,12 +215,12 @@ export function PricingClient({
                 plan.popular ? "btn-primary" : "btn-secondary"
               }`}
               onClick={() => handleSelectPlan(plan)}
-              disabled={paymentLoading === plan.planId}
+              disabled={paymentLoading !== null}
             >
               {paymentLoading === plan.planId ? (
                 <>
                   <span className="spinner"></span>
-                  Processing...
+                  {paymentStage || "Processing..."}
                 </>
               ) : selectedPlan === plan.planId ? (
                 "Selected — Click to Continue"

@@ -118,17 +118,18 @@ export async function GET(request: NextRequest) {
       // Prefer an entitled/warned subscription if it exists (domain-agnostic).
       supabase
         .from("subscriptions")
-        .select("id, status, current_period_end, plan_name, product_domain")
+        .select("id, status, current_period_end, plan_name, product_domain, pricing_plan_id")
         .eq("user_id", user.id)
+        .eq("product_domain", domain)
         .in("status", [...ALLOWED_SUB_STATUSES, ...WARN_SUB_STATUSES])
         .order("created_at", { ascending: false })
         .limit(1)
         .maybeSingle(),
-      // Otherwise, pick a blocked subscription for a specific lock reason.
       supabase
         .from("subscriptions")
-        .select("id, status, current_period_end, plan_name, product_domain")
+        .select("id, status, current_period_end, plan_name, product_domain, pricing_plan_id")
         .eq("user_id", user.id)
+        .eq("product_domain", domain)
         .in("status", BLOCKED_SUB_STATUSES)
         .order("created_at", { ascending: false })
         .limit(1)

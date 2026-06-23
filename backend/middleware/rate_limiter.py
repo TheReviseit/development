@@ -251,6 +251,11 @@ def rate_limit(
             g.rate_limit_info = info
             
             if not allowed:
+                try:
+                    from monitoring.billing_metrics import record_rate_limit_hit
+                    record_rate_limit_hit(scope)
+                except ImportError:
+                    pass
                 response = jsonify({
                     'success': False,
                     'error': 'Rate limit exceeded',

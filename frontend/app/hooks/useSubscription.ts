@@ -25,7 +25,7 @@
 "use client";
 
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useCallback, useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { BillingLockReason, TrialInfo } from "@/app/(dashboard)/components/BillingLockScreen";
 import { getProductDomainFromBrowser } from "@/lib/domain/client";
 
@@ -78,17 +78,18 @@ export interface UseSubscriptionReturn {
 // CONSTANTS
 // =============================================================================
 
-/** How long data is considered fresh (no refetch) */
-const STALE_TIME_MS = 30_000; // 30 seconds
+import {
+  subscriptionKeys,
+  STALE_TIMES,
+  SUBSCRIPTION_EVENTS,
+  DEFAULT_QUERY_OPTIONS,
+} from "@/lib/billing/cache-constants";
 
 /** Max time a fetch can take before abort */
 const FETCH_TIMEOUT_MS = 8_000; // 8 seconds
 
 /** How long to allow access on network error before locking */
 const FAIL_OPEN_GRACE_MS = 30_000; // 30 seconds
-
-/** Query cache key base (domain is appended) */
-const QUERY_KEY_BASE = ["subscription-status"] as const;
 
 // =============================================================================
 // FETCH FUNCTION
@@ -154,6 +155,7 @@ export function useSubscription(): UseSubscriptionReturn {
 
   // Bounded fail-open: track last successful check
   const lastSuccessRef = useRef<number>(Date.now());
+  const [, setGraceTick] = useState(0);
 
   const {
     data,
@@ -161,15 +163,23 @@ export function useSubscription(): UseSubscriptionReturn {
     isRefetching,
     error,
   } = useQuery<SubscriptionStatus>({
-    queryKey: [...QUERY_KEY_BASE, domain],
+    queryKey: subscriptionKeys.status(domain),
     queryFn: () => fetchBillingStatus(domain),
-    staleTime: STALE_TIME_MS,
-    refetchOnWindowFocus: true,   // Catch real-time trial expiry
-    refetchOnReconnect: true,     // Network recovery
-    retry: 2,                      // 2 retries with backoff
-    retryDelay: (attempt) => Math.min(1000 * Math.pow(2, attempt), 5000),
-    // Don't refetch by default on interval — explicit on billing pages
+    staleTime: STALE_TIMES.SUBSCRIPTION_STATUS,
+    ...DEFAULT_QUERY_OPTIONS,
   });
+
+  // Re-render when fail-open grace expires so lock state updates without user action
+  useEffect(() => {
+    if (!error || data) return;
+    const elapsed = Date.now() - lastSuccessRef.current;
+    if (elapsed >= FAIL_OPEN_GRACE_MS) return;
+    const timer = setTimeout(
+      () => setGraceTick((t) => t + 1),
+      FAIL_OPEN_GRACE_MS - elapsed + 50,
+    );
+    return () => clearTimeout(timer);
+  }, [error, data]);
 
   // Update last success timestamp on every successful fetch
   useEffect(() => {
@@ -178,24 +188,24 @@ export function useSubscription(): UseSubscriptionReturn {
     }
   }, [data, error]);
 
-  // Listen for subscription-updated events → invalidate cache
+  // Listen for subscription events → invalidate cache
   useEffect(() => {
     const handleSubUpdated = () => {
-      console.info("[useSubscription] subscription-updated event → invalidating cache");
-      queryClient.invalidateQueries({ queryKey: QUERY_KEY_BASE });
+      console.info("[useSubscription] subscription-updated → invalidating");
+      queryClient.invalidateQueries({ queryKey: subscriptionKeys.all });
     };
 
     const handleProductActivated = () => {
-      console.info("[useSubscription] product-activated event → invalidating cache");
-      queryClient.invalidateQueries({ queryKey: QUERY_KEY_BASE });
+      console.info("[useSubscription] product-activated → invalidating");
+      queryClient.invalidateQueries({ queryKey: subscriptionKeys.all });
     };
 
-    window.addEventListener("subscription-updated", handleSubUpdated);
-    window.addEventListener("product-activated", handleProductActivated);
+    window.addEventListener(SUBSCRIPTION_EVENTS.UPDATED, handleSubUpdated);
+    window.addEventListener(SUBSCRIPTION_EVENTS.PRODUCT_ACTIVATED, handleProductActivated);
 
     return () => {
-      window.removeEventListener("subscription-updated", handleSubUpdated);
-      window.removeEventListener("product-activated", handleProductActivated);
+      window.removeEventListener(SUBSCRIPTION_EVENTS.UPDATED, handleSubUpdated);
+      window.removeEventListener(SUBSCRIPTION_EVENTS.PRODUCT_ACTIVATED, handleProductActivated);
     };
   }, [queryClient]);
 
@@ -260,7 +270,7 @@ export function useSubscription(): UseSubscriptionReturn {
   // =======================================================================
   const refresh = useCallback(async () => {
     console.info("[useSubscription] Manual refresh triggered");
-    await queryClient.invalidateQueries({ queryKey: QUERY_KEY_BASE });
+    await queryClient.invalidateQueries({ queryKey: subscriptionKeys.all });
   }, [queryClient]);
 
   return {

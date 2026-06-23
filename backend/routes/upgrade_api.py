@@ -301,13 +301,18 @@ def create_upgrade_checkout():
             'NO_DB_USER', 400
         )
 
+    from services.postgres_rate_limit import rate_limit_or_429
+    limited = rate_limit_or_429(f"checkout:{supabase_user_id}", 3600, 10)
+    if limited:
+        return jsonify(limited[0]), limited[1]
+
     try:
         data = request.get_json()
         if not data:
             return error_response('Request body required', 'MISSING_BODY', 400)
 
         domain = data.get('domain')
-        target_plan_slug = data.get('target_plan_slug')
+        target_plan_slug = data.get('target_plan_slug') or data.get('plan_slug')
         billing_cycle = data.get('billing_cycle', 'monthly')
         addon_slugs = data.get('addon_slugs', [])
 
@@ -394,7 +399,7 @@ def create_upgrade_checkout():
 
         from services.checkout_worker import get_checkout_worker
         worker = get_checkout_worker()
-        enqueued = worker.try_enqueue(checkout_id)
+        enqueued = worker is not None and worker.try_enqueue(checkout_id)
 
         if not enqueued:
             supabase.table('checkout_requests').update({
@@ -563,7 +568,7 @@ def verify_upgrade_payment():
         # 1. Find the user's pending upgrade subscription
         query = supabase.table('subscriptions').select('*').eq(
             'user_id', supabase_user_id
-        ).in_('status', ['pending_upgrade', 'upgrade_failed']).order(
+        ).in_('status', ['pending_upgrade', 'upgrade_failed', 'pending']).order(
             'updated_at', desc=True
         ).limit(1)
 
@@ -701,115 +706,63 @@ def verify_upgrade_payment():
                 'message': 'Payment received! Your subscription is being activated. This usually takes a few seconds.',
             })
 
-        # 4. Activate the upgrade — swap to new plan
-        new_plan_id = subscription.get('pending_upgrade_to_plan_id') or subscription.get('pricing_plan_id')
-        if not new_plan_id:
-            return error_response('No target plan found', 'NO_TARGET_PLAN', 400)
+        # 4. Activate via unified ActivationService
+        from services.activation_service import activate_subscription, reconcile_plan_snapshot
 
-        # Resolve plan_slug AND razorpay_plan_id for the new plan.
-        #
-        # CRITICAL: The subscriptions.plan_id column stores the Razorpay plan ID.
-        # The feature gate engine uses plan_id to re-derive pricing_plan_id, so
-        # it MUST be updated here. Without this, the gate reads the old Starter
-        # Razorpay plan ID and returns Starter features even on Business plan.
-        new_plan_slug = None
-        new_razorpay_plan_id = None
-        new_plan_display_name = None
-        new_plan_ai_limit = None
-        try:
-            plan_row = supabase.table('pricing_plans').select(
-                'plan_slug, razorpay_plan_id, display_name, limits_json'
-            ).eq('id', new_plan_id).limit(1).execute()
-            if plan_row.data:
-                new_plan_slug = plan_row.data[0].get('plan_slug')
-                new_razorpay_plan_id = plan_row.data[0].get('razorpay_plan_id')
-                new_plan_display_name = plan_row.data[0].get('display_name') or new_plan_slug
-                limits_json = plan_row.data[0].get('limits_json') or {}
-                new_plan_ai_limit = limits_json.get('ai_responses') or limits_json.get('ai_responses_limit')
-        except Exception as slug_err:
-            logger.warning(f"verify_payment could not resolve plan details for {new_plan_id}: {slug_err}")
-
-        update_data = {
-            'status': 'active',
-            'pricing_plan_id': new_plan_id,
-            'razorpay_subscription_id': rzp_sub_id,
-            'pending_upgrade_to_plan_id': None,
-            'pending_upgrade_razorpay_subscription_id': None,
-            'upgrade_failure_reason': None,
-            'upgrade_initiated_at': None,
-            'updated_at': datetime.now(timezone.utc).isoformat(),
-        }
-
-        # Keep plan_name in sync with the new plan
-        if new_plan_slug:
-            update_data['plan_name'] = new_plan_slug
-
-        # CRITICAL: Update plan_id to new plan's Razorpay plan ID.
-        # The feature gate engine's _get_subscription reads plan_id to look up
-        # the pricing plan. Without this update it resolves to the old Starter
-        # plan and returns Starter features after upgrade.
-        if new_razorpay_plan_id:
-            update_data['plan_id'] = new_razorpay_plan_id
-
-        # Set period from Razorpay if available
+        period_start = None
+        period_end = None
         current_start = rzp_sub.get('current_start')
         current_end = rzp_sub.get('current_end')
         if current_start:
-            update_data['current_period_start'] = datetime.fromtimestamp(
+            period_start = datetime.fromtimestamp(
                 current_start, tz=timezone.utc
             ).isoformat()
         if current_end:
-            update_data['current_period_end'] = datetime.fromtimestamp(
+            period_end = datetime.fromtimestamp(
                 current_end, tz=timezone.utc
             ).isoformat()
 
-        # FAANG-level race prevention: only activate if still pending_upgrade.
-        # The webhook handler also calls _activate_upgrade_atomic with the same
-        # filter — only one can win. If the webhook already activated this row,
-        # this UPDATE affects 0 rows and we fall through to "already_active".
-        result = supabase.table('subscriptions').update(update_data).eq(
-            'id', subscription['id']
-        ).eq('status', 'pending_upgrade').execute()
+        activation = activate_subscription(
+            supabase,
+            subscription,
+            source="verify_payment",
+            expected_status="pending_upgrade",
+            period_start=period_start,
+            period_end=period_end,
+            razorpay_subscription_id=rzp_sub_id,
+        )
 
-        if not result.data:
-            # Webhook already activated this — return success
-            logger.info(
-                f"verify_payment_already_activated_by_webhook user={supabase_user_id} "
-                f"sub={subscription['id']}"
+        if not activation.activated and activation.already_active:
+            reconcile = reconcile_plan_snapshot(
+                supabase,
+                subscription['id'],
+                source="verify_payment",
             )
-            return success_response({'activated': True, 'already_active': True})
+            if reconcile.reconciled:
+                activation = reconcile
 
-        # 5. Cancel the old subscription (upgrade creates a NEW row; old stays ACTIVE)
+        if not activation.activated and not activation.already_active:
+            return error_response(
+                'Could not activate subscription',
+                'ACTIVATION_FAILED',
+                409,
+            )
+
+        new_plan_id = subscription.get('pending_upgrade_to_plan_id') or subscription.get('pricing_plan_id')
+        new_plan_slug = activation.plan_slug
+        new_plan_display_name = new_plan_slug
+        new_plan_ai_limit = None
         try:
-            previous_sub_id = subscription.get('previous_subscription_id')
-            if previous_sub_id:
-                supabase.table('subscriptions').update({
-                    'status': 'cancelled',
-                    'cancelled_at': datetime.now(timezone.utc).isoformat(),
-                    'cancellation_reason': 'upgraded',
-                    'updated_at': datetime.now(timezone.utc).isoformat()
-                }).eq('id', previous_sub_id).execute()
-            else:
-                # Fallback: cancel any other ACTIVE sub for same user+domain
-                supabase.table('subscriptions').update({
-                    'status': 'cancelled',
-                    'cancelled_at': datetime.now(timezone.utc).isoformat(),
-                    'cancellation_reason': 'upgraded',
-                    'updated_at': datetime.now(timezone.utc).isoformat()
-                }).match({
-                    'user_id': supabase_user_id,
-                    'product_domain': subscription.get('product_domain', ''),
-                    'status': 'active',
-                }).neq('id', subscription['id']).execute()
-        except Exception as cancel_err:
-            logger.warning(
-                f"verify_payment old sub cancellation skipped (non-critical): {cancel_err}"
-            )
+            plan_row = supabase.table('pricing_plans').select(
+                'display_name, limits_json'
+            ).eq('id', new_plan_id).limit(1).execute()
+            if plan_row.data:
+                new_plan_display_name = plan_row.data[0].get('display_name') or new_plan_slug
+                limits_json = plan_row.data[0].get('limits_json') or {}
+                new_plan_ai_limit = limits_json.get('ai_responses') or limits_json.get('ai_responses_limit')
+        except Exception:
+            pass
 
-        # 7. Invalidate caches.
-        # Use increment_subscription_version (not just invalidate_subscription_cache)
-        # so the versioned cache key is bumped — all in-flight requests that already
-        # hold a reference to the old versioned key will miss and re-fetch from DB.
         domain = subscription.get('product_domain', 'shop')
         try:
             from services.feature_gate_engine import get_feature_gate_engine
@@ -819,18 +772,13 @@ def verify_upgrade_payment():
         except Exception as cache_err:
             logger.warning(f"verify_payment cache invalidation failed: {cache_err}")
 
-        # 8. Trigger slug migration for shop domain upgrades.
-        #    When a Starter user upgrades to Business/Pro their slug is still
-        #    the forced fallback (user_id[:8]).  We migrate it immediately so
-        #    /store/<business-name> works without requiring a manual profile save.
-        #
-        #    IMPORTANT: businesses.user_id stores Firebase UID, not Supabase UUID.
-        #    g.firebase_uid is set by require_auth and is the correct key.
-        if domain == 'shop' and new_plan_slug in ('business', 'pro'):
+        if domain == 'shop' and new_plan_slug and (
+            new_plan_slug.endswith('business') or new_plan_slug.endswith('pro')
+            or new_plan_slug in ('business', 'pro')
+        ):
             try:
                 _migrate_slug_on_upgrade(firebase_uid, supabase)
             except Exception as slug_err:
-                # Non-critical — user can still trigger migration by re-saving profile
                 logger.warning(f"verify_payment slug migration failed (non-critical): {slug_err}")
 
         logger.info(
@@ -838,17 +786,23 @@ def verify_upgrade_payment():
             f"plan={new_plan_id} rzp_sub={rzp_sub_id} domain={domain}"
         )
 
+        refetch = supabase.table('subscriptions').select('*').eq(
+            'id', subscription['id']
+        ).limit(1).execute()
+        active_sub = refetch.data[0] if refetch.data else subscription
+
         return success_response({
             'activated': True,
+            'already_active': activation.already_active and not activation.activated,
             'plan_id': new_plan_id,
             'domain': domain,
             'subscription': {
                 'status': 'active',
                 'plan_name': new_plan_display_name or new_plan_slug or 'Unknown',
                 'razorpay_subscription_id': rzp_sub_id,
-                'ai_responses_limit': new_plan_ai_limit or 0,
-                'current_period_start': update_data.get('current_period_start'),
-                'current_period_end': update_data.get('current_period_end'),
+                'ai_responses_limit': new_plan_ai_limit or active_sub.get('ai_responses_limit', 0),
+                'current_period_start': active_sub.get('current_period_start'),
+                'current_period_end': active_sub.get('current_period_end'),
             },
         })
 
@@ -913,7 +867,9 @@ def get_checkout_status(checkout_id):
                         extra={"checkout_id": checkout_id, "age_seconds": age_seconds}
                     )
                     from services.checkout_worker import get_checkout_worker
-                    get_checkout_worker().try_enqueue(checkout_id)
+                    worker = get_checkout_worker()
+                    if worker is not None:
+                        worker.try_enqueue(checkout_id)
                     status = 'initiated'
 
         if status == 'completed':
@@ -985,13 +941,8 @@ def _resolve_user_email(supabase, supabase_user_id, firebase_uid) -> Optional[st
 
 
 def _resolve_target_plan(supabase, slug, domain, billing_cycle) -> Optional[Dict]:
-    result = supabase.table('pricing_plans').select('*').match({
-        'plan_slug': slug,
-        'product_domain': domain,
-        'billing_cycle': billing_cycle,
-        'is_active': True,
-    }).execute()
-    return result.data[0] if result.data else None
+    from services.plan_resolver import resolve_pricing_plan
+    return resolve_pricing_plan(supabase, domain, slug, billing_cycle)
 
 
 def _resolve_addons(supabase, addon_slugs, domain):

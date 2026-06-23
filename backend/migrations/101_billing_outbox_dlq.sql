@@ -1,0 +1,9 @@
+-- ===================================================================
+-- Migration 101: Billing Outbox + Dead Letter Queue
+-- ===================================================================
+-- Canonical copy of supabase/migrations/20260619010000_billing_outbox_dlq.sql
+-- Use the supabase version as authoritative.
+-- ===================================================================
+-- See supabase/migrations/20260619010000_billing_outbox_dlq.sql
+-- Run that file in the Supabase SQL Editor.
+-- ===================================================================

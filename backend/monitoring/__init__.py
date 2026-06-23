@@ -13,6 +13,7 @@ from .metrics import (
     check_kpis,
 )
 from .logging_config import setup_structured_logging, get_logger
+from . import billing_metrics
 
 __all__ = [
     'init_profiler',
@@ -25,5 +26,6 @@ __all__ = [
     'check_kpis',
     'setup_structured_logging',
     'get_logger',
+    'billing_metrics',
 ]
 

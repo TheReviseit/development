@@ -4,8 +4,7 @@ Shared Authentication Middleware — Firebase Token Verification
 SECURITY: All routes MUST use `require_auth` from this module.
 Every request must present a valid Firebase ID token in the
 `Authorization: Bearer` header. Tokens are verified locally with
-check_revoked=False (no blocking HTTPS call to Google) and a
-5-second timeout to prevent worker thread exhaustion.
+check_revoked=False (no blocking HTTPS call to Google) after startup prewarm.
 
 Usage:
     from middleware.auth import require_auth
@@ -77,15 +76,9 @@ def _reset_auth_circuit() -> None:
     _auth_circuit_last_failure = 0.0
 
 
+
 def verify_token_direct(token: str) -> Optional[dict]:
-    """Verify Firebase ID token directly (no thread pool).
-
-    Uses check_revoked=False for local-only verification with cached
-    public keys (~5ms after first call). The first call may fetch keys
-    from Google (~200ms) but that's a one-time cost at worker level.
-
-    Returns decoded token dict, or None on failure.
-    """
+    """Verify Firebase ID token locally using cached public keys."""
     if not FIREBASE_IMPORTED:
         logger.error("Firebase Admin SDK not installed")
         return None
@@ -93,9 +86,20 @@ def verify_token_direct(token: str) -> Optional[dict]:
         logger.error("Firebase app not initialized")
         return None
     try:
-        logger.info(f"verify_token_direct: calling verify_id_token with check_revoked=False")
-        decoded = firebase_auth.verify_id_token(token, check_revoked=False, clock_skew_seconds=10)
-        logger.info(f"verify_token_direct: success uid={decoded.get('uid', 'N/A')[:20]}")
+        from config.billing_flags import get_bool_flag
+        # fix_auth_check_revoked=True (default) → local verify only, no Google revoke HTTP call
+        check_revoked = not get_bool_flag('fix_auth_check_revoked', True)
+        started = time.time()
+        decoded = firebase_auth.verify_id_token(
+            token,
+            check_revoked=check_revoked,
+            clock_skew_seconds=60,
+        )
+        elapsed_ms = (time.time() - started) * 1000
+        logger.info(
+            f"verify_token_direct: success uid={decoded.get('uid', 'N/A')[:20]} "
+            f"elapsed_ms={elapsed_ms:.0f} check_revoked={check_revoked}"
+        )
         _reset_auth_circuit()
         return decoded
     except firebase_admin.auth.ExpiredIdTokenError as e:
@@ -126,9 +130,11 @@ def _init_firebase_if_needed() -> bool:
     except ValueError:
         logger.info("_init_firebase_if_needed: No Firebase app found, attempting initialization")
     try:
-        from firebase_client import initialize_firebase
+        from firebase_client import initialize_firebase, warm_firebase_auth_cache
         result = initialize_firebase()
         logger.info(f"_init_firebase_if_needed: initialize_firebase() returned {result}")
+        if result:
+            warm_firebase_auth_cache()
         return result
     except Exception as e:
         logger.error(f"_init_firebase_if_needed: Failed to initialize Firebase: {type(e).__name__}: {e}")

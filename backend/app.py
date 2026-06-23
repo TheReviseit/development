@@ -258,6 +258,12 @@ except Exception as e:
 
 app = Flask(__name__)
 
+try:
+    from services.billing_tracing import init_billing_tracing
+    init_billing_tracing(app)
+except ImportError as e:
+    logger.warning(f"Billing tracing not initialized: {e}")
+
 # Configure from production config
 if PRODUCTION_CONFIG_AVAILABLE and prod_config:
     app.config.update(prod_config.to_flask_config())
@@ -427,6 +433,14 @@ try:
 except ImportError as e:
     logger.warning(f"Feature Gate routes not available: {e}")
 
+# Register Billing Admin routes (Phase C: webhook replay console, DLQ, reconciliation)
+try:
+    from routes.billing_admin import billing_admin_bp
+    app.register_blueprint(billing_admin_bp)
+    logger.info("🔧 Billing Admin routes registered (/api/admin/billing/*)")
+except ImportError as e:
+    logger.warning(f"Billing Admin routes not available: {e}")
+
 # Register Products API routes (unified write path — single product creation endpoint)
 try:
     from routes.products_api import products_bp
@@ -451,6 +465,13 @@ try:
 except ImportError as e:
     logger.warning(f"Upgrade API routes not available: {e}")
 
+try:
+    from routes.internal_billing import register_internal_billing_routes
+    register_internal_billing_routes(app)
+    logger.info("Internal billing routes registered (/internal/checkout/*)")
+except ImportError as e:
+    logger.warning(f"Internal billing routes not available: {e}")
+
 # Register Subscription Webhook routes (lifecycle events)
 try:
     from routes.subscription_webhooks import subscription_webhooks_bp
@@ -458,14 +479,6 @@ try:
     logger.info("Subscription webhook routes registered (/api/webhooks/subscription)")
 except ImportError as e:
     logger.warning(f"Subscription webhook routes not available: {e}")
-
-# Register Billing Admin routes (monitoring + management)
-try:
-    from routes.billing_admin import billing_admin_bp
-    app.register_blueprint(billing_admin_bp)
-    logger.info("Billing admin routes registered (/api/admin/billing/*)")
-except ImportError as e:
-    logger.warning(f"Billing admin routes not available: {e}")
 
 # NOTE: Billing API routes are now registered in routes/__init__.py
 
@@ -547,10 +560,21 @@ except Exception as e:
 try:
     from services.checkout_worker import get_checkout_worker
     _checkout_worker = get_checkout_worker()
-    _checkout_worker.start()
-    logger.info("✅ Checkout background worker started (2 workers, max 10 queued)")
+    if _checkout_worker is not None:
+        _checkout_worker.start()
+        logger.info("✅ Checkout background worker started (2 workers, max 10 queued)")
+    else:
+        logger.info("ℹ️ Checkout worker disabled (CHECKOUT_WORKER_ENABLED=false)")
 except Exception as e:
     logger.warning(f"⚠️ Checkout worker not started (non-fatal): {e}")
+
+# Checkout dispatch pool graceful shutdown (bounded async Razorpay)
+try:
+    from services.checkout_dispatch_pool import shutdown_checkout_dispatch_pool
+    import atexit as _atexit_dispatch
+    _atexit_dispatch.register(lambda: shutdown_checkout_dispatch_pool(wait=True))
+except Exception as e:
+    logger.warning(f"Checkout dispatch pool shutdown hook not registered: {e}")
 
 
 # =============================================================================
@@ -699,7 +723,16 @@ def health_check():
             health['metrics'] = get_metrics_summary()
         except Exception:
             pass
-    
+
+    # Circuit breaker state
+    try:
+        from routes.billing_api import razorpay_circuit_breaker
+        health['circuit_breaker'] = {
+            'razorpay_state': razorpay_circuit_breaker.state,
+        }
+    except Exception:
+        health['circuit_breaker'] = {'razorpay_state': 'unknown'}
+
     return jsonify(health), 200
 
 
@@ -2294,9 +2327,12 @@ if __name__ == '__main__':
     try:
         from services.checkout_worker import get_checkout_worker
         _checkout_worker = get_checkout_worker()
-        _checkout_worker.start()
-        atexit.register(lambda: _checkout_worker.stop())
-        print(f'💳 Checkout Worker: Started ✅ (workers=2, max_queued=10)')
+        if _checkout_worker is not None:
+            _checkout_worker.start()
+            atexit.register(lambda: _checkout_worker.stop())
+            print(f'💳 Checkout Worker: Started ✅ (workers=2, max_queued=10)')
+        else:
+            print(f'ℹ️ Checkout Worker: Disabled (CHECKOUT_WORKER_ENABLED=false)')
     except Exception as e:
         print(f'❌ Failed to start checkout worker: {e}')
 
@@ -2307,5 +2343,5 @@ if __name__ == '__main__':
     import platform
     use_reloader = (platform.system() != 'Windows') and debug
     
-    app.run(host='0.0.0.0', port=port, debug=debug, use_reloader=use_reloader)
+    app.run(host='0.0.0.0', port=port, debug=debug, use_reloader=use_reloader, threaded=True)
 

@@ -15,9 +15,37 @@ Endpoint: POST /api/webhooks/subscription
 """
 
 import logging
+from datetime import datetime, timezone, timedelta
 from flask import Blueprint, request, jsonify
 
 logger = logging.getLogger('reviseit.subscription_webhooks')
+
+RAZORPAY_WEBHOOK_TOLERANCE_SECONDS = 300
+
+
+def verify_webhook_timestamp(payload: dict) -> bool:
+    """
+    Verify webhook timestamp is within tolerance window.
+    
+    Razorpay sends 'created_at' as a Unix timestamp at the top level
+    of the webhook event object. Reject events older than 5 minutes
+    to prevent replay attacks.
+    
+    Fail CLOSED: missing or non-numeric timestamp = reject.
+    """
+    created_at_raw = payload.get('created_at')
+    if created_at_raw is None or not isinstance(created_at_raw, (int, float)):
+        logger.error(f"Webhook missing or invalid created_at field: {type(created_at_raw)}")
+        return False
+    event_time = datetime.fromtimestamp(created_at_raw, tz=timezone.utc)
+    age = datetime.now(timezone.utc) - event_time
+    if age > timedelta(seconds=RAZORPAY_WEBHOOK_TOLERANCE_SECONDS):
+        logger.warning(f"Webhook event too old: age={age}")
+        return False
+    if age < timedelta(seconds=-60):
+        logger.warning(f"Webhook event from the future: age={age}")
+        return False
+    return True
 
 subscription_webhooks_bp = Blueprint(
     'subscription_webhooks', __name__,
@@ -63,20 +91,26 @@ def handle_subscription_webhook():
         if not payload:
             return jsonify({'status': 'error', 'message': 'Empty payload'}), 400
 
+        # 3b. Verify webhook timestamp (replay protection, fail-closed)
+        if not verify_webhook_timestamp(payload):
+            event_id = payload.get('id', 'unknown')
+            logger.warning(f"webhook_timestamp_rejected id={event_id}")
+            return jsonify({'status': 'rejected', 'message': 'Event too old or invalid timestamp'}), 400
+
         # 4. Process event
         result = processor.process_event(payload)
 
-        # 5. Always return 200 for processed/duplicate events
-        # Razorpay will retry on non-2xx, which we don't want for already-processed events
-        status_code = 200 if result.get('processed') else 200
+        # 5. Return 500 when processing failed so Razorpay retries (lock contention, etc.)
+        status_code = 200 if result.get('processed') else 500
 
         logger.info(
             f"webhook_response event={result.get('event_type')} "
-            f"action={result.get('action')} duplicate={result.get('duplicate')}"
+            f"action={result.get('action')} duplicate={result.get('duplicate')} "
+            f"status_code={status_code}"
         )
 
         return jsonify({
-            'status': 'processed' if result.get('processed') else 'accepted',
+            'status': 'processed' if result.get('processed') else 'retry',
             **result,
         }), status_code
 

@@ -474,7 +474,11 @@ class CheckoutBackgroundWorker:
         cutoff = (
             datetime.now(timezone.utc) - timedelta(seconds=self.ORPHAN_AGE_SECONDS)
         ).isoformat()
+        initiated_cutoff = (
+            datetime.now(timezone.utc) - timedelta(seconds=30)
+        ).isoformat()
 
+        # 1. Reclaim abandoned 'processing' jobs (older than ORPHAN_AGE_SECONDS)
         orphans = self._supabase.table('checkout_requests').select('id').eq(
             'status', 'processing'
         ).lt('updated_at', cutoff).execute()
@@ -495,8 +499,19 @@ class CheckoutBackgroundWorker:
                 )
                 self.try_enqueue(orphan_id)
 
+        # 2. Pick up fresh 'initiated' items that Celery never delivered
+        fresh = self._supabase.table('checkout_requests').select('id').eq(
+            'status', 'initiated'
+        ).lt('updated_at', initiated_cutoff).order('updated_at').limit(5).execute()
+
+        for row in (fresh.data or []):
+            self.try_enqueue(row['id'])
+
 
 def get_checkout_worker():
+    checkout_worker_enabled = os.getenv('CHECKOUT_WORKER_ENABLED', 'false').lower() == 'true'
+    if not checkout_worker_enabled:
+        return None
     global _CHECKOUT_WORKER_INSTANCE
     if _CHECKOUT_WORKER_INSTANCE is None:
         from supabase_client import get_supabase_client

@@ -45,6 +45,7 @@ try:
             "tasks.orders",  # Order processing tasks
             "tasks.otp_delivery",  # OTP delivery tasks
             "tasks.billing_monitor",  # Subscription lifecycle monitoring
+            "tasks.subscription_worker",  # Async subscription creation
             "tasks.forms_maintenance",  # Form soft-delete purge (enterprise two-phase delete)
             "tasks.usage_events",  # Feature usage event processing
             "tasks.messaging_tasks",  # Instagram/WhatsApp omni-channel messaging
@@ -399,6 +400,51 @@ celery_app.conf.beat_schedule = {
     "whatsapp-connection-cleanup": {
         "task": "whatsapp_connection.cleanup",
         "schedule": 300.0,
+        "options": {"queue": "low"},
+    },
+
+    # =========================================================================
+    # Phase A: Abandoned Checkout Cleanup (every 15 minutes)
+    # =========================================================================
+    # Sweeps pending subscriptions older than 30 minutes and cancels them.
+    # Safety net for users who dismiss the Razorpay modal without completing.
+    "abandoned-checkout-cleanup": {
+        "task": "abandoned_checkout_cleanup.sweep_stale_pending",
+        "schedule": 900.0,  # Every 15 minutes
+        "options": {"queue": "low"},
+    },
+
+    # =========================================================================
+    # Phase B: Subscription Event Projection (every 2 seconds)
+    # =========================================================================
+    # Reads unprocessed subscription_events and projects them onto
+    # subscriptions.status. For 100ms latency, deploy the standalone
+    # subscription_projection_daemon.py separately.
+    "subscription-projection-batch": {
+        "task": "subscription_projection_worker.process_batch",
+        "schedule": 2.0,  # Every 2 seconds
+        "options": {"queue": "default"},
+    },
+
+    # =========================================================================
+    # Phase C: Billing Outbox Worker (every 10 seconds)
+    # =========================================================================
+    # Polls billing_outbox for pending reconciliation jobs.
+    # Each job triggers reconciliation_engine.reconcile_subscription()
+    # to compare local state with Razorpay canonical state.
+    "billing-outbox-process-batch": {
+        "task": "billing_outbox_worker.process_batch",
+        "schedule": 10.0,  # Every 10 seconds
+        "options": {"queue": "default"},
+    },
+
+    # =========================================================================
+    # Phase C: Billing Outbox Cleanup (every 6 hours)
+    # =========================================================================
+    # Purges completed outbox entries older than 72 hours.
+    "billing-outbox-cleanup": {
+        "task": "billing_outbox_worker.cleanup",
+        "schedule": 21600.0,  # Every 6 hours
         "options": {"queue": "low"},
     },
 }

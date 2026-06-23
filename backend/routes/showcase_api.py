@@ -163,7 +163,7 @@ def map_showcase_item_to_dto(
         "title": item.title,
         "description": item.description,
         "subtitle": item.subtitle,
-        "imageUrl": item.thumbnail_url or item.image_url,
+        "imageUrl": item.thumbnail_url or item.image_url or None,
         "isFeatured": item.is_featured,
         "metadata": item.metadata,
         "viewCount": item.view_count

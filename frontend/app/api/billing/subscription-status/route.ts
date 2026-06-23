@@ -7,7 +7,8 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
-import { proxyRequest, isBackendHealthy } from "@/lib/api/proxy-client";
+import { proxyRequest } from "@/lib/api/proxy-client";
+import { cb } from "@/lib/api/server-circuit-breaker";
 import { resolveContext } from "@/lib/api/context-resolver";
 
 interface AuthResult {
@@ -69,10 +70,10 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       );
     }
 
-    if (!isBackendHealthy()) {
+    if (cb.isOpen()) {
       return NextResponse.json(
         { success: false, code: "SERVICE_UNAVAILABLE", message: "Service temporarily unavailable.", requestId },
-        { status: 503, headers: { "X-Request-ID": requestId, "Retry-After": "5" } },
+        { status: 503, headers: { "X-Request-ID": requestId, "Retry-After": "30" } },
       );
     }
 
@@ -100,12 +101,14 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     });
 
     if (proxyResult.success && proxyResult.data) {
+      cb.recordSuccess();
       return NextResponse.json(proxyResult.data, {
         status: proxyResult.statusCode || 200,
         headers: { "X-Request-ID": requestId },
       });
     }
 
+    if (proxyResult.statusCode >= 500) cb.recordFailure();
     return NextResponse.json(
       proxyResult.error || { success: false, code: "PROXY_ERROR", message: "Failed to fetch subscription status.", requestId },
       { status: proxyResult.statusCode || 502, headers: { "X-Request-ID": requestId } },

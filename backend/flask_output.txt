@@ -1,0 +1,173 @@
+2026-06-19 23:18:41 | WARNING | reviseit.payments | ⚠️ Validation schemas not available
+2026-06-19 23:18:41 | INFO | reviseit.cache | ✅ Redis connected: redis://:Ph58KhW05kJvRaRK202NM...
+2026-06-19 23:18:41 | INFO | reviseit.cache | CacheManager initialized: L1=500 entries, L2=Redis
+2026-06-19 23:18:42 | INFO | utils.slug_resolver | ✅ Redis connected for slug cache: redis://:Ph58KhW05kJvRaRK202NMoqSkQZvFAxF@redis-12013.crce217.ap-south-1-1.ec2.cloud.redislabs.com:12013
+2026-06-19 23:18:42 | WARNING | reviseit.billing.tracing | OpenTelemetry SDK not installed. Install: pip install opentelemetry-sdk opentelemetry-exporter-otlp-proto-http
+2026-06-19 23:18:42 | WARNING | reviseit.billing.metrics | No metrics library available; billing metrics are no-ops
+2026-06-19 23:18:42 | INFO | reviseit.billing.api | Redis connection established for billing idempotency
+2026-06-19 23:18:42 | INFO | reviseit.app | 🚀 Enterprise Credential Manager loaded
+2026-06-19 23:18:43 | INFO | firebase_client | Using Firebase credential file: flowauxi-659d62acabdc.json
+2026-06-19 23:18:43 | INFO | firebase_client | Firebase Admin SDK initialized successfully
+2026-06-19 23:18:43 | INFO | firebase_client | Firebase project verified: flowauxi
+2026-06-19 23:18:45 | INFO | reviseit.conversation | ✅ Conversation state persistence enabled (Redis)
+2026-06-19 23:18:45 | WARNING | reviseit.memory | Memory Manager: google-genai package not available, summarization disabled
+2026-06-19 23:18:45 | INFO | reviseit.memory | Memory Manager: Redis connected for cross-session profiles
+2026-06-19 23:18:45 | INFO | reviseit.app | 🧠 AI Brain initialized with usage tracking
+2026-06-19 23:18:45 | INFO | reviseit.extensions | ✅ Flask-Compress initialized (gzip enabled)
+2026-06-19 23:18:45 | INFO | reviseit.extensions | ✅ Flask-Caching initialized with Redis
+2026-06-19 23:18:45 | WARNING | reviseit.monitoring | flask_profiler not installed. Run: pip install flask-profiler
+2026-06-19 23:18:45 | INFO | reviseit.monitoring | Using in-memory metrics (Prometheus not available)
+2026-06-19 23:18:45 | INFO | reviseit.extensions | ✅ All extensions initialized
+2026-06-19 23:18:45 | INFO | reviseit.app | ✅ Production extensions initialized
+2026-06-19 23:18:45 | INFO | reviseit.app | 🌐 Domain detection middleware registered (request.host → g.product_domain)
+2026-06-19 23:18:45 | INFO | reviseit.app | 🛡️ CSRF protection middleware registered
+Files Tools routes unavailable: No module named 'PIL'
+2026-06-19 23:18:45 | INFO | routes.messaging | ✅ Registered messaging routes
+✅ Registered API routes: templates, contacts, analytics, campaigns, bulk-campaigns, appointments, orders, payments, inventory, showcase, slug-cache, monitor, health, billing, test-push, messaging
+2026-06-19 23:18:45 | INFO | reviseit.app | 💰 Pricing API routes registered (/api/pricing/*)
+2026-06-19 23:18:45 | INFO | reviseit.app | 🔐 OTP API routes registered (/v1/otp/*)
+2026-06-19 23:18:45 | WARNING | reviseit.app | Console Auth routes not available: No module named 'bcrypt'
+2026-06-19 23:18:45 | WARNING | reviseit.app | Console API routes not available: No module named 'bcrypt'
+2026-06-19 23:18:45 | WARNING | reviseit.app | Console Billing routes not available: No module named 'bcrypt'
+2026-06-19 23:18:45 | INFO | utils.username_cache | ✅ Redis connected: redis://:Ph58KhW05kJvRaRK202NMoqSkQZvFAxF@redis-12013.crce217.ap-south-1-1.ec2.cloud.redislabs.com:12013
+2026-06-19 23:18:45 | INFO | reviseit.app | 👤 Username API routes registered (/api/username/*)
+2026-06-19 23:18:45 | INFO | reviseit.app | 🔗 Username Resolve routes registered (/api/username/resolve/*)
+2026-06-19 23:18:45 | INFO | reviseit.app | 🌐 Domain routes registered (/api/domains/*)
+2026-06-19 23:18:45 | INFO | reviseit.app | 🚦 Feature Gate routes registered (/api/features/*)
+2026-06-19 23:18:45 | INFO | reviseit.app | 🔧 Billing Admin routes registered (/api/admin/billing/*)
+2026-06-19 23:18:45 | INFO | reviseit.app | 📦 Products API routes registered (/api/products/*)
+2026-06-19 23:18:45 | INFO | reviseit.app | 🔧 Admin API routes registered (/api/admin/*)
+2026-06-19 23:18:45 | INFO | reviseit.app | ⬆️  Upgrade API routes registered (/api/upgrade/*)
+2026-06-19 23:18:45 | INFO | reviseit.app | Subscription webhook routes registered (/api/webhooks/subscription)
+2026-06-19 23:18:45 | INFO | reviseit.app | 📋 Forms API routes registered (/api/forms/*)
+2026-06-19 23:18:45 | INFO | reviseit.app | 📩 Meta Webhook routes registered (/api/webhooks/meta)
+2026-06-19 23:18:45 | INFO | reviseit.app | 🎯 Trial API routes registered (/api/trials/*)
+2026-06-19 23:18:45 | ERROR | reviseit.app | Files Tools routes import failed
+Traceback (most recent call last):
+  File "C:\Users\Sugan001\Desktop\Flowauxi\backend\app.py", line 509, in <module>
+    from domains.file_tools.api.routes import file_tools_bp
+  File "C:\Users\Sugan001\Desktop\Flowauxi\backend\domains\file_tools\__init__.py", line 3, in <module>
+    from .application.tool_registry import ToolRegistry
+  File "C:\Users\Sugan001\Desktop\Flowauxi\backend\domains\file_tools\application\tool_registry.py", line 8, in <module>
+    from ..converters.image_converter.pillow_converter import PillowImageConverter
+  File "C:\Users\Sugan001\Desktop\Flowauxi\backend\domains\file_tools\converters\image_converter\pillow_converter.py", line 7, in <module>
+    from PIL import Image, ImageOps
+ModuleNotFoundError: No module named 'PIL'
+2026-06-19 23:18:46 | INFO | flowauxi.messaging.outbox | 📨 USE_OUTBOX=False (set USE_OUTBOX=false for direct send mode)
+2026-06-19 23:18:46 | INFO | flowauxi.messaging.sdk | 📡 FlowAuxiMessaging SDK initialized
+2026-06-19 23:18:46 | INFO | reviseit.app | 📡 Omni-Channel Messaging SDK initialized (Instagram + WhatsApp)
+2026-06-19 23:18:46 | INFO | reviseit.celery | ✅ Celery initialized successfully with Redis
+2026-06-19 23:18:46 | INFO | reviseit.celery | 📨 USE_OUTBOX=False (set USE_OUTBOX=false for direct send)
+2026-06-19 23:18:46 | INFO | reviseit.celery | ⚡ Messaging Celery tasks registered successfully
+2026-06-19 23:18:46 | INFO | reviseit.app | ⚡ Messaging Celery tasks registered (8 tasks)
+2026-06-19 23:18:46 | INFO | services.checkout_worker | checkout_worker_starting workers=2 max_queued=10
+2026-06-19 23:18:48 | INFO | reviseit.app | ✅ Checkout background worker started (2 workers, max 10 queued)
+2026-06-19 23:18:49 | INFO | reviseit.app | ✅ Contact schema validation passed — all CRM columns present
+✅ Rate limiter connected to Redis
+2026-06-19 23:18:49 | INFO | reviseit.app | 🔒 Webhook security initialized
+2026-06-19 23:18:49 | INFO | reviseit.app | 💾 Advanced cache manager initialized
+2026-06-19 23:18:49 | INFO | reviseit.environment | 🔐 Razorpay environment detected: SANDBOX
+2026-06-19 23:18:49 | INFO | reviseit.environment | ✅ RAZORPAY_KEY_SECRET is set (24 chars)
+2026-06-19 23:18:49 | INFO | reviseit.app | 🔐 Razorpay environment: SANDBOX
+2026-06-19 23:18:49 | INFO | reviseit.pricing_service | ✅ All active plans have sandbox Razorpay plan IDs configured
+2026-06-19 23:18:49 | INFO | reviseit.app | ✅ All plans have sandbox Razorpay IDs configured
+
+🚀 WhatsApp Admin API Server
+📡 Running on: http://localhost:5000
+🔧 Environment: development
+🌐 CORS enabled for: http://localhost:3000
+🧠 AI Brain: Ready ✅
+💾 Cache: Redis ✅
+📊 Metrics: Enabled ✅
+🛡️ Resilience: Enabled ✅
+💰 Billing Monitor: Dev scheduler ✅ (every 10 min)
+2026-06-19 23:18:49 | INFO | reviseit.app | ⏰ [DEV] Billing scheduler started (interval=600s, first run in 60s)
+2026-06-19 23:18:49 | INFO | outbox_processor | Started FAANG Database Outbox Processor.
+📦 Database Outbox Processor: Started ✅ (Polling events_outbox)
+2026-06-19 23:18:49 | INFO | services.checkout_worker | checkout_worker_starting workers=2 max_queued=10
+💳 Checkout Worker: Started ✅ (workers=2, max_queued=10)
+
+ * Serving Flask app 'app'
+ * Debug mode: on
+2026-06-19 23:19:49 | INFO | reviseit.app | 🔄 [DEV] Running scheduled billing cycle...
+2026-06-19 23:19:49 | INFO | billing_cycle | ============================================================
+2026-06-19 23:19:49 | INFO | billing_cycle |   Billing Cycle Runner (LIVE)
+2026-06-19 23:19:49 | INFO | billing_cycle |   Started: 2026-06-19T17:49:49.601914+00:00
+2026-06-19 23:19:49 | INFO | billing_cycle | ============================================================
+2026-06-19 23:19:49 | INFO | billing_cycle | 
+--- Step 1: Detecting overdue subscriptions ---
+2026-06-19 23:19:49 | INFO | billing_cycle |   ✅ No overdue subscriptions found.
+2026-06-19 23:19:49 | INFO | billing_cycle | 
+--- Step 2: Checking expired grace periods ---
+2026-06-19 23:19:50 | INFO | billing_cycle |   ✅ No expired grace periods.
+2026-06-19 23:19:50 | INFO | billing_cycle | 
+--- Step 3: Processing pending payment retries ---
+2026-06-19 23:19:50 | INFO | billing_cycle |   ✅ No pending retries due.
+2026-06-19 23:19:50 | INFO | billing_cycle | 
+============================================================
+2026-06-19 23:19:50 | INFO | billing_cycle |   Billing Cycle Complete (LIVE)
+2026-06-19 23:19:50 | INFO | billing_cycle |   Elapsed: 0.62s
+2026-06-19 23:19:50 | INFO | billing_cycle |   Overdue detected: 0
+2026-06-19 23:19:50 | INFO | billing_cycle |   Overdue transitioned: 0
+2026-06-19 23:19:50 | INFO | billing_cycle |   Grace periods expired: 0
+2026-06-19 23:19:50 | INFO | billing_cycle |   Retries processed: 0
+2026-06-19 23:19:50 | INFO | billing_cycle |   Errors: 0
+2026-06-19 23:19:50 | INFO | billing_cycle | ============================================================
+2026-06-19 23:19:50 | INFO | reviseit.app | ✅ [DEV] Billing cycle complete: overdue=0 transitioned=0
+2026-06-19 23:29:50 | INFO | reviseit.app | 🔄 [DEV] Running scheduled billing cycle...
+2026-06-19 23:29:50 | INFO | billing_cycle | ============================================================
+2026-06-19 23:29:50 | INFO | billing_cycle |   Billing Cycle Runner (LIVE)
+2026-06-19 23:29:50 | INFO | billing_cycle |   Started: 2026-06-19T17:59:50.240907+00:00
+2026-06-19 23:29:50 | INFO | billing_cycle | ============================================================
+2026-06-19 23:29:50 | INFO | billing_cycle | 
+--- Step 1: Detecting overdue subscriptions ---
+2026-06-19 23:29:50 | INFO | billing_cycle |   ✅ No overdue subscriptions found.
+2026-06-19 23:29:50 | INFO | billing_cycle | 
+--- Step 2: Checking expired grace periods ---
+2026-06-19 23:29:50 | INFO | billing_cycle |   ✅ No expired grace periods.
+2026-06-19 23:29:50 | INFO | billing_cycle | 
+--- Step 3: Processing pending payment retries ---
+2026-06-19 23:29:50 | INFO | billing_cycle |   ✅ No pending retries due.
+2026-06-19 23:29:50 | INFO | billing_cycle | 
+============================================================
+2026-06-19 23:29:50 | INFO | billing_cycle |   Billing Cycle Complete (LIVE)
+2026-06-19 23:29:50 | INFO | billing_cycle |   Elapsed: 0.50s
+2026-06-19 23:29:50 | INFO | billing_cycle |   Overdue detected: 0
+2026-06-19 23:29:50 | INFO | billing_cycle |   Overdue transitioned: 0
+2026-06-19 23:29:50 | INFO | billing_cycle |   Grace periods expired: 0
+2026-06-19 23:29:50 | INFO | billing_cycle |   Retries processed: 0
+2026-06-19 23:29:50 | INFO | billing_cycle |   Errors: 0
+2026-06-19 23:29:50 | INFO | billing_cycle | ============================================================
+2026-06-19 23:29:50 | INFO | reviseit.app | ✅ [DEV] Billing cycle complete: overdue=0 transitioned=0
+2026-06-19 23:39:50 | INFO | reviseit.app | 🔄 [DEV] Running scheduled billing cycle...
+2026-06-19 23:39:50 | INFO | billing_cycle | ============================================================
+2026-06-19 23:39:50 | INFO | billing_cycle |   Billing Cycle Runner (LIVE)
+2026-06-19 23:39:50 | INFO | billing_cycle |   Started: 2026-06-19T18:09:50.767146+00:00
+2026-06-19 23:39:50 | INFO | billing_cycle | ============================================================
+2026-06-19 23:39:50 | INFO | billing_cycle | 
+--- Step 1: Detecting overdue subscriptions ---
+2026-06-19 23:39:50 | INFO | billing_cycle |   ✅ No overdue subscriptions found.
+2026-06-19 23:39:50 | INFO | billing_cycle | 
+--- Step 2: Checking expired grace periods ---
+2026-06-19 23:39:51 | INFO | billing_cycle |   ✅ No expired grace periods.
+2026-06-19 23:39:51 | INFO | billing_cycle | 
+--- Step 3: Processing pending payment retries ---
+2026-06-19 23:39:51 | INFO | billing_cycle |   ✅ No pending retries due.
+2026-06-19 23:39:51 | INFO | billing_cycle | 
+============================================================
+2026-06-19 23:39:51 | INFO | billing_cycle |   Billing Cycle Complete (LIVE)
+2026-06-19 23:39:51 | INFO | billing_cycle |   Elapsed: 0.49s
+2026-06-19 23:39:51 | INFO | billing_cycle |   Overdue detected: 0
+2026-06-19 23:39:51 | INFO | billing_cycle |   Overdue transitioned: 0
+2026-06-19 23:39:51 | INFO | billing_cycle |   Grace periods expired: 0
+2026-06-19 23:39:51 | INFO | billing_cycle |   Retries processed: 0
+2026-06-19 23:39:51 | INFO | billing_cycle |   Errors: 0
+2026-06-19 23:39:51 | INFO | billing_cycle | ============================================================
+2026-06-19 23:39:51 | INFO | reviseit.app | ✅ [DEV] Billing cycle complete: overdue=0 transitioned=0
+2026-06-19 23:49:51 | INFO | reviseit.app | 🔄 [DEV] Running scheduled billing cycle...
+2026-06-19 23:49:51 | INFO | billing_cycle | ============================================================
+2026-06-19 23:49:51 | INFO | billing_cycle |   Billing Cycle Runner (LIVE)
+2026-06-19 23:49:51 | INFO | billing_cycle |   Started: 2026-06-19T18:19:51.269725+00:00
+2026-06-19 23:49:51 | INFO | billing_cycle | ============================================================
+2026-06-19 23:49:51 | INFO | billing_cycle | 
+--- Step 1: Detecting overdue subscriptions ---

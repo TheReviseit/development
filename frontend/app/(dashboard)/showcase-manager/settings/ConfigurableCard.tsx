@@ -35,6 +35,7 @@ export function ConfigurableCard({
 }: ConfigurableCardProps) {
   const { fields, actions } = config;
   const [imageLoaded, setImageLoaded] = React.useState(false);
+  const [imageError, setImageError] = React.useState(false);
   const [internalLoading, setInternalLoading] = React.useState(true);
 
   // Staggered entrance animation/skeleton
@@ -90,14 +91,28 @@ export function ConfigurableCard({
     <div className={styles.card} onClick={onClick}>
       {/* Image Container - Nova Style (1:1 Aspect Ratio) */}
       <div className={styles.imageFrame}>
-        <img
-          src={item.imageUrl}
-          alt={item.title}
-          loading="lazy"
-          onLoad={() => setImageLoaded(true)}
-          style={{ opacity: imageLoaded ? 1 : 0 }}
-        />
-        {!imageLoaded && (
+        {item.imageUrl && !imageError ? (
+          <img
+            src={item.imageUrl}
+            alt={item.title}
+            loading="lazy"
+            onLoad={() => setImageLoaded(true)}
+            onError={() => {
+              setImageError(true);
+              setImageLoaded(true);
+            }}
+            style={{ opacity: imageLoaded ? 1 : 0 }}
+          />
+        ) : (
+          <div className={styles.imagePlaceholder}>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+              <rect x="3" y="3" width="18" height="18" rx="2" />
+              <circle cx="8.5" cy="8.5" r="1.5" />
+              <path d="M21 15l-5-5L5 21" />
+            </svg>
+          </div>
+        )}
+        {!imageLoaded && item.imageUrl && !imageError && (
           <div className={styles.skeletonImage}>
             <div className={styles.skeletonShimmer} />
           </div>

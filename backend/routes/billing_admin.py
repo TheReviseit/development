@@ -1,483 +1,348 @@
 """
-Billing Admin API — Monitoring & Management Endpoints
-=======================================================
+Billing Admin API (Phase C)
+============================
+Admin endpoints for the webhook replay console, DLQ management,
+reconciliation monitoring, and event sourcing observability.
 
-Admin-only endpoints for monitoring subscription health, viewing
-billing events, managing suspensions, and triggering manual actions.
-
-All endpoints require admin authentication.
+Access Control:
+  - All endpoints require: X-Admin-Key header matching MONITOR_ADMIN_KEY
+  - Admin key validated inline (_require_admin helper)
+  - No JWT/user session — admin endpoints use shared secret key
 
 Endpoints:
-    GET  /api/admin/billing/dashboard      — Overview dashboard data
-    GET  /api/admin/billing/subscriptions   — List subscriptions with filters
-    GET  /api/admin/billing/events          — Billing event log
-    GET  /api/admin/billing/retries         — Payment retry queue
-    GET  /api/admin/billing/suspensions     — Active suspensions
-    GET  /api/admin/billing/mrr             — MRR breakdown
-    POST /api/admin/billing/reactivate      — Manually reactivate subscription
-    POST /api/admin/billing/suspend         — Manually suspend subscription
-    POST /api/admin/billing/run-monitor     — Trigger billing monitor cycle
+  GET    /api/admin/billing/outbox/stats       — Outbox backlog & throughput
+  GET    /api/admin/billing/dlq                — List DLQ entries
+  GET    /api/admin/billing/dlq/<id>           — Single DLQ entry detail
+  POST   /api/admin/billing/dlq/<id>/replay    — Replay DLQ entry
+  POST   /api/admin/billing/dlq/<id>/resolve   — Resolve DLQ entry
+  POST   /api/admin/billing/dlq/<id>/dismiss   — Dismiss DLQ entry
+  GET    /api/admin/billing/reconciliation     — Reconciliation history
+  GET    /api/admin/billing/projection/lag     — Projection worker lag
 """
 
 import logging
-from datetime import datetime, timezone, timedelta
+import os
+from datetime import datetime, timezone
+from typing import Optional
+
 from flask import Blueprint, request, jsonify
 
-logger = logging.getLogger('reviseit.billing_admin')
+logger = logging.getLogger('reviseit.routes.billing_admin')
 
 billing_admin_bp = Blueprint('billing_admin', __name__, url_prefix='/api/admin/billing')
 
-
-# =============================================================================
-# Helpers
-# =============================================================================
-
-def _get_supabase():
-    from supabase_client import get_supabase_client
-    return get_supabase_client()
+ADMIN_KEY = os.getenv('MONITOR_ADMIN_KEY') or os.getenv('ADMIN_API_KEY', '')
 
 
-def _require_admin():
-    """Simple admin check — extend with your auth middleware."""
-    admin_key = request.headers.get('X-Admin-Key', '')
-    import os
-    expected = os.getenv('ADMIN_API_KEY', '')
-    if not expected or admin_key != expected:
-        return False
-    return True
+def _require_admin() -> Optional[str]:
+    """Validate admin key from header. Returns error message or None."""
+    key = request.headers.get('X-Admin-Key', '')
+    if not key or key != ADMIN_KEY:
+        return 'Unauthorized: invalid or missing X-Admin-Key'
+    return None
 
 
-def _error(message, code, status=400):
-    return jsonify({'success': False, 'error': code, 'message': message}), status
-
-
-def _success(data, status=200):
+def _success(data: dict, status: int = 200):
     return jsonify({'success': True, **data}), status
 
 
+def _error(message: str, code: str = 'ERROR', status: int = 400):
+    return jsonify({'success': False, 'error': message, 'code': code}), status
+
+
 # =============================================================================
-# GET /api/admin/billing/dashboard
+# OUTBOX STATS
 # =============================================================================
 
-@billing_admin_bp.route('/dashboard', methods=['GET'])
-def billing_dashboard():
-    """
-    Overview dashboard with key billing metrics.
-
-    Returns:
-        - subscription_counts: by status
-        - revenue: total MRR
-        - at_risk: past_due + grace_period count
-        - recent_failures: last 24h payment failures
-        - active_suspensions: count
-    """
-    if not _require_admin():
-        return _error('Unauthorized', 'UNAUTHORIZED', 401)
+@billing_admin_bp.route('/outbox/stats', methods=['GET'])
+def outbox_stats():
+    auth_error = _require_admin()
+    if auth_error:
+        return _error(auth_error, 'UNAUTHORIZED', 401)
 
     try:
-        supabase = _get_supabase()
-
-        # Subscription counts by status
-        counts = {}
-        for status in ['active', 'past_due', 'grace_period', 'suspended',
-                       'cancelled', 'halted', 'paused', 'expired', 'trialing',
-                       'pending', 'pending_upgrade']:
-            result = supabase.table('subscriptions').select(
-                'id', count='exact'
-            ).eq('status', status).execute()
-            counts[status] = result.count or 0
-
-        # Payment failures in last 24h
-        yesterday = (datetime.now(timezone.utc) - timedelta(hours=24)).isoformat()
-        failures = supabase.table('billing_events').select(
-            'id', count='exact'
-        ).eq('event_type', 'payment.failed').gte(
-            'created_at', yesterday
-        ).execute()
-
-        # Active suspensions
-        active_suspensions = supabase.table('account_suspensions').select(
-            'id', count='exact'
-        ).is_('reactivated_at', 'null').execute()
-
-        # Pending retries
-        pending_retries = supabase.table('payment_retries').select(
-            'id', count='exact'
-        ).eq('status', 'pending').execute()
-
-        return _success({
-            'subscription_counts': counts,
-            'total_active': counts.get('active', 0) + counts.get('trialing', 0),
-            'total_at_risk': counts.get('past_due', 0) + counts.get('grace_period', 0),
-            'total_suspended': counts.get('suspended', 0),
-            'total_churned': counts.get('cancelled', 0) + counts.get('expired', 0),
-            'payment_failures_24h': failures.count or 0,
-            'active_suspensions': active_suspensions.count or 0,
-            'pending_retries': pending_retries.count or 0,
-            'generated_at': datetime.now(timezone.utc).isoformat(),
-        })
-
+        from services.billing_outbox_service import get_outbox_stats
+        stats = get_outbox_stats()
+        return _success({'stats': stats})
     except Exception as e:
-        logger.error(f"billing_dashboard_error: {e}", exc_info=True)
-        return _error('Failed to load dashboard', 'INTERNAL_ERROR', 500)
+        logger.error(f"admin_outbox_stats_error: {e}", exc_info=True)
+        return _error(str(e), 'INTERNAL_ERROR', 500)
 
 
 # =============================================================================
-# GET /api/admin/billing/subscriptions
+# DLQ LIST & DETAIL
 # =============================================================================
 
-@billing_admin_bp.route('/subscriptions', methods=['GET'])
-def list_subscriptions():
-    """
-    List subscriptions with optional filters.
+@billing_admin_bp.route('/dlq', methods=['GET'])
+def dlq_list():
+    auth_error = _require_admin()
+    if auth_error:
+        return _error(auth_error, 'UNAUTHORIZED', 401)
 
-    Query params:
-        status: Filter by status (e.g., past_due, suspended)
-        domain: Filter by product_domain
-        limit: Max results (default 50, max 200)
-        offset: Pagination offset
-    """
-    if not _require_admin():
-        return _error('Unauthorized', 'UNAUTHORIZED', 401)
+    status_filter = request.args.get('status')
+    source_filter = request.args.get('source')
+    limit = min(int(request.args.get('limit', 50)), 200)
+    offset = int(request.args.get('offset', 0))
 
     try:
-        supabase = _get_supabase()
-
-        status_filter = request.args.get('status')
-        domain_filter = request.args.get('domain')
-        limit = min(int(request.args.get('limit', 50)), 200)
-        offset = int(request.args.get('offset', 0))
-
-        query = supabase.table('subscriptions').select(
-            'id, user_id, product_domain, status, plan_name, '
-            'current_period_start, current_period_end, grace_period_end, '
-            'last_payment_failure_at, payment_retry_count, '
-            'suspended_at, suspension_reason, '
-            'razorpay_subscription_id, created_at, updated_at',
-            count='exact'
+        from services.webhook_dlq_service import get_dlq_entries
+        result = get_dlq_entries(
+            status=status_filter or None,
+            source=source_filter or None,
+            limit=limit,
+            offset=offset,
         )
-
-        if status_filter:
-            query = query.eq('status', status_filter)
-        if domain_filter:
-            query = query.eq('product_domain', domain_filter)
-
-        result = query.order('updated_at', desc=True).range(
-            offset, offset + limit - 1
-        ).execute()
-
         return _success({
-            'subscriptions': result.data or [],
-            'total': result.count or 0,
-            'limit': limit,
-            'offset': offset,
+            'entries': result['entries'],
+            'total': result['total'],
+            'limit': result['limit'],
+            'offset': result['offset'],
         })
-
     except Exception as e:
-        logger.error(f"list_subscriptions_error: {e}", exc_info=True)
-        return _error('Failed to list subscriptions', 'INTERNAL_ERROR', 500)
+        logger.error(f"admin_dlq_list_error: {e}", exc_info=True)
+        return _error(str(e), 'INTERNAL_ERROR', 500)
 
 
-# =============================================================================
-# GET /api/admin/billing/events
-# =============================================================================
-
-@billing_admin_bp.route('/events', methods=['GET'])
-def list_billing_events():
-    """
-    Query billing events with filters.
-
-    Query params:
-        subscription_id: Filter by subscription
-        user_id: Filter by user
-        event_type: Filter by type
-        limit: Max results (default 50)
-        offset: Pagination offset
-    """
-    if not _require_admin():
-        return _error('Unauthorized', 'UNAUTHORIZED', 401)
+@billing_admin_bp.route('/dlq/<dlq_id>', methods=['GET'])
+def dlq_detail(dlq_id: str):
+    auth_error = _require_admin()
+    if auth_error:
+        return _error(auth_error, 'UNAUTHORIZED', 401)
 
     try:
-        supabase = _get_supabase()
-
-        limit = min(int(request.args.get('limit', 50)), 200)
-        offset = int(request.args.get('offset', 0))
-
-        query = supabase.table('billing_events').select('*', count='exact')
-
-        sub_id = request.args.get('subscription_id')
-        user_id = request.args.get('user_id')
-        event_type = request.args.get('event_type')
-
-        if sub_id:
-            query = query.eq('subscription_id', sub_id)
-        if user_id:
-            query = query.eq('user_id', user_id)
-        if event_type:
-            query = query.eq('event_type', event_type)
-
-        result = query.order('created_at', desc=True).range(
-            offset, offset + limit - 1
-        ).execute()
-
-        return _success({
-            'events': result.data or [],
-            'total': result.count or 0,
-            'limit': limit,
-            'offset': offset,
-        })
-
+        from services.webhook_dlq_service import get_dlq_entry
+        entry = get_dlq_entry(dlq_id)
+        if not entry:
+            return _error('DLQ entry not found', 'NOT_FOUND', 404)
+        return _success({'entry': entry})
     except Exception as e:
-        logger.error(f"list_events_error: {e}", exc_info=True)
-        return _error('Failed to list events', 'INTERNAL_ERROR', 500)
+        logger.error(f"admin_dlq_detail_error dlq_id={dlq_id}: {e}", exc_info=True)
+        return _error(str(e), 'INTERNAL_ERROR', 500)
 
 
 # =============================================================================
-# GET /api/admin/billing/retries
+# DLQ ACTIONS: REPLAY / RESOLVE / DISMISS
 # =============================================================================
 
-@billing_admin_bp.route('/retries', methods=['GET'])
-def list_retries():
-    """List payment retries, optionally filtered by status."""
-    if not _require_admin():
-        return _error('Unauthorized', 'UNAUTHORIZED', 401)
+@billing_admin_bp.route('/dlq/<dlq_id>/replay', methods=['POST'])
+def dlq_replay(dlq_id: str):
+    auth_error = _require_admin()
+    if auth_error:
+        return _error(auth_error, 'UNAUTHORIZED', 401)
+
+    reviewed_by = request.headers.get('X-Admin-User', 'admin')
+    data = request.get_json(silent=True) or {}
+    resolution_note = data.get('note', '')
 
     try:
-        supabase = _get_supabase()
-
-        status_filter = request.args.get('status', 'pending')
-        limit = min(int(request.args.get('limit', 50)), 200)
-
-        query = supabase.table('payment_retries').select('*', count='exact')
-        if status_filter != 'all':
-            query = query.eq('status', status_filter)
-
-        result = query.order('scheduled_at').limit(limit).execute()
-
-        return _success({
-            'retries': result.data or [],
-            'total': result.count or 0,
-        })
-
-    except Exception as e:
-        logger.error(f"list_retries_error: {e}", exc_info=True)
-        return _error('Failed to list retries', 'INTERNAL_ERROR', 500)
-
-
-# =============================================================================
-# GET /api/admin/billing/suspensions
-# =============================================================================
-
-@billing_admin_bp.route('/suspensions', methods=['GET'])
-def list_suspensions():
-    """List active (unreactivated) suspensions."""
-    if not _require_admin():
-        return _error('Unauthorized', 'UNAUTHORIZED', 401)
-
-    try:
-        supabase = _get_supabase()
-
-        active_only = request.args.get('active_only', 'true') == 'true'
-        limit = min(int(request.args.get('limit', 50)), 200)
-
-        query = supabase.table('account_suspensions').select('*', count='exact')
-        if active_only:
-            query = query.is_('reactivated_at', 'null')
-
-        result = query.order('suspended_at', desc=True).limit(limit).execute()
-
-        return _success({
-            'suspensions': result.data or [],
-            'total': result.count or 0,
-        })
-
-    except Exception as e:
-        logger.error(f"list_suspensions_error: {e}", exc_info=True)
-        return _error('Failed to list suspensions', 'INTERNAL_ERROR', 500)
-
-
-# =============================================================================
-# GET /api/admin/billing/mrr
-# =============================================================================
-
-@billing_admin_bp.route('/mrr', methods=['GET'])
-def get_mrr():
-    """Get MRR breakdown by plan and domain."""
-    if not _require_admin():
-        return _error('Unauthorized', 'UNAUTHORIZED', 401)
-
-    try:
-        from tasks.billing_monitor import generate_mrr_report
-        report = generate_mrr_report.apply().get(timeout=30)
-        return _success({'report': report})
-    except Exception as e:
-        logger.error(f"mrr_report_error: {e}", exc_info=True)
-        return _error('Failed to generate report', 'INTERNAL_ERROR', 500)
-
-
-# =============================================================================
-# POST /api/admin/billing/reactivate
-# =============================================================================
-
-@billing_admin_bp.route('/reactivate', methods=['POST'])
-def admin_reactivate():
-    """
-    Manually reactivate a subscription.
-
-    Request: { "subscription_id": "uuid" }
-    """
-    if not _require_admin():
-        return _error('Unauthorized', 'UNAUTHORIZED', 401)
-
-    try:
-        data = request.get_json() or {}
-        sub_id = data.get('subscription_id')
-        if not sub_id:
-            return _error('subscription_id required', 'MISSING_FIELD', 400)
-
-        from services.subscription_lifecycle import get_lifecycle_engine
-        engine = get_lifecycle_engine()
-
-        success = engine.reactivate_subscription(
-            subscription_id=sub_id,
-            reason='Manual admin reactivation',
-            reactivated_by='admin_action',
-        )
-
-        if success:
-            return _success({'reactivated': True, 'subscription_id': sub_id})
-        else:
-            return _error(
-                'Could not reactivate (subscription may already be active or not found)',
-                'REACTIVATION_FAILED', 400
-            )
-
-    except Exception as e:
-        logger.error(f"admin_reactivate_error: {e}", exc_info=True)
-        return _error('Reactivation failed', 'INTERNAL_ERROR', 500)
-
-
-# =============================================================================
-# POST /api/admin/billing/suspend
-# =============================================================================
-
-@billing_admin_bp.route('/suspend', methods=['POST'])
-def admin_suspend():
-    """
-    Manually suspend a subscription.
-
-    Request: { "subscription_id": "uuid", "reason": "..." }
-    """
-    if not _require_admin():
-        return _error('Unauthorized', 'UNAUTHORIZED', 401)
-
-    try:
-        data = request.get_json() or {}
-        sub_id = data.get('subscription_id')
-        reason = data.get('reason', 'Admin-initiated suspension')
-
-        if not sub_id:
-            return _error('subscription_id required', 'MISSING_FIELD', 400)
-
-        from services.subscription_lifecycle import get_lifecycle_engine
-        engine = get_lifecycle_engine()
-
-        success = engine.suspend_subscription(
-            subscription_id=sub_id,
-            reason=reason,
-            triggered_by='admin_action',
-        )
-
-        if success:
-            return _success({'suspended': True, 'subscription_id': sub_id})
-        else:
-            return _error(
-                'Could not suspend (subscription may already be suspended or not found)',
-                'SUSPENSION_FAILED', 400
-            )
-
-    except Exception as e:
-        logger.error(f"admin_suspend_error: {e}", exc_info=True)
-        return _error('Suspension failed', 'INTERNAL_ERROR', 500)
-
-
-# =============================================================================
-# POST /api/admin/billing/run-monitor
-# =============================================================================
-
-@billing_admin_bp.route('/run-monitor', methods=['POST'])
-def trigger_monitor():
-    """
-    Manually trigger a billing monitor cycle.
-
-    Tries to queue via Celery first. Falls back to running synchronously
-    if Celery is not available (useful for local testing without a worker).
-    """
-    if not _require_admin():
-        return _error('Unauthorized', 'UNAUTHORIZED', 401)
-
-    try:
-        from tasks.billing_monitor import run_billing_cycle
-
-        # Try async via Celery first
-        try:
-            task = run_billing_cycle.delay()
+        from services.webhook_dlq_service import replay_entry
+        result = replay_entry(dlq_id, reviewed_by=reviewed_by)
+        if result.get('success'):
             return _success({
-                'triggered': True,
-                'mode': 'async',
-                'task_id': task.id,
-                'message': 'Billing monitor cycle queued in Celery',
+                'message': 'DLQ entry replayed',
+                'dlq_id': dlq_id,
+                'reviewed_by': reviewed_by,
             })
-        except Exception:
-            # Celery not running — run synchronously (local dev / test)
-            logger.info("Celery unavailable, running billing cycle synchronously")
-            result = run_billing_cycle()
-            return _success({
-                'triggered': True,
-                'mode': 'sync',
-                'result': result,
-                'message': 'Billing monitor cycle completed synchronously',
-            })
-
+        return _error(result.get('error', 'Replay failed'), 'REPLAY_FAILED', 500)
     except Exception as e:
-        logger.error(f"trigger_monitor_error: {e}", exc_info=True)
-        return _error('Failed to trigger monitor', 'INTERNAL_ERROR', 500)
+        logger.error(f"admin_dlq_replay_error dlq_id={dlq_id}: {e}", exc_info=True)
+        return _error(str(e), 'INTERNAL_ERROR', 500)
 
 
-# =============================================================================
-# GET /api/admin/billing/subscription/:id/history
-# =============================================================================
+@billing_admin_bp.route('/dlq/<dlq_id>/resolve', methods=['POST'])
+def dlq_resolve(dlq_id: str):
+    auth_error = _require_admin()
+    if auth_error:
+        return _error(auth_error, 'UNAUTHORIZED', 401)
 
-@billing_admin_bp.route('/subscription/<subscription_id>/history', methods=['GET'])
-def subscription_history(subscription_id):
-    """Get full state transition history for a subscription."""
-    if not _require_admin():
-        return _error('Unauthorized', 'UNAUTHORIZED', 401)
+    reviewed_by = request.headers.get('X-Admin-User', 'admin')
+    data = request.get_json(silent=True) or {}
+    resolution_note = data.get('note', '')
+
+    if not resolution_note:
+        return _error('resolution note is required to resolve', 'VALIDATION_ERROR')
 
     try:
-        supabase = _get_supabase()
+        from services.webhook_dlq_service import resolve_entry
+        success = resolve_entry(dlq_id, reviewed_by, resolution_note)
+        if success:
+            return _success({'message': 'DLQ entry resolved', 'dlq_id': dlq_id})
+        return _error('Failed to resolve DLQ entry', 'RESOLVE_FAILED', 500)
+    except Exception as e:
+        logger.error(f"admin_dlq_resolve_error dlq_id={dlq_id}: {e}", exc_info=True)
+        return _error(str(e), 'INTERNAL_ERROR', 500)
 
-        # Get status history
-        history = supabase.table('subscription_status_history').select('*').eq(
-            'subscription_id', subscription_id
-        ).order('created_at', desc=True).limit(100).execute()
 
-        # Get billing events
-        events = supabase.table('billing_events').select('*').eq(
-            'subscription_id', subscription_id
-        ).order('created_at', desc=True).limit(100).execute()
+@billing_admin_bp.route('/dlq/<dlq_id>/dismiss', methods=['POST'])
+def dlq_dismiss(dlq_id: str):
+    auth_error = _require_admin()
+    if auth_error:
+        return _error(auth_error, 'UNAUTHORIZED', 401)
 
-        # Get retry history
-        retries = supabase.table('payment_retries').select('*').eq(
-            'subscription_id', subscription_id
-        ).order('created_at', desc=True).limit(50).execute()
+    reviewed_by = request.headers.get('X-Admin-User', 'admin')
+    data = request.get_json(silent=True) or {}
+    resolution_note = data.get('note', '')
+
+    try:
+        from services.webhook_dlq_service import dismiss_entry
+        success = dismiss_entry(dlq_id, reviewed_by, resolution_note)
+        if success:
+            return _success({'message': 'DLQ entry dismissed', 'dlq_id': dlq_id})
+        return _error('Failed to dismiss DLQ entry', 'DISMISS_FAILED', 500)
+    except Exception as e:
+        logger.error(f"admin_dlq_dismiss_error dlq_id={dlq_id}: {e}", exc_info=True)
+        return _error(str(e), 'INTERNAL_ERROR', 500)
+
+
+# =============================================================================
+# DLQ STATS
+# =============================================================================
+
+@billing_admin_bp.route('/dlq/stats', methods=['GET'])
+def dlq_stats():
+    auth_error = _require_admin()
+    if auth_error:
+        return _error(auth_error, 'UNAUTHORIZED', 401)
+
+    try:
+        from services.webhook_dlq_service import get_dlq_stats
+        stats = get_dlq_stats()
+        return _success({'stats': stats})
+    except Exception as e:
+        logger.error(f"admin_dlq_stats_error: {e}", exc_info=True)
+        return _error(str(e), 'INTERNAL_ERROR', 500)
+
+
+# =============================================================================
+# RECONCILIATION MONITORING
+# =============================================================================
+
+@billing_admin_bp.route('/reconciliation', methods=['GET'])
+def reconciliation_status():
+    auth_error = _require_admin()
+    if auth_error:
+        return _error(auth_error, 'UNAUTHORIZED', 401)
+
+    domain = request.args.get('domain')
+    limit = min(int(request.args.get('limit', 20)), 100)
+
+    try:
+        from supabase_client import get_supabase_client
+        db = get_supabase_client()
+
+        query = db.table('subscription_events') \
+            .select('id, subscription_id, event_type, new_status, reason, actor, created_at') \
+            .eq('actor', 'reconciliation_engine') \
+            .order('id', desc=True) \
+            .limit(limit)
+
+        if domain:
+            query = query.eq('product_domain', domain)
+
+        result = query.execute()
 
         return _success({
-            'status_history': history.data or [],
-            'billing_events': events.data or [],
-            'payment_retries': retries.data or [],
+            'reconciliation_events': result.data or [],
+            'total': len(result.data or []),
         })
 
     except Exception as e:
-        logger.error(f"subscription_history_error: {e}", exc_info=True)
-        return _error('Failed to load history', 'INTERNAL_ERROR', 500)
+        logger.error(f"admin_reconciliation_error: {e}", exc_info=True)
+        return _error(str(e), 'INTERNAL_ERROR', 500)
+
+
+# =============================================================================
+# PROJECTION LAG
+# =============================================================================
+
+@billing_admin_bp.route('/projection/lag', methods=['GET'])
+def projection_lag():
+    auth_error = _require_admin()
+    if auth_error:
+        return _error(auth_error, 'UNAUTHORIZED', 401)
+
+    try:
+        from supabase_client import get_supabase_client
+        db = get_supabase_client()
+
+        result = db.table('projection_checkpoints') \
+            .select('*') \
+            .eq('projector_name', 'subscription_status') \
+            .single() \
+            .execute()
+
+        return _success({'checkpoint': result.data})
+
+    except Exception as e:
+        logger.error(f"admin_projection_lag_error: {e}", exc_info=True)
+        return _error(str(e), 'INTERNAL_ERROR', 500)
+
+
+# =============================================================================
+# RUNTIME FLAGS ADMIN
+# =============================================================================
+
+@billing_admin_bp.route('/flags', methods=['GET'])
+def list_runtime_flags():
+    auth_error = _require_admin()
+    if auth_error:
+        return _error(auth_error, 'UNAUTHORIZED', 401)
+    try:
+        from config.billing_flags import get_all_flags
+        return _success({'flags': get_all_flags(force_refresh=True)})
+    except Exception as e:
+        logger.error(f"admin_flags_list_error: {e}", exc_info=True)
+        return _error(str(e), 'INTERNAL_ERROR', 500)
+
+
+@billing_admin_bp.route('/flags/<flag_key>', methods=['PUT'])
+def update_runtime_flag(flag_key: str):
+    auth_error = _require_admin()
+    if auth_error:
+        return _error(auth_error, 'UNAUTHORIZED', 401)
+    body = request.get_json(silent=True) or {}
+    value = body.get('value')
+    reason = (body.get('reason') or '').strip()
+    actor = request.headers.get('X-Admin-Actor', 'admin_api')
+    if value is None:
+        return _error('value is required', 'VALIDATION_ERROR', 400)
+    if len(reason) < 5:
+        return _error('reason required (min 5 chars)', 'VALIDATION_ERROR', 400)
+    try:
+        from supabase_client import get_supabase_client
+        from config.billing_flags import invalidate_cache
+        db = get_supabase_client()
+        import json as json_lib
+        flag_value = value if isinstance(value, (dict, list)) else json_lib.loads(json_lib.dumps(value))
+        db.rpc('update_billing_runtime_flag', {
+            'p_key': flag_key,
+            'p_value': flag_value,
+            'p_reason': reason,
+            'p_actor': actor,
+        }).execute()
+        invalidate_cache()
+        logger.warning(
+            f"billing_flag_updated key={flag_key} actor={actor} reason={reason[:80]}"
+        )
+        return _success({'flag_key': flag_key, 'value': flag_value})
+    except Exception as e:
+        logger.error(f"admin_flag_update_error key={flag_key}: {e}", exc_info=True)
+        return _error(str(e), 'INTERNAL_ERROR', 500)
+
+
+@billing_admin_bp.route('/flags/audit', methods=['GET'])
+def list_flag_audit():
+    auth_error = _require_admin()
+    if auth_error:
+        return _error(auth_error, 'UNAUTHORIZED', 401)
+    try:
+        from supabase_client import get_supabase_client
+        db = get_supabase_client()
+        limit = min(int(request.args.get('limit', 50)), 200)
+        result = db.table('billing_runtime_flags_audit').select('*').order(
+            'changed_at', desc=True
+        ).limit(limit).execute()
+        return _success({'audit': result.data or []})
+    except Exception as e:
+        logger.error(f"admin_flag_audit_error: {e}", exc_info=True)
+        return _error(str(e), 'INTERNAL_ERROR', 500)

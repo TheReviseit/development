@@ -23,6 +23,7 @@ import {
   openRazorpayCheckout,
   verifyPayment,
   clearPaymentRequestId,
+  loadRazorpayScript,
 } from "@/lib/api/razorpay";
 import type { ProductDomain } from "@/lib/product/types";
 import {
@@ -84,6 +85,7 @@ export function OnboardingFlowClient({
   const [connectionError, setConnectionError] = useState<string | null>(null);
   const [paymentLoading, setPaymentLoading] = useState<string | null>(null);
   const [paymentError, setPaymentError] = useState<string | null>(null);
+  const [paymentStage, setPaymentStage] = useState<string>("");
   const [wabaData, setWabaData] = useState<{
     wabaId: string;
     phoneNumberId: string;
@@ -181,6 +183,16 @@ export function OnboardingFlowClient({
   }, [checkOnboardingStatus, router]);
 
   // =========================================================================
+  // PRELOAD RAZORPAY SDK WHEN PRICING STEP IS ACTIVE
+  // =========================================================================
+
+  useEffect(() => {
+    if (step === "pricing") {
+      loadRazorpayScript();
+    }
+  }, [step]);
+
+  // =========================================================================
   // WHATSAPP CONNECTION HANDLERS
   // =========================================================================
 
@@ -217,6 +229,7 @@ export function OnboardingFlowClient({
 
     setPaymentLoading(plan.planId);
     setPaymentError(null);
+    setPaymentStage("Connecting to payment server...");
 
     try {
       console.log(
@@ -272,6 +285,7 @@ export function OnboardingFlowClient({
       }
 
       console.log("[Onboarding] Subscription created:", order.subscription_id);
+      setPaymentStage("Opening payment gateway...");
 
       // Open Razorpay checkout
       await openRazorpayCheckout({
@@ -438,6 +452,13 @@ export function OnboardingFlowClient({
               </div>
             )}
 
+            {paymentLoading && paymentStage && (
+              <div className="payment-progress">
+                <span className="spinner"></span>
+                <span className="payment-stage-text">{paymentStage}</span>
+              </div>
+            )}
+
             <div className="pricing-cards-grid">
               {plans.map((plan) => (
                 <div
@@ -484,12 +505,12 @@ export function OnboardingFlowClient({
                   <button
                     className={`plan-button ${plan.popular ? "primary" : ""}`}
                     onClick={() => handleSelectPlan(plan)}
-                    disabled={paymentLoading === plan.planId}
+                    disabled={paymentLoading !== null}
                   >
                     {paymentLoading === plan.planId ? (
                       <>
                         <span className="spinner"></span>
-                        Processing...
+                        {paymentStage || "Processing..."}
                       </>
                     ) : (
                       `Select ${plan.name}`

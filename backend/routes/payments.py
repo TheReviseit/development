@@ -28,6 +28,7 @@ try:
 except ImportError:
     HAS_GEVENT = False
 import requests
+from requests.adapters import HTTPAdapter
 from functools import wraps
 from flask import Blueprint, request, jsonify, g
 from datetime import datetime, timezone, timedelta
@@ -36,6 +37,14 @@ from contextlib import contextmanager
 
 # Configure logging
 logger = logging.getLogger('reviseit.payments')
+
+
+def _safe_request_id(default: str = 'checkout_worker') -> str:
+    """Request id for logging — safe outside Flask request/app context."""
+    try:
+        return getattr(g, 'request_id', default)
+    except RuntimeError:
+        return default
 
 # Import validation schemas
 try:
@@ -88,6 +97,44 @@ try:
 except ImportError:
     razorpay = None  # type: ignore
 
+# Razorpay HTTP session (connection pooling)
+_razorpay_http_session = None
+
+def _get_razorpay_http_session() -> requests.Session:
+    """
+    FAANG-level: Reusable HTTP session with connection pooling for Razorpay API calls.
+    
+    Connection pool:
+      - pool_connections=10: keep 10 connections alive
+      - pool_maxsize=20: allow up to 20 concurrent connections
+    This eliminates TCP handshake + TLS negotiation overhead on every call.
+    """
+    global _razorpay_http_session
+    if _razorpay_http_session is None:
+        from urllib3.util.retry import Retry
+        session = requests.Session()
+        
+        # Configure urllib3 to safely retry on dropped/stale connections (e.g. 10054 ConnectionResetError)
+        # without duplicating requests that might have reached the server.
+        retry_strategy = Retry(
+            total=3,
+            connect=3,
+            read=3,
+            status_forcelist=[429, 500, 502, 503, 504],
+            allowed_methods=["HEAD", "GET", "OPTIONS", "POST"],  # Allow POST because we use idempotency headers
+            backoff_factor=0.5
+        )
+        adapter = HTTPAdapter(
+            pool_connections=10,
+            pool_maxsize=20,
+            max_retries=retry_strategy,
+        )
+        session.mount('https://', adapter)
+        session.auth = (os.getenv('RAZORPAY_KEY_ID', ''), os.getenv('RAZORPAY_KEY_SECRET', ''))
+        _razorpay_http_session = session
+        logger.info("🔌 Razorpay HTTP session initialized (pool=10, max=20)")
+    return _razorpay_http_session
+
 # Razorpay client (lazy initialization)
 razorpay_client = None
 RAZORPAY_AVAILABLE = False
@@ -127,10 +174,26 @@ def get_razorpay_client():
     try:
         razorpay_client = razorpay.Client(auth=(RAZORPAY_KEY_ID, RAZORPAY_KEY_SECRET))
         if hasattr(razorpay_client, 'session'):
-            _client_session = _get_rzp_client().session
-            _client_session.timeout = 10
+            from requests.adapters import HTTPAdapter
+            from urllib3.util.retry import Retry
+            
+            retry_strategy = Retry(
+                total=3,
+                connect=3,
+                read=3,
+                status_forcelist=[429, 500, 502, 503, 504],
+                allowed_methods=["HEAD", "GET", "OPTIONS", "POST"],
+                backoff_factor=0.5
+            )
+            adapter = HTTPAdapter(
+                pool_connections=10,
+                pool_maxsize=20,
+                max_retries=retry_strategy
+            )
+            razorpay_client.session.mount('https://', adapter)
+            razorpay_client.session.timeout = 10
         RAZORPAY_AVAILABLE = True
-        logger.info("✅ Razorpay client initialized (10s timeout)")
+        logger.info("✅ Razorpay client initialized (10s timeout, auto-retry configured)")
         return razorpay_client
     except Exception as e:
         logger.error(f"❌ Failed to initialize Razorpay client: {e}")
@@ -426,7 +489,7 @@ def record_webhook_event(event_id: str, event_type: str, subscription_id: str = 
     if not SUPABASE_AVAILABLE:
         return True  # Allow if no DB
     
-    request_id = getattr(g, 'request_id', 'unknown')
+    request_id = _safe_request_id('checkout_worker')
     
     try:
         supabase = get_supabase_client()
@@ -485,7 +548,7 @@ def upsert_payment_history(
     if not SUPABASE_AVAILABLE:
         return {'success': True, 'is_new': True, 'payment_id': razorpay_payment_id}
     
-    request_id = getattr(g, 'request_id', 'unknown')
+    request_id = _safe_request_id('checkout_worker')
     
     if not razorpay_payment_id:
         logger.warning(f"[{request_id}] Attempted to insert payment without payment_id")
@@ -561,7 +624,7 @@ def safe_insert_payment_history(
     if not SUPABASE_AVAILABLE:
         return {'success': True, 'is_new': True}
     
-    request_id = getattr(g, 'request_id', 'unknown')
+    request_id = _safe_request_id('checkout_worker')
     
     if not razorpay_payment_id:
         logger.warning(f"[{request_id}] Attempted to insert payment without payment_id")
@@ -618,7 +681,7 @@ def update_subscription_status(
     if not SUPABASE_AVAILABLE:
         return {'success': True, 'updated': True}
     
-    request_id = getattr(g, 'request_id', 'unknown')
+    request_id = _safe_request_id('checkout_worker')
     
     try:
         supabase = get_supabase_client()
@@ -765,17 +828,40 @@ def create_razorpay_subscription(data, idempotency_key=None):
     """
     Create Razorpay subscription with idempotency header support.
     
-    Uses raw requests library instead of razorpay-python SDK to pass
-    the X-Razorpay-Idempotency-Key header. The Python SDK's create()
-    does not support custom headers, making retries dangerous.
+    Uses connection-pooled requests.Session to eliminate TCP/TLS overhead.
+    Timeout: connect=5s, read=10s — fail fast on network issues.
     
-    With this fix, if a subscription is created on Razorpay's side but
-    the HTTP response is lost (network issue), the retry with the same
-    idempotency key will return the existing subscription instead of
-    creating a duplicate.
+    The raw requests approach is intentional: the razorpay-python SDK's
+    create() does not support custom headers (needed for idempotency).
+    
+    With idempotency keys, if a subscription is created on Razorpay's side
+    but the HTTP response is lost (network issue), the retry returns the
+    existing subscription instead of creating a duplicate.
+    
+    Traced as 'razorpay.api.create_subscription' with plan_id and idempotency
+    attributes for end-to-end distributed tracing.
     """
-    import requests as _requests
+    try:
+        from services.billing_tracing import span_context, billing_attributes
+        _span_ctx = span_context(
+            "razorpay.api.create_subscription",
+            attributes=billing_attributes(
+                plan_slug=data.get('notes', {}).get('plan_slug') if isinstance(data.get('notes'), dict) else None,
+                checkout_token=data.get('notes', {}).get('checkout_token') if isinstance(data.get('notes'), dict) else None,
+            ),
+        )
+        _do_trace = True
+    except ImportError:
+        _do_trace = False
 
+    if _do_trace:
+        with _span_ctx:
+            return _do_create_razorpay_subscription(data, idempotency_key)
+    return _do_create_razorpay_subscription(data, idempotency_key)
+
+
+def _do_create_razorpay_subscription(data, idempotency_key=None):
+    """Internal: raw HTTP call to Razorpay API."""
     url = 'https://api.razorpay.com/v1/subscriptions'
     headers = {
         'Content-Type': 'application/json',
@@ -783,17 +869,21 @@ def create_razorpay_subscription(data, idempotency_key=None):
     if idempotency_key:
         headers['X-Razorpay-Idempotency-Key'] = idempotency_key
 
-    response = _requests.post(
+    session = _get_razorpay_http_session()
+    response = session.post(
         url,
-        auth=(RAZORPAY_KEY_ID, RAZORPAY_KEY_SECRET),
         json=data,
         headers=headers,
-        timeout=(30, 25),
+        timeout=(5, 10),
     )
 
     if response.status_code == 409:
         error_data = response.json()
-        existing_id = error_data.get('error', {}).get('field', '')
+        error_obj = error_data.get('error', {}) or {}
+        existing_id = (
+            (error_obj.get('metadata') or {}).get('resource_id')
+            or error_obj.get('field', '')
+        )
         logger.warning(
             f"Razorpay idempotency hit: {existing_id} "
             f"(key={idempotency_key[:20] if idempotency_key else 'none'}...)"
@@ -816,7 +906,7 @@ def get_razorpay_customer_id_new(user_id: str) -> Optional[str]:
     if not SUPABASE_AVAILABLE:
         return None
     
-    request_id = getattr(g, 'request_id', 'unknown')
+    request_id = _safe_request_id('checkout_worker')
     
     try:
         supabase = get_supabase_client()
@@ -854,7 +944,7 @@ def store_razorpay_customer_new(
     if not SUPABASE_AVAILABLE:
         return True
     
-    request_id = getattr(g, 'request_id', 'unknown')
+    request_id = _safe_request_id('checkout_worker')
     
     try:
         supabase = get_supabase_client()
@@ -892,17 +982,54 @@ def store_razorpay_customer_new(
         return True  # Don't block flow, customer ID will be saved on subscription row anyway
 
 
+def recover_razorpay_customer_by_email(email: str) -> Optional[str]:
+    """
+    Recover an existing Razorpay customer ID by email.
+
+    Used when customer.create() returns 'already exists' but our DB has no row
+    (account re-created, DB wiped, or async worker missed prior persistence).
+    """
+    if not email:
+        return None
+
+    request_id = _safe_request_id('checkout_worker')
+    try:
+        all_customers = _get_rzp_client().customer.all({'count': 100})
+        existing = next(
+            (c for c in all_customers.get('items', []) if c.get('email') == email),
+            None,
+        )
+        if existing:
+            customer_id = existing['id']
+            logger.info(
+                f"[{request_id}] ✅ Recovered Razorpay customer by email: {customer_id}"
+            )
+            return customer_id
+        logger.error(
+            f"[{request_id}] Customer 'already exists' but not found via API lookup "
+            f"email={email}"
+        )
+    except Exception as e:
+        logger.error(f"[{request_id}] recover_razorpay_customer_by_email failed: {e}")
+
+    return None
+
+
 @payments_bp.route('/subscriptions/create', methods=['POST'])
 @require_razorpay
 @require_auth
 def create_subscription():
     """
     Create a new Razorpay subscription.
-    
-    Uses stable idempotency key: hash(user_id + plan_id + currency + interval)
-    
-    State: Creates subscription with status=PENDING
+
+    DEPRECATED: Use POST /api/billing/create-subscription (async, production path).
     """
+    return error_response(
+        'This endpoint is deprecated. Use /api/billing/create-subscription.',
+        'USE_BILLING_API',
+        410,
+    )
+
     request_id = g.request_id
     user_id = g.user_id
     
@@ -1347,7 +1474,7 @@ def create_subscription():
                 'request_id': request_id
             }
         }
-        subscription = create_razorpay_subscription(subscription_data)
+        subscription = create_razorpay_subscription(subscription_data, idempotency_key=idempotency_key)
         
         # =================================================================
         # STEP 3: Store with billing immutability (UPDATE or INSERT)
@@ -1766,7 +1893,7 @@ def get_subscription_status():
             return error_response('Database not available', 'DB_UNAVAILABLE', 503)
         
         # Check cache first (10 second TTL to reduce database load from polling)
-        cache_key = f"subscription_status:{user_id}"
+        cache_key = f"subscription_status:{user_id}:{product_domain}"
         if cache_manager:
             cached_response = cache_manager.get(cache_key)
             if cached_response:
@@ -1774,10 +1901,20 @@ def get_subscription_status():
         
         supabase = get_supabase_client()
         
-        # Get most recent subscription (any status for status check)
-        result = supabase.table('subscriptions').select('*').eq(
+        product_domain = getattr(g, 'product_domain', None) or request.headers.get('X-Product-Domain') or 'shop'
+        
+        # Domain-scoped: prefer subscription_current authoritative row
+        result = supabase.table('subscription_current').select('*').eq(
             'user_id', user_id
-        ).order('created_at', desc=True).limit(1).execute()
+        ).eq('product_domain', product_domain).limit(1).execute()
+        
+        if not result.data:
+            # Fallback: latest subscription for this domain (any status)
+            result = supabase.table('subscriptions').select('*').eq(
+                'user_id', user_id
+            ).eq('product_domain', product_domain).order(
+                'created_at', desc=True
+            ).limit(1).execute()
         
         if not result.data:
             return success_response({
@@ -1798,6 +1935,8 @@ def get_subscription_status():
         # Derive from pricing_plan_id when available so feature gates (e.g.
         # canAccessAnalytics checks plan_name !== "starter") are always correct.
         plan_name = subscription.get('plan_name') or 'starter'
+        if subscription.get('authoritative_plan_slug'):
+            plan_name = subscription['authoritative_plan_slug']
         pricing_plan_id = subscription.get('pricing_plan_id')
         if pricing_plan_id:
             try:
@@ -2252,7 +2391,7 @@ def extract_event_metadata(event: Dict) -> Dict:
 
 def process_subscription_activated(meta: Dict) -> WebhookResult:
     """Handle subscription.activated event — supports both new subscriptions and upgrades."""
-    request_id = getattr(g, 'request_id', 'unknown')
+    request_id = _safe_request_id('checkout_worker')
     sub_data = meta['subscription_data']
     sub_id = meta['subscription_id']
 
@@ -2366,7 +2505,7 @@ def process_subscription_charged(meta: Dict) -> WebhookResult:
     PLAN CHANGE: If pending_plan_slug is set, atomically applies the
     pending plan change via the apply_plan_change() DB function.
     """
-    request_id = getattr(g, 'request_id', 'unknown')
+    request_id = _safe_request_id('checkout_worker')
     sub_data = meta['subscription_data']
     payment_data = meta['payment_data']
     sub_id = meta['subscription_id']
@@ -2469,7 +2608,7 @@ def process_subscription_charged(meta: Dict) -> WebhookResult:
 
 def process_subscription_cancelled(meta: Dict) -> WebhookResult:
     """Handle subscription.cancelled event."""
-    request_id = getattr(g, 'request_id', 'unknown')
+    request_id = _safe_request_id('checkout_worker')
     sub_id = meta['subscription_id']
     
     if not sub_id:
@@ -2488,7 +2627,7 @@ def process_subscription_cancelled(meta: Dict) -> WebhookResult:
 
 def process_subscription_halted(meta: Dict) -> WebhookResult:
     """Handle subscription.halted event."""
-    request_id = getattr(g, 'request_id', 'unknown')
+    request_id = _safe_request_id('checkout_worker')
     sub_id = meta['subscription_id']
     
     if not sub_id:
@@ -2507,7 +2646,7 @@ def process_subscription_halted(meta: Dict) -> WebhookResult:
 
 def process_subscription_paused(meta: Dict) -> WebhookResult:
     """Handle subscription.paused event."""
-    request_id = getattr(g, 'request_id', 'unknown')
+    request_id = _safe_request_id('checkout_worker')
     sub_id = meta['subscription_id']
     
     if not sub_id:
@@ -2525,7 +2664,7 @@ def process_subscription_paused(meta: Dict) -> WebhookResult:
 
 def process_subscription_resumed(meta: Dict) -> WebhookResult:
     """Handle subscription.resumed event."""
-    request_id = getattr(g, 'request_id', 'unknown')
+    request_id = _safe_request_id('checkout_worker')
     sub_id = meta['subscription_id']
     
     if not sub_id:
@@ -2555,7 +2694,7 @@ def process_payment_captured(meta: Dict) -> WebhookResult:
     3. Call subscription.update(schedule_change_at='cycle_end')
     4. Set plan_change_locked = TRUE
     """
-    request_id = getattr(g, 'request_id', 'unknown')
+    request_id = _safe_request_id('checkout_worker')
     payment_data = meta['payment_data']
     payment_id = meta['payment_id']
     event_id = meta['event_id']
@@ -2623,7 +2762,7 @@ def process_payment_failed(meta: Dict) -> WebhookResult:
     PLAN CHANGE: If the payment was for a proration order, clears all
     pending state so the user can re-attempt the upgrade.
     """
-    request_id = getattr(g, 'request_id', 'unknown')
+    request_id = _safe_request_id('checkout_worker')
     payment_data = meta['payment_data']
     
     error_code = payment_data.get('error_code', 'unknown')
@@ -2679,7 +2818,7 @@ def process_subscription_updated(meta: Dict) -> WebhookResult:
     We log this for audit but don't apply the plan change here —
     the actual application happens in subscription.charged on the next cycle.
     """
-    request_id = getattr(g, 'request_id', 'unknown')
+    request_id = _safe_request_id('checkout_worker')
     sub_data = meta['subscription_data']
     sub_id = meta['subscription_id']
     event_id = meta['event_id']
@@ -2798,133 +2937,17 @@ def health_check():
 @payments_bp.route('/payments/webhook', methods=['POST'])
 def razorpay_webhook():
     """
-    Handle Razorpay webhook events - Production Grade.
+    DEPRECATED — Legacy webhook endpoint.
     
-    CRITICAL PATTERNS:
-    1. Uses RAW body for signature verification (before any parsing)
-    2. ALWAYS returns 200 for duplicates (never 400/500)
-    3. Payment-level idempotency via UPSERT
-    4. Event-level deduplication via webhook_events table
-    5. Event ordering safety (ignores outdated events)
-    6. Structured error handling - only 400 for invalid signature/payload
-    
-    RESPONSE CODES:
-    - 200: Success, duplicate, or any business logic outcome
-    - 400: Invalid signature or malformed payload ONLY
-    - 503: Database unavailable (Razorpay will retry)
+    All Razorpay webhooks must be sent to /api/webhooks/subscription instead.
+    This endpoint is preserved for backward compatibility but returns 410 Gone.
     """
-    # Generate request ID for tracing
-    g.request_id = generate_request_id()
-    request_id = g.request_id
-    
-    webhook_start = datetime.now(timezone.utc)
-    
-    try:
-        # ============================================================
-        # STEP 1: Get RAW body BEFORE any parsing (critical for signature)
-        # ============================================================
-        raw_body = request.get_data()
-        signature = request.headers.get('X-Razorpay-Signature', '')
-        
-        if not raw_body:
-            logger.warning(f"[{request_id}] Empty webhook body")
-            return WEBHOOK_INVALID_PAYLOAD.to_response()
-        
-        # ============================================================
-        # STEP 2: Verify webhook signature
-        # ============================================================
-        if not verify_webhook_signature_raw(raw_body, signature):
-            logger.warning(f"[{request_id}] Invalid webhook signature")
-            return WEBHOOK_INVALID_SIGNATURE.to_response()
-        
-        # ============================================================
-        # STEP 3: Parse event payload
-        # ============================================================
-        event = parse_webhook_event(raw_body)
-        if not event:
-            logger.warning(f"[{request_id}] Failed to parse webhook JSON")
-            return WEBHOOK_INVALID_PAYLOAD.to_response()
-        
-        # Extract standardized metadata
-        meta = extract_event_metadata(event)
-        event_id = meta['event_id']
-        event_type = meta['event_type']
-        
-        logger.info(f"[{request_id}] Webhook received: {event_type} (event_id={event_id})")
-        
-        # ============================================================
-        # STEP 4: Event-level deduplication
-        # ============================================================
-        is_new_event = record_webhook_event(
-            event_id=event_id,
-            event_type=event_type,
-            subscription_id=meta['subscription_id'],
-            payment_id=meta['payment_id'],
-            created_at=meta['created_at'],
-            result='processing',
-            raw_payload=meta['raw_payload']
-        )
-        
-        if not is_new_event:
-            logger.info(f"[{request_id}] Duplicate event ignored: {event_id}")
-            return WEBHOOK_DUPLICATE_EVENT.to_response()
-        
-        # ============================================================
-        # STEP 5: Database availability check
-        # ============================================================
-        if not SUPABASE_AVAILABLE:
-            logger.error(f"[{request_id}] Database unavailable for webhook processing")
-            return WEBHOOK_DB_UNAVAILABLE.to_response()
-        
-        # ============================================================
-        # STEP 6: Route to specific event handler
-        # ============================================================
-        handler = WEBHOOK_HANDLERS.get(event_type)
-        
-        if handler:
-            result = handler(meta)
-            
-            # Log processing time
-            duration = (datetime.now(timezone.utc) - webhook_start).total_seconds() * 1000
-            logger.info(f"[{request_id}] Webhook {event_type} processed in {duration:.0f}ms")
-            
-            return result.to_response()
-        else:
-            # Unknown event type - log and return 200 (don't make Razorpay retry)
-            logger.info(f"[{request_id}] Unhandled webhook event type: {event_type}")
-            return WEBHOOK_OK.to_response()
-        
-    except Exception as e:
-        # ============================================================
-        # CRITICAL: Determine if this is a retriable error
-        # ============================================================
-        error_str = str(e).lower()
-        request_id = getattr(g, 'request_id', 'unknown')
-        
-        # Check if this is a duplicate key error (should return 200)
-        if is_duplicate_error(e):
-            logger.info(f"[{request_id}] Webhook duplicate detected in exception handler: {e}")
-            return WEBHOOK_DUPLICATE_PAYMENT.to_response()
-        
-        # Check if this is a connection/timeout error (return 503 for retry)
-        is_transient = any(x in error_str for x in [
-            'connection', 'timeout', 'temporarily unavailable', 'reset by peer'
-        ])
-        
-        if is_transient:
-            logger.error(f"[{request_id}] Transient webhook error (will retry): {e}")
-            return jsonify({
-                'status': 'error',
-                'message': 'Temporary error, please retry'
-            }), 503
-        
-        # For all other errors, log but return 200 to prevent infinite retries
-        # The raw_payload is already stored in webhook_events for manual review
-        logger.exception(f"[{request_id}] Webhook processing error (non-retriable): {e}")
-        return jsonify({
-            'status': 'error_logged',
-            'message': 'Error logged for review'
-        }), 200
+    logger.warning("Legacy webhook endpoint called — use /api/webhooks/subscription")
+    return jsonify({
+        'status': 'deprecated',
+        'message': 'This webhook endpoint is deprecated. '
+                   'Please reconfigure Razorpay to send webhooks to /api/webhooks/subscription.',
+    }), 410
 
 
 # =============================================================================

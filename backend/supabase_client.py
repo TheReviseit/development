@@ -97,18 +97,20 @@ def get_supabase_client() -> Optional[Client]:
         return None
     
     try:
+        options = ClientOptions(
+            postgrest_client_timeout=10,
+            storage_client_timeout=10,
+            schema="public",
+            headers={"X-Client-Info": "flowauxi-backend"},
+        )
         _supabase_client = create_client(
             supabase_url,
             supabase_key,
-            options=ClientOptions(
-                postgrest_client_timeout=10,
-                schema='public',
-            )
+            options=options,
         )
-        print("✅ Supabase client initialized (pooled, 10s timeout)")
         return _supabase_client
     except Exception as e:
-        print(f"❌ Failed to initialize Supabase client: {e}")
+        print(f"[supabase_client] Failed to initialize: {e}")
         return None
 
 

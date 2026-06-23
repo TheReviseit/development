@@ -823,11 +823,10 @@ export default function OnboardingPageEmbedded() {
     setPaymentError(null);
 
     try {
-      const response = await fetch("/api/trials/internal/start", {
+      const response = await fetch("/api/trials/start", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "X-Internal-Api-Key": process.env.NEXT_PUBLIC_INTERNAL_API_KEY || "",
         },
         body: JSON.stringify({
           user_id: user.uid,
@@ -1017,6 +1016,7 @@ export default function OnboardingPageEmbedded() {
 
       if ((order as any).already_active) {
         setBillingRedirectInProgress(true);
+        releaseBillingAction();
         router.push(`/payment/status?subscription_id=${order.subscription_id}`);
         return;
       }

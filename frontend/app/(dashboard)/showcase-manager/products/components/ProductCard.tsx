@@ -1,7 +1,7 @@
 // Product Card Component for Showcase Dashboard
 // Uses nova card design from store
 
-import React from "react";
+import React, { useState } from "react";
 
 interface ProductCardProps {
   product: {
@@ -25,15 +25,17 @@ export default function ProductCard({
   onToggleVisibility,
   onDelete,
 }: ProductCardProps) {
+  const [imageError, setImageError] = useState(false);
   return (
     <div className="novaCard" onClick={onEdit}>
       {/* Image Container */}
       <div className="novaImageContainer">
-        {product.image_url ? (
+        {product.image_url && !imageError ? (
           <img
             src={product.image_url}
             alt={product.title}
             className="novaImage"
+            onError={() => setImageError(true)}
           />
         ) : (
           <div className="novaImagePlaceholder">

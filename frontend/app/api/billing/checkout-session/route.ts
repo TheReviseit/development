@@ -15,8 +15,11 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { proxyRequest, isBackendHealthy } from '@/lib/api/proxy-client';
+import { proxyRequest } from '@/lib/api/proxy-client';
+import { cb } from '@/lib/api/server-circuit-breaker';
 import { resolveContext } from '@/lib/api/context-resolver';
+
+export const maxDuration = 60; // Allow enough time for backend cold start and Razorpay API
 
 // =============================================================================
 // TYPES
@@ -203,6 +206,20 @@ function checkRateLimit(identifier: string): { allowed: boolean; retryAfter?: nu
 export async function POST(request: NextRequest): Promise<NextResponse> {
   const requestId = `checkout_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
 
+  if (process.env.VERCEL_ENV && process.env.ALLOW_SYNC_CHECKOUT !== "true") {
+    return NextResponse.json(
+      {
+        success: false,
+        error: {
+          code: "USE_ASYNC_CHECKOUT",
+          message: "Use async checkout via /api/billing/create-subscription",
+          redirect: "/api/billing/create-subscription",
+        },
+      },
+      { status: 410 },
+    );
+  }
+
   try {
     // -------------------------------------------------------------------------
     // STEP 1: AUTHENTICATION
@@ -299,8 +316,8 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     // -------------------------------------------------------------------------
     // STEP 4: CHECK BACKEND HEALTH
     // -------------------------------------------------------------------------
-    if (!isBackendHealthy()) {
-      console.error(`[Checkout] ${requestId} - Backend unhealthy, circuit breaker may be open`);
+    if (cb.isOpen()) {
+      console.error(`[Checkout] ${requestId} - Circuit breaker open`);
       
       return NextResponse.json(
         {
@@ -315,11 +332,8 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
         },
         { 
           status: 503,
-          headers: {
-            'Retry-After': '30',
-            'X-Request-ID': requestId,
-          },
-        }
+          headers: { 'Retry-After': '30', 'X-Request-ID': requestId },
+        },
       );
     }
     
@@ -388,6 +402,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       const data = proxyResult.data;
       
       if (data.success) {
+        cb.recordSuccess();
         console.log(`[Checkout] ${requestId} - Success, session created`);
         
         return NextResponse.json(
@@ -402,7 +417,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
           { headers: { 'X-Request-ID': requestId } }
         );
       } else {
-        // Backend returned success: false
+        if (proxyResult.statusCode >= 500) cb.recordFailure();
         console.log(`[Checkout] ${requestId} - Backend returned error: ${data.error?.code}`);
         
         return NextResponse.json(
@@ -418,7 +433,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       }
     }
     
-    // Proxy failed
+    if (proxyResult.statusCode >= 500) cb.recordFailure();
     console.error(`[Checkout] ${requestId} - Proxy failed:`, proxyResult.error);
     
     return NextResponse.json(

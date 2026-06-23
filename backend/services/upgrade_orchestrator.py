@@ -284,7 +284,7 @@ class UpgradeOrchestrator:
                 auth=(RAZORPAY_KEY_ID, RAZORPAY_KEY_SECRET),
                 json=subscription_data,
                 headers=_headers,
-                timeout=(30, 25),
+                timeout=(5, 15),
             )
 
             if _response.status_code == 409:
@@ -594,77 +594,22 @@ class UpgradeOrchestrator:
         )
 
         try:
-            # 1. Activate the new subscription row atomically
-            # FAANG-level: eq('status', 'pending_upgrade') ensures only one
-            # of {verify-payment, webhook} can win the race. If the other
-            # already activated this row, this UPDATE affects 0 rows.
-            result = self._supabase.table('subscriptions').update({
-                'status': 'active',
-                'current_period_start': event_data.get('current_period_start'),
-                'current_period_end': event_data.get('current_period_end'),
-                'updated_at': datetime.now(timezone.utc).isoformat()
-            }).eq('id', subscription_id).eq('status', 'pending_upgrade').execute()
+            from services.activation_service import activate_subscription
 
-            if not result.data:
-                self.logger.warning(
-                    "activate_upgrade_already_activated",
-                    extra={"subscription_id": subscription_id}
-                )
-                # Already active — return True (idempotent)
-                return True
-
-            # 2. Cancel the old active subscription (if linking info exists)
-            try:
-                if previous_sub_id:
-                    self._supabase.table('subscriptions').update({
-                        'status': 'cancelled',
-                        'cancelled_at': datetime.now(timezone.utc).isoformat(),
-                        'cancellation_reason': 'upgraded',
-                        'updated_at': datetime.now(timezone.utc).isoformat()
-                    }).eq('id', previous_sub_id).execute()
-                else:
-                    # Fallback: find and cancel any other ACTIVE sub for same user+domain
-                    self._supabase.table('subscriptions').update({
-                        'status': 'cancelled',
-                        'cancelled_at': datetime.now(timezone.utc).isoformat(),
-                        'cancellation_reason': 'upgraded',
-                        'updated_at': datetime.now(timezone.utc).isoformat()
-                    }).match({
-                        'user_id': user_id,
-                        'product_domain': domain,
-                        'status': 'active',
-                    }).neq('id', subscription_id).execute()
-            except Exception as cancel_old_err:
-                self.logger.warning(
-                    "activate_upgrade_old_sub_cancel_skipped",
-                    extra={
-                        "subscription_id": subscription_id,
-                        "previous_sub_id": previous_sub_id,
-                        "error": str(cancel_old_err)[:100]
-                    }
-                )
-
-            # 3. Reset usage counters for metered features
-            self._reset_usage_counters(user_id, domain)
-
-            # 4. Increment subscription version (invalidate caches)
-            self._increment_subscription_version(user_id, domain)
-
-            # 5. Invalidate all caches (belt + suspenders)
-            self._invalidate_all_caches(user_id, domain)
-
-            self.logger.info(
-                "upgrade_activated_success",
-                extra={
-                    "subscription_id": subscription_id,
-                    "user_id": user_id,
-                    "domain": domain,
-                    "previous_subscription_id": previous_sub_id,
-                    "to_plan": subscription.get('pricing_plan_id'),
-                }
+            result = activate_subscription(
+                self._supabase,
+                subscription,
+                source="webhook",
+                expected_status="pending_upgrade",
+                period_start=event_data.get("current_period_start"),
+                period_end=event_data.get("current_period_end"),
+                correlation_id=event_data.get("correlation_id"),
             )
-
-            return True
+            if result.activated or result.already_active:
+                self._reset_usage_counters(user_id, domain)
+                self._increment_subscription_version(user_id, domain)
+                self._invalidate_all_caches(user_id, domain)
+            return result.activated or result.already_active
 
         except Exception as e:
             self.logger.error(
@@ -683,21 +628,18 @@ class UpgradeOrchestrator:
         event_data: Dict
     ) -> bool:
         """Activate a new subscription (not upgrade)."""
-        subscription_id = subscription['id']
+        from services.activation_service import activate_subscription
 
-        self._supabase.table('subscriptions').update({
-            'status': 'active',
-            'current_period_start': event_data.get('current_period_start'),
-            'current_period_end': event_data.get('current_period_end'),
-            'updated_at': datetime.now(timezone.utc).isoformat()
-        }).eq('id', subscription_id).execute()
-
-        self.logger.info(
-            "new_subscription_activated",
-            extra={"subscription_id": subscription_id, "user_id": subscription['user_id']}
+        result = activate_subscription(
+            self._supabase,
+            subscription,
+            source="webhook",
+            expected_status="pending",
+            period_start=event_data.get("current_period_start"),
+            period_end=event_data.get("current_period_end"),
+            correlation_id=event_data.get("correlation_id"),
         )
-
-        return True
+        return result.activated or result.already_active
 
     def _get_active_subscription(
         self,

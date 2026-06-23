@@ -9,8 +9,8 @@
  * Features: Domain detection, billing cycle toggle, loading states
  */
 
-import { useState, useEffect } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useState, useEffect, useCallback } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { onAuthStateChanged } from "firebase/auth";
 import { auth } from "@/src/firebase/firebase";
 import BillingCycleToggle from "./BillingCycleToggle";
@@ -19,6 +19,13 @@ import AddOnsSection from "./AddOnsSection";
 import UsageSummary from "./UsageSummary";
 import LoadingSkeleton from "./LoadingSkeleton";
 import ErrorState from "./ErrorState";
+import {
+  subscriptionKeys,
+  STALE_TIMES,
+  SUBSCRIPTION_EVENTS,
+  DEFAULT_QUERY_OPTIONS,
+  invalidateUpgradeOptions,
+} from "@/lib/billing/cache-constants";
 
 interface UpgradeContainerProps {
   initialDomain: string;
@@ -29,6 +36,7 @@ export default function UpgradeContainer({
   initialDomain,
   recommendedPlan,
 }: UpgradeContainerProps) {
+  const queryClient = useQueryClient();
   const [billingCycle, setBillingCycle] = useState<"monthly" | "yearly">(
     "monthly",
   );
@@ -44,9 +52,23 @@ export default function UpgradeContainer({
     return () => unsubscribe();
   }, []);
 
+  // ── Cache Invalidation Bridge ─────────────────────────────────────────────
+  const handleSubscriptionUpdate = useCallback(() => {
+    invalidateUpgradeOptions(queryClient);
+  }, [queryClient]);
+
+  useEffect(() => {
+    window.addEventListener(SUBSCRIPTION_EVENTS.UPDATED, handleSubscriptionUpdate);
+    window.addEventListener(SUBSCRIPTION_EVENTS.PRODUCT_ACTIVATED, handleSubscriptionUpdate);
+    return () => {
+      window.removeEventListener(SUBSCRIPTION_EVENTS.UPDATED, handleSubscriptionUpdate);
+      window.removeEventListener(SUBSCRIPTION_EVENTS.PRODUCT_ACTIVATED, handleSubscriptionUpdate);
+    };
+  }, [handleSubscriptionUpdate]);
+
   // Fetch upgrade options from API
   const { data, isLoading, error, refetch } = useQuery({
-    queryKey: ["upgrade-options", initialDomain, billingCycle],
+    queryKey: subscriptionKeys.upgradeOptions(initialDomain, billingCycle),
     queryFn: async () => {
       // Get Firebase auth ID token (server-verified, not forgeable X-User-Id)
       const user = auth.currentUser;
@@ -74,9 +96,9 @@ export default function UpgradeContainer({
 
       return res.json();
     },
-    enabled: authReady, // Only fire after Firebase auth state is confirmed
-    staleTime: 5 * 60 * 1000, // 5 min cache
-    retry: 2,
+    enabled: authReady,
+    staleTime: STALE_TIMES.UPGRADE_OPTIONS,
+    ...DEFAULT_QUERY_OPTIONS,
   });
 
   // Loading state

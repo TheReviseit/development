@@ -2,8 +2,12 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "crons": [
     {
-      "path": "/api/cron/token-refresh",
-      "schedule": "0 2 * * *"
+      "path": "/api/cron/keep-warm",
+      "schedule": "*/5 * * * *"
+    },
+    {
+      "path": "/api/cron/reconcile-billing",
+      "schedule": "*/15 * * * *"
     },
     {
       "path": "/api/cron/expire-bookings",

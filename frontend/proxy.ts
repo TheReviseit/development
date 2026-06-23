@@ -1375,7 +1375,7 @@ function addProductHeaders(
 
 export const config = {
   matcher: [
-    "/((?!_next/static|_next/image|favicon.ico|.*\.(?:jpg|jpeg|gif|png|svg|ico|css|js|webp|woff|woff2|webmanifest|json|xml|txt)).*)",
+    "/((?!_next/static|_next/image|favicon.ico|.*\.(?:avif|jpg|jpeg|gif|png|svg|ico|css|js|webp|woff|woff2|webmanifest|json|xml|txt)).*)",
   ],
 };
 

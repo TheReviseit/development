@@ -9,13 +9,18 @@
  */
 
 import { useState, useEffect, useRef } from "react";
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { auth } from "@/src/firebase/firebase";
 import {
   generateCheckoutIdempotencyKey,
   generateSubscriptionModifyKey,
   generatePaymentRetryKey,
 } from "@/lib/billing/idempotency";
+import {
+  SUBSCRIPTION_EVENTS,
+  invalidateSubscriptionCache,
+} from "@/lib/billing/cache-constants";
+import { ConflictRetryBanner } from "./ConflictRetryBanner";
 
 interface Plan {
   plan_slug: string;
@@ -59,10 +64,13 @@ export default function PlanCard({
 }: PlanCardProps) {
   const [isProcessing, setIsProcessing] = useState(false);
   const processingRef = useRef(false);
+  const upgradeAbortRef = useRef<AbortController | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const [showRetry, setShowRetry] = useState(false);
+  const [lastErrorStatus, setLastErrorStatus] = useState<number | null>(null);
   const pollStartRef = useRef(0);
+  const queryClient = useQueryClient();
 
   // Track elapsed seconds during checkout polling
   useEffect(() => {
@@ -74,6 +82,15 @@ export default function PlanCard({
     }, 1000);
     return () => clearInterval(interval);
   }, [isProcessing, errorMessage]);
+
+  // Cleanup processing state and abort polling on unmount
+  useEffect(() => {
+    return () => {
+      processingRef.current = false;
+      upgradeAbortRef.current?.abort();
+      upgradeAbortRef.current = null;
+    };
+  }, []);
 
   // Load Razorpay SDK on mount with cleanup and 10s timeout
   useEffect(() => {
@@ -162,87 +179,104 @@ const upgradeMutation = useMutation({
       processingRef.current = true;
 
       const user = auth.currentUser;
-      if (!user) throw new Error("Not authenticated");
+      if (!user) {
+        processingRef.current = false;
+        throw new Error("Not authenticated");
+      }
+
+      // Create abort controller for this request
+      const abortController = new AbortController();
+      upgradeAbortRef.current = abortController;
+      const signal = abortController.signal;
 
       // Get token with conditional refresh — only force-refresh if expired
       const idToken = await user.getIdToken(false);
       const bearer = `Bearer ${idToken}`;
 
-      // ── Path 1: Prorated upgrade (existing subscription) ──────────
-      if (hasProration) {
-        const idemKey = await generateSubscriptionModifyKey(user.uid, plan.plan_slug, 'upgrade');
-        const res = await fetch("/api/billing/change-plan", {
+      try {
+        // ── Path 1: Prorated upgrade (existing subscription) ──────────
+        if (hasProration) {
+          const idemKey = await generateSubscriptionModifyKey(user.uid, plan.plan_slug, 'upgrade');
+          const res = await fetch("/api/billing/change-plan", {
+            method: "POST",
+            credentials: "include",
+            headers: {
+              "Content-Type": "application/json",
+              "Authorization": bearer,
+              "Idempotency-Key": idemKey,
+            },
+            body: JSON.stringify({ new_plan_slug: plan.plan_slug }),
+          });
+          if (!res.ok) {
+            const err = await res.json().catch(() => ({}));
+            throw new Error((err as any).message || "Plan change failed");
+          }
+          return res.json();
+        }
+
+        // ── Path 2: New subscription (async checkout — no blocking) ──
+        const checkoutIdemKey = await generateCheckoutIdempotencyKey(user.uid, plan.plan_slug, domain);
+        const initRes = await fetch("/api/upgrade/checkout", {
           method: "POST",
           credentials: "include",
           headers: {
             "Content-Type": "application/json",
             "Authorization": bearer,
-            "Idempotency-Key": idemKey,
+            "Idempotency-Key": checkoutIdemKey,
           },
-          body: JSON.stringify({ new_plan_slug: plan.plan_slug }),
+          body: JSON.stringify({
+            domain,
+            target_plan_slug: plan.plan_slug,
+            billing_cycle: billingCycle,
+          }),
         });
-        if (!res.ok) {
-          const err = await res.json().catch(() => ({}));
-          throw new Error((err as any).message || "Plan change failed");
+        if (!initRes.ok) {
+          const error = await initRes.json().catch(() => ({}));
+          throw new Error((error as any).message || "Upgrade failed");
         }
-        return res.json();
-      }
+        const initData = await initRes.json();
+        const checkoutId = initData.checkout_id;
+        if (!checkoutId) {
+          throw new Error("No checkout_id in response");
+        }
 
-      // ── Path 2: New subscription (async checkout — no blocking) ──
-      // POST /api/upgrade/checkout returns immediately with a checkout_id.
-      // The background worker creates the Razorpay subscription asynchronously.
-      // We poll GET /api/upgrade/checkout-status/<id> until completed (max 60s).
-      const checkoutIdemKey = await generateCheckoutIdempotencyKey(user.uid, plan.plan_slug, domain);
-      const initRes = await fetch("/api/upgrade/checkout", {
-        method: "POST",
-        credentials: "include",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": bearer,
-          "Idempotency-Key": checkoutIdemKey,
-        },
-        body: JSON.stringify({
-          domain,
-          target_plan_slug: plan.plan_slug,
-          billing_cycle: billingCycle,
-        }),
-      });
-      if (!initRes.ok) {
-        const error = await initRes.json().catch(() => ({}));
-        throw new Error((error as any).message || "Upgrade failed");
-      }
-      const initData = await initRes.json();
-      const checkoutId = initData.checkout_id;
-      if (!checkoutId) {
-        throw new Error("No checkout_id in response");
-      }
-
-      // Poll for completion (max 60s — matches worker max execution with 3 retries)
-      const pollStart = Date.now();
-      const POLL_TIMEOUT = 60000;
-      const POLL_INTERVAL = 2000;
-      let lastStatus = "initiated";
-      while (Date.now() - pollStart < POLL_TIMEOUT) {
-        await new Promise((r) => setTimeout(r, POLL_INTERVAL));
-        const pollRes = await fetch(`/api/upgrade/checkout-status/${checkoutId}`, {
-          headers: { "Authorization": bearer },
-        });
-        if (!pollRes.ok) {
-          const err = await pollRes.json().catch(() => ({}));
-          throw new Error((err as any).message || "Status check failed");
+        // Poll for completion (max 60s) — check abort signal each iteration
+        const pollStart = Date.now();
+        const POLL_TIMEOUT = 60000;
+        let pollInterval = 300;
+        const POLL_INTERVAL_MAX = 2000;
+        let lastStatus = "initiated";
+        while (Date.now() - pollStart < POLL_TIMEOUT) {
+          if (signal.aborted) {
+            throw new DOMException("Aborted", "AbortError");
+          }
+          await new Promise((r) => setTimeout(r, pollInterval));
+          pollInterval = Math.min(pollInterval * 1.5, POLL_INTERVAL_MAX);
+          if (signal.aborted) {
+            throw new DOMException("Aborted", "AbortError");
+          }
+          const pollRes = await fetch(`/api/billing/upgrade-checkout-status/${checkoutId}`, {
+            headers: { "Authorization": bearer },
+          });
+          if (!pollRes.ok) {
+            const err = await pollRes.json().catch(() => ({}));
+            throw new Error((err as any).message || "Status check failed");
+          }
+          const pollData = await pollRes.json();
+          lastStatus = pollData.status;
+          if (pollData.status === "completed") {
+            return pollData;
+          }
+          if (pollData.status === "failed") {
+            throw new Error(pollData.error_message || "Payment setup failed");
+          }
         }
-        const pollData = await pollRes.json();
-        lastStatus = pollData.status;
-        if (pollData.status === "completed") {
-          return pollData;
-        }
-        if (pollData.status === "failed") {
-          throw new Error(pollData.error_message || "Payment setup failed");
-        }
+        throw new Error(
+          `Payment setup timed out (status: ${lastStatus}). Please try again.`
+        );
+      } finally {
+        upgradeAbortRef.current = null;
       }
-      throw new Error(
-        `Payment setup timed out (status: ${lastStatus}). Please try again.`
-      );
     },
     onMutate: () => {
       setIsProcessing(true);
@@ -321,13 +355,38 @@ const upgradeMutation = useMutation({
 
             processingRef.current = false;
             sessionStorage.removeItem("flowauxi_upgrade_pending");
+            invalidateSubscriptionCache(queryClient);
+            window.dispatchEvent(new CustomEvent(SUBSCRIPTION_EVENTS.UPDATED));
+            window.dispatchEvent(new CustomEvent(SUBSCRIPTION_EVENTS.PAYMENT_SUCCEEDED));
             window.location.href = "/home?upgrade=success";
           },
           modal: {
-            ondismiss: function () {
+            ondismiss: async function () {
               setIsProcessing(false);
               processingRef.current = false;
               sessionStorage.removeItem("flowauxi_upgrade_pending");
+              try {
+                const user = auth.currentUser;
+                if (user) {
+                  const token = await user.getIdToken(false);
+                  await fetch("/api/billing/cancel-pending", {
+                    method: "POST",
+                    credentials: "include",
+                    headers: {
+                      "Content-Type": "application/json",
+                      "Authorization": `Bearer ${token}`,
+                    },
+                    body: JSON.stringify({
+                      domain,
+                      plan_slug: plan.plan_slug,
+                    }),
+                  });
+                }
+              } catch {
+                // Fire-and-forget: background job also cleans up stragglers
+              }
+              invalidateSubscriptionCache(queryClient);
+              window.dispatchEvent(new CustomEvent(SUBSCRIPTION_EVENTS.UPDATED));
             },
           },
         };
@@ -395,13 +454,37 @@ const upgradeMutation = useMutation({
 
             processingRef.current = false;
             sessionStorage.removeItem("flowauxi_upgrade_pending");
+            invalidateSubscriptionCache(queryClient);
+            window.dispatchEvent(new CustomEvent(SUBSCRIPTION_EVENTS.UPDATED));
             window.location.href = "/payment-success?source=subscription";
           },
           modal: {
-            ondismiss: function () {
+            ondismiss: async function () {
               setIsProcessing(false);
               processingRef.current = false;
               sessionStorage.removeItem("flowauxi_upgrade_pending");
+              try {
+                const user = auth.currentUser;
+                if (user) {
+                  const token = await user.getIdToken(false);
+                  await fetch("/api/billing/cancel-pending", {
+                    method: "POST",
+                    credentials: "include",
+                    headers: {
+                      "Content-Type": "application/json",
+                      "Authorization": `Bearer ${token}`,
+                    },
+                    body: JSON.stringify({
+                      domain,
+                      plan_slug: plan.plan_slug,
+                    }),
+                  });
+                }
+              } catch {
+                // Fire-and-forget: background job also cleans up stragglers
+              }
+              invalidateSubscriptionCache(queryClient);
+              window.dispatchEvent(new CustomEvent(SUBSCRIPTION_EVENTS.UPDATED));
             },
           },
         };
@@ -449,7 +532,15 @@ const upgradeMutation = useMutation({
       }
     },
     onError: (error: Error) => {
+      if (error.name === 'AbortError') {
+        console.info("[PlanCard] Upgrade aborted (component unmounted)");
+        setIsProcessing(false);
+        processingRef.current = false;
+        return;
+      }
       console.error("[PlanCard] Upgrade mutation error:", error);
+      const isConflict = error.message.includes("409") || error.message.toLowerCase().includes("conflict");
+      setLastErrorStatus(isConflict ? 409 : null);
       setErrorMessage(error.message);
       setIsProcessing(false);
       processingRef.current = false;
@@ -535,7 +626,19 @@ const upgradeMutation = useMutation({
       </div>
 
       {/* Error Banner */}
-      {errorMessage && (
+      {errorMessage && lastErrorStatus === 409 ? (
+        <ConflictRetryBanner
+          domain={domain}
+          onResolved={() => {
+            setErrorMessage(null);
+            setShowRetry(false);
+            setLastErrorStatus(null);
+            setElapsedSeconds(0);
+            processingRef.current = false;
+            upgradeMutation.mutate();
+          }}
+        />
+      ) : errorMessage ? (
         <div className="mt-4 p-3 bg-red-50 border border-red-200 rounded-lg">
           <p className="text-sm text-red-700">{errorMessage}</p>
           {showRetry && (
@@ -547,7 +650,7 @@ const upgradeMutation = useMutation({
             </button>
           )}
         </div>
-      )}
+      ) : null}
 
       {/* CTA Button */}
       <div className="mt-6">

@@ -223,7 +223,19 @@ class PricingService:
         if cached is not None:
             return cached
         
-        # Query database
+        # Query database — unified slug resolution
+        try:
+            from services.plan_resolver import resolve_pricing_plan
+            plan = resolve_pricing_plan(
+                self.supabase, product_domain, plan_slug, billing_cycle
+            )
+            if plan:
+                plan = self._transform_plan(plan)
+                self._cache.set(plan, self.env, product_domain, plan_slug, billing_cycle)
+                return plan
+        except Exception:
+            pass
+
         try:
             result = self.supabase.table('pricing_plans').select('*').match({
                 'product_domain': product_domain,
