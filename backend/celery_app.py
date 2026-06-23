@@ -53,6 +53,8 @@ try:
             "tasks.whatsapp_connection",  # WhatsApp connection v2 cleanup/sync
             "tasks.file_tools_video",  # File Tools video upload assembly and conversion
             "tasks.file_tools_ocr",  # File Tools OCR extraction
+            "tasks.billing_maintenance",  # Checkout queue + orphan reconcile
+            "tasks.booking_maintenance",  # Booking slot expiry
         ]
     )
     
@@ -153,6 +155,9 @@ celery_app.conf.task_routes = {
     "tasks.billing_monitor.run_billing_cycle": {"queue": "default"},
     "tasks.billing_monitor.sync_razorpay_state": {"queue": "default"},
     "tasks.billing_monitor.generate_mrr_report": {"queue": "low"},
+    "billing_maintenance.process_checkout_queue": {"queue": "default"},
+    "billing_maintenance.reconcile_orphans": {"queue": "default"},
+    "booking_maintenance.expire_stale_bookings": {"queue": "low"},
 
     # Forms maintenance (low priority — safe background cleanup)
     "tasks.forms_maintenance.purge_deleted_forms_task": {"queue": "low"},
@@ -400,6 +405,25 @@ celery_app.conf.beat_schedule = {
     "whatsapp-connection-cleanup": {
         "task": "whatsapp_connection.cleanup",
         "schedule": 300.0,
+        "options": {"queue": "low"},
+    },
+
+    # =========================================================================
+    # Billing maintenance (Render beat — Vercel Hobby is once/day max)
+    # =========================================================================
+    "billing-process-checkout-queue": {
+        "task": "billing_maintenance.process_checkout_queue",
+        "schedule": 30.0,  # Every 30 seconds
+        "options": {"queue": "default"},
+    },
+    "billing-reconcile-orphans": {
+        "task": "billing_maintenance.reconcile_orphans",
+        "schedule": 900.0,  # Every 15 minutes
+        "options": {"queue": "default"},
+    },
+    "booking-expire-stale": {
+        "task": "booking_maintenance.expire_stale_bookings",
+        "schedule": 300.0,  # Every 5 minutes
         "options": {"queue": "low"},
     },
 

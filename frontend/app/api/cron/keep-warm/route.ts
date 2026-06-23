@@ -1,5 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 
+/**
+ * Manual / dev trigger only — NOT scheduled on Vercel Hobby (once/day max).
+ * Production scheduling: Render Celery beat + /api/cron/daily-maintenance.
+ */
+
 const BACKEND_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
 
 async function keepWarm(): Promise<void> {

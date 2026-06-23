@@ -2,10 +2,11 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 
 // ============================================================
-// Booking Expiration Cron Job
+// Booking Expiration (manual / dev trigger)
 // ============================================================
-// Runs every minute to expire unpaid bookings past their reservation window.
-// This releases slots for other customers when payments are abandoned.
+// NOT in vercel.json — Vercel Hobby allows cron at most once per day.
+// Production: Render Celery booking_maintenance.expire_stale_bookings every 5m.
+// Daily safety net: /api/cron/daily-maintenance at 02:00 UTC.
 // ============================================================
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
