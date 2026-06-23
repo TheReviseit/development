@@ -413,7 +413,7 @@ export default function PaymentPageClient({
             'Payment failed or was blocked by the browser/network.';
 
           setError(
-            `${reasonText} ${result.checkoutUrl ? 'You can also open the secure checkout page below.' : ''}`,
+            `${reasonText}${fallbackCheckoutUrl ? ' You can also open the secure checkout page below.' : ''}`,
           );
           setIsLoading(null);
         });
@@ -423,11 +423,11 @@ export default function PaymentPageClient({
     } catch (e) {
       console.error('Razorpay open error:', e);
       setError(
-        `Failed to open payment window. ${result.checkoutUrl ? 'You can also open the secure checkout page below.' : ''}`,
+        `Failed to open payment window.${fallbackCheckoutUrl ? ' You can also open the secure checkout page below.' : ''}`,
       );
       setIsLoading(null);
     }
-  }, [user.userId, tenant.productDomain, domainConfig.themeColor, razorpayLoaded, verifyWithRetry]);
+  }, [user.userId, tenant.productDomain, domainConfig.themeColor, razorpayLoaded, verifyWithRetry, fallbackCheckoutUrl]);
 
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col">

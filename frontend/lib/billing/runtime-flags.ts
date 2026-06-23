@@ -2,7 +2,7 @@
  * Billing runtime flags — fetched from Flask with 30s client cache.
  */
 
-type RuntimeFlags = Record<string, string | number | boolean>;
+export type RuntimeFlags = Record<string, string | number | boolean>;
 
 let cache: RuntimeFlags | null = null;
 let cacheLoadedAt = 0;

@@ -85,7 +85,8 @@ function ErrorIcon({ type }: { type: ErrorCategory }) {
       </svg>
     ),
   };
-  return <>{iconMap[icon] || iconMap.alert}</>;
+  const iconKey = ERROR_CONFIG[type].icon;
+  return <>{iconMap[iconKey] || iconMap.alert}</>;
 }
 
 export default function ErrorState({ error, onRetry }: ErrorStateProps) {

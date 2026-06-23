@@ -259,10 +259,11 @@ async function pollCheckoutCompletion(
         };
 
       case "failed":
-        logger.error("checkout_failed", {
-          checkout_token: checkoutToken,
-          error: data.error_message,
-        });
+        logger.error(
+          "checkout_failed",
+          new Error(data.error_message || "Subscription creation failed"),
+          { checkout_token: checkoutToken },
+        );
         {
           const err = new Error(
             data.error_message || "Subscription creation failed",
