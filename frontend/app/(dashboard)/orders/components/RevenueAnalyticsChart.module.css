@@ -1,12 +1,12 @@
-/* Revenue Analytics Chart - Dark theme matching dashboard */
+/* Revenue Analytics Chart - Light theme matching dashboard */
 
 .container {
   position: relative;
-  background: #0a0a0a;
+  background: #ffffff;
   border-radius: 16px;
   padding: 24px;
   margin-bottom: 24px;
-  border: 1px solid rgba(0, 0, 0, 0.04);
+  border: 1px solid rgba(0, 0, 0, 0.08);
   overflow: hidden;
 }
 
@@ -27,7 +27,7 @@
 .title {
   font-size: 16px;
   font-weight: 600;
-  color: #111827;
+  color: #000000;
   margin: 0;
 }
 
@@ -55,7 +55,7 @@
 
 .orderCount {
   font-size: 12px;
-  color: rgba(255, 255, 255, 0.5);
+  color: rgba(0, 0, 0, 0.55);
   font-weight: 400;
 }
 
@@ -69,10 +69,10 @@
   align-items: center;
   gap: 6px;
   padding: 8px 12px;
-  background: #f3f4f6;
-  border: 1px solid rgba(0, 0, 0, 0.08);
+  background: #ffffff;
+  border: 1px solid rgba(0, 0, 0, 0.1);
   border-radius: 8px;
-  color: #111827;
+  color: #000000;
   font-size: 13px;
   font-weight: 500;
   cursor: pointer;
@@ -80,8 +80,8 @@
 }
 
 .dropdownButton:hover {
-  background: #e5e7eb;
-  border-color: rgba(255, 255, 255, 0.25);
+  background: #fafafa;
+  border-color: rgba(0, 0, 0, 0.16);
 }
 
 .dropdownIcon {
@@ -97,12 +97,12 @@
   top: calc(100% + 4px);
   right: 0;
   min-width: 120px;
-  background: #f3f4f6;
+  background: #ffffff;
   border: 1px solid rgba(0, 0, 0, 0.1);
   border-radius: 8px;
   padding: 4px;
   z-index: 100;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
 }
 
 .dropdownItem {
@@ -111,7 +111,7 @@
   background: transparent;
   border: none;
   border-radius: 6px;
-  color: rgba(255, 255, 255, 0.7);
+  color: #000000;
   font-size: 13px;
   text-align: left;
   cursor: pointer;
@@ -120,12 +120,12 @@
 
 .dropdownItem:hover {
   background: rgba(0, 0, 0, 0.04);
-  color: #111827;
+  color: #000000;
 }
 
 .dropdownItemActive {
-  background: rgba(0, 0, 0, 0.08);
-  color: #111827;
+  background: rgba(0, 0, 0, 0.06);
+  color: #000000;
   font-weight: 600;
 }
 
@@ -136,13 +136,13 @@
 
 /* Tooltip */
 .tooltip {
-  background: rgba(15, 15, 15, 0.95);
+  background: #ffffff;
   backdrop-filter: blur(8px);
-  color: #111827;
+  color: #000000;
   padding: 10px 14px;
   border-radius: 10px;
   box-shadow:
-    0 8px 24px rgba(0, 0, 0, 0.5),
+    0 8px 24px rgba(0, 0, 0, 0.12),
     0 0 0 1px rgba(0, 0, 0, 0.08);
   white-space: nowrap;
 }
@@ -150,14 +150,14 @@
 .tooltipRevenue {
   font-size: 16px;
   font-weight: 700;
-  color: #111827;
+  color: #000000;
   margin-bottom: 2px;
 }
 
 .tooltipDate {
   font-size: 12px;
   font-weight: 500;
-  color: rgba(255, 255, 255, 0.6);
+  color: rgba(0, 0, 0, 0.55);
 }
 
 .tooltipValue {
@@ -187,13 +187,13 @@
 .emptyTitle {
   font-size: 16px;
   font-weight: 600;
-  color: rgba(255, 255, 255, 0.8);
+  color: #000000;
   margin-bottom: 8px;
 }
 
 .emptyMessage {
   font-size: 14px;
-  color: rgba(255, 255, 255, 0.5);
+  color: rgba(0, 0, 0, 0.55);
   max-width: 400px;
   line-height: 1.5;
 }
@@ -270,22 +270,22 @@
 .errorTitle {
   font-size: 16px;
   font-weight: 600;
-  color: rgba(255, 255, 255, 0.8);
+  color: #000000;
 }
 
 .errorMessage {
   font-size: 14px;
-  color: rgba(255, 255, 255, 0.5);
+  color: rgba(0, 0, 0, 0.55);
   max-width: 400px;
 }
 
 .retryButton {
   margin-top: 8px;
   padding: 10px 20px;
-  background: rgba(0, 0, 0, 0.04);
-  border: 1px solid rgba(0, 0, 0, 0.1);
+  background: #ffffff;
+  border: 1px solid rgba(0, 0, 0, 0.12);
   border-radius: 8px;
-  color: #111827;
+  color: #000000;
   font-size: 14px;
   font-weight: 500;
   cursor: pointer;
@@ -293,8 +293,8 @@
 }
 
 .retryButton:hover {
-  background: rgba(0, 0, 0, 0.08);
-  border-color: rgba(255, 255, 255, 0.25);
+  background: rgba(0, 0, 0, 0.04);
+  border-color: rgba(0, 0, 0, 0.2);
 }
 
 /* Loading Overlay */
@@ -304,7 +304,7 @@
   left: 0;
   right: 0;
   bottom: 0;
-  background: rgba(10, 10, 10, 0.7);
+  background: rgba(255, 255, 255, 0.75);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -315,7 +315,7 @@
   width: 32px;
   height: 32px;
   border: 3px solid rgba(0, 0, 0, 0.12);
-  border-top-color: white;
+  border-top-color: #000000;
   border-radius: 50%;
   animation: spin 0.8s linear infinite;
 }

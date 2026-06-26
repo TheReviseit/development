@@ -13,6 +13,13 @@ import ProductImageUpload from "./ProductImageUpload";
 import { ProductCard } from "./ProductCard";
 import ProductForm from "./ProductCard/ProductForm";
 import SlidePanel from "@/app/utils/ui/SlidePanel";
+import {
+  createClientSaveCorrelationId,
+  fetchBusinessSave,
+  logClientSaveTiming,
+  markSavePhase,
+  measureSavePhases,
+} from "@/lib/perf/settings-save.client";
 
 // Types for business data
 interface ProductVariant {
@@ -1192,55 +1199,57 @@ export default function BotSettingsView() {
   }, [alertToast]);
 
   const handleSave = async () => {
-    console.log("[handleSave] Starting save...");
+    const correlationId = createClientSaveCorrelationId();
+    markSavePhase(correlationId, "start");
     setSaving(true);
     setMessage(null);
 
     try {
-      // Use dataRef.current to get the latest data (avoids stale closure in setTimeout)
       const currentData = dataRef.current;
-      console.log("[handleSave] Saving products:", currentData.products);
 
-      // Convert data to API format for consistent storage
+      const convertStarted =
+        typeof performance !== "undefined" ? performance.now() : 0;
       const apiFormattedData = convertToApiFormat(currentData);
+      markSavePhase(correlationId, "convert");
 
-      // Prepare both requests
-      const firestoreSave = fetch("/api/business/save", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(apiFormattedData),
-      });
+      const stringifyStarted =
+        typeof performance !== "undefined" ? performance.now() : 0;
+      const serializedBody = JSON.stringify(apiFormattedData);
+      const stringifyMs =
+        typeof performance !== "undefined"
+          ? Math.round((performance.now() - stringifyStarted) * 100) / 100
+          : undefined;
+      markSavePhase(correlationId, "stringify");
 
-      // Flask backend sync with 5-second timeout (fire-and-forget, don't block)
+      const response = await fetchBusinessSave(correlationId, serializedBody);
+
+      // Optional AI runtime cache refresh — fire-and-forget, does not block save UX
       const backendUrl =
         process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 5000); // 5s timeout
-
-      const flaskSync = fetch(`${backendUrl}/api/whatsapp/set-business-data`, {
+      void fetch(`${backendUrl}/api/whatsapp/set-business-data`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(apiFormattedData),
-        signal: controller.signal,
-      })
-        .catch(() => {
-          // Silently ignore Flask errors - it's optional
-          console.log(
-            "Backend sync skipped (backend may not be running or timed out)",
-          );
-        })
-        .finally(() => {
-          clearTimeout(timeoutId);
-        });
+        headers: {
+          "Content-Type": "application/json",
+          "X-Correlation-ID": correlationId,
+        },
+        body: serializedBody,
+        signal: AbortSignal.timeout(5000),
+      }).catch(() => undefined);
 
-      // Run Firestore save first (primary), Flask sync is fire-and-forget
-      const response = await firestoreSave;
-
-      // Don't wait for Flask - just start it
-      flaskSync; // Fire and forget
+      const clientPhases = measureSavePhases(correlationId);
+      logClientSaveTiming(correlationId, clientPhases, {
+        payload_bytes: serializedBody.length,
+        convert_ms:
+          typeof performance !== "undefined"
+            ? Math.round((stringifyStarted - convertStarted) * 100) / 100
+            : undefined,
+        stringify_ms: stringifyMs,
+        http_status: response.status,
+        server_timing: response.headers.get("Server-Timing"),
+        upstream_correlation_id: response.headers.get("X-Correlation-ID"),
+      });
 
       if (response.ok) {
-        console.log("[handleSave] Save successful!");
         setInitialData(dataRef.current);
         setMessage({
           type: "success",

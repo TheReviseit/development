@@ -1,5 +1,4 @@
-import { createClient, type SupabaseClient } from "@supabase/supabase-js";
-import { createFetchWithTimeout } from "@/lib/server/fetchWithTimeout";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import type {
   ProductDomain,
   SupabaseUser,
@@ -36,24 +35,7 @@ export type EnsureUserAndMembershipFullResult = {
   hasAccess: boolean;
 };
 
-export function createSupabaseServiceClientOrThrow(options?: {
-  timeoutMs?: number;
-}) {
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-
-  if (!supabaseUrl || !supabaseServiceKey) {
-    throw new Error("Missing Supabase environment variables");
-  }
-
-  const timeoutMs = options?.timeoutMs ?? 5000;
-  const timeoutFetch = createFetchWithTimeout(timeoutMs);
-
-  return createClient(supabaseUrl, supabaseServiceKey, {
-    auth: { autoRefreshToken: false, persistSession: false },
-    global: { fetch: timeoutFetch },
-  });
-}
+export { createSupabaseServiceClientOrThrow } from "@/lib/supabase/service-client";
 
 export async function ensureSupabaseUserAndMembershipFull(
   params: EnsureUserAndMembershipParams,

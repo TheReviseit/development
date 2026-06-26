@@ -1,101 +1,141 @@
-/**
- * Business Save API Route — THIN PROXY TO FLASK BACKEND
- *
- * ✅ ENTERPRISE FIX: All business writes now go through Flask backend.
- * This route is a pure proxy — no Supabase service-role key, no direct DB writes.
- *
- * Flask endpoint: POST /api/shop/business/update
- * - Enforces entitlements via FeatureGateEngine
- * - Server-side slug change detection (no client flags)
- * - Atomic writes with UNIQUE constraint enforcement
- *
- * Previously this route was 274 lines of service-role Supabase writes
- * with zero entitlement checks. Now it's ~40 lines of pure proxy.
- */
-
 import { NextRequest, NextResponse } from "next/server";
 import { verifySessionCookieSafe } from "@/lib/firebase-admin";
 import { cookies } from "next/headers";
+import { trace as otelTrace, context, propagation } from "@opentelemetry/api";
+import {
+  attachSavePerfHeaders,
+  createSaveCorrelationId,
+  logSettingsSaveTiming,
+  SETTINGS_SAVE_CORRELATION_HEADER,
+  SettingsSaveServerTimer,
+} from "@/lib/perf/settings-save";
 
 const BACKEND_URL = process.env.BACKEND_URL || "http://127.0.0.1:5000";
+const PROXY_TIMEOUT_MS = Number(process.env.BUSINESS_SAVE_PROXY_TIMEOUT_MS || "15000");
 
 export async function POST(request: NextRequest) {
-  try {
-    // ── AUTH: Verify session cookie ────────────────────────────────────
-    const cookieStore = await cookies();
-    const sessionCookie = cookieStore.get("session")?.value;
+  const timer = new SettingsSaveServerTimer(
+    createSaveCorrelationId(request.headers.get(SETTINGS_SAVE_CORRELATION_HEADER)),
+  );
+  const tracer = otelTrace.getTracer("flowauxi.business.save", "1.0.0");
 
-    if (!sessionCookie) {
-      return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
-    }
+  return tracer.startActiveSpan("next.api.business.save", async (span) => {
+    span.setAttribute("correlation_id", timer.correlationId);
 
-    const result = await verifySessionCookieSafe(sessionCookie, true);
-    if (!result.success) {
-      return NextResponse.json({ error: "Invalid session" }, { status: 401 });
-    }
-    const userId = result.data!.uid;
+    try {
+      const cookieStore = await cookies();
+      const sessionCookie = cookieStore.get("session")?.value;
 
-    // ── PARSE BODY ────────────────────────────────────────────────────
-    const businessData = await request.json();
-
-    // Strip allow_slug_update — backend detects slug changes itself
-    delete businessData.allow_slug_update;
-
-    // ── PROXY TO FLASK BACKEND ────────────────────────────────────────
-    const cookieHeader = request.headers.get("cookie") || "";
-
-    const response = await fetch(`${BACKEND_URL}/api/shop/business/update`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "X-User-ID": userId, // Trusted: already verified above
-        Cookie: cookieHeader,
-      },
-      body: JSON.stringify(businessData),
-      cache: "no-store",
-    });
-
-    // ── FORWARD RESPONSE ──────────────────────────────────────────────
-    const data = await response.json();
-
-    console.log(
-      `[Business Save Proxy] ${response.status} for user ${userId} — ` +
-        `${Object.keys(businessData).length} field(s)`,
-    );
-
-    // ── ENTERPRISE CACHE INVALIDATION (FAANG LEVEL) ───────────────────
-    // Aggressively invalidate all related caches immediately on successful save
-    if (response.ok) {
-      try {
-        const { invalidateByUserId } = await import("@/lib/cache/store-cache");
-        const { revalidatePath } = await import("next/cache");
-        
-        // 1. Bust in-memory LRU cache
-        invalidateByUserId(userId);
-        
-        // 2. Bust Next.js App Router Cache (ISR + Data Cache) for the store
-        // Use slug from response or request
-        const slug = data.slug || data.canonicalSlug || businessData.url_slug || businessData.canonicalSlug;
-        if (slug) {
-          revalidatePath(`/store/${slug}`, "layout");
-          console.log(`[Business Save Proxy] Revalidated layout for /store/${slug}`);
-        } else {
-          // If we don't have a direct slug, we can't reliably revalidatePath,
-          // but invalidateByUserId handles the LRU memory cache.
-          console.warn("[Business Save Proxy] No slug found for Next.js ISR revalidation.");
-        }
-      } catch (err) {
-        console.error("[Business Save Proxy] Cache invalidation failed:", err);
+      if (!sessionCookie) {
+        span.setStatus({ code: 2, message: "not_authenticated" });
+        return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
       }
-    }
 
-    return NextResponse.json(data, { status: response.status });
-  } catch (error: unknown) {
-    console.error("[Business Save Proxy] Error:", error);
-    const errorMessage = error instanceof Error ? error.message : "Proxy error";
-    return NextResponse.json(
-      { error: "PROXY_ERROR", message: errorMessage },
-      { status: 500 },
-    );
-  }
+      const authStarted = Date.now();
+      const result = await verifySessionCookieSafe(sessionCookie, false);
+      timer.record("auth", authStarted);
+
+      if (!result.success) {
+        span.setStatus({ code: 2, message: "invalid_session" });
+        return NextResponse.json({ error: "Invalid session" }, { status: 401 });
+      }
+      const userId = result.data!.uid;
+      span.setAttribute("user_id_suffix", userId.slice(-8));
+
+      const parseStarted = Date.now();
+      const businessData = await request.json();
+      timer.record("parse_body", parseStarted);
+      delete businessData.allow_slug_update;
+
+      span.setAttribute("payload_field_count", Object.keys(businessData).length);
+
+      const cookieHeader = request.headers.get("cookie") || "";
+      const proxyHeaders: Record<string, string> = {
+        "Content-Type": "application/json",
+        "X-User-ID": userId,
+        Cookie: cookieHeader,
+        [SETTINGS_SAVE_CORRELATION_HEADER]: timer.correlationId,
+      };
+
+      propagation.inject(context.active(), proxyHeaders);
+
+      const proxyStarted = Date.now();
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), PROXY_TIMEOUT_MS);
+
+      let response: Response;
+      try {
+        response = await fetch(`${BACKEND_URL}/api/shop/business/update`, {
+          method: "POST",
+          headers: proxyHeaders,
+          body: JSON.stringify(businessData),
+          cache: "no-store",
+          signal: controller.signal,
+        });
+      } finally {
+        clearTimeout(timeoutId);
+      }
+      timer.record("proxy_fetch", proxyStarted);
+
+      const upstreamTiming = response.headers.get("Server-Timing");
+      span.setAttribute("upstream_server_timing", upstreamTiming || "none");
+      span.setAttribute("upstream_status", response.status);
+
+      const parseResponseStarted = Date.now();
+      const data = await response.json();
+      timer.record("parse_response", parseResponseStarted);
+
+      if (response.ok) {
+        const cacheStarted = Date.now();
+        try {
+          const { invalidateByUserId } = await import("@/lib/cache/store-cache");
+          const { revalidatePath } = await import("next/cache");
+
+          invalidateByUserId(userId);
+
+          const slug =
+            data.slug ||
+            data.canonicalSlug ||
+            businessData.url_slug ||
+            businessData.urlSlug ||
+            businessData.canonicalSlug;
+          if (slug) {
+            revalidatePath(`/store/${slug}`, "layout");
+          }
+        } catch (err) {
+          console.error("[Business Save Proxy] Cache invalidation failed:", err);
+        }
+        timer.record("cache_invalidate", cacheStarted);
+      }
+
+      logSettingsSaveTiming(timer, {
+        user_id_suffix: userId.slice(-8),
+        upstream_status: response.status,
+        payload_field_count: Object.keys(businessData).length,
+      });
+
+      const jsonResponse = NextResponse.json(data, { status: response.status });
+      attachSavePerfHeaders(jsonResponse, timer, upstreamTiming);
+      span.setAttribute("total_ms", timer.totalMs());
+      return jsonResponse;
+    } catch (error: unknown) {
+      span.recordException(error instanceof Error ? error : new Error(String(error)));
+      span.setStatus({ code: 2, message: "proxy_error" });
+      console.error("[Business Save Proxy] Error:", error);
+      const errorMessage = error instanceof Error ? error.message : "Proxy error";
+      const jsonResponse = NextResponse.json(
+        {
+          error: "PROXY_ERROR",
+          message: errorMessage,
+          correlation_id: timer.correlationId,
+        },
+        { status: 500 },
+      );
+      attachSavePerfHeaders(jsonResponse, timer);
+      logSettingsSaveTiming(timer, { error: errorMessage });
+      return jsonResponse;
+    } finally {
+      span.end();
+    }
+  });
 }

@@ -1,8 +1,16 @@
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
+import { invalidateAllSessionVerifyCache, invalidateSessionVerifyCache } from "@/lib/auth/session-verify-cache";
 
 export async function POST() {
   const cookieStore = await cookies();
+  const session = cookieStore.get("session");
+
+  if (session?.value) {
+    invalidateSessionVerifyCache(session.value);
+  } else {
+    invalidateAllSessionVerifyCache();
+  }
 
   // Clear all known auth cookies for the dashboard product.
   // - `session`: Firebase Admin session cookie (canonical)

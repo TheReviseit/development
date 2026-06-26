@@ -148,10 +148,14 @@ export async function createWhatsAppAccount(data: {
   business_verification_status: string | null;
   quality_rating?: string | null;
   messaging_limit_tier: string | null;
+  webhook_status?: "pending" | "active" | "failed";
 }): Promise<ConnectedWhatsAppAccount> {
   const { data: account, error } = await supabaseAdmin
     .from("connected_whatsapp_accounts")
-    .insert(data)
+    .insert({
+      ...data,
+      webhook_status: data.webhook_status ?? "pending",
+    })
     .select()
     .single();
 
@@ -249,6 +253,8 @@ export async function createPhoneNumber(data: {
   webhook_url: string | null;
   webhook_verify_token: string | null;
   is_primary: boolean;
+  is_active?: boolean;
+  can_send_messages?: boolean;
 }): Promise<ConnectedPhoneNumber> {
   // If this is primary, unset other primary numbers for this user
   if (data.is_primary) {

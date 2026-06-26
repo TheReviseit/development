@@ -29,8 +29,7 @@ const DEFAULT_SLIDES: BannerSlide[] = [
       "Discover the latest trends in ethnic fashion with our curated collection",
     buttonText: "Shop Now",
     buttonLink: "#",
-    imageUrl:
-      "https://images.unsplash.com/photo-1610030469983-98e550d6193c?w=1200",
+    imageUrl: "/shop-photos/banner_new_arrivals.png",
     gradientFrom: "#22c15a",
     gradientTo: "#2dd4ff",
   },
@@ -42,8 +41,7 @@ const DEFAULT_SLIDES: BannerSlide[] = [
       "Celebrate in style with exclusive discounts on premium ethnic wear",
     buttonText: "Explore Deals",
     buttonLink: "#",
-    imageUrl:
-      "https://images.pexels.com/photos/1926769/pexels-photo-1926769.jpeg?auto=compress&cs=tinysrgb&w=1200",
+    imageUrl: "/shop-photos/banner_festive_sale.png",
     gradientFrom: "#f97316",
     gradientTo: "#facc15",
   },
@@ -55,8 +53,7 @@ const DEFAULT_SLIDES: BannerSlide[] = [
       "Make your special day unforgettable with our exquisite wedding wear",
     buttonText: "View Collection",
     buttonLink: "#",
-    imageUrl:
-      "https://images.unsplash.com/photo-1617627143750-d86bc21e42bb?w=1200",
+    imageUrl: "/shop-photos/banner_wedding.png",
     gradientFrom: "#ec4899",
     gradientTo: "#8b5cf6",
   },

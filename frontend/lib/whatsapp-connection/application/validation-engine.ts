@@ -31,14 +31,20 @@ export class WhatsAppValidationEngine {
       });
     }
 
-    for (const rateKey of rateKeys) {
-      const decision = await checkWhatsAppConnectionRateLimit(rateKey);
+    const rateDecisions = await Promise.all(
+      rateKeys.map((rateKey) => checkWhatsAppConnectionRateLimit(rateKey)),
+    );
+    for (let i = 0; i < rateDecisions.length; i += 1) {
+      const decision = rateDecisions[i];
       if (!decision.allowed) {
         throw new WhatsAppConnectionError(
           "RATE_LIMITED",
           "Too many WhatsApp connection attempts. Please wait before trying again.",
           429,
-          { retryAfterSeconds: decision.retryAfterSeconds, namespace: rateKey.namespace },
+          {
+            retryAfterSeconds: decision.retryAfterSeconds,
+            namespace: rateKeys[i].namespace,
+          },
         );
       }
     }

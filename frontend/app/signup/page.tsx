@@ -23,10 +23,7 @@ import {
   getRecommendedConfig,
   shouldCheckRedirectResult,
 } from "@/lib/auth/firebase-auth";
-import {
-  getOnboardingCheck,
-  getOnboardingDestination,
-} from "@/lib/auth/onboarding-check-client";
+import { warmupSupabaseConnection } from "@/lib/supabase/service-client";
 import type { AuthDecision } from "@/types/auth.types";
 
 // Lazy load Toast component
@@ -89,11 +86,12 @@ const GoogleIcon = memo(() => (
 GoogleIcon.displayName = "GoogleIcon";
 
 // Helper function to provision user + set session cookie (canonical path)
-async function syncWithRetry(
+// SIGNUP VARIANT: zero retries — eliminates 250-1750ms backoff overhead.
+// The server is stateless and idempotent. A single attempt is sufficient.
+async function syncSignup(
   idToken: string,
-  allowCreate: boolean,
-  retries = 1,
   phoneNumber?: string,
+  fullName?: string,
 ): Promise<{
   ok: boolean;
   status: number;
@@ -101,6 +99,64 @@ async function syncWithRetry(
   message?: string;
   authDecision?: AuthDecision;
 }> {
+  try {
+    const response = await fetch("/api/auth/sync", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify({
+        idToken,
+        allowCreate: true,
+        ...(phoneNumber ? { phoneNumber } : {}),
+        ...(fullName ? { fullName } : {}),
+      }),
+    });
+
+    const responseData = await response.json().catch(() => ({}));
+
+    if (response.ok) {
+      return {
+        ok: true,
+        status: response.status,
+        authDecision: responseData.authDecision,
+      };
+    }
+
+    return {
+      ok: false,
+      status: response.status,
+      code: responseData.code || responseData.error,
+      message: responseData.message || responseData.error,
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      status: 0,
+      code: "NETWORK_ERROR",
+      message: "Failed to reach auth server",
+    };
+  }
+}
+
+// LOGIN VARIANT: supports retries for session cookie expiry during page refresh.
+// Not used in signup — retained for the Google sign-in flow.
+async function syncWithRetry(
+  idToken: string,
+  allowCreate: boolean,
+  retries = 2,
+  phoneNumber?: string,
+  getFreshIdToken?: () => Promise<string>,
+  fullName?: string,
+): Promise<{
+  ok: boolean;
+  status: number;
+  code?: string;
+  message?: string;
+  authDecision?: AuthDecision;
+}> {
+  const backoffMs = [250, 500];
+  let activeToken = idToken;
+
   for (let i = 0; i <= retries; i++) {
     try {
       const response = await fetch("/api/auth/sync", {
@@ -108,9 +164,10 @@ async function syncWithRetry(
         headers: { "Content-Type": "application/json" },
         credentials: "include",
         body: JSON.stringify({
-          idToken,
+          idToken: activeToken,
           allowCreate,
           ...(phoneNumber ? { phoneNumber } : {}),
+          ...(fullName ? { fullName } : {}),
         }),
       });
 
@@ -124,63 +181,48 @@ async function syncWithRetry(
         };
       }
 
-      const errorData = responseData;
-      const code = errorData.code || errorData.error;
-      const message = errorData.message || errorData.error;
+      const code = responseData.code || responseData.error;
+      const message = responseData.message || responseData.error;
+      const details = String(responseData.details || "");
+      const isRetriable =
+        code === "SYNC_IN_PROGRESS" ||
+        response.status === 202 ||
+        code === "UPSTREAM_TIMEOUT" ||
+        response.status === 504 ||
+        (response.status === 500 &&
+          (details.includes("AbortError") || details.includes("aborted")));
 
-      if (i === retries) return { ok: false, status: response.status, code, message };
-    } catch (error) {
-      if (i === retries) {
-        return { ok: false, status: 0, code: "NETWORK_ERROR", message: "Failed to reach auth server" };
+      if (isRetriable && i < retries) {
+        if ((code === "UPSTREAM_TIMEOUT" || response.status === 504) && getFreshIdToken) {
+          try {
+            activeToken = await getFreshIdToken();
+          } catch {
+            /* skip */
+          }
+        }
+        const delay = backoffMs[Math.min(i, backoffMs.length - 1)] ?? 1000;
+        await new Promise((resolve) => setTimeout(resolve, delay));
+        continue;
       }
-      await new Promise((resolve) => setTimeout(resolve, 150 * (i + 1)));
+
+      if (i === retries) {
+        return { ok: false, status: response.status, code, message };
+      }
+    } catch {
+      if (i === retries) {
+        return {
+          ok: false,
+          status: 0,
+          code: "NETWORK_ERROR",
+          message: "Failed to reach auth server",
+        };
+      }
+      const delay = backoffMs[Math.min(i, backoffMs.length - 1)] ?? 1000;
+      await new Promise((resolve) => setTimeout(resolve, delay));
     }
   }
 
   return { ok: false, status: 0, code: "UNKNOWN", message: "Auth sync failed" };
-}
-
-// Helper function to check if user has completed WhatsApp onboarding
-async function checkOnboardingStatus(): Promise<boolean> {
-  try {
-    const data = await getOnboardingCheck({ force: true });
-    console.log("[checkOnboardingStatus] API response:", {
-      onboardingCompleted: data.onboardingCompleted,
-      whatsappConnected: data.whatsappConnected,
-      hasActiveTrial: data.hasActiveTrial,
-      hasActiveSubscription: data.hasActiveSubscription,
-      canEnterDashboard: data.canEnterDashboard,
-      nextPath: data.nextPath,
-      reason: data.reason,
-    });
-    const product = getProductDomainFromBrowser();
-    const isOnboardingComplete = getOnboardingDestination(
-      data,
-      product,
-    ).startsWith("/home");
-    console.log("[checkOnboardingStatus] Returning:", isOnboardingComplete);
-    return isOnboardingComplete;
-  } catch (error) {
-    console.error("[checkOnboardingStatus] Error:", error);
-    return false;
-  }
-}
-
-function getPostAuthPath(
-  syncResult: { authDecision?: AuthDecision },
-  fallbackOnboardingCompleted?: boolean,
-) {
-  if (syncResult.authDecision?.nextPath) {
-    return syncResult.authDecision.nextPath;
-  }
-
-  if (typeof fallbackOnboardingCompleted === "boolean") {
-    return fallbackOnboardingCompleted
-      ? "/home"
-      : `/onboarding-embedded?domain=${getProductDomainFromBrowser()}`;
-  }
-
-  return `/onboarding-embedded?domain=${getProductDomainFromBrowser()}`;
 }
 
 // ═════════════════════════════════════════════════════════════════════════════
@@ -351,9 +393,27 @@ export default function SignupPage() {
   const showPasswordFeedback =
     Boolean(passwordStrength && password.length > 0) || Boolean(passwordError);
 
-  // Resolve current domain for dynamic marketing copy
+  // Resolve current domain for dynamic marketing copy and handle URL errors
   useEffect(() => {
     setDomain(getProductDomainFromBrowser());
+    
+    // FAANG Level: Connection Pre-Warming
+    // Send a pre-flight request to wake up the serverless function, compile the route,
+    // and establish HTTP keep-alive connections to Firebase and Supabase.
+    // This entirely hides the 5-second IPv6 fallback DNS latency from the user.
+    fetch("/api/auth/sync?warmup=true", { method: "POST" }).catch((e) => {
+      console.log("[Signup] Pre-warm failed (expected if offline)", e);
+    });
+    
+    // Check for application-level error messages in the URL
+    if (typeof window !== "undefined") {
+      const url = new URL(window.location.href);
+      if (url.searchParams.has("error") && url.searchParams.has("message")) {
+        setError(url.searchParams.get("message") || "An error occurred.");
+        // Clean up the URL so it doesn't stay there on refresh
+        window.history.replaceState({}, document.title, window.location.pathname);
+      }
+    }
   }, []);
 
   // Check for redirect result on mount (ONLY if we detect a redirect return)
@@ -395,8 +455,8 @@ export default function SignupPage() {
             }
           }
 
-          // Provision user + create session cookie (canonical)
-          const syncResult = await syncWithRetry(idToken, true);
+          // Provision user + create session cookie (zero-retry)
+          const syncResult = await syncSignup(idToken);
           if (!syncResult.ok) {
             setError(
               syncResult.code === "UPSTREAM_TIMEOUT"
@@ -409,12 +469,10 @@ export default function SignupPage() {
             return;
           }
 
-          const fallbackCompleted = syncResult.authDecision
-            ? undefined
-            : await checkOnboardingStatus();
-          router.replace(
-            getPostAuthPath(syncResult, fallbackCompleted) || "/onboarding",
-          );
+          // New signup: navigate directly to onboarding (skip checkOnboardingStatus)
+          setGoogleLoading(false);
+          setIsRedirectPending(false);
+          router.replace(`/onboarding-embedded?domain=${domain}`);
         } else if (result.error) {
           const errorAnalysis = classifyAuthError(result.error);
           console.error("[Signup] Redirect auth error:", errorAnalysis);
@@ -536,23 +594,24 @@ export default function SignupPage() {
       setLoading(true);
 
       try {
-        // Step 1: Create Firebase user
-        const userCredential = await createUserWithEmailAndPassword(
-          auth,
-          email,
-          password,
-        );
-        await updateProfile(userCredential.user, { displayName: name });
+        // Step 1: Create Firebase user — overlap Supabase warmup + route prefetch with this call
+        const [userCredential] = await Promise.all([
+          createUserWithEmailAndPassword(auth, email, password),
+          warmupSupabaseConnection().catch(() => {}),
+          router.prefetch("/verify-email"),
+        ]);
+        
+        // Fire-and-forget: do not block the UI waiting for Firebase profile update
+        updateProfile(userCredential.user, { displayName: name }).catch(() => {});
 
-        // Force a token refresh so the backend receives the new displayName
-        const idToken = await userCredential.user.getIdToken(true);
+        // Fetch instantly available locally cached token (0ms)
+        const idToken = await userCredential.user.getIdToken(false);
 
-        // Step 2: Provision user + set session cookie (canonical)
-        const syncResult = await syncWithRetry(
+        // Step 2: Provision user + set session cookie (zero-retry, saves ~1.7s)
+        const syncResult = await syncSignup(
           idToken,
-          true,
-          1,
           phoneValidation.e164,
+          name
         );
         if (!syncResult.ok) {
           // Graceful degradation: if product provisioning fails
@@ -567,20 +626,53 @@ export default function SignupPage() {
           throw new Error(syncResult.code || "AUTH_SYNC_FAILED");
         }
 
-        // Step 3: Send verification email (best-effort)
-        fetch("/api/auth/send-verification", {
+        // Step 3: Send verification email (fire-and-forget; non-blocking)
+        if (typeof window !== "undefined") {
+          sessionStorage.setItem("flowauxi:verify-email-dispatch", "sending");
+        }
+
+        void fetch("/api/auth/send-verification", {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${idToken}`,
+          },
           body: JSON.stringify({
             userId: userCredential.user.uid,
             email: email,
           }),
-        }).catch((e) => console.error("Verification email error:", e));
+        })
+          .then(async (response) => {
+            const data = await response.json().catch(() => ({}));
+            if (typeof window === "undefined") return;
+            if (response.ok) {
+              sessionStorage.setItem("flowauxi:verify-email-dispatch", "sent");
+              if (typeof data.expiresAt === "string") {
+                sessionStorage.setItem("flowauxi:verify-email-expires-at", data.expiresAt);
+              }
+              return;
+            }
+            sessionStorage.setItem("flowauxi:verify-email-dispatch", "failed");
+          })
+          .catch((e) => {
+            console.error("Verification email error:", e);
+            if (typeof window !== "undefined") {
+              sessionStorage.setItem("flowauxi:verify-email-dispatch", "failed");
+            }
+          });
 
         router.push("/verify-email");
       } catch (err: any) {
         console.error("Signup error:", err);
         setLoading(false);
+
+        if (err?.code === "auth/email-already-in-use") {
+          // User already registered — redirect to login instead of showing an error
+          const product = getProductDomainFromBrowser();
+          router.replace(`/login?email=${encodeURIComponent(email)}&domain=${product}`);
+          return;
+        }
+
         const errorMessage = handleFirebaseError(err);
         setError(errorMessage);
 
@@ -672,9 +764,9 @@ export default function SignupPage() {
         }
 
         // ════════════════════════════════════════════════════════════════════
-        // STEP 3: Create Session (Critical Path)
+        // STEP 3: Create Session (Zero-Retry — signup path)
         // ════════════════════════════════════════════════════════════════════
-const syncResult = await syncWithRetry(idToken, true);
+        const syncResult = await syncSignup(idToken);
         if (!syncResult.ok) {
           if (syncResult.code === "PRODUCT_NOT_ENABLED") {
             console.warn(
@@ -695,65 +787,12 @@ const syncResult = await syncWithRetry(idToken, true);
         // User provisioning is handled by /api/auth/sync above.
 
         // ════════════════════════════════════════════════════════════════════
-        // STEP 5: Session Confirmation with Exponential Backoff
-        // CRITICAL: Confirms cookie propagation before navigation
+        // STEP 5: Navigate — new Google signup skips onboarding check
         // ════════════════════════════════════════════════════════════════════
-        performance.mark("auth-success");
-
-        // ════════════════════════════════════════════════════════════════════
-        // STEP 6: Check Onboarding Status and Navigate
-        // ════════════════════════════════════════════════════════════════════
-        const fallbackCompleted = syncResult.authDecision
-          ? undefined
-          : await checkOnboardingStatus();
-
+        setGoogleLoading(false);
         performance.mark("navigation-start");
 
-        const destination =
-          getPostAuthPath(syncResult, fallbackCompleted) || "/onboarding";
-        console.log(`[Auth] Navigating to ${destination}`);
-
-        router.replace(destination);
-
-        // ════════════════════════════════════════════════════════════════════
-        // STEP 7: Performance Observability
-        // ════════════════════════════════════════════════════════════════════
-        // Use setTimeout to measure after navigation initiates
-        setTimeout(() => {
-          performance.mark("navigation-complete");
-
-          // Core metric: total auth-to-nav time
-          performance.measure(
-            "auth-to-nav",
-            "auth-start",
-            "navigation-complete"
-          );
-
-          // Sub-metric: navigation latency only
-          performance.measure(
-            "nav-latency",
-            "navigation-start",
-            "navigation-complete"
-          );
-
-          // Log all metrics
-          logPerformanceMetric("auth-to-nav", 750); // 750ms target
-          logPerformanceMetric("nav-latency", 400); // 400ms target
-
-          // Overall success log
-          const totalMeasure = performance.getEntriesByName(
-            "auth-to-nav"
-          )[0] as PerformanceMeasure;
-          if (totalMeasure) {
-            const status =
-              totalMeasure.duration <= 750 ? "SUCCESS" : "SLOW";
-            console.log(
-              `[Auth] ${status}: Auth flow completed in ${Math.round(
-                totalMeasure.duration
-              )}ms`
-            );
-          }
-        }, 100);
+        router.replace(`/onboarding-embedded?domain=${domain}`);
       } else {
         // Handle failure
         if (result.error) {

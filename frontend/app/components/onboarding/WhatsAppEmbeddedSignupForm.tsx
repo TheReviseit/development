@@ -16,6 +16,7 @@ import {
 import type { LucideIcon } from "lucide-react";
 import gsap from "gsap";
 import { facebookSDK } from "@/lib/facebook/facebook-sdk";
+import { logEmbeddedSignupClientTiming } from "@/lib/perf/embedded-signup.client";
 import metaLogo from "@/src/icons/Meta_Platforms_logo.svg";
 
 interface WhatsAppEmbeddedSignupFormProps {
@@ -151,6 +152,8 @@ export default function WhatsAppEmbeddedSignupForm({
         }
       : null,
   );
+  const [securingElapsedSec, setSecuringElapsedSec] = useState(0);
+  const [webhookPending, setWebhookPending] = useState(false);
 
   const containerRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
@@ -177,6 +180,20 @@ export default function WhatsAppEmbeddedSignupForm({
         });
     }
   }, [isSuccessPreview]);
+
+  useEffect(() => {
+    if (connectionState !== "connecting" || connectionStep !== "securing") {
+      setSecuringElapsedSec(0);
+      return;
+    }
+
+    const startedAt = Date.now();
+    const interval = window.setInterval(() => {
+      setSecuringElapsedSec(Math.floor((Date.now() - startedAt) / 1000));
+    }, 1000);
+
+    return () => window.clearInterval(interval);
+  }, [connectionState, connectionStep]);
 
   useEffect(() => {
     if (contentRef.current) {
@@ -230,13 +247,25 @@ export default function WhatsAppEmbeddedSignupForm({
         businessId: embeddedData.data.business_id,
       };
 
+      const correlationId = crypto.randomUUID();
+      const fetchStartedAt = performance.now();
+
       const response = await fetch("/api/facebook/embedded-signup", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          "X-Correlation-ID": correlationId,
+        },
         body: JSON.stringify({
           code: result.code,
           setupData,
         }),
+      });
+
+      logEmbeddedSignupClientTiming({
+        correlationId,
+        clientMs: performance.now() - fetchStartedAt,
+        serverTimingHeader: response.headers.get("Server-Timing"),
       });
 
       const data = await response.json();
@@ -259,6 +288,48 @@ export default function WhatsAppEmbeddedSignupForm({
         throw new Error("Incomplete data from server");
       }
 
+      const webhookStatus =
+        data.data?.webhookStatus ??
+        data.data?.whatsappAccount?.webhook_status ??
+        "pending";
+
+      onSuccess({
+        wabaId,
+        phoneNumberId,
+        displayPhoneNumber,
+        wabaName,
+      });
+
+      if (webhookStatus === "pending") {
+        setWebhookPending(true);
+        const pollUntil = Date.now() + 60_000;
+        const poll = async () => {
+          while (Date.now() < pollUntil) {
+            try {
+              const health = await fetch(
+                `/api/whatsapp/connection-health?wabaId=${encodeURIComponent(wabaId)}`,
+              );
+              if (health.ok) {
+                const healthData = await health.json();
+                if (healthData.webhookStatus === "active") {
+                  setWebhookPending(false);
+                  return;
+                }
+                if (healthData.webhookStatus === "failed") {
+                  setWebhookPending(false);
+                  return;
+                }
+              }
+            } catch {
+              // keep polling
+            }
+            await new Promise((resolve) => setTimeout(resolve, 3000));
+          }
+          setWebhookPending(false);
+        };
+        void poll();
+      }
+
       const expiresAt = whatsappAccount?.token_expires_at
         ? new Date(whatsappAccount.token_expires_at)
         : new Date(Date.now() + 60 * 24 * 60 * 60 * 1000);
@@ -277,13 +348,6 @@ export default function WhatsAppEmbeddedSignupForm({
 
       setConnectionState("success");
       facebookSDK.clearEmbeddedSignupData();
-
-      onSuccess({
-        wabaId,
-        phoneNumberId,
-        displayPhoneNumber,
-        wabaName,
-      });
     } catch (error) {
       const message = getErrorMessage(error, "Failed to connect WhatsApp");
       console.error("Connection error:", error);
@@ -366,6 +430,12 @@ export default function WhatsAppEmbeddedSignupForm({
       <div className="connecting-text">
         <h3>{CONNECTING_COPY[connectionStep].title}</h3>
         <p>{CONNECTING_COPY[connectionStep].description}</p>
+        {connectionStep === "securing" && securingElapsedSec > 0 ? (
+          <p className="connecting-elapsed">{securingElapsedSec}s elapsed</p>
+        ) : null}
+        {webhookPending ? (
+          <p className="connecting-elapsed">Finishing setup…</p>
+        ) : null}
       </div>
     </div>
   );

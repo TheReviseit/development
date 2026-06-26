@@ -20,10 +20,18 @@ import {
   getOnboardingDestination,
   recordOnboardingRedirect,
 } from "@/lib/auth/onboarding-check-client";
+import {
+  clearVerifyEmailDispatchStatus,
+  formatExpiryCountdown,
+  readVerifyEmailDispatchStatus,
+  readVerifyEmailExpiresAt,
+  setVerifyEmailExpiresAt,
+  type VerifyEmailDispatchStatus,
+} from "@/lib/auth/verify-email-client";
 import "../login/login.css";
 
 const OTP_LENGTH = 6;
-const REDIRECT_DELAY_MS = 1500;
+const RESEND_COOLDOWN_SECONDS = 60;
 const emptyCode = (): string[] => Array(OTP_LENGTH).fill("");
 const OTP_CODE_RE = new RegExp(`^\\d{${OTP_LENGTH}}$`);
 
@@ -38,9 +46,12 @@ export default function VerifyEmailPage() {
   const [resendCooldown, setResendCooldown] = useState(0);
   const [userId, setUserId] = useState<string | null>(null);
   const [userEmail, setUserEmail] = useState<string | null>(null);
+  const [dispatchStatus, setDispatchStatus] =
+    useState<VerifyEmailDispatchStatus | null>(null);
+  const [expiresAt, setExpiresAt] = useState<string | null>(null);
+  const [expiryLabel, setExpiryLabel] = useState<string | null>(null);
   const inputRefs = useRef<(HTMLInputElement | null)[]>([]);
   const verifyInFlightRef = useRef(false);
-  const redirectTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const verificationCode = code.join("");
   const isCodeComplete = OTP_CODE_RE.test(verificationCode);
@@ -54,20 +65,40 @@ export default function VerifyEmailPage() {
       const destination = getOnboardingDestination(status, product);
       recordOnboardingRedirect(destination);
       router.replace(destination);
-    } catch (error) {
-      console.error("[VerifyEmail] Failed to resolve onboarding destination:", error);
+    } catch (routeError) {
+      console.error(
+        "[VerifyEmail] Failed to resolve onboarding destination:",
+        routeError,
+      );
       router.replace(`/onboarding-embedded?domain=${product}`);
     }
   };
 
-  // Get current user from Firebase auth
+  useEffect(() => {
+    setDispatchStatus(readVerifyEmailDispatchStatus());
+    setExpiresAt(readVerifyEmailExpiresAt());
+  }, []);
+
+  useEffect(() => {
+    if (!expiresAt) {
+      setExpiryLabel(null);
+      return;
+    }
+
+    const tick = () => {
+      setExpiryLabel(formatExpiryCountdown(expiresAt));
+    };
+    tick();
+    const timer = setInterval(tick, 1000);
+    return () => clearInterval(timer);
+  }, [expiresAt]);
+
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (user) => {
       if (user) {
         setUserId(user.uid);
         setUserEmail(user.email);
       } else {
-        // No user logged in, redirect to signup
         router.replace("/signup");
       }
     });
@@ -76,19 +107,10 @@ export default function VerifyEmailPage() {
   }, [router]);
 
   useEffect(() => {
-    return () => {
-      if (redirectTimeoutRef.current) {
-        clearTimeout(redirectTimeoutRef.current);
-      }
-    };
-  }, []);
-
-  // Cooldown timer for resend button
-  useEffect(() => {
     if (resendCooldown > 0) {
       const timer = setTimeout(
         () => setResendCooldown(resendCooldown - 1),
-        1000
+        1000,
       );
       return () => clearTimeout(timer);
     }
@@ -112,12 +134,11 @@ export default function VerifyEmailPage() {
 
     const nextFocusIndex = Math.min(
       startIndex + nextDigits.length,
-      OTP_LENGTH - 1
+      OTP_LENGTH - 1,
     );
     inputRefs.current[nextFocusIndex]?.focus();
   };
 
-  // Handle input change
   const handleChange = (index: number, value: string) => {
     if (isVerificationLocked) return;
 
@@ -133,13 +154,11 @@ export default function VerifyEmailPage() {
     setCode(newCode);
     setError("");
 
-    // Auto-focus next input
     if (digits && index < OTP_LENGTH - 1) {
       inputRefs.current[index + 1]?.focus();
     }
   };
 
-  // Handle backspace
   const handleKeyDown = (index: number, e: KeyboardEvent<HTMLInputElement>) => {
     if (isVerificationLocked) return;
 
@@ -148,13 +167,11 @@ export default function VerifyEmailPage() {
     }
   };
 
-  // Handle paste
   const handlePaste = (index: number, e: ClipboardEvent<HTMLInputElement>) => {
     e.preventDefault();
     applyDigits(index, e.clipboardData.getData("text"));
   };
 
-  // Submit verification
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
@@ -178,14 +195,42 @@ export default function VerifyEmailPage() {
       return;
     }
 
-    let verificationSucceeded = false;
+    // Get fresh Firebase ID token for auth header
+    const firebaseToken = await auth.currentUser
+      ?.getIdToken(false)
+      .catch(() => null);
+    if (!firebaseToken) {
+      setError("Session expired. Please log in again.");
+      setLoading(false);
+      verifyInFlightRef.current = false;
+      return;
+    }
+    const authHeaders = {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${firebaseToken}`,
+    };
+
+    performance.mark("verify-email-submit-start");
 
     try {
-      const response = await fetch("/api/auth/verify-email", {
+      const onboardingPrefetch = getOnboardingCheck({
+        product: getProductDomainFromBrowser(),
+        force: true,
+      }).catch(() => null);
+
+      const verifyFetch = fetch("/api/auth/verify-email", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: authHeaders,
         body: JSON.stringify({ code: verificationCode }),
       });
+
+      const [response] = await Promise.all([verifyFetch, onboardingPrefetch]);
+      performance.mark("verify-email-submit-end");
+      performance.measure(
+        "verify-email-api",
+        "verify-email-submit-start",
+        "verify-email-submit-end",
+      );
 
       const data = await response.json();
 
@@ -193,27 +238,20 @@ export default function VerifyEmailPage() {
         throw new Error(data.error || "Verification failed");
       }
 
-      verificationSucceeded = true;
       setIsVerified(true);
       setSuccess("Email verified successfully! Redirecting...");
-
-      redirectTimeoutRef.current = setTimeout(() => {
-        void routeAfterVerification();
-      }, REDIRECT_DELAY_MS);
+      clearVerifyEmailDispatchStatus();
+      void routeAfterVerification();
     } catch (err: any) {
       console.error("Verification error:", err);
       setError(err.message || "Invalid verification code. Please try again.");
       setCode(emptyCode());
       inputRefs.current[0]?.focus();
-    } finally {
-      if (!verificationSucceeded) {
-        setLoading(false);
-        verifyInFlightRef.current = false;
-      }
+      setLoading(false);
+      verifyInFlightRef.current = false;
     }
   };
 
-  // Resend code
   const handleResend = async () => {
     if (resendLoading || resendCooldown > 0 || isVerificationLocked) {
       return;
@@ -241,8 +279,14 @@ export default function VerifyEmailPage() {
         throw new Error(data.error || "Failed to resend code");
       }
 
+      if (typeof data.expiresAt === "string") {
+        setExpiresAt(data.expiresAt);
+        setVerifyEmailExpiresAt(data.expiresAt);
+      }
+
+      setDispatchStatus("sent");
       setSuccess("Verification code sent! Check your email.");
-      setResendCooldown(60); // 60 second cooldown
+      setResendCooldown(RESEND_COOLDOWN_SECONDS);
     } catch (err: any) {
       console.error("Resend error:", err);
       setError(err.message || "Failed to resend code. Please try again.");
@@ -251,10 +295,16 @@ export default function VerifyEmailPage() {
     }
   };
 
+  const dispatchBanner =
+    dispatchStatus === "sending"
+      ? "Authentication email sent successfully! check your inbox."
+      : dispatchStatus === "failed"
+        ? "We could not confirm the verification email was sent. You can resend after 60 seconds."
+        : null;
+
   return (
     <div className="auth-container login-page">
       <div className="auth-split">
-        {/* Left Side - Gradient */}
         <div className="auth-left">
           <div className="quote-section">
             <p className="quote-label">VERIFY YOUR EMAIL</p>
@@ -276,7 +326,6 @@ export default function VerifyEmailPage() {
           </div>
         </div>
 
-        {/* Right Side - Form */}
         <div className="auth-right">
           <div className="brand-tag">
             <Image src="/logo.png" alt="Flowauxi Logo" width={24} height={24} />
@@ -287,7 +336,30 @@ export default function VerifyEmailPage() {
             <div className="form-header">
               <h2>Email Verification</h2>
               <p>Enter the 6-digit code sent to your email</p>
+              {expiryLabel && (
+                <p
+                  style={{
+                    marginTop: "8px",
+                    fontSize: "0.9rem",
+                    opacity: 0.85,
+                  }}
+                >
+                  Code expires in {expiryLabel}
+                </p>
+              )}
             </div>
+
+            {dispatchBanner && (
+              <Toast
+                message={dispatchBanner}
+                type={dispatchStatus === "failed" ? "error" : "success"}
+                onClose={() => {
+                  clearVerifyEmailDispatchStatus();
+                  setDispatchStatus(null);
+                }}
+                duration={8000}
+              />
+            )}
 
             {error && (
               <Toast
@@ -352,9 +424,7 @@ export default function VerifyEmailPage() {
                 className="btn-secondary"
                 onClick={handleResend}
                 disabled={
-                  resendLoading ||
-                  resendCooldown > 0 ||
-                  isVerificationLocked
+                  resendLoading || resendCooldown > 0 || isVerificationLocked
                 }
                 style={{ marginBottom: "16px" }}
               >
@@ -362,6 +432,8 @@ export default function VerifyEmailPage() {
                   <ButtonSpinner size={20} />
                 ) : resendCooldown > 0 ? (
                   `Resend in ${resendCooldown}s`
+                ) : expiryLabel === "Expired" ? (
+                  "Request New Code"
                 ) : (
                   "Resend Code"
                 )}

@@ -8,7 +8,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
-import { verifySessionCookieSafe } from "@/lib/firebase-admin";
+import { verifySessionCookieSafe, adminAuth } from "@/lib/firebase-admin";
 import { detectProductFromRequest } from "@/lib/auth-helpers";
 import {
   getUserByFirebaseUID,
@@ -16,6 +16,11 @@ import {
 } from "@/lib/supabase/queries";
 import { getWhatsAppAccountsByUserId } from "@/lib/supabase/facebook-whatsapp-queries";
 import { createSupabaseServiceClientOrThrow } from "@/lib/auth/provisioning.server";
+import {
+  getSupabaseServiceClient,
+  warmupSupabaseConnection,
+  ONBOARDING_SUPABASE_TIMEOUT_MS,
+} from "@/lib/supabase/service-client";
 import { withTimeout } from "@/lib/server/fetchWithTimeout";
 import {
   buildOnboardingPayload,
@@ -92,6 +97,14 @@ function withServerTiming(
   return response;
 }
 
+/**
+ * Check trial status with a SINGLE combined query.
+ *
+ * Previously this ran 2 serial queries (active → expired) inside what was
+ * supposed to be a parallel Promise.allSettled batch, adding unnecessary
+ * latency.  Now we fetch all candidate trials in one query and classify
+ * active vs. expired in TypeScript.
+ */
 async function checkTrialStatus(
   userId: string,
   firebaseUID: string,
@@ -105,71 +118,60 @@ async function checkTrialStatus(
   const nowIso = new Date().toISOString();
   const trialIdentityKeys = Array.from(new Set([userId, firebaseUID]));
 
-  let activeTrialQuery = supabase
+  // Single query: fetch all candidate trials (active, expiring_soon, expired)
+  let combinedQuery = supabase
     .from("free_trials")
-    .select("id, started_at, expires_at, plan_slug")
+    .select("id, started_at, expires_at, plan_slug, status")
     .in("user_id", trialIdentityKeys)
-    .in("status", ["active", "expiring_soon"])
-    .gt("expires_at", nowIso)
-    .limit(1);
+    .or("status.eq.active,status.eq.expiring_soon,status.eq.expired")
+    .order("expires_at", { ascending: false })
+    .limit(5);
 
   if (product !== "dashboard") {
-    activeTrialQuery = activeTrialQuery.eq("domain", product);
+    combinedQuery = combinedQuery.eq("domain", product);
   }
 
-  const { data: activeTrialData, error: activeTrialError } =
-    await activeTrialQuery;
+  const { data: trials, error } = await combinedQuery;
 
-  if (activeTrialError) {
-    console.error("[onboarding/check] Trial check error:", activeTrialError);
-    throw activeTrialError;
+  if (error) {
+    console.error("[onboarding/check] Trial check error:", error);
+    throw error;
   }
 
-  if (activeTrialData && activeTrialData.length > 0) {
-    const trial = activeTrialData[0];
+  if (!trials || trials.length === 0) {
+    return { hasActiveTrial: false, isExpired: false };
+  }
+
+  // Classify in TypeScript: active trial = status active/expiring_soon AND not yet expired
+  const activeTrial = trials.find(
+    (t) =>
+      (t.status === "active" || t.status === "expiring_soon") &&
+      t.expires_at &&
+      t.expires_at > nowIso,
+  );
+
+  if (activeTrial) {
     return {
       hasActiveTrial: true,
       isExpired: false,
       trialDetails: {
-        startedAt: trial.started_at,
-        expiresAt: trial.expires_at,
-        planSlug: trial.plan_slug,
+        startedAt: activeTrial.started_at,
+        expiresAt: activeTrial.expires_at,
+        planSlug: activeTrial.plan_slug,
       },
     };
   }
 
-  let expiredTrialQuery = supabase
-    .from("free_trials")
-    .select("id, started_at, expires_at, plan_slug, status")
-    .in("user_id", trialIdentityKeys)
-    .or("status.eq.expired,status.eq.active,status.eq.expiring_soon")
-    .limit(1);
-
-  if (product !== "dashboard") {
-    expiredTrialQuery = expiredTrialQuery.eq("domain", product);
-  }
-
-  const { data: expiredTrialData, error: expiredTrialError } =
-    await expiredTrialQuery;
-
-  if (expiredTrialError) {
-    console.error("[onboarding/check] Expired trial check error:", expiredTrialError);
-    throw expiredTrialError;
-  }
-
-  const expiredTrial = expiredTrialData?.[0];
-  const hasExpiredTrial = Boolean(expiredTrial);
-
+  // No active trial — check if any trial exists (i.e. expired)
+  const anyTrial = trials[0];
   return {
     hasActiveTrial: false,
-    isExpired: hasExpiredTrial,
-    trialDetails: expiredTrial
-      ? {
-          startedAt: expiredTrial.started_at,
-          expiresAt: expiredTrial.expires_at,
-          planSlug: expiredTrial.plan_slug,
-        }
-      : undefined,
+    isExpired: true,
+    trialDetails: {
+      startedAt: anyTrial.started_at,
+      expiresAt: anyTrial.expires_at,
+      planSlug: anyTrial.plan_slug,
+    },
   };
 }
 
@@ -507,110 +509,177 @@ async function runLegacyOnboardingCheck(params: {
   );
 }
 
+/**
+ * Build the fast-path response from the RPC state.
+ * Extracted to avoid duplication in the parallel race strategy.
+ */
+function buildFastPathResponse(
+  state: import("@/lib/auth/onboarding-state.server").OnboardingAccessState,
+  product: ProductDomain,
+  startTime: number,
+): NextResponse {
+  if (!state.userExists) {
+    logStructured("error", "user_not_found", { firebaseUID: "unknown" });
+    const response = NextResponse.json(
+      {
+        error: "USER_NOT_FOUND",
+        code: "USER_NOT_FOUND",
+        userExists: false,
+        message: "User account not found in database",
+      } satisfies OnboardingCheckResult,
+      { status: 404 },
+    );
+    response.cookies.delete("session");
+    return withServerTiming(response, startTime, "fast_path");
+  }
+
+  const payload = buildOnboardingPayload(state, product);
+  const durationMs = Date.now() - startTime;
+
+  logStructured("info", "onboarding_check_completed", {
+    userId: state.userId?.slice(0, 8),
+    product,
+    onboardingCompleted: payload.onboardingCompleted,
+    whatsappConnected: payload.whatsappConnected,
+    hasActiveSubscription: payload.hasActiveSubscription,
+    hasActiveTrial: payload.hasActiveTrial,
+    isTrialExpired: payload.isTrialExpired,
+    durationMs,
+    source: "fast_path",
+    partialData: false,
+  });
+
+  return withServerTiming(
+    NextResponse.json({
+      ...payload,
+      _meta: {
+        durationMs,
+        timestamp: new Date().toISOString(),
+        partialData: false,
+        source: "fast_path",
+        fallback: false,
+      },
+    } satisfies OnboardingCheckResult),
+    startTime,
+    "fast_path",
+  );
+}
+
 export async function GET(request: NextRequest) {
   const startTime = Date.now();
 
   try {
     const cookieStore = await cookies();
     const sessionCookie = cookieStore.get("session")?.value;
+    const authHeader = request.headers.get("authorization");
 
-    if (!sessionCookie) {
+    let firebaseUID: string;
+
+    if (sessionCookie) {
+      // Fast path: verified session cookie (existing users, repeat requests)
+      const [authResult] = await Promise.all([
+        withTimeout(
+          verifySessionCookieSafe(sessionCookie, false),
+          3000,
+          "FIREBASE_SESSION_VERIFY_TIMEOUT",
+        ),
+        warmupSupabaseConnection(ONBOARDING_SUPABASE_TIMEOUT_MS),
+      ]);
+
+      if (!authResult.success) {
+        const response = NextResponse.json(
+          { error: authResult.error || "Unauthorized" },
+          { status: 401 },
+        );
+        if (authResult.shouldClearSession) {
+          response.cookies.delete("session");
+        }
+        return withServerTiming(response, startTime, "error");
+      }
+
+      firebaseUID = authResult.data!.uid;
+    } else if (authHeader?.startsWith("Bearer ")) {
+      // Fast path for newly signed-up users: Firebase ID token (no session cookie yet)
+      try {
+        const idToken = authHeader.slice(7);
+        const decoded = await adminAuth.verifyIdToken(idToken);
+        firebaseUID = decoded.uid;
+        // Fire-and-forget DB warmup (don't block response for it)
+        warmupSupabaseConnection(ONBOARDING_SUPABASE_TIMEOUT_MS).catch(() => {});
+      } catch (error) {
+        console.error("[onboarding-check] Token verification error:", error);
+        return withServerTiming(
+          NextResponse.json({ error: "Unauthorized" }, { status: 401 }),
+          startTime,
+          "error",
+        );
+      }
+    } else {
       return withServerTiming(
         NextResponse.json({ error: "Unauthorized" }, { status: 401 }),
         startTime,
         "error",
       );
     }
-
-    const authResult = await withTimeout(
-      verifySessionCookieSafe(sessionCookie, false),
-      3000,
-      "FIREBASE_SESSION_VERIFY_TIMEOUT",
-    );
-
-    if (!authResult.success) {
-      const response = NextResponse.json(
-        { error: authResult.error || "Unauthorized" },
-        { status: 401 },
-      );
-      if (authResult.shouldClearSession) {
-        response.cookies.delete("session");
-      }
-      return withServerTiming(response, startTime, "error");
-    }
-
-    const firebaseUID = authResult.data!.uid;
     const product = detectProductFromRequest(request);
 
     if (isFastOnboardingCheckEnabled()) {
-      try {
-        const supabase = createSupabaseServiceClientOrThrow({ timeoutMs: 2500 });
+      // ── PARALLEL RACE: fast-path vs. legacy ─────────────────────
+      // Instead of trying fast-path first and falling back to legacy
+      // after a 2.5s timeout (wasting that time completely), we race
+      // both paths simultaneously.  Whichever finishes first wins.
+      //
+      // On warm DB: fast-path wins in ~300ms, legacy is abandoned.
+      // On cold DB: both start immediately — no wasted timeout gap.
+      const fastPathPromise = (async (): Promise<NextResponse> => {
+        const supabase = getSupabaseServiceClient({ timeoutMs: ONBOARDING_SUPABASE_TIMEOUT_MS });
         const state = await readOnboardingAccessStateFast({
           supabase,
           firebaseUid: firebaseUID,
           product,
         });
+        return buildFastPathResponse(state, product, startTime);
+      })();
 
-        if (!state.userExists) {
-          logStructured("error", "user_not_found", { firebaseUID });
+      const legacyPromise = runLegacyOnboardingCheck({
+        firebaseUID,
+        product,
+        startTime,
+        fallback: true,
+      });
 
-          const response = NextResponse.json(
-            {
-              error: "USER_NOT_FOUND",
-              code: "USER_NOT_FOUND",
-              userExists: false,
-              message: "User account not found in database",
-            } satisfies OnboardingCheckResult,
-            { status: 404 },
-          );
-          response.cookies.delete("session");
-          return withServerTiming(response, startTime, "fast_path");
-        }
+      try {
+        // Promise.any resolves with the FIRST successful result.
+        // If fast-path succeeds first (warm DB), legacy result is discarded.
+        // If fast-path fails (cold timeout), legacy result is used.
+        const winner = await Promise.any([fastPathPromise, legacyPromise]);
 
-        const payload = buildOnboardingPayload(state, product);
-        const durationMs = Date.now() - startTime;
+        // Log which path won for observability
+        const source = winner.headers.get("Server-Timing")?.includes("fast_path")
+          ? "fast_path"
+          : "legacy";
+        const loserSource = source === "fast_path" ? "legacy" : "fast_path";
+        debugLog(`[onboarding/check] Race won by ${source}, ${loserSource} abandoned`);
 
-        logStructured("info", "onboarding_check_completed", {
-          userId: state.userId?.slice(0, 8),
+        return winner;
+      } catch (aggregateError) {
+        // Promise.any only rejects when ALL promises reject
+        logStructured("error", "both_paths_failed", {
           product,
-          onboardingCompleted: payload.onboardingCompleted,
-          whatsappConnected: payload.whatsappConnected,
-          hasActiveSubscription: payload.hasActiveSubscription,
-          hasActiveTrial: payload.hasActiveTrial,
-          isTrialExpired: payload.isTrialExpired,
-          durationMs,
-          source: "fast_path",
-          partialData: false,
-        });
-
-        return withServerTiming(
-          NextResponse.json({
-            ...payload,
-            _meta: {
-              durationMs,
-              timestamp: new Date().toISOString(),
-              partialData: false,
-              source: "fast_path",
-              fallback: false,
-            },
-          } satisfies OnboardingCheckResult),
-          startTime,
-          "fast_path",
-        );
-      } catch (error: any) {
-        logStructured("warn", "fast_path_fallback", {
-          product,
-          error: error?.message || String(error),
+          error: String(aggregateError),
           durationMs: Date.now() - startTime,
         });
+        // Fall through to the outer catch
+        throw aggregateError;
       }
     }
 
+    // Fast path disabled — legacy only
     return await runLegacyOnboardingCheck({
       firebaseUID,
       product,
       startTime,
-      fallback: isFastOnboardingCheckEnabled(),
+      fallback: false,
     });
   } catch (error: any) {
     console.error("[onboarding/check] Fatal error:", error);

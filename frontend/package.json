@@ -16,7 +16,9 @@
     "test": "jest",
     "test:redirect": "jest --testPathPatterns='redirect' --passWithNoTests",
     "test:ci": "jest --testPathPatterns='redirect' --passWithNoTests",
-    "optimize:images": "node scripts/optimize-images.js"
+    "optimize:images": "node scripts/optimize-images.js",
+    "perf:microbench-settings": "node scripts/perf/microbench-settings-save.mjs",
+    "perf:microbench-embedded-signup": "node scripts/perf/microbench-embedded-signup.mjs"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.980.0",

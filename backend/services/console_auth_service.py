@@ -923,6 +923,13 @@ Flowauxi"""
             }
         
         user_id = payload.get('sub')
+        if not user_id:
+            return {
+                'success': False,
+                'error': 'INVALID_REFRESH_TOKEN',
+                'message': 'Token missing subject (user_id)'
+            }
+        
         token_hash = hashlib.sha256(refresh_token.encode()).hexdigest()
         
         try:

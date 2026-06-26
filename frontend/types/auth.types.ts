@@ -66,6 +66,11 @@ export interface SyncUserRequest {
    * profile data unless it also exists on the trusted Firebase token.
    */
   phoneNumber?: string;
+  /**
+   * Optional full name explicitly passed during signup to avoid forcing a
+   * blocking Firebase token refresh just to embed the displayName claim.
+   */
+  fullName?: string;
 }
 
 export interface SyncUserResponse {

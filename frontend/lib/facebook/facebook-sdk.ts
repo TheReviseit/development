@@ -612,7 +612,7 @@ class FacebookSDK {
       const redirectUri =
         process.env.NEXT_PUBLIC_FACEBOOK_REDIRECT_URI ||
         (typeof window !== "undefined"
-          ? window.location.origin + "/onboarding"
+          ? `${window.location.origin}/onboarding-embedded`
           : undefined);
       console.log(
         "🔵 [Facebook SDK] Using redirect_uri for OAuth:",

@@ -32,8 +32,7 @@ const DEMO_PRODUCTS: Product[] = [
     price: 12999,
     description:
       "Handwoven pure silk saree with intricate zari work. Perfect for weddings and festive occasions. Features traditional temple border design with pallu motifs.",
-    imageUrl:
-      "https://images.unsplash.com/photo-1583391733956-f086e3f49ce1?w=600",
+    imageUrl: "/shop-photos/kanchipuram_saree.png",
     sizes: ["Free Size"],
     colors: ["Red", "Gold", "Maroon", "Green"],
   },
@@ -44,8 +43,7 @@ const DEMO_PRODUCTS: Product[] = [
     price: 2499,
     description:
       "Comfortable pure cotton kurta with traditional block print patterns. Ideal for daily wear and casual occasions.",
-    imageUrl:
-      "https://images.unsplash.com/photo-1617114919297-3c8ddb01f599?w=600",
+    imageUrl: "/shop-photos/cotton_kurta.png",
     sizes: ["S", "M", "L", "XL", "XXL"],
     colors: ["Blue", "White", "Yellow"],
   },
@@ -56,8 +54,7 @@ const DEMO_PRODUCTS: Product[] = [
     price: 18999,
     description:
       "Stunning designer lehenga with heavy embroidery work. Includes matching choli and dupatta. Perfect for sangeet and reception.",
-    imageUrl:
-      "https://images.unsplash.com/photo-1595777457583-95e059d581b8?w=600",
+    imageUrl: "/shop-photos/designer_lehenga.png",
     sizes: ["S", "M", "L", "XL"],
     colors: ["Pink", "Peach", "Wine"],
   },
@@ -68,8 +65,7 @@ const DEMO_PRODUCTS: Product[] = [
     price: 3499,
     description:
       "Authentic Banarasi silk dupatta with golden zari weaving. Versatile piece that elevates any outfit.",
-    imageUrl:
-      "https://images.unsplash.com/photo-1583391733975-dae3a71ef3cc?w=600",
+    imageUrl: "/shop-photos/banarasi_dupatta.png",
     sizes: ["Free Size"],
     colors: ["Red", "Blue", "Purple", "Orange"],
   },
@@ -80,8 +76,7 @@ const DEMO_PRODUCTS: Product[] = [
     price: 5999,
     description:
       "Floor-length Anarkali suit with intricate thread embroidery. Flowy silhouette perfect for parties.",
-    imageUrl:
-      "https://images.unsplash.com/photo-1585487000160-6ebcfceb0d03?w=600",
+    imageUrl: "/shop-photos/anarkali_suit.png",
     sizes: ["S", "M", "L", "XL", "XXL"],
     colors: ["Navy", "Teal", "Burgundy"],
   },
@@ -92,8 +87,7 @@ const DEMO_PRODUCTS: Product[] = [
     price: 1999,
     description:
       "Trendy palazzo set with digital print kurta. Comfortable rayon fabric ideal for summer.",
-    imageUrl:
-      "https://images.unsplash.com/photo-1512436991641-6745cdb1723f?w=600",
+    imageUrl: "/shop-photos/palazzo_set.png",
     sizes: ["S", "M", "L", "XL"],
     colors: ["Multicolor", "Black", "White"],
   },
@@ -104,8 +98,7 @@ const DEMO_PRODUCTS: Product[] = [
     price: 4999,
     description:
       "Authentic handloom cotton saree from Bengal. Breathable fabric with traditional tant weave.",
-    imageUrl:
-      "https://images.unsplash.com/photo-1589810635657-232948472d98?w=600",
+    imageUrl: "/shop-photos/cotton_saree.png",
     sizes: ["Free Size"],
     colors: ["White", "Yellow", "Orange"],
   },
@@ -116,8 +109,7 @@ const DEMO_PRODUCTS: Product[] = [
     price: 3299,
     description:
       "Elegant white kurta with hand-embroidered chikankari work from Lucknow. Timeless classic piece.",
-    imageUrl:
-      "https://images.unsplash.com/photo-1496747611176-843222e1e57c?w=600",
+    imageUrl: "/shop-photos/chikankari_kurta.png",
     sizes: ["S", "M", "L", "XL", "XXL"],
     colors: ["White", "Peach", "Light Blue"],
   },

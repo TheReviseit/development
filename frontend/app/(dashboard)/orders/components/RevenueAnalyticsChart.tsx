@@ -208,14 +208,14 @@ export function RevenueAnalyticsChart({
                   x2="0"
                   y2="1"
                 >
-                  <stop offset="0%" stopColor="#ffffff" stopOpacity={0.15} />
-                  <stop offset="100%" stopColor="#ffffff" stopOpacity={0.02} />
+                  <stop offset="0%" stopColor="#22c55e" stopOpacity={0.25} />
+                  <stop offset="100%" stopColor="#22c55e" stopOpacity={0.02} />
                 </linearGradient>
               </defs>
 
               <CartesianGrid
                 strokeDasharray="3 3"
-                stroke="rgba(48, 45, 45, 0.5)"
+                stroke="rgba(0, 0, 0, 0.08)"
                 vertical={false}
               />
 
@@ -223,7 +223,7 @@ export function RevenueAnalyticsChart({
                 dataKey="label"
                 axisLine={false}
                 tickLine={false}
-                tick={{ fill: "rgba(255, 255, 255, 0.5)", fontSize: 12 }}
+                tick={{ fill: "rgba(0, 0, 0, 0.55)", fontSize: 12 }}
                 dy={10}
                 interval="preserveStartEnd"
               />
@@ -231,7 +231,7 @@ export function RevenueAnalyticsChart({
               <YAxis
                 axisLine={false}
                 tickLine={false}
-                tick={{ fill: "rgba(255, 255, 255, 0.5)", fontSize: 12 }}
+                tick={{ fill: "rgba(0, 0, 0, 0.55)", fontSize: 12 }}
                 tickFormatter={yAxisFormatter}
                 domain={yAxisDomain}
                 dx={-5}
@@ -239,19 +239,19 @@ export function RevenueAnalyticsChart({
 
               <Tooltip
                 content={<CustomTooltip currency={currency} />}
-                cursor={{ stroke: "rgba(255, 255, 255, 0.2)", strokeWidth: 1 }}
+                cursor={{ stroke: "rgba(0, 0, 0, 0.12)", strokeWidth: 1 }}
               />
 
               <Area
                 type="monotone"
                 dataKey="revenue"
-                stroke="rgba(255, 255, 255, 0.6)"
+                stroke="#22c55e"
                 strokeWidth={2}
                 fill="url(#revenueGradient)"
                 activeDot={{
                   r: 6,
-                  fill: "#ffffff",
-                  stroke: "#1a1a2e",
+                  fill: "#22c55e",
+                  stroke: "#ffffff",
                   strokeWidth: 3,
                 }}
               />

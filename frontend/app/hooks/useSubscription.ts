@@ -40,6 +40,10 @@ export interface SubscriptionStatus {
   reason: BillingLockReason | null;
   /** Raw subscription status string from DB */
   status: string | null;
+  /** Plan name (e.g. 'starter', 'business', 'pro') */
+  plan_name?: string | null;
+  /** Tier: 0=starter, 1=business, 2=pro */
+  plan_tier?: number | null;
   /** Trial metadata (if user has/had a trial) */
   trial: TrialInfo | null;
   /** API error indicator */
@@ -57,6 +61,10 @@ export interface UseSubscriptionReturn {
   trial: TrialInfo | null;
   /** Raw subscription status */
   subscriptionStatus: string | null;
+  /** Plan name (e.g. 'starter', 'business', 'pro') */
+  planName: string | null;
+  /** Plan tier: 0=starter, 1=business, 2=pro */
+  planTier: number | null;
   /** Whether initial fetch is still loading */
   isLoading: boolean;
   /** Whether a background refetch is happening */
@@ -124,14 +132,28 @@ async function fetchBillingStatus(domain: string): Promise<SubscriptionStatus> {
       throw new Error(`billing-status HTTP ${response.status}`);
     }
 
-    const data = await response.json();
+    const apiData = await response.json();
+
+    let planName: string | null = null;
+    let planTier: number | null = null;
+    if (!apiData.locked) {
+      planName =
+        apiData.plan_name ??
+        apiData.plan_slug ??
+        apiData.trial?.plan ??
+        null;
+      planTier =
+        typeof apiData.plan_tier === "number" ? apiData.plan_tier : null;
+    }
 
     return {
-      locked: data.locked ?? false,
-      reason: (data.reason as BillingLockReason) ?? null,
-      status: data.status ?? null,
-      trial: data.trial ?? null,
-      error: data.error,
+      locked: apiData.locked ?? false,
+      reason: (apiData.reason as BillingLockReason) ?? null,
+      status: apiData.status ?? null,
+      plan_name: planName,
+      plan_tier: planTier,
+      trial: apiData.trial ?? null,
+      error: apiData.error,
     };
   } catch (error: any) {
     clearTimeout(timeoutId);
@@ -236,6 +258,9 @@ export function useSubscription(): UseSubscriptionReturn {
 
   const lockReason = isLocked ? (data?.reason ?? "unknown") : null;
 
+  const planName = data?.plan_name ?? null;
+  const planTier = data?.plan_tier ?? null;
+
   // =======================================================================
   // FEATURE GUARDS
   // =======================================================================
@@ -279,6 +304,8 @@ export function useSubscription(): UseSubscriptionReturn {
     lockReason,
     trial: data?.trial ?? null,
     subscriptionStatus: data?.status ?? null,
+    planName,
+    planTier,
     isLoading,
     isRefetching,
     isGracePeriod,

@@ -1,0 +1,12 @@
+{
+  "captured_at": "2026-06-25T00:00:00.000Z",
+  "protocol": "60s warmup + 50 VU x 3m record",
+  "note": "Pre-Phase-1 baseline placeholder. Re-run k6-verify-email.js after deployment to refresh.",
+  "measured_evidence_from_logs": {
+    "POST /api/auth/verify-email_ms": 8800,
+    "POST /api/auth/sync_ms": 4773,
+    "POST /api/auth/send-verification_ms": 1886,
+    "client_redirect_delay_ms": 1500
+  },
+  "metrics": null
+}

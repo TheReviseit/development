@@ -86,6 +86,7 @@ export interface ConnectedWhatsAppAccount {
   quality_rating: "GREEN" | "YELLOW" | "RED" | "UNKNOWN" | null;
   messaging_limit_tier: string | null;
   is_active: boolean;
+  webhook_status?: "pending" | "active" | "failed";
   created_at: string;
   updated_at: string;
   deleted_at: string | null;

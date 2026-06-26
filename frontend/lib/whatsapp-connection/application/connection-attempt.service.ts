@@ -12,6 +12,19 @@ import { WhatsAppValidationEngine } from "./validation-engine";
 import { verifyAttemptToken } from "../security/attempt-token";
 import { WhatsAppConnectionError } from "../domain/errors";
 
+function hasCompleteEmbeddedSetup(
+  input: EmbeddedSignupFinalizeInput & { redirectUri?: string | null },
+): boolean {
+  const setupData = input.setupData || {};
+  const messageData = input.messageEventData || {};
+  const wabaId = setupData.wabaId || setupData.waba_id || messageData.waba_id;
+  const phoneNumberId =
+    setupData.phoneNumberId ||
+    setupData.phone_number_id ||
+    messageData.phone_number_id;
+  return Boolean(wabaId && phoneNumberId);
+}
+
 export class ConnectionAttemptService {
   constructor(
     private readonly repository = new WhatsAppConnectionRepository(),
@@ -94,6 +107,7 @@ export class ConnectionAttemptService {
     }
 
     const idempotencyKey = params.idempotencyKey || attempt.idempotency_key;
+    const fastLane = hasCompleteEmbeddedSetup(params.input);
 
     await this.repository.transitionAttempt({
       tenant: context.tenant,
@@ -106,16 +120,18 @@ export class ConnectionAttemptService {
       origin: context.requestContext.origin,
     });
 
-    await this.repository.transitionAttempt({
-      tenant: context.tenant,
-      attemptId,
-      state: "meta_authorized",
-      validationResult: {
-        permissions: meta.permissions,
-        wabaId: meta.wabaId,
-        phoneNumberId: meta.phoneNumberId,
-      },
-    });
+    if (!fastLane) {
+      await this.repository.transitionAttempt({
+        tenant: context.tenant,
+        attemptId,
+        state: "meta_authorized",
+        validationResult: {
+          permissions: meta.permissions,
+          wabaId: meta.wabaId,
+          phoneNumberId: meta.phoneNumberId,
+        },
+      });
+    }
 
     const resourceKeys = buildResourceKeys({
       tenantId: context.tenant.tenantId,
@@ -125,11 +141,13 @@ export class ConnectionAttemptService {
     });
 
     return await this.lockManager.withLocks(resourceKeys, async () => {
-      await this.repository.transitionAttempt({
-        tenant: context.tenant,
-        attemptId,
-        state: "locked",
-      });
+      if (!fastLane) {
+        await this.repository.transitionAttempt({
+          tenant: context.tenant,
+          attemptId,
+          state: "locked",
+        });
+      }
 
       const decision = await this.validationEngine.evaluate({
         tenant: context.tenant,
@@ -171,17 +189,19 @@ export class ConnectionAttemptService {
         origin: context.requestContext.origin,
       });
 
-      await this.repository.transitionAttempt({
-        tenant: context.tenant,
-        attemptId,
-        state: activatedMeta.webhookSubscribed ? "webhook_subscribed" : "ownership_checked",
-        validationResult: {
-          permissions: activatedMeta.permissions,
-          warnings: activatedMeta.warnings,
-          webhookSubscribed: activatedMeta.webhookSubscribed,
-          phoneRegistered: activatedMeta.phoneRegistered,
-        },
-      });
+      if (!fastLane) {
+        await this.repository.transitionAttempt({
+          tenant: context.tenant,
+          attemptId,
+          state: activatedMeta.webhookSubscribed ? "webhook_subscribed" : "ownership_checked",
+          validationResult: {
+            permissions: activatedMeta.permissions,
+            warnings: activatedMeta.warnings,
+            webhookSubscribed: activatedMeta.webhookSubscribed,
+            phoneRegistered: activatedMeta.phoneRegistered,
+          },
+        });
+      }
 
       return await this.repository.finalizeConnection({
         tenant: context.tenant,

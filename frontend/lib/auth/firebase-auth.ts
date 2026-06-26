@@ -57,6 +57,12 @@ const DEFAULT_CONFIG: AuthConfig = {
   },
 };
 
+const REDIRECT_IN_PROGRESS_KEY = "_firebaseRedirectInProgress";
+const REDIRECT_STARTED_AT_KEY = "_firebaseRedirectStartedAt";
+const REDIRECT_FLAG_TTL_MS = 10 * 60 * 1000;
+
+let redirectResultPromise: Promise<AuthAttemptResult> | null = null;
+
 // =============================================================================
 // ERROR CLASSIFICATION
 // =============================================================================
@@ -74,7 +80,16 @@ const FALLBACK_ERROR = {
 export function classifyAuthError(
   error: unknown
 ): {
-  type: "popup_blocked" | "popup_closed" | "network" | "unauthorized_domain" | "cancelled" | "unknown";
+  type:
+    | "popup_blocked"
+    | "popup_closed"
+    | "network"
+    | "unauthorized_domain"
+    | "provider_disabled"
+    | "configuration"
+    | "account_conflict"
+    | "cancelled"
+    | "unknown";
   shouldRetry: boolean;
   shouldFallback: boolean;
   userMessage: string;
@@ -86,8 +101,11 @@ export function classifyAuthError(
   }
 
   const err = error as Record<string, unknown>;
-  const code = typeof err.code === "string" ? err.code : "";
+  const rawCode = typeof err.code === "string" ? err.code : "";
   const message = typeof err.message === "string" ? err.message : "";
+  const messageCode = message.match(/\((auth\/[^)]+)\)/)?.[1] || "";
+  const code = rawCode || messageCode;
+  const normalizedMessage = message.toLowerCase();
 
   // Popup blocked by browser
   if (code === "auth/popup-blocked") {
@@ -100,7 +118,10 @@ export function classifyAuthError(
   }
 
   // Popup closed by user or cross-origin issue
-  if (code === "auth/popup-closed-by-user") {
+  if (
+    code === "auth/popup-closed-by-user" ||
+    normalizedMessage.includes("cross-origin-opener-policy")
+  ) {
     return {
       type: "popup_closed",
       shouldRetry: true,
@@ -125,7 +146,43 @@ export function classifyAuthError(
       type: "unauthorized_domain",
       shouldRetry: false,
       shouldFallback: false,
-      userMessage: "This domain is not authorized. Please contact support.",
+      userMessage:
+        "This domain is not authorized for Google sign-in. Add it in Firebase Authentication settings.",
+    };
+  }
+
+  if (code === "auth/operation-not-allowed") {
+    return {
+      type: "provider_disabled",
+      shouldRetry: false,
+      shouldFallback: false,
+      userMessage:
+        "Google sign-in is not enabled for this Firebase project. Enable the Google provider in Firebase Authentication.",
+    };
+  }
+
+  if (
+    code === "auth/api-key-not-valid" ||
+    code === "auth/invalid-api-key" ||
+    code === "auth/invalid-app-credential" ||
+    code === "auth/project-not-found"
+  ) {
+    return {
+      type: "configuration",
+      shouldRetry: false,
+      shouldFallback: false,
+      userMessage:
+        "Firebase authentication is misconfigured. Check the Firebase public config for this environment.",
+    };
+  }
+
+  if (code === "auth/account-exists-with-different-credential") {
+    return {
+      type: "account_conflict",
+      shouldRetry: false,
+      shouldFallback: false,
+      userMessage:
+        "An account already exists with this email using a different sign-in method.",
     };
   }
 
@@ -140,12 +197,26 @@ export function classifyAuthError(
   }
 
   // Initial state / storage issues
-  if (message.includes("initial state")) {
+  if (normalizedMessage.includes("initial state")) {
     return {
       type: "unknown",
       shouldRetry: false,
       shouldFallback: true,
       userMessage: "Browser storage issue detected. Trying alternative method...",
+    };
+  }
+
+  if (code) {
+    return {
+      ...FALLBACK_ERROR,
+      userMessage: `Authentication failed (${code}). Please try again.`,
+    };
+  }
+
+  if (message) {
+    return {
+      ...FALLBACK_ERROR,
+      userMessage: "Authentication failed. Please try again or use redirect sign-in.",
     };
   }
 
@@ -216,7 +287,9 @@ async function attemptPopupSignIn(
   resolver?: PopupRedirectResolver
 ): Promise<AuthAttemptResult> {
   try {
-    const result = await signInWithPopup(auth, provider, resolver);
+    const result = resolver
+      ? await signInWithPopup(auth, provider, resolver)
+      : await signInWithPopup(auth, provider);
     return {
       success: true,
       user: result,
@@ -243,13 +316,18 @@ async function initiateRedirectSignIn(
     // Set flag before redirect so we know to check on return
     setRedirectInProgress();
     
-    await signInWithRedirect(auth, provider, resolver);
+    if (resolver) {
+      await signInWithRedirect(auth, provider, resolver);
+    } else {
+      await signInWithRedirect(auth, provider);
+    }
     // Note: signInWithRedirect never returns on success (page redirects)
     return {
       success: true,
       method: "redirect",
     };
   } catch (error) {
+    clearRedirectInProgress();
     return {
       success: false,
       error: error as AuthError,
@@ -265,26 +343,92 @@ export async function checkRedirectResult(
   auth: Auth,
   resolver?: PopupRedirectResolver
 ): Promise<AuthAttemptResult> {
-  try {
-    const result = await getRedirectResult(auth, resolver);
-    if (result) {
+  if (redirectResultPromise) {
+    return redirectResultPromise;
+  }
+
+  redirectResultPromise = (async () => {
+    try {
+      const result = resolver
+        ? await getRedirectResult(auth, resolver)
+        : await getRedirectResult(auth);
+      if (result) {
+        return {
+          success: true,
+          user: result,
+          method: "redirect",
+        };
+      }
       return {
-        success: true,
-        user: result,
+        success: false,
         method: "redirect",
       };
+    } catch (error) {
+      return {
+        success: false,
+        error: error as AuthError,
+        method: "redirect",
+      };
+    } finally {
+      clearRedirectInProgress();
+      redirectResultPromise = null;
     }
-    return {
-      success: false,
-      method: "redirect",
-    };
-  } catch (error) {
-    return {
-      success: false,
-      error: error as AuthError,
-      method: "redirect",
-    };
+  })();
+
+  return redirectResultPromise;
+}
+
+function safeGetStorageValue(storage: Storage | undefined, key: string): string | null {
+  try {
+    return storage?.getItem(key) ?? null;
+  } catch {
+    return null;
   }
+}
+
+function safeSetStorageValue(storage: Storage | undefined, key: string, value: string): void {
+  try {
+    storage?.setItem(key, value);
+  } catch {
+    /* Storage can be blocked in private or embedded contexts. */
+  }
+}
+
+function safeRemoveStorageValue(storage: Storage | undefined, key: string): void {
+  try {
+    storage?.removeItem(key);
+  } catch {
+    /* Storage can be blocked in private or embedded contexts. */
+  }
+}
+
+function getRedirectStartedAt(): number | null {
+  const raw =
+    safeGetStorageValue(window.sessionStorage, REDIRECT_STARTED_AT_KEY) ||
+    safeGetStorageValue(window.localStorage, REDIRECT_STARTED_AT_KEY);
+
+  if (!raw) return null;
+
+  const startedAt = Number(raw);
+  return Number.isFinite(startedAt) ? startedAt : null;
+}
+
+function hasFreshRedirectFlag(): boolean {
+  const hasFlag =
+    safeGetStorageValue(window.sessionStorage, REDIRECT_IN_PROGRESS_KEY) === "true" ||
+    safeGetStorageValue(window.localStorage, REDIRECT_IN_PROGRESS_KEY) === "true";
+
+  if (!hasFlag) return false;
+
+  const startedAt = getRedirectStartedAt();
+  if (!startedAt) return true;
+
+  const isFresh = Date.now() - startedAt < REDIRECT_FLAG_TTL_MS;
+  if (!isFresh) {
+    clearRedirectInProgress();
+  }
+
+  return isFresh;
 }
 
 /**
@@ -312,8 +456,9 @@ export function shouldCheckRedirectResult(): boolean {
                          url.searchParams.has("auth") ||
                          url.searchParams.has("state");
 
-    // Check sessionStorage for redirect flag
-    const hasRedirectFlag = sessionStorage.getItem("_firebaseRedirectInProgress") === "true";
+    // Check durable redirect marker. Firebase redirect returns can lose the
+    // original tab context, so we mirror this in sessionStorage and localStorage.
+    const hasRedirectFlag = hasFreshRedirectFlag();
 
     // Check if we just came back from accounts.google.com
     const referrer = document.referrer || "";
@@ -324,12 +469,10 @@ export function shouldCheckRedirectResult(): boolean {
     const hasErrorParams = url.searchParams.has("error") ||
                           url.searchParams.has("error_description");
 
-    // Clear the redirect flag if it exists (we're processing it now)
-    if (hasRedirectFlag) {
-      sessionStorage.removeItem("_firebaseRedirectInProgress");
-    }
+    // Distinguish Firebase OAuth errors from our own application errors
+    const isFirebaseError = hasErrorParams && (hasRedirectFlag || fromGoogleAuth || hasAuthParams);
 
-    const shouldCheck = hasAuthParams || hasRedirectFlag || fromGoogleAuth || hasErrorParams;
+    const shouldCheck = hasAuthParams || hasRedirectFlag || fromGoogleAuth || isFirebaseError;
 
     if (shouldCheck) {
       console.log("[Auth] Detected potential redirect return:", {
@@ -353,11 +496,21 @@ export function shouldCheckRedirectResult(): boolean {
  */
 export function setRedirectInProgress(): void {
   if (typeof window === "undefined") return;
-  try {
-    sessionStorage.setItem("_firebaseRedirectInProgress", "true");
-  } catch (error) {
-    console.warn("[Auth] Could not set redirect flag:", error);
-  }
+
+  const startedAt = String(Date.now());
+  safeSetStorageValue(window.sessionStorage, REDIRECT_IN_PROGRESS_KEY, "true");
+  safeSetStorageValue(window.sessionStorage, REDIRECT_STARTED_AT_KEY, startedAt);
+  safeSetStorageValue(window.localStorage, REDIRECT_IN_PROGRESS_KEY, "true");
+  safeSetStorageValue(window.localStorage, REDIRECT_STARTED_AT_KEY, startedAt);
+}
+
+export function clearRedirectInProgress(): void {
+  if (typeof window === "undefined") return;
+
+  safeRemoveStorageValue(window.sessionStorage, REDIRECT_IN_PROGRESS_KEY);
+  safeRemoveStorageValue(window.sessionStorage, REDIRECT_STARTED_AT_KEY);
+  safeRemoveStorageValue(window.localStorage, REDIRECT_IN_PROGRESS_KEY);
+  safeRemoveStorageValue(window.localStorage, REDIRECT_STARTED_AT_KEY);
 }
 
 // =============================================================================
@@ -419,7 +572,12 @@ export async function signInWithGoogleHybrid(
 
   // Analyze error
   const errorAnalysis = classifyAuthError(result.error!);
-  console.log("[Auth] Popup failed:", errorAnalysis.type, errorAnalysis.userMessage);
+  console.warn("[Auth] Popup failed:", {
+    type: errorAnalysis.type,
+    code: result.error?.code,
+    message: result.error?.message,
+    userMessage: errorAnalysis.userMessage,
+  });
 
   // Attempt 2: Retry if enabled and error is retryable
   if (config.enablePopupRetry && 

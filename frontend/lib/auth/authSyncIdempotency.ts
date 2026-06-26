@@ -17,6 +17,73 @@ export function generateAuthSyncIdempotencyKey(params: {
   return `as_${hash}`;
 }
 
+export function generateAuthSyncWarmCacheKey(params: {
+  firebaseUid: string;
+  product: string;
+  allowCreate: boolean;
+}): string {
+  const { firebaseUid, product, allowCreate } = params;
+  const components = ["warm", firebaseUid, product, allowCreate ? "1" : "0"].join(":");
+  const hash = createHash("sha256").update(components).digest("hex").slice(0, 32);
+  return `asw_${hash}`;
+}
+
+export async function getAuthSyncWarmCache(params: {
+  supabase: SupabaseClient;
+  cacheKey: string;
+}): Promise<{ statusCode: number; responseBody: any } | null> {
+  const { supabase, cacheKey } = params;
+  const { data, error } = await supabase.rpc("auth_sync_warm_get", {
+    p_cache_key: cacheKey,
+  });
+  if (error) {
+    if (isMissingAuthSyncWarmRpc(error, "auth_sync_warm_get")) {
+      return null;
+    }
+    console.warn("[AUTH_SYNC] Warm cache lookup failed (non-fatal):", error);
+    return null;
+  }
+  if (!data?.status_code) return null;
+  return {
+    statusCode: Number(data.status_code),
+    responseBody: data.response_body,
+  };
+}
+
+export async function putAuthSyncWarmCache(params: {
+  supabase: SupabaseClient;
+  cacheKey: string;
+  statusCode: number;
+  responseBody: any;
+  ttlSeconds?: number;
+}): Promise<void> {
+  const { supabase, cacheKey, statusCode, responseBody, ttlSeconds = 60 } = params;
+  const { error } = await supabase.rpc("auth_sync_warm_put", {
+    p_cache_key: cacheKey,
+    p_response_body: responseBody,
+    p_status_code: statusCode,
+    p_ttl_seconds: ttlSeconds,
+  });
+  if (error) {
+    if (isMissingAuthSyncWarmRpc(error, "auth_sync_warm_put")) {
+      return;
+    }
+    throw error;
+  }
+}
+
+export function isMissingAuthSyncWarmRpc(error: unknown, rpcName: string): boolean {
+  const msg = String((error as { message?: string })?.message || error);
+  const code = (error as { code?: string })?.code;
+  return (
+    code === "PGRST202" ||
+    msg.includes("Could not find the function") ||
+    msg.includes("schema cache") ||
+    (msg.includes(rpcName) &&
+      (msg.includes("does not exist") || msg.includes("Could not find")))
+  );
+}
+
 export type AuthSyncIdempotencyRow =
   | {
       claimed: boolean;
@@ -43,6 +110,36 @@ export async function claimAuthSyncIdempotency(params: {
   });
   if (error) throw error;
   return data as AuthSyncIdempotencyRow;
+}
+
+export async function claimAuthSyncIdempotencySafe(params: {
+  supabase: SupabaseClient;
+  idempotencyKey: string;
+  lockedBy: string;
+  ttlSeconds: number;
+}): Promise<
+  | { ok: true; claim: NonNullable<AuthSyncIdempotencyRow> }
+  | { ok: false; timeout: true }
+  | { ok: false; timeout: false; error: unknown }
+> {
+  try {
+    const claim = await claimAuthSyncIdempotency(params);
+    if (!claim) {
+      return { ok: false, timeout: false, error: new Error("IDEMPOTENCY_NULL") };
+    }
+    return { ok: true, claim };
+  } catch (error) {
+    const msg = String((error as Error)?.message || error);
+    if (
+      msg.includes("AbortError") ||
+      msg.includes("aborted") ||
+      msg.includes("timeout") ||
+      msg.includes("TIMEOUT")
+    ) {
+      return { ok: false, timeout: true };
+    }
+    return { ok: false, timeout: false, error };
+  }
 }
 
 export async function getAuthSyncIdempotency(params: {

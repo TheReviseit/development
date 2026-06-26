@@ -4,7 +4,9 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { getDomainVisibility, type ProductDomain } from "@/lib/domain/config";
+import { isProPlan } from "@/lib/billing/plan-display";
 import { auth } from "@/src/firebase/firebase";
+import { useSubscriptionContext } from "./SubscriptionProvider";
 import styles from "../dashboard.module.css";
 import {
   BarChart2,
@@ -87,6 +89,7 @@ export default function DashboardSidebar({
   const pathname = usePathname();
   const [userCount, setUserCount] = useState<number>(0);
   const currentDomain: ProductDomain = productDomain;
+  const { planName, planTier } = useSubscriptionContext();
   const [aiCapabilities, setAiCapabilities] = useState<AICapabilities>({
     appointment_booking_enabled: false,
     order_booking_enabled: false,
@@ -416,6 +419,7 @@ export default function DashboardSidebar({
 
   const displayName = userName || userEmail?.split("@")[0] || "User";
   const initials = displayName.substring(0, 2).toUpperCase();
+  const isProUser = planTier === 2 || isProPlan(planName, currentDomain);
 
   const renderNavSection = (sectionName: "top" | "workspace" | "favorites") => {
     const items = navItems.filter(
@@ -617,6 +621,11 @@ export default function DashboardSidebar({
       <div className={styles.sidebarFooter}>
         <div className={styles.userProfileRow}>
           <div className={styles.userProfile}>
+            {isProUser && (
+              <span className={styles.planBadgeCorner} aria-label="Pro plan">
+                Pro
+              </span>
+            )}
             <div className={styles.userAvatar}>{initials}</div>
             {!isCollapsed && (
               <div className={styles.userInfo}>

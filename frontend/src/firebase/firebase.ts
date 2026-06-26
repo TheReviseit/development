@@ -22,6 +22,7 @@ import {
   browserLocalPersistence,
   indexedDBLocalPersistence,
   browserSessionPersistence,
+  browserPopupRedirectResolver,
   connectAuthEmulator,
 } from "firebase/auth";
 import { getFirestore, Firestore } from "firebase/firestore";
@@ -45,51 +46,22 @@ interface FirebaseConfig {
 // =============================================================================
 
 /**
- * Get the appropriate auth domain based on current environment
+ * Resolve the Firebase hosted auth domain.
  * 
- * This is CRITICAL for Firebase Auth to work across multiple domains:
- * - localhost:3000 (development)
- * - localhost:3001 (shop development)
- * - yourdomain.com (production)
- * - www.yourdomain.com (production with www)
- * 
- * Firebase Auth requires the authDomain to be authorized in the Firebase Console.
- * All variations must be added to: Firebase Console → Authentication → Settings → Authorized Domains
+ * This should be the Firebase auth handler host, for example
+ * flowauxi.firebaseapp.com. Localhost, preview URLs, and custom app domains
+ * must be added separately in Firebase Authentication -> Authorized domains.
  */
 function getAuthDomain(): string | undefined {
-  // Priority 1: Environment variable (explicit override)
   if (process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN) {
     return process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN;
   }
 
-  // Priority 2: Auto-detect from browser (client-side only)
-  if (typeof window !== "undefined") {
-    const hostname = window.location.hostname;
-    const port = window.location.port;
-    
-    // Production domains
-    if (hostname === "flowauxi.com" || hostname === "www.flowauxi.com") {
-      return "www.flowauxi.com";
-    }
-    
-    // Subdomains
-    if (hostname.endsWith(".flowauxi.com")) {
-      return hostname;
-    }
-    
-    // Localhost with specific ports
-    if (hostname === "localhost") {
-      return port ? `localhost:${port}` : "localhost";
-    }
-    
-    // 127.0.0.1
-    if (hostname === "127.0.0.1") {
-      return port ? `127.0.0.1:${port}` : "127.0.0.1";
-    }
+  if (process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID) {
+    return `${process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID}.firebaseapp.com`;
   }
 
-  // Fallback to environment variable or undefined
-  return process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN;
+  return undefined;
 }
 
 // =============================================================================
@@ -131,6 +103,18 @@ function validateConfig(config: FirebaseConfig): void {
 
 // Validate on load
 validateConfig(firebaseConfig);
+
+if (
+  typeof window !== "undefined" &&
+  firebaseConfig.authDomain &&
+  /^(localhost|127\.0\.0\.1)(:\d+)?$/.test(firebaseConfig.authDomain)
+) {
+  console.warn(
+    "[Firebase] NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN should be the Firebase auth host " +
+      "(for example flowauxi.firebaseapp.com), not the local app host. " +
+      "Add localhost in Firebase Authorized domains instead.",
+  );
+}
 
 // =============================================================================
 // APP INITIALIZATION (Singleton Pattern)
@@ -180,6 +164,7 @@ function initializeFirebaseAuth(firebaseApp: FirebaseApp): Auth {
     // before an async setPersistence call can complete.
     return initializeAuth(firebaseApp, {
       persistence: [indexedDBLocalPersistence, browserLocalPersistence, browserSessionPersistence],
+      popupRedirectResolver: browserPopupRedirectResolver,
     });
   } catch (error: any) {
     // If auth is already initialized (e.g., during React Fast Refresh),

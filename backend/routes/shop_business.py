@@ -23,6 +23,13 @@ from typing import Optional
 import logging
 import re
 import threading
+import time
+
+from services.settings_tracing import (
+    start_timer_from_request_headers,
+    register_shop_business_tracing,
+    span_context,
+)
 
 try:
     from middleware import rate_limit
@@ -49,6 +56,7 @@ def _generate_slug(text: str) -> str:
     return slug or 'store'
 
 shop_business_bp = Blueprint('shop_business', __name__, url_prefix='/api/shop/business')
+register_shop_business_tracing(shop_business_bp)
 
 
 # =============================================================================
@@ -224,6 +232,30 @@ JSONB_MERGE_FIELDS = {
     'codAvailable': ('ecommerce_policies', 'cod_available'),
 }
 
+SLUG_PAYLOAD_KEYS = frozenset({'storeSlug', 'store_slug', 'urlSlug', 'url_slug'})
+
+# Payload keys sent by AI Settings / profile UI but not persisted via FIELD_MAP
+SETTINGS_FAST_PATH_EXTRA_KEYS = frozenset({
+    'business_id',
+    'products_services',
+    'products',
+    'productCategories',
+    'product_categories',
+    'allow_slug_update',
+})
+
+
+def _is_ai_settings_fast_path(payload: dict, db_data: dict) -> bool:
+    """
+    Profile/settings-only save from /bot-settings: no slug in payload.
+    Skips FeatureGateEngine, slug enforcement, and duplicate scans (Phase 0 proved ~3s cost).
+    """
+    if 'url_slug' in db_data or SLUG_PAYLOAD_KEYS.intersection(payload.keys()):
+        return False
+    allowed = set(FIELD_MAP.keys()) | set(JSONB_MERGE_FIELDS.keys()) | SETTINGS_FAST_PATH_EXTRA_KEYS
+    unknown = set(payload.keys()) - allowed - BLACKLISTED_FIELDS
+    return not unknown
+
 
 # =============================================================================
 # MAIN ENDPOINT
@@ -253,15 +285,33 @@ def update_business():
         500: {"error": "..."}
     """
 
+    g.settings_save_timer = start_timer_from_request_headers(request.headers)
+    timer = g.settings_save_timer
+    timer.set_attr("endpoint", "shop_business.update")
+
+    with span_context(
+        "flask.shop_business.update",
+        attributes={"correlation_id": timer.correlation_id},
+    ):
+        return _update_business_impl(timer)
+
+
+def _update_business_impl(timer):
     # ── AUTH ──────────────────────────────────────────────────────────────
+    t_auth = time.perf_counter()
     user_id = _get_user_from_token()
+    timer.record("auth", t_auth)
     if not user_id:
         return jsonify({"error": "NOT_AUTHENTICATED"}), 401
 
     # ── PARSE PAYLOAD ────────────────────────────────────────────────────
+    t_parse = time.perf_counter()
     payload = request.get_json(silent=True)
+    timer.record("parse", t_parse)
     if not payload:
         return jsonify({"error": "Invalid JSON body"}), 400
+
+    timer.set_attr("payload_field_count", len(payload.keys()))
 
     # ── BUILD DB UPDATE (only explicitly provided fields) ────────────────
     db_data = {}
@@ -298,6 +348,11 @@ def update_business():
         logger.error(f"❌ Failed to get Supabase client: {e}")
         return jsonify({"error": "Database unavailable"}), 500
 
+    settings_fast_path = _is_ai_settings_fast_path(payload, db_data)
+    timer.set_attr("settings_fast_path", settings_fast_path)
+    if settings_fast_path:
+        logger.info(f"⚡ Settings fast path for user {user_id} — skipping slug/entitlement work")
+
     # ── PLAN-BASED SLUG ENFORCEMENT ──────────────────────────────────────
     # Starter plan users get a forced fallback slug (user_id[:8]).
     # Business/Pro plan users get a slug auto-generated from business_name
@@ -309,7 +364,8 @@ def update_business():
     slug_auto_migrated = False  # True when Business/Pro user's forced slug was auto-regenerated
     pre_save_slug = None        # Captured before upsert for cache invalidation
 
-    if 'url_slug' not in db_data:
+    if not settings_fast_path and 'url_slug' not in db_data:
+        timer.set_attr("slug_enforcement_path", True)
         # CRITICAL: Always use 'shop' domain for slug enforcement.
         # The custom_domain feature and subscription are shop-domain features.
         # g.product_domain may be 'dashboard' when saving from /dashboard/profile.
@@ -321,7 +377,9 @@ def update_business():
                 f"🔍 DEBUG: Checking custom_domain for user_id='{user_id}' domain='{domain}' "
                 f"engine_type={type(engine).__name__} engine_id={id(engine)}"
             )
+            t_feature_gate = time.perf_counter()
             decision = engine.check_feature_access(user_id, domain, 'custom_domain')
+            timer.record("feature_gate", t_feature_gate)
             logger.info(
                 f"🔍 DEBUG: custom_domain decision: allowed={decision.allowed} "
                 f"denial_reason={getattr(decision, 'denial_reason', None)} "
@@ -331,11 +389,13 @@ def update_business():
             # Always read current slug once — used in both branches below
             fallback_slug = user_id[:8].lower()
             try:
+                t_db_slug = time.perf_counter()
                 current_record = db.table('businesses') \
                     .select('url_slug, business_name') \
                     .eq('user_id', user_id) \
                     .maybe_single() \
                     .execute()
+                timer.record("db_read_slug", t_db_slug)
                 current_slug = current_record.data.get('url_slug') if current_record.data else None
                 stored_business_name = current_record.data.get('business_name') if current_record.data else None
             except Exception:
@@ -371,9 +431,11 @@ def update_business():
                     new_slug = _generate_slug(effective_name)
                     # Collision check — don't steal another user's slug
                     try:
+                        t_collision = time.perf_counter()
                         collision = db.table('businesses').select('user_id').eq(
                             'url_slug_lower', new_slug.lower()
                         ).neq('user_id', user_id).limit(1).execute()
+                        timer.record("db_read_slug_collision", t_collision)
                         if collision.data:
                             import hashlib
                             suffix = hashlib.md5(user_id.encode()).hexdigest()[:4]
@@ -398,14 +460,16 @@ def update_business():
     # ── SLUG ENTITLEMENT CHECK (server-side detection) ───────────────────
     # Skip this check if slug was forced by plan enforcement above,
     # or if it was auto-migrated (entitlement already verified above).
-    if 'url_slug' in db_data and not slug_forced_by_plan and not slug_auto_migrated:
+    if not settings_fast_path and 'url_slug' in db_data and not slug_forced_by_plan and not slug_auto_migrated:
         try:
             # Fetch current slug from DB
+            t_slug_entitlement_read = time.perf_counter()
             current_record = db.table('businesses') \
                 .select('url_slug') \
                 .eq('user_id', user_id) \
                 .maybe_single() \
                 .execute()
+            timer.record("db_read_slug_entitlement", t_slug_entitlement_read)
 
             current_slug = None
             if current_record.data:
@@ -425,7 +489,9 @@ def update_business():
                 try:
                     from services.feature_gate_engine import get_feature_gate_engine
                     engine = get_feature_gate_engine()
+                    t_slug_feature_gate = time.perf_counter()
                     decision = engine.check_feature_access(user_id, domain, 'custom_domain')
+                    timer.record("feature_gate_slug_change", t_slug_feature_gate)
 
                     if not decision.allowed:
                         logger.warning(
@@ -460,7 +526,7 @@ def update_business():
     # With migration 050, the trigger respects explicit slugs automatically.
     # We only need allow_slug_regeneration for auto-migration (fallback→name)
     # where the trigger should auto-generate based on a business_name change.
-    if slug_auto_migrated:
+    if not settings_fast_path and slug_auto_migrated:
         try:
             db.rpc('set_config', {
                 'setting': 'app.allow_slug_regeneration',
@@ -472,41 +538,44 @@ def update_business():
             logger.warning(f"⚠️ Could not set slug session variable: {e}")
 
     # ── DEFENSIVE DUPLICATE CHECK (should never happen after migration 040) ──
-    try:
-        # Check if multiple business records exist for this user
-        duplicate_check = db.table('businesses') \
-            .select('id, updated_at') \
-            .eq('user_id', user_id) \
-            .execute()
-        
-        if duplicate_check.data and len(duplicate_check.data) > 1:
-            # CRITICAL: Multiple records found - clean up by keeping most recent
-            logger.warning(
-                f"⚠️ DUPLICATE DETECTED: Found {len(duplicate_check.data)} business records "
-                f"for user {user_id}. Cleaning up..."
-            )
-            
-            # Sort by updated_at descending, keep the first (most recent)
-            sorted_records = sorted(
-                duplicate_check.data,
-                key=lambda x: x.get('updated_at', ''),
-                reverse=True
-            )
-            keep_id = sorted_records[0]['id']
-            delete_ids = [r['id'] for r in sorted_records[1:]]
-            
-            # Delete old duplicates
-            for delete_id in delete_ids:
-                try:
-                    db.table('businesses').delete().eq('id', delete_id).execute()
-                    logger.info(f"🗑️ Deleted duplicate business record: {delete_id}")
-                except Exception as del_err:
-                    logger.error(f"Failed to delete duplicate {delete_id}: {del_err}")
-            
-            logger.info(f"✅ Duplicate cleanup complete. Keeping record: {keep_id}")
-    except Exception as e:
-        # Non-critical - log and continue with upsert
-        logger.warning(f"Duplicate check failed (non-critical): {e}")
+    if not settings_fast_path:
+        try:
+            # Check if multiple business records exist for this user
+            t_duplicate = time.perf_counter()
+            duplicate_check = db.table('businesses') \
+                .select('id, updated_at') \
+                .eq('user_id', user_id) \
+                .execute()
+            timer.record("db_read_duplicate", t_duplicate)
+
+            if duplicate_check.data and len(duplicate_check.data) > 1:
+                # CRITICAL: Multiple records found - clean up by keeping most recent
+                logger.warning(
+                    f"⚠️ DUPLICATE DETECTED: Found {len(duplicate_check.data)} business records "
+                    f"for user {user_id}. Cleaning up..."
+                )
+
+                # Sort by updated_at descending, keep the first (most recent)
+                sorted_records = sorted(
+                    duplicate_check.data,
+                    key=lambda x: x.get('updated_at', ''),
+                    reverse=True
+                )
+                keep_id = sorted_records[0]['id']
+                delete_ids = [r['id'] for r in sorted_records[1:]]
+
+                # Delete old duplicates
+                for delete_id in delete_ids:
+                    try:
+                        db.table('businesses').delete().eq('id', delete_id).execute()
+                        logger.info(f"🗑️ Deleted duplicate business record: {delete_id}")
+                    except Exception as del_err:
+                        logger.error(f"Failed to delete duplicate {delete_id}: {del_err}")
+
+                logger.info(f"✅ Duplicate cleanup complete. Keeping record: {keep_id}")
+        except Exception as e:
+            # Non-critical - log and continue with upsert
+            logger.warning(f"Duplicate check failed (non-critical): {e}")
 
     # ── JSONB FIELD MERGES (top-level payload keys → sub-keys of JSONB columns) ──
     # For fields like codAvailable that map into a JSONB sub-key, we fetch the
@@ -514,11 +583,13 @@ def update_business():
     jsonb_merge_keys = [k for k in JSONB_MERGE_FIELDS if k in payload]
     if jsonb_merge_keys:
         try:
+            t_jsonb = time.perf_counter()
             current_record = db.table('businesses') \
                 .select('ecommerce_policies') \
                 .eq('user_id', user_id) \
                 .maybe_single() \
                 .execute()
+            timer.record("db_read_jsonb", t_jsonb)
             current_ep = {}
             if current_record.data:
                 current_ep = current_record.data.get('ecommerce_policies') or {}
@@ -544,9 +615,12 @@ def update_business():
         db_data['url_slug_lower'] = db_data['url_slug'].lower()
 
     try:
+        t_upsert = time.perf_counter()
         result = db.table('businesses') \
             .upsert(db_data, on_conflict='user_id') \
             .execute()
+        timer.record("db_upsert", t_upsert)
+        timer.set_attr("db_fields_written", len(db_data.keys()))
 
         logger.info(f"✅ Business data saved to Supabase for user {user_id}")
 
@@ -586,11 +660,13 @@ def update_business():
     if 'url_slug' in db_data and db_data.get('url_slug'):
         try:
             from domains.custom_domains.application.service import get_custom_domain_service
+            t_reconcile = time.perf_counter()
             domain_reconciliation = (
                 get_custom_domain_service()
                 .reconcile_shop_store_bindings_for_user(user_id)
                 .body
             )
+            timer.record("domain_reconcile", t_reconcile)
             logger.info(
                 "✅ Custom domain store-binding reconciliation complete for user %s: %s",
                 user_id,

@@ -3,7 +3,6 @@ import {
   requiresWhatsAppOnboarding,
   type ProductDomain,
 } from "@/lib/domain/config";
-import { withTimeout } from "@/lib/server/fetchWithTimeout";
 import type { AuthDecision } from "@/types/auth.types";
 
 export interface TrialDetails {
@@ -37,8 +36,6 @@ export interface OnboardingCheckPayload {
   reason: AuthDecision["reason"];
   trialDetails?: TrialDetails;
 }
-
-const FAST_PATH_TIMEOUT_MS = 2500;
 
 export function isFastOnboardingCheckEnabled() {
   return process.env.FAST_ONBOARDING_CHECK_ENABLED !== "false";
@@ -83,6 +80,15 @@ function normalizeRpcState(raw: any): OnboardingAccessState {
   };
 }
 
+/**
+ * Read the onboarding access state via a single DB RPC call.
+ *
+ * The timeout is now handled exclusively by the Supabase client's fetch-level
+ * AbortController (set via createFetchWithTimeout in service-client.ts).
+ * Previously this function ALSO wrapped the RPC in withTimeout(), creating a
+ * double-timeout race condition that caused premature ONBOARDING_STATE_RPC_TIMEOUT
+ * errors on cold starts.
+ */
 export async function readOnboardingAccessStateFast(params: {
   supabase: SupabaseClient;
   firebaseUid: string;
@@ -90,18 +96,10 @@ export async function readOnboardingAccessStateFast(params: {
 }): Promise<OnboardingAccessState> {
   const { supabase, firebaseUid, product } = params;
 
-  const rpcPromise = Promise.resolve(
-    supabase.rpc("get_onboarding_access_state", {
-      p_firebase_uid: firebaseUid,
-      p_product: product,
-    }),
-  );
-
-  const { data, error } = await withTimeout(
-    rpcPromise,
-    FAST_PATH_TIMEOUT_MS,
-    "ONBOARDING_STATE_RPC_TIMEOUT",
-  );
+  const { data, error } = await supabase.rpc("get_onboarding_access_state", {
+    p_firebase_uid: firebaseUid,
+    p_product: product,
+  });
 
   if (error) throw error;
   if (!data) throw new Error("ONBOARDING_STATE_RPC_EMPTY");

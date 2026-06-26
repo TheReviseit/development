@@ -808,10 +808,11 @@ export default function AnalyticsView() {
               return (
                 <div
                   style={{
-                    background: "#0a0a0a",
+                    background: "#ffffff",
                     borderRadius: "16px",
                     padding: "24px",
                     marginBottom: "24px",
+                    border: "1px solid rgba(0, 0, 0, 0.08)",
                   }}
                 >
                   {/* Header */}
@@ -828,7 +829,7 @@ export default function AnalyticsView() {
                         style={{
                           fontSize: "18px",
                           fontWeight: 600,
-                          color: "#ffffff",
+                          color: "#000000",
                           margin: 0,
                         }}
                       >
@@ -837,7 +838,7 @@ export default function AnalyticsView() {
                       <p
                         style={{
                           fontSize: "13px",
-                          color: "#6b7280",
+                          color: "rgba(0, 0, 0, 0.55)",
                           margin: "4px 0 0 0",
                         }}
                       >
@@ -869,7 +870,7 @@ export default function AnalyticsView() {
                           key={idx}
                           style={{
                             fontSize: "11px",
-                            color: "#6b7280",
+                            color: "rgba(0, 0, 0, 0.55)",
                           }}
                         >
                           {item.label}
@@ -907,7 +908,7 @@ export default function AnalyticsView() {
                                 (idx / (yAxisLabels.length - 1)) * 100
                               }%`,
                               height: "1px",
-                              background: "#1a1a1a",
+                              background: "rgba(0, 0, 0, 0.08)",
                               zIndex: 0,
                             }}
                           />
@@ -939,8 +940,8 @@ export default function AnalyticsView() {
                                   bottom: `calc(${barHeight}% + 8px)`,
                                   left: "50%",
                                   transform: "translateX(-50%)",
-                                  background: "#1f1f1f",
-                                  border: "1px solid #333",
+                                  background: "#ffffff",
+                                  border: "1px solid rgba(0, 0, 0, 0.1)",
                                   borderRadius: "8px",
                                   padding: "8px 12px",
                                   whiteSpace: "nowrap",
@@ -949,12 +950,13 @@ export default function AnalyticsView() {
                                   transition: "all 0.2s",
                                   zIndex: 100,
                                   pointerEvents: "none",
+                                  boxShadow: "0 4px 12px rgba(0, 0, 0, 0.1)",
                                 }}
                               >
                                 <div
                                   style={{
                                     fontSize: "12px",
-                                    color: "#9ca3af",
+                                    color: "rgba(0, 0, 0, 0.55)",
                                     marginBottom: "2px",
                                   }}
                                 >
@@ -964,7 +966,7 @@ export default function AnalyticsView() {
                                   style={{
                                     fontSize: "14px",
                                     fontWeight: 600,
-                                    color: "#ffffff",
+                                    color: "#000000",
                                   }}
                                 >
                                   {value.toLocaleString()} messages
@@ -1016,7 +1018,7 @@ export default function AnalyticsView() {
                                 flex: 1,
                                 textAlign: "center",
                                 fontSize: "10px",
-                                color: "#6b7280",
+                                color: "rgba(0, 0, 0, 0.55)",
                                 overflow: "hidden",
                               }}
                             >

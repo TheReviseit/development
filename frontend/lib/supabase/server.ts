@@ -1,7 +1,15 @@
 import { createClient } from "@supabase/supabase-js";
+import { createFetchWithTimeout } from "@/lib/server/fetchWithTimeout";
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
+
+/**
+ * Legacy admin timeout — prevents infinite hangs on cold Supabase connections.
+ * Previously this client had NO timeout, so getUserByFirebaseUID,
+ * getWhatsAppAccountsByUserId, and getSubscriptionByUserId could hang forever.
+ */
+const LEGACY_ADMIN_TIMEOUT_MS = 10_000;
 
 if (!supabaseUrl || !supabaseServiceKey) {
   console.error("Missing Supabase environment variables:");
@@ -17,5 +25,8 @@ export const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey, {
   auth: {
     autoRefreshToken: false,
     persistSession: false,
+  },
+  global: {
+    fetch: createFetchWithTimeout(LEGACY_ADMIN_TIMEOUT_MS),
   },
 });

@@ -207,11 +207,8 @@ export class MetaCloudConnectionProvider {
     meta: MetaValidationResult;
     origin?: string | null;
   }): Promise<MetaValidationResult> {
-    const webhookSubscribed = await this.subscribeWebhook({
-      accessToken: params.meta.accessToken,
-      wabaId: params.meta.wabaId,
-      origin: params.origin,
-    });
+    // Webhook subscribe is deferred to the durable job queue for faster onboarding.
+    const webhookSubscribed = false;
 
     if (process.env.WA_EMBEDDED_SIGNUP_REGISTER_PHONE_ON_CONNECT !== "true") {
       return {
@@ -221,6 +218,7 @@ export class MetaCloudConnectionProvider {
         alreadyRegistered: false,
         warnings: [
           ...params.meta.warnings,
+          "Webhook subscription queued asynchronously",
           "Cloud API phone registration deferred during onboarding",
         ],
       };

@@ -61,7 +61,6 @@ import OnboardingPricingReplica, {
   type OnboardingPricingPlan,
 } from "./OnboardingPricingReplica";
 import {
-  ONBOARDING_PRICING_TRIAL_TOGGLE_FLAG,
   resolvePricingAction,
   resolvePricingModeFromFlag,
   type OnboardingPricingMode,
@@ -71,15 +70,38 @@ type Step = "whatsapp" | "pricing" | "complete";
 type PlanName = OnboardingPricingPlan["id"];
 type OnboardingPreviewMode = "complete" | "whatsapp-success";
 
-interface PricingPlanResponse {
-  plan_slug: string;
-  display_name: string;
-  description: string;
-  amount_paise: number;
-  price_display: string;
-  currency: string;
-  features: string[];
+interface OnboardingBootstrapResponse {
+  success?: boolean;
+  domain?: ProductDomain;
+  pricing?: {
+    plans?: Array<{
+      id: string;
+      name: string;
+      priceDisplay: string;
+      description: string;
+      features: string[];
+      price: number;
+      currency: string;
+    }>;
+  };
+  features?: {
+    onboardingPricingTrialToggle?: {
+      enabled?: boolean;
+      updatedAt?: string;
+    };
+  };
+  error?: string;
 }
+
+const BOOTSTRAP_CLIENT_CACHE_TTL_MS = 60_000;
+const bootstrapClientCache = new Map<
+  ProductDomain,
+  { expiresAt: number; value: OnboardingBootstrapResponse }
+>();
+const bootstrapInFlight = new Map<
+  ProductDomain,
+  Promise<OnboardingBootstrapResponse>
+>();
 
 function isPlanName(value: string): value is PlanName {
   return value === "starter" || value === "business" || value === "pro";
@@ -108,38 +130,28 @@ function getOnboardingPreviewMode(): OnboardingPreviewMode | null {
   return null;
 }
 
-async function fetchOnboardingPricingPlans(): Promise<{
+async function fetchOnboardingBootstrapConfig(
+  domain: ProductDomain,
+): Promise<{
   domain: ProductDomain;
   plans: OnboardingPricingPlan[];
+  trialToggleEnabled: boolean;
 }> {
-  const response = await fetch("/api/pricing/plans", {
-    cache: "no-store",
-  });
-  const payload = (await response.json().catch(() => null)) as {
-    success?: boolean;
-    domain?: ProductDomain;
-    plans?: PricingPlanResponse[];
-    error?: string;
-    errorCode?: string;
-  } | null;
+  const payload = await getBootstrapPayload(domain);
 
-  if (!response.ok || !payload?.success || !payload.domain) {
-    throw new Error(
-      payload?.error ||
-        payload?.errorCode ||
-        "Pricing is not configured for this product.",
-    );
+  if (!payload.success || !payload.domain) {
+    throw new Error(payload.error || "Onboarding configuration is unavailable.");
   }
 
-  const plans = (payload.plans || [])
-    .filter((plan) => isPlanName(plan.plan_slug))
+  const plans = (payload.pricing?.plans || [])
+    .filter((plan) => isPlanName(plan.id))
     .map((plan) => ({
-      id: plan.plan_slug as PlanName,
-      name: plan.display_name,
-      priceDisplay: plan.price_display,
+      id: plan.id as PlanName,
+      name: plan.name,
+      priceDisplay: plan.priceDisplay,
       description: plan.description,
       features: plan.features,
-      price: plan.amount_paise,
+      price: plan.price,
       currency: plan.currency,
     }));
 
@@ -147,23 +159,60 @@ async function fetchOnboardingPricingPlans(): Promise<{
     throw new Error("No active pricing plans are configured for this product.");
   }
 
-  return { domain: payload.domain, plans };
+  return {
+    domain: payload.domain,
+    plans,
+    trialToggleEnabled:
+      payload.features?.onboardingPricingTrialToggle?.enabled === true,
+  };
 }
 
-async function fetchPricingTrialToggleFlag(): Promise<boolean> {
-  const response = await fetch(
-    `/api/features/flag?feature=${ONBOARDING_PRICING_TRIAL_TOGGLE_FLAG}`,
-    {
-      cache: "no-store",
-    },
-  );
+async function getBootstrapPayload(
+  domain: ProductDomain,
+): Promise<OnboardingBootstrapResponse> {
+  const cached = bootstrapClientCache.get(domain);
+  const now = Date.now();
 
-  if (!response.ok) {
-    throw new Error(`Feature flag lookup failed with ${response.status}`);
+  if (cached && cached.expiresAt > now) {
+    return cached.value;
   }
 
-  const result = (await response.json()) as { enabled?: boolean };
-  return result.enabled === true;
+  const pending = bootstrapInFlight.get(domain);
+  if (pending) {
+    return pending;
+  }
+
+  const request = fetch(
+    `/api/onboarding/bootstrap?domain=${encodeURIComponent(domain)}`,
+    {
+      credentials: "include",
+    },
+  )
+    .then(async (response) => {
+      const payload = (await response.json().catch(() => null)) as
+        | OnboardingBootstrapResponse
+        | null;
+
+      if (!response.ok || !payload) {
+        throw new Error(
+          payload?.error ||
+            `Onboarding configuration failed with ${response.status}`,
+        );
+      }
+
+      bootstrapClientCache.set(domain, {
+        value: payload,
+        expiresAt: Date.now() + BOOTSTRAP_CLIENT_CACHE_TTL_MS,
+      });
+
+      return payload;
+    })
+    .finally(() => {
+      bootstrapInFlight.delete(domain);
+    });
+
+  bootstrapInFlight.set(domain, request);
+  return request;
 }
 
 interface SupportContactItem {
@@ -434,7 +483,6 @@ export default function OnboardingPageEmbedded() {
   const [pricingConfigError, setPricingConfigError] = useState<string | null>(
     null,
   );
-  const [showWhatsappStep, setShowWhatsappStep] = useState(true);
   const [pricingMode, setPricingMode] = useState<OnboardingPricingMode>("paid");
   const [trialToggleEnabled, setTrialToggleEnabled] = useState(false);
 
@@ -459,90 +507,52 @@ export default function OnboardingPageEmbedded() {
     billingActionInProgressRef.current = false;
   }, []);
 
-  useEffect(() => {
+  const loadBootstrapConfig = useCallback(async () => {
     const activePreviewMode = getOnboardingPreviewMode() ?? previewMode;
-    let cancelled = false;
-
-    async function loadPricing() {
-      const domain = detectDomainFromWindow();
-      setCurrentDomain(domain);
-      setShowWhatsappStep(requiresWhatsAppOnboarding(domain));
-
-      if (activePreviewMode !== false) {
-        setPricingLoading(false);
-        setPricingConfigError(null);
-        return;
-      }
-
-      setPricingLoading(true);
-      setPricingConfigError(null);
-
-      try {
-        const pricing = await fetchOnboardingPricingPlans();
-        if (cancelled) return;
-
-        if (pricing.domain !== domain) {
-          console.warn("[pricing] Domain mismatch while loading plans", {
-            detectedDomain: domain,
-            pricingDomain: pricing.domain,
-          });
-          throw new Error(
-            "Pricing domain mismatch. Please refresh and try again.",
-          );
-        }
-
-        setPlans(pricing.plans);
-      } catch (error) {
-        if (cancelled) return;
-
-        console.error("[pricing] Failed to load configured plans", error);
-        setPlans([]);
-        setPricingConfigError(
-          error instanceof Error
-            ? error.message
-            : "Pricing is not configured for this product.",
-        );
-      } finally {
-        if (!cancelled) {
-          setPricingLoading(false);
-        }
-      }
-    }
-
-    loadPricing();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [previewMode]);
-
-  useEffect(() => {
-    const activePreviewMode = getOnboardingPreviewMode() ?? previewMode;
+    const domain = detectDomainFromWindow();
+    setCurrentDomain(domain);
 
     if (activePreviewMode !== false) {
+      setPricingLoading(false);
+      setPricingConfigError(null);
       return;
     }
 
-    let cancelled = false;
+    setPricingLoading(true);
+    setPricingConfigError(null);
 
-    fetchPricingTrialToggleFlag()
-      .then((enabled) => {
-        if (cancelled) return;
-        setTrialToggleEnabled(enabled);
-        if (!enabled) {
-          setPricingMode("paid");
-        }
-      })
-      .catch((error) => {
-        if (cancelled) return;
-        console.warn("[pricing] Trial toggle disabled by flag failure", error);
-        setTrialToggleEnabled(false);
-        setPricingMode("paid");
-      });
+    try {
+      const pricing = await fetchOnboardingBootstrapConfig(domain);
 
-    return () => {
-      cancelled = true;
-    };
+      if (pricing.domain !== domain) {
+        console.warn("[pricing] Domain mismatch while loading config", {
+          detectedDomain: domain,
+          pricingDomain: pricing.domain,
+        });
+        throw new Error("Pricing domain mismatch. Please refresh and try again.");
+      }
+
+      setPlans(pricing.plans);
+      setTrialToggleEnabled(pricing.trialToggleEnabled);
+      setPricingMode((currentMode) =>
+        resolvePricingModeFromFlag({
+          requestedMode: currentMode,
+          flagEnabled: pricing.trialToggleEnabled,
+        }),
+      );
+    } catch (error) {
+      console.error("[pricing] Failed to load onboarding config", error);
+      setPlans([]);
+      setTrialToggleEnabled(false);
+      setPricingMode("paid");
+      setPricingConfigError(
+        error instanceof Error
+          ? error.message
+          : "Pricing is not configured for this product.",
+      );
+    } finally {
+      setPricingLoading(false);
+    }
   }, [previewMode]);
 
   const checkOnboardingStatus = useCallback(async (): Promise<boolean> => {
@@ -591,7 +601,11 @@ export default function OnboardingPageEmbedded() {
             "[onboarding-embedded] Onboarding check failed:",
             error instanceof OnboardingCheckError ? error.status : error,
           );
-          setStep(showWhatsappStep ? "whatsapp" : "pricing");
+          setStep(
+            requiresWhatsAppOnboarding(detectDomainFromWindow())
+              ? "whatsapp"
+              : "pricing",
+          );
           return false;
         }
 
@@ -691,13 +705,17 @@ export default function OnboardingPageEmbedded() {
         return false;
       } catch (error) {
         console.error("[onboarding-embedded] Error:", error);
-        setStep(showWhatsappStep ? "whatsapp" : "pricing");
+        setStep(
+          requiresWhatsAppOnboarding(detectDomainFromWindow())
+            ? "whatsapp"
+            : "pricing",
+        );
         return false;
       }
     };
 
     return runCheck();
-  }, [router, showWhatsappStep]);
+  }, [router]);
 
   useEffect(() => {
     const activePreviewMode = getOnboardingPreviewMode() ?? previewMode;
@@ -711,7 +729,10 @@ export default function OnboardingPageEmbedded() {
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
       if (currentUser) {
         setUser(currentUser);
-        const shouldRedirect = await checkOnboardingStatus();
+        const [, shouldRedirect] = await Promise.all([
+          loadBootstrapConfig(),
+          checkOnboardingStatus(),
+        ]);
         if (!shouldRedirect) {
           setLoading(false);
         }
@@ -721,7 +742,7 @@ export default function OnboardingPageEmbedded() {
     });
 
     return () => unsubscribe();
-  }, [router, checkOnboardingStatus, previewMode]);
+  }, [router, checkOnboardingStatus, loadBootstrapConfig, previewMode]);
 
   const handleConnectionSuccess = async (data: {
     wabaId: string;

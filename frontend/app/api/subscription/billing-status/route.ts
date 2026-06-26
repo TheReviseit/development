@@ -115,10 +115,12 @@ export async function GET(request: NextRequest) {
       { data: membership },
       { data: trialRecord },
     ] = await Promise.all([
-      // Prefer an entitled/warned subscription if it exists (domain-agnostic).
+      // Prefer an entitled/warned subscription if it exists (domain-scoped).
       supabase
         .from("subscriptions")
-        .select("id, status, current_period_end, plan_name, product_domain, pricing_plan_id")
+        .select(
+          "id, status, current_period_end, plan_name, product_domain, pricing_plan_id, pricing_plans(plan_slug, display_name)",
+        )
         .eq("user_id", user.id)
         .eq("product_domain", domain)
         .in("status", [...ALLOWED_SUB_STATUSES, ...WARN_SUB_STATUSES])
@@ -127,7 +129,9 @@ export async function GET(request: NextRequest) {
         .maybeSingle(),
       supabase
         .from("subscriptions")
-        .select("id, status, current_period_end, plan_name, product_domain, pricing_plan_id")
+        .select(
+          "id, status, current_period_end, plan_name, product_domain, pricing_plan_id, pricing_plans(plan_slug, display_name)",
+        )
         .eq("user_id", user.id)
         .eq("product_domain", domain)
         .in("status", BLOCKED_SUB_STATUSES)
@@ -153,7 +157,60 @@ export async function GET(request: NextRequest) {
     ]);
 
     const subscription = entitledSub ?? blockedSub;
-    
+
+    const resolvePlanFields = (sub: typeof subscription) => {
+      if (!sub) return { plan_name: null as string | null, plan_tier: number | null };
+      const joinedRaw = (sub as { pricing_plans?: { plan_slug?: string } | { plan_slug?: string }[] | null })
+        .pricing_plans;
+      const joined = Array.isArray(joinedRaw) ? joinedRaw[0] : joinedRaw;
+      const slug = joined?.plan_slug || sub.plan_name || null;
+      let plan_tier: number | null = null;
+      if (slug) {
+        const short = slug.replace(new RegExp(`^${domain}_`), "").toLowerCase();
+        if (short === "pro" || short === "professional" || slug.toLowerCase().endsWith("_pro")) {
+          plan_tier = 2;
+        } else if (short === "business" || short === "growth") {
+          plan_tier = 1;
+        } else if (short === "starter" || short === "free") {
+          plan_tier = 0;
+        }
+      }
+      return { plan_name: slug, plan_tier };
+    };
+
+    const enrichPlanFields = async (sub: typeof subscription) => {
+      let fields = resolvePlanFields(sub);
+      if (fields.plan_name) return fields;
+
+      if (sub?.pricing_plan_id) {
+        const { data: planRow } = await supabase
+          .from("pricing_plans")
+          .select("plan_slug")
+          .eq("id", sub.pricing_plan_id)
+          .maybeSingle();
+        if (planRow?.plan_slug) {
+          fields = resolvePlanFields({
+            ...sub,
+            plan_name: planRow.plan_slug,
+            pricing_plans: planRow,
+          } as typeof sub);
+          if (fields.plan_name) return fields;
+        }
+      }
+
+      const { data: fallbackSub } = await supabase
+        .from("subscriptions")
+        .select(
+          "plan_name, pricing_plan_id, product_domain, pricing_plans(plan_slug)",
+        )
+        .eq("user_id", user.id)
+        .eq("status", "active")
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      return resolvePlanFields(fallbackSub);
+    };
     // Parse trial state
     let trial = null;
     let expiredTrial = null;
@@ -212,11 +269,14 @@ export async function GET(request: NextRequest) {
 
     if (membership && (membershipStatus === "active" || membershipTrialActive)) {
       const status = membershipStatus === "active" ? "active" : "trial";
+      const planFields = await enrichPlanFields(subscription);
       console.log(`[BILLING_STATUS] User ${user.id} has active user_products membership (${status}), granting access`);
       return NextResponse.json({
         locked: false,
         reason: null,
         status,
+        plan_name: planFields.plan_name,
+        plan_tier: planFields.plan_tier,
         trial: membershipTrialActive
           ? {
               id: membership.id,
@@ -262,7 +322,14 @@ export async function GET(request: NextRequest) {
         }
 
         console.log(`[BILLING_STATUS] User ${user.id} has active subscription (${subStatus}), granting access`);
-        return NextResponse.json({ locked: false, reason: null, status: subStatus });
+        const planFields = await enrichPlanFields(subscription);
+        return NextResponse.json({
+          locked: false,
+          reason: null,
+          status: subStatus,
+          plan_name: planFields.plan_name,
+          plan_tier: planFields.plan_tier,
+        });
       }
 
       // Subscription exists but is in a blocked state — map to lock reason
