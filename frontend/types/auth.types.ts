@@ -144,6 +144,10 @@ export interface SupabaseUser {
   last_sign_in_at?: string;
   created_at?: string;
   updated_at?: string;
+  /** O(1) flag for Store icon visibility in navbar. Set when user saves AI Settings. */
+  ai_settings_configured?: boolean;
+  /** Denormalized store slug for zero-join navbar rendering. Updated on business save. */
+  store_slug?: string;
 }
 
 // ============================================================================
@@ -363,6 +367,11 @@ export interface AuthContextType {
 
   /** Get membership details for a product */
   getProductMembership: (product: ProductDomain) => ProductMembership | null;
+
+  // ===== USER STATE UPDATES =====
+  /** Update the local user object with partial data (no API call).
+   *  Used for optimistic UI updates like ai_settings_configured flag. */
+  updateUser: (partial: Partial<SupabaseUser>) => void;
 }
 
 // ============================================================================

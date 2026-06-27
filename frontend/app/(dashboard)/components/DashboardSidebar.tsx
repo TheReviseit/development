@@ -72,7 +72,6 @@ interface DashboardSidebarProps {
   isCollapsed?: boolean;
   setIsCollapsed?: (collapsed: boolean) => void;
   productDomain?: ProductDomain;
-  storeUsername?: string | null;
 }
 
 export default function DashboardSidebar({
@@ -84,7 +83,6 @@ export default function DashboardSidebar({
   isCollapsed = false,
   setIsCollapsed,
   productDomain = "dashboard",
-  storeUsername,
 }: DashboardSidebarProps) {
   const pathname = usePathname();
   const [userCount, setUserCount] = useState<number>(0);

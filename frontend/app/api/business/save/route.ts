@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { verifySessionCookieSafe } from "@/lib/firebase-admin";
+import { createSupabaseServiceClientOrThrow } from "@/lib/supabase/service-client";
 import { cookies } from "next/headers";
 import { trace as otelTrace, context, propagation } from "@opentelemetry/api";
 import {
@@ -87,6 +88,8 @@ export async function POST(request: NextRequest) {
 
       if (response.ok) {
         const cacheStarted = Date.now();
+        let storeSlug: string | undefined;
+
         try {
           const { invalidateByUserId } = await import("@/lib/cache/store-cache");
           const { revalidatePath } = await import("next/cache");
@@ -99,13 +102,59 @@ export async function POST(request: NextRequest) {
             businessData.url_slug ||
             businessData.urlSlug ||
             businessData.canonicalSlug;
+          storeSlug = slug;
           if (slug) {
             revalidatePath(`/store/${slug}`, "layout");
           }
         } catch (err) {
           console.error("[Business Save Proxy] Cache invalidation failed:", err);
         }
+
+        // ─── FAANG-GRADE: Fetch slug from DB + update users table ──────────
+        // The Flask backend returns {"success": True} without the slug.
+        // We query businesses directly to get the canonical store URL slug,
+        // then persist it on the users table for O(1) navbar access.
+        try {
+          const supabase = createSupabaseServiceClientOrThrow({ timeoutMs: 5000 });
+
+          // 1. Fetch the store slug from the businesses table after save
+          if (!storeSlug) {
+            const { data: bizData } = await supabase
+              .from("businesses")
+              .select("url_slug")
+              .eq("user_id", userId)
+              .maybeSingle();
+            storeSlug = bizData?.url_slug || undefined;
+          }
+
+          // 2. Persist flag + slug on users table (future auth syncs pick it up)
+          if (storeSlug) {
+            await supabase
+              .from("users")
+              .update({
+                ai_settings_configured: true,
+                store_slug: storeSlug,
+              })
+              .eq("firebase_uid", userId);
+          } else {
+            // No slug yet — still mark AI settings as configured
+            await supabase
+              .from("users")
+              .update({ ai_settings_configured: true })
+              .eq("firebase_uid", userId);
+          }
+        } catch (err) {
+          console.error(
+            "[Business Save Proxy] Failed to update ai_settings_configured:",
+            err,
+          );
+        }
+
         timer.record("cache_invalidate", cacheStarted);
+
+        // Include flags in response so client updates auth context instantly
+        data.aiSettingsConfigured = true;
+        data.storeSlug = storeSlug || null;
       }
 
       logSettingsSaveTiming(timer, {

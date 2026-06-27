@@ -19,6 +19,7 @@ import {
   useSubscriptionContext,
 } from "./components/SubscriptionProvider";
 import { Bell, Search, Store } from "lucide-react";
+import { useAuth } from "@/app/components/auth/AuthProvider";
 import styles from "./dashboard.module.css";
 import CommandPalette from "./components/CommandPalette";
 
@@ -129,7 +130,6 @@ export default function DashboardLayout({
   const [upgradeMessage, setUpgradeMessage] = useState("");
   const searchInputRef = useRef<HTMLInputElement>(null);
   const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false);
-  const [storeUsername, setStoreUsername] = useState<string | null>(null);
 
   useEffect(() => {
     const down = (e: KeyboardEvent) => {
@@ -303,23 +303,6 @@ export default function DashboardLayout({
   useEffect(() => {
     if (loading || !user) {
       return;
-    }
-
-    if (currentDomain === "shop") {
-      const fetchUsername = async () => {
-        try {
-          const res = await fetch("/api/user/username");
-          if (res.ok) {
-            const data = await res.json();
-            if (data.success && data.username) {
-              setStoreUsername(data.username);
-            }
-          }
-        } catch (error) {
-          console.error("Failed to fetch username:", error);
-        }
-      };
-      fetchUsername();
     }
 
     const fetchCapabilities = async () => {
@@ -575,16 +558,7 @@ export default function DashboardLayout({
                     </div>
                   </div>
                   <div className={styles.topHeaderRight}>
-                    {currentDomain === "shop" && storeUsername && (
-                      <div 
-                        style={{ display: 'flex', alignItems: 'center', cursor: 'pointer', marginRight: '24px' }} 
-                        className="hover:opacity-80 transition-opacity"
-                        onClick={() => window.open(`/store/${storeUsername}`, "_blank")}
-                        title="View Store"
-                      >
-                        <Store size={20} color="#ffffff" strokeWidth={2.25} />
-                      </div>
-                    )}
+                    <StoreIconRenderer />
                     <div style={{ display: 'flex', alignItems: 'center', cursor: 'pointer' }} className="hover:opacity-80 transition-opacity">
                       <Bell size={20} color="#ffffff" strokeWidth={2.25} />
                     </div>
@@ -605,19 +579,18 @@ export default function DashboardLayout({
 
               {/* Desktop Sidebar - Hidden on mobile */}
               {!isMobile && (
-                <DashboardSidebar
-                  activeSection={activeSection}
-                  onSectionChange={(section) =>
-                    handleSectionChange(section as Section)
-                  }
-                  userEmail={user?.email || undefined}
-                  userName={user?.full_name || user?.displayName || undefined}
-                  isSidebarOpen={isSidebarOpen}
-                  isCollapsed={isCollapsed}
-                  setIsCollapsed={setIsCollapsed}
-                  productDomain={currentDomain}
-                  storeUsername={storeUsername}
-                />
+                  <DashboardSidebar
+                    activeSection={activeSection}
+                    onSectionChange={(section) =>
+                      handleSectionChange(section as Section)
+                    }
+                    userEmail={user?.email || undefined}
+                    userName={user?.full_name || user?.displayName || undefined}
+                    isSidebarOpen={isSidebarOpen}
+                    isCollapsed={isCollapsed}
+                    setIsCollapsed={setIsCollapsed}
+                    productDomain={currentDomain}
+                  />
               )}
 
               <main className={`${styles.mainContent} ${activeSection === 'messages' ? styles.messagesMainContent : ''}`}>
@@ -1204,29 +1177,7 @@ export default function DashboardLayout({
                             </button>
                           )}
 
-                          {currentDomain === "shop" && storeUsername && (
-                            <button
-                              className={styles.mobileNavLink}
-                              onClick={() => {
-                                setShowMobileMenu(false);
-                                window.open(`/store/${storeUsername}`, "_blank");
-                              }}
-                            >
-                              <svg
-                                width="20"
-                                height="20"
-                                fill="none"
-                                stroke="currentColor"
-                                viewBox="0 0 24 24"
-                                style={{ strokeWidth: 2.25 }}
-                              >
-                                <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path>
-                                <polyline points="15 3 21 3 21 9"></polyline>
-                                <line x1="10" y1="14" x2="21" y2="3"></line>
-                              </svg>
-                              <span>View Store</span>
-                            </button>
-                          )}
+                          <StoreIconMobileRenderer closeMenu={() => { setShowMobileMenu(false); }} />
                           {/* Products - domain-aware only */}
                           {visibility.products && (
                             <div className={styles.mobileNavItemWrapper}>
@@ -1865,6 +1816,83 @@ export default function DashboardLayout({
 //
 // Architecture: If billing is locked, this replaces ALL children with
 // BillingLockScreen (early-return = zero dashboard DOM = zero bypass).
+// ═══════════════════════════════════════════════════════════════════════════════
+// StoreIconRenderer — FAANG-Grade O(1) Store Icon
+//
+// Reads ai_settings_configured DIRECTLY from auth context (React Context).
+// Zero API calls. Zero database queries. Re-renders instantly when
+// updateUser() is called from BotSettingsView after successful save.
+//
+// Multi-tab sync: When another tab saves AI settings, the BroadcastChannel
+// in AuthProvider updates the user object in this tab, which re-renders this
+// component with the Store icon visible — all without any page refresh.
+// ═══════════════════════════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════════════════════════
+// StoreIconRenderer — FAANG-Grade O(1) Store Icon
+//
+// Reads ai_settings_configured DIRECTLY from auth context (React Context).
+// Zero API calls. Zero database queries. Re-renders instantly when
+// updateUser() is called from BotSettingsView after successful save.
+//
+// Multi-tab sync: When another tab saves AI settings, the BroadcastChannel
+// in AuthProvider updates the user object in this tab, which re-renders this
+// component with the Store icon visible — all without any page refresh.
+// ═══════════════════════════════════════════════════════════════════════════════
+function StoreIconRenderer() {
+  const { user } = useAuth();
+
+  if (user?.ai_settings_configured !== true) return null;
+
+  const storeUrl = user?.store_slug
+    ? `/store/${user.store_slug}`
+    : `/store`;
+
+  return (
+    <div
+      style={{ display: 'flex', alignItems: 'center', cursor: 'pointer', marginRight: '24px' }}
+      className="hover:opacity-80 transition-opacity"
+      onClick={() => window.open(storeUrl, "_blank")}
+      title="View Store"
+    >
+      <Store size={20} color="#ffffff" strokeWidth={2.25} />
+    </div>
+  );
+}
+
+function StoreIconMobileRenderer({ closeMenu }: { closeMenu: () => void }) {
+  const { user } = useAuth();
+
+  if (user?.ai_settings_configured !== true) return null;
+
+  const storeUrl = user?.store_slug
+    ? `/store/${user.store_slug}`
+    : `/store`;
+
+  return (
+    <button
+      className={styles.mobileNavLink}
+      onClick={() => {
+        closeMenu();
+        window.open(storeUrl, "_blank");
+      }}
+    >
+      <svg
+        width="20"
+        height="20"
+        fill="none"
+        stroke="currentColor"
+        viewBox="0 0 24 24"
+        style={{ strokeWidth: 2.25 }}
+      >
+        <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path>
+        <polyline points="15 3 21 3 21 9"></polyline>
+        <line x1="10" y1="14" x2="21" y2="3"></line>
+      </svg>
+      <span>View Store</span>
+    </button>
+  );
+}
+
 function BillingGateInner({
   loading,
   user,

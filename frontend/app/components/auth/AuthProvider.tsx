@@ -507,6 +507,40 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   );
 
   // ========================================================================
+  // UPDATE USER (Partial State Update)
+  // ========================================================================
+
+  /**
+   * Update the local user object with partial data.
+   * No API call — used for optimistic UI updates after mutations.
+   * Broadcasts changes to other tabs via BroadcastChannel.
+   */
+  const updateUser = useCallback(
+    (partial: Partial<SupabaseUser>) => {
+      setUser((prev) => {
+        if (!prev) return prev;
+        const updated = { ...prev, ...partial };
+
+        // Broadcast to other tabs for real-time sync
+        if (partial.ai_settings_configured !== undefined) {
+          try {
+            authChannelRef.current?.postMessage({
+              type: "AI_SETTINGS_CONFIGURED",
+              ai_settings_configured: partial.ai_settings_configured,
+              store_slug: partial.store_slug,
+            });
+          } catch {
+            // BroadcastChannel may be closed
+          }
+        }
+
+        return updated;
+      });
+    },
+    [],
+  );
+
+  // ========================================================================
   // SIGN OUT
   // ========================================================================
 
@@ -548,6 +582,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setCurrentProduct(null);
         setAvailableProducts([]);
         updateAuthState("UNAUTHENTICATED" as AuthState, "CROSS_TAB_SIGNOUT");
+      } else if (type === "AI_SETTINGS_CONFIGURED") {
+        // Another tab just saved AI settings — mirror the flag locally
+        // so the Store icon appears instantly in this tab too.
+        console.log("[AUTH] Cross-tab: AI settings configured from another tab");
+        setUser((prev) => {
+          if (!prev) return prev;
+          return {
+            ...prev,
+            ai_settings_configured: event.data.ai_settings_configured,
+            store_slug: event.data.store_slug ?? prev.store_slug,
+          };
+        });
       }
     };
 
@@ -821,6 +867,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     activateProduct,
     hasProductAccess,
     getProductMembership,
+
+    // User state updates
+    updateUser,
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

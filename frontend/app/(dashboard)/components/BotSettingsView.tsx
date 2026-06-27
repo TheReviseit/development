@@ -13,6 +13,7 @@ import ProductImageUpload from "./ProductImageUpload";
 import { ProductCard } from "./ProductCard";
 import ProductForm from "./ProductCard/ProductForm";
 import SlidePanel from "@/app/utils/ui/SlidePanel";
+import { useAuth } from "@/app/components/auth/AuthProvider";
 import {
   createClientSaveCorrelationId,
   fetchBusinessSave,
@@ -439,6 +440,7 @@ function SizeMultiSelect({
 }
 
 export default function BotSettingsView() {
+  const { updateUser } = useAuth();
   const [activeTab, setActiveTab] = useState<TabType>("profile");
   const [data, setData] = useState<BusinessData>(INITIAL_DATA);
   const [initialData, setInitialData] = useState<BusinessData>(INITIAL_DATA);
@@ -1255,6 +1257,23 @@ export default function BotSettingsView() {
           type: "success",
           text: "Product saved successfully! 🎉",
         });
+
+        // ─── FAANG-GRADE: Update auth context instantly ───────────────────
+        // Read the aiSettingsConfigured flag from the save response to update
+        // the auth context, making the Store icon appear in the navbar
+        // immediately without any page refresh or additional API call.
+        try {
+          const responseData = await response.json();
+          if (responseData.aiSettingsConfigured) {
+            updateUser({
+              ai_settings_configured: true,
+              store_slug: responseData.storeSlug || undefined,
+            });
+          }
+        } catch {
+          // Response body may not be JSON-parsable; fall back to optimistic update
+          updateUser({ ai_settings_configured: true });
+        }
       } else {
         const errorText = await response.text();
         console.error("[handleSave] Save failed:", response.status, errorText);
