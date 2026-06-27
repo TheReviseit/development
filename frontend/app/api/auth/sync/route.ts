@@ -43,6 +43,11 @@ import {
   type SyncUserResponse,
 } from "@/types/auth.types";
 import { normalizeIndianPhoneInput } from "@/lib/validation/indianPhone";
+import {
+  UI_STATE_COOKIE,
+  serializeUiState,
+  getUiStateCookieOptions,
+} from "@/lib/auth/ui-state";
 import { trace as otelTrace } from "@opentelemetry/api";
 
 // ═════════════════════════════════════════════════════════════════════════════
@@ -270,6 +275,11 @@ export async function POST(request: NextRequest) {
       };
       const response = NextResponse.json<SyncUserResponse>(cachedBody, { status: memoryHit.statusCode });
 
+      // Set ui_state cookie for O(1) SSR Store icon hydration
+      if (memoryHit.statusCode === 200) {
+        attachUiStateCookie(response, (cachedBody as any).user);
+      }
+
       // Set session cookie if needed (fire-and-forget, don't block response)
       if (!hasValidSessionCookie && memoryHit.statusCode === 200) {
         setSessionCookieNonBlocking(idToken, timer);
@@ -475,6 +485,8 @@ async function handleSignupFastPath(params: {
   );
 
   const response = NextResponse.json<SyncUserResponse>(responseBody, { status: 200 });
+  // Set ui_state cookie for O(1) SSR Store icon hydration
+  attachUiStateCookie(response, user);
   // Set session cookie on the response BEFORE returning, so the browser
   // receives Set-Cookie and subsequent requests are authenticated.
   // This blocks the response but ensures the dashboard flow works after onboarding.
@@ -558,6 +570,10 @@ async function handleLoginPath(params: {
 
     if (Boolean((cachedBody as any)?.success) && !hasValidSessionCookie) {
       setSessionCookieNonBlocking(idToken, timer);
+    }
+
+    if (cached.statusCode === 200) {
+      attachUiStateCookie(response, (cachedBody as any).user);
     }
 
     response.headers.set("x-idempotency-key", idempotencyKey);
@@ -650,6 +666,7 @@ async function handleLoginPath(params: {
           if (!hasValidSessionCookie) setSessionCookieNonBlocking(idToken, timer);
           const response = NextResponse.json<SyncUserResponse>(result.body, { status: result.status });
           response.headers.set("x-idempotency-key", idempotencyKey);
+          attachUiStateCookie(response, (result.body as any).user);
           return finalizeResponse(response);
         }
       } catch (warmErr) {
@@ -776,6 +793,9 @@ async function handleLoginPath(params: {
 
     const response = NextResponse.json<SyncUserResponse>(result.body, { status: result.status });
     response.headers.set("x-idempotency-key", idempotencyKey);
+    if (result.status === 200) {
+      attachUiStateCookie(response, (result.body as any).user);
+    }
     return finalizeResponse(response);
   } catch (error: any) {
     if (claimOwned && supabase && idempotencyKey) {
@@ -848,6 +868,22 @@ async function createSessionCookieWithTimeout(idToken: string): Promise<string> 
     adminAuth.createSessionCookie(idToken, { expiresIn: 60 * 60 * 24 * 5 * 1000 }),
     2000,
     "FIREBASE_CREATE_SESSION_COOKIE_TIMEOUT",
+  );
+}
+
+/**
+ * Attach the lightweight ui_state cookie to the response.
+ * Used for O(1) SSR hydration of Store icon visibility.
+ */
+function attachUiStateCookie(response: NextResponse, user: SupabaseUser | undefined | null): void {
+  if (!user) return;
+  response.cookies.set(
+    UI_STATE_COOKIE,
+    serializeUiState({
+      ai_settings_configured: user.ai_settings_configured === true,
+      store_slug: user.store_slug || null,
+    }),
+    getUiStateCookieOptions(),
   );
 }
 

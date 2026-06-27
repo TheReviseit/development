@@ -161,7 +161,9 @@ export function useFirebaseAuth() {
       // Handle redirect case (page will navigate away)
       if (result.method === "redirect" && !result.error) {
         setIsRedirectPending(true);
-        // Page is about to redirect, keep loading state
+        // Clear loading so the button resets. The page will redirect;
+        // if not, user sees the form again without a stuck spinner.
+        setLoading(false);
         return null;
       }
 

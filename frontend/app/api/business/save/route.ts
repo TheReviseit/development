@@ -2,6 +2,11 @@ import { NextRequest, NextResponse } from "next/server";
 import { verifySessionCookieSafe } from "@/lib/firebase-admin";
 import { createSupabaseServiceClientOrThrow } from "@/lib/supabase/service-client";
 import { cookies } from "next/headers";
+import {
+  UI_STATE_COOKIE,
+  serializeUiState,
+  getUiStateCookieOptions,
+} from "@/lib/auth/ui-state";
 import { trace as otelTrace, context, propagation } from "@opentelemetry/api";
 import {
   attachSavePerfHeaders,
@@ -86,9 +91,10 @@ export async function POST(request: NextRequest) {
       const data = await response.json();
       timer.record("parse_response", parseResponseStarted);
 
+      let storeSlug: string | undefined;
+
       if (response.ok) {
         const cacheStarted = Date.now();
-        let storeSlug: string | undefined;
 
         try {
           const { invalidateByUserId } = await import("@/lib/cache/store-cache");
@@ -165,6 +171,19 @@ export async function POST(request: NextRequest) {
 
       const jsonResponse = NextResponse.json(data, { status: response.status });
       attachSavePerfHeaders(jsonResponse, timer, upstreamTiming);
+
+      // ─── FAANG-GRADE: Set ui_state cookie for O(1) SSR hydration ─────
+      if (response.ok) {
+        jsonResponse.cookies.set(
+          UI_STATE_COOKIE,
+          serializeUiState({
+            ai_settings_configured: true,
+            store_slug: storeSlug || null,
+          }),
+          getUiStateCookieOptions(),
+        );
+      }
+
       span.setAttribute("total_ms", timer.totalMs());
       return jsonResponse;
     } catch (error: unknown) {

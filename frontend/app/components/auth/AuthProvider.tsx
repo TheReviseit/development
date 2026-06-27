@@ -25,6 +25,7 @@ import type {
   ProductDomain,
   ProductMembership,
 } from "@/types/auth.types";
+import { clientWriteUiState } from "@/lib/auth/ui-state";
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 const AUTH_SYNC_COOLDOWN_MS = 1_500;
@@ -534,6 +535,25 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           }
         }
 
+        // ─── FAANG-GRADE: Sync ui_state cookie for O(1) SSR hydration ───
+        // When ai_settings_configured or store_slug changes, immediately
+        // persist to the non-httpOnly cookie so page refreshes and other
+        // browser contexts (new tabs, popups) see the latest state.
+        if (
+          "ai_settings_configured" in partial ||
+          "store_slug" in partial
+        ) {
+          try {
+            clientWriteUiState({
+              ai_settings_configured:
+                updated.ai_settings_configured === true,
+              store_slug: updated.store_slug || null,
+            });
+          } catch {
+            // cookie write failed — non-critical, ignoral
+          }
+        }
+
         return updated;
       });
     },
@@ -588,11 +608,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         console.log("[AUTH] Cross-tab: AI settings configured from another tab");
         setUser((prev) => {
           if (!prev) return prev;
-          return {
+          const updated = {
             ...prev,
             ai_settings_configured: event.data.ai_settings_configured,
             store_slug: event.data.store_slug ?? prev.store_slug,
           };
+          // ─── Sync the ui_state cookie for O(1) SSR ──────────────────
+          // Persistent cookie ensures page refreshes and new tabs in
+          // this browser see the Store icon immediately.
+          try {
+            clientWriteUiState({
+              ai_settings_configured: updated.ai_settings_configured === true,
+              store_slug: updated.store_slug || null,
+            });
+          } catch {}
+          return updated;
         });
       }
     };

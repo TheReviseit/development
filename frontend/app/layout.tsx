@@ -1,7 +1,9 @@
 import { Suspense } from "react";
 import type { Metadata } from "next";
-import { headers } from "next/headers";
+import { headers, cookies } from "next/headers";
 import { Outfit, Plus_Jakarta_Sans, Inter, Dancing_Script } from "next/font/google";
+import { UiStateProvider } from "@/app/components/auth/UiStateProvider";
+import { UI_STATE_COOKIE, parseUiState } from "@/lib/auth/ui-state";
 import "./globals.css";
 import { SpeedInsights } from "@vercel/speed-insights/next";
 import { ServiceWorkerRegistration } from "@/components/pwa/ServiceWorkerRegistration";
@@ -290,6 +292,10 @@ export default async function RootLayout({
   const schemas =
     domain === "dashboard" ? ALL_SCHEMAS : generateDomainSchemas(host);
 
+  // ─── FAANG-GRADE: Read ui_state cookie for O(1) SSR hydration ────────
+  const cookieStore = await cookies();
+  const uiState = parseUiState(cookieStore.get(UI_STATE_COOKIE)?.value);
+
   return (
     <html
       lang={locale}
@@ -379,7 +385,9 @@ export default async function RootLayout({
                 <AnalyticsProvider />
               </Suspense>
               <CookieConsent />
-              {children}
+              <UiStateProvider initialUiState={uiState}>
+                {children}
+              </UiStateProvider>
               <SpeedInsights />
             </QueryProvider>
           </ThemeProvider>

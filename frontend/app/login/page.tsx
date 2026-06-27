@@ -143,6 +143,10 @@ async function syncExistingLoginSession(idToken: string) {
   return syncWithRetry(idToken, false);
 }
 
+async function syncNewUserSession(idToken: string) {
+  return syncWithRetry(idToken, true);
+}
+
 function isMissingAccountSyncResult(result: LoginSyncResult) {
   return result.status === 404 || result.code === "USER_NOT_FOUND";
 }
@@ -324,8 +328,10 @@ export default function LoginPage() {
   }, []);
 
   // Check for redirect result on mount (ONLY if we detect a redirect return)
+  // NOTE: This effect only handles cleanup — it does NOT process the user
+  // session. Processing is done by the onAuthStateChanged effect below,
+  // which fires when the user is signed in after a successful redirect.
   useEffect(() => {
-    // Only check redirect result if we detect we're returning from a redirect
     if (!shouldCheckRedirectResult()) {
       console.log("[Login] No redirect detected, skipping check");
       return;
@@ -340,30 +346,12 @@ export default function LoginPage() {
         const result = await checkRedirectResult(auth);
 
         if (result.success && result.user) {
-          console.log("[Login] Redirect result successful");
-          const idToken = await result.user.user.getIdToken();
-
-          const syncResult = await syncExistingLoginSession(idToken);
-          if (!syncResult.ok) {
-            if (isMissingAccountSyncResult(syncResult)) {
-              await clearMissingAccountSession("login_redirect_user_not_found");
-              setError(
-                "Your previous session no longer exists. Please sign in again.",
-              );
-              setGoogleLoading(false);
-              setIsRedirectPending(false);
-              setCheckingSession(false);
-              return;
-            }
-            throw new Error(syncResult.code || "AUTH_SYNC_FAILED");
-          }
-
-          const fallbackCompleted = syncResult.authDecision
-            ? undefined
-            : await checkOnboardingStatus();
-          router.replace(
-            getPostAuthPath(syncResult, fallbackCompleted) || "/onboarding",
-          );
+          // Redirect completed — onAuthStateChanged will fire and process
+          // the session. We just clean up the loading state here.
+          console.log("[Login] Redirect result successful, waiting for auth state...");
+          setGoogleLoading(false);
+          setIsRedirectPending(false);
+          setCheckingSession(false);
         } else if (result.error) {
           const errorAnalysis = classifyAuthError(result.error);
           console.error("[Login] Redirect auth error:", errorAnalysis);
@@ -372,7 +360,6 @@ export default function LoginPage() {
           setIsRedirectPending(false);
           setCheckingSession(false);
         } else {
-          // No result and no error - might be a normal page load
           console.log("[Login] No redirect result found");
           setGoogleLoading(false);
           setIsRedirectPending(false);
@@ -399,20 +386,40 @@ export default function LoginPage() {
     return () => clearTimeout(timeout);
   }, [checkingSession]);
 
+  // Redirect safety net: if redirect doesn't complete within 10s, recover UI
+  useEffect(() => {
+    if (!isRedirectPending) return;
+    const timeout = setTimeout(() => {
+      console.warn("[LOGIN] Redirect timeout — recovering UI");
+      setIsRedirectPending(false);
+      setGoogleLoading(false);
+      setCheckingSession(false);
+      setError("Sign-in is taking longer than expected. Please try again or use email login.");
+    }, 10000);
+    return () => clearTimeout(timeout);
+  }, [isRedirectPending]);
+
   /**
    * Enterprise-grade session validation on mount
+   * With re-entrant guard to prevent recursive processing when
+   * clearInvalidClientSession() triggers auth.signOut().
    */
   useEffect(() => {
     let isMounted = true;
+    let isProcessingRef = false;
 
     const validateSession = async () => {
       const unsubscribe = auth.onAuthStateChanged(async (firebaseUser) => {
-        if (!isMounted) return;
+        if (!isMounted || isProcessingRef) return;
+        isProcessingRef = true;
 
-        if (firebaseUser) {
-          try {
+        try {
+          if (firebaseUser) {
+            // Use allowCreate=true for Google/Federated sign-ins which may
+            // be first-time users. The auth sync route is idempotent and
+            // will return the existing user if they already exist.
             const idToken = await firebaseUser.getIdToken(true);
-            const syncResult = await syncExistingLoginSession(idToken);
+            const syncResult = await syncNewUserSession(idToken);
 
             if (syncResult.ok) {
               const fallbackCompleted = syncResult.authDecision
@@ -428,26 +435,24 @@ export default function LoginPage() {
             }
 
             console.warn("[Login] Session sync failed:", syncResult);
-            await clearInvalidClientSession(
-              isMissingAccountSyncResult(syncResult)
-                ? "login_session_user_not_found"
-                : "login_session_sync_failed",
-            );
             if (isMounted && isMissingAccountSyncResult(syncResult)) {
               setError(
-                "Your previous session no longer exists. Please sign in again.",
+                "No active Flowauxi account was found. Please sign up or contact support.",
               );
+              // Defer sign-out outside the onAuthStateChanged callback
+              // to prevent re-entrant invocation with auth.signOut().
+              void Promise.resolve().then(() => {
+                clearInvalidClientSession("login_session_user_not_found");
+              });
             }
-          } catch (error) {
-            console.error("Session validation error:", error);
-            try {
-              await clearInvalidClientSession("login_session_validation_error");
-            } catch {}
           }
-        }
-
-        if (isMounted) {
-          setCheckingSession(false);
+        } catch (error) {
+          console.error("Session validation error:", error);
+        } finally {
+          if (isMounted) {
+            setCheckingSession(false);
+          }
+          isProcessingRef = false;
         }
       });
 
@@ -555,6 +560,10 @@ export default function LoginPage() {
 
       // Handle redirect case
       if (result.method === "redirect" && !result.error) {
+        // Clear loading so the button resets. signInWithRedirect will
+        // navigate the page; if it doesn't (blocked browser, edge case),
+        // the user sees the form again and can retry.
+        setGoogleLoading(false);
         setIsRedirectPending(true);
         return;
       }
@@ -577,7 +586,7 @@ export default function LoginPage() {
           return;
         }
 
-        const syncResult = await syncExistingLoginSession(idToken);
+        const syncResult = await syncNewUserSession(idToken);
         if (!syncResult.ok) {
           if (isMissingAccountSyncResult(syncResult)) {
             await clearMissingAccountSession("google_login_user_not_found");
@@ -756,6 +765,26 @@ export default function LoginPage() {
                 <p style={{ color: "#999", fontSize: "12px" }}>
                   Please don&apos;t close this window
                 </p>
+                <button
+                  onClick={() => {
+                    setIsRedirectPending(false);
+                    setGoogleLoading(false);
+                    setCheckingSession(false);
+                    setError("");
+                  }}
+                  style={{
+                    marginTop: "24px",
+                    padding: "8px 24px",
+                    border: "1px solid #ddd",
+                    borderRadius: "6px",
+                    background: "#fff",
+                    color: "#666",
+                    cursor: "pointer",
+                    fontSize: "13px",
+                  }}
+                >
+                  Cancel
+                </button>
               </div>
             </div>
           </div>

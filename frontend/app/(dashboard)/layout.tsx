@@ -20,6 +20,7 @@ import {
 } from "./components/SubscriptionProvider";
 import { Bell, Search, Store } from "lucide-react";
 import { useAuth } from "@/app/components/auth/AuthProvider";
+import { useUiState } from "@/app/components/auth/UiStateProvider";
 import styles from "./dashboard.module.css";
 import CommandPalette from "./components/CommandPalette";
 
@@ -1819,32 +1820,40 @@ export default function DashboardLayout({
 // ═══════════════════════════════════════════════════════════════════════════════
 // StoreIconRenderer — FAANG-Grade O(1) Store Icon
 //
-// Reads ai_settings_configured DIRECTLY from auth context (React Context).
-// Zero API calls. Zero database queries. Re-renders instantly when
-// updateUser() is called from BotSettingsView after successful save.
-//
-// Multi-tab sync: When another tab saves AI settings, the BroadcastChannel
-// in AuthProvider updates the user object in this tab, which re-renders this
-// component with the Store icon visible — all without any page refresh.
-// ═══════════════════════════════════════════════════════════════════════════════
-// ═══════════════════════════════════════════════════════════════════════════════
-// StoreIconRenderer — FAANG-Grade O(1) Store Icon
-//
-// Reads ai_settings_configured DIRECTLY from auth context (React Context).
-// Zero API calls. Zero database queries. Re-renders instantly when
-// updateUser() is called from BotSettingsView after successful save.
-//
-// Multi-tab sync: When another tab saves AI settings, the BroadcastChannel
-// in AuthProvider updates the user object in this tab, which re-renders this
-// component with the Store icon visible — all without any page refresh.
+// Architecture:
+//   1. UiStateProvider (root layout) reads the flowauxi_ui_state cookie at
+//      SSR time for O(1) rendering — zero API calls, zero DB queries.
+//   2. On the client, we reconcile with useAuth() via a one-way merge:
+//      if auth says configured=true, we update UiStateProvider; we never
+//      overwrite true with false (protects against stale auth sync cache).
+//   3. updateUser() in AuthProvider also writes to the cookie, so the
+//      icon appears instantly after save AND survives page refreshes.
+//   4. Cross-tab BroadcastChannel also syncs the cookie, so new tabs
+//      opened after save see the icon without any network request.
 // ═══════════════════════════════════════════════════════════════════════════════
 function StoreIconRenderer() {
   const { user } = useAuth();
+  const { uiState, mergeUiState } = useUiState();
 
-  if (user?.ai_settings_configured !== true) return null;
+  // One-way reconciliation: auth -> UiState (never the reverse).
+  // Protects against stale auth sync in-memory cache (60s TTL).
+  useEffect(() => {
+    if (user?.ai_settings_configured === true) {
+      mergeUiState({
+        ai_settings_configured: true,
+        store_slug: user.store_slug || null,
+      });
+    }
+  }, [user, mergeUiState]);
 
-  const storeUrl = user?.store_slug
-    ? `/store/${user.store_slug}`
+  // Show icon if EITHER source says configured.
+  // Cookie is set by the server on login/save; auth context is the
+  // secondary source that reconciles after the sync API resolves.
+  const showStore = uiState.ai_settings_configured || user?.ai_settings_configured === true;
+  if (!showStore) return null;
+
+  const storeUrl = user?.store_slug || uiState.store_slug
+    ? `/store/${user?.store_slug || uiState.store_slug}`
     : `/store`;
 
   return (
@@ -1861,11 +1870,22 @@ function StoreIconRenderer() {
 
 function StoreIconMobileRenderer({ closeMenu }: { closeMenu: () => void }) {
   const { user } = useAuth();
+  const { uiState, mergeUiState } = useUiState();
 
-  if (user?.ai_settings_configured !== true) return null;
+  useEffect(() => {
+    if (user?.ai_settings_configured === true) {
+      mergeUiState({
+        ai_settings_configured: true,
+        store_slug: user.store_slug || null,
+      });
+    }
+  }, [user, mergeUiState]);
 
-  const storeUrl = user?.store_slug
-    ? `/store/${user.store_slug}`
+  const showStore = uiState.ai_settings_configured || user?.ai_settings_configured === true;
+  if (!showStore) return null;
+
+  const storeUrl = user?.store_slug || uiState.store_slug
+    ? `/store/${user?.store_slug || uiState.store_slug}`
     : `/store`;
 
   return (
