@@ -159,7 +159,7 @@ export async function GET(request: NextRequest) {
     const subscription = entitledSub ?? blockedSub;
 
     const resolvePlanFields = (sub: typeof subscription) => {
-      if (!sub) return { plan_name: null as string | null, plan_tier: number | null };
+      if (!sub) return { plan_name: null as string | null, plan_tier: null as number | null };
       const joinedRaw = (sub as { pricing_plans?: { plan_slug?: string } | { plan_slug?: string }[] | null })
         .pricing_plans;
       const joined = Array.isArray(joinedRaw) ? joinedRaw[0] : joinedRaw;
@@ -193,7 +193,7 @@ export async function GET(request: NextRequest) {
             ...sub,
             plan_name: planRow.plan_slug,
             pricing_plans: planRow,
-          } as typeof sub);
+          } as unknown as typeof sub);
           if (fields.plan_name) return fields;
         }
       }
@@ -209,7 +209,7 @@ export async function GET(request: NextRequest) {
         .limit(1)
         .maybeSingle();
 
-      return resolvePlanFields(fallbackSub);
+      return resolvePlanFields(fallbackSub as unknown as typeof subscription);
     };
     // Parse trial state
     let trial = null;
