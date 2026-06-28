@@ -747,6 +747,15 @@ def _update_business_impl(timer):
     thread.start()
 
     response_body = {"success": True}
+
+    # ── RETURN URL SLUG FOR O(1) NAVBAR HYDRATION ──────────────────────
+    # The frontend proxy needs the slug to set the ui_state cookie and
+    # update the users table without an additional DB query.
+    # Always returned regardless of plan — Starter gets uid[:8],
+    # Business/Pro gets the auto-generated business name slug.
+    if db_data.get("url_slug"):
+        response_body["url_slug"] = db_data["url_slug"]
+
     if domain_reconciliation is not None:
         response_body["domainReconciliation"] = domain_reconciliation
     return jsonify(response_body), 200

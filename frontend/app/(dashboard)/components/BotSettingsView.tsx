@@ -14,6 +14,7 @@ import { ProductCard } from "./ProductCard";
 import ProductForm from "./ProductCard/ProductForm";
 import SlidePanel from "@/app/utils/ui/SlidePanel";
 import { useAuth } from "@/app/components/auth/AuthProvider";
+import { useUiState } from "@/app/components/auth/UiStateProvider";
 import {
   createClientSaveCorrelationId,
   fetchBusinessSave,
@@ -441,6 +442,7 @@ function SizeMultiSelect({
 
 export default function BotSettingsView() {
   const { updateUser } = useAuth();
+  const { mergeUiState } = useUiState();
   const [activeTab, setActiveTab] = useState<TabType>("profile");
   const [data, setData] = useState<BusinessData>(INITIAL_DATA);
   const [initialData, setInitialData] = useState<BusinessData>(INITIAL_DATA);
@@ -1258,21 +1260,29 @@ export default function BotSettingsView() {
           text: "Product saved successfully! 🎉",
         });
 
-        // ─── FAANG-GRADE: Update auth context instantly ───────────────────
+        // ─── FAANG-GRADE: Update auth context + UiState instantly ──────
         // Read the aiSettingsConfigured flag from the save response to update
-        // the auth context, making the Store icon appear in the navbar
-        // immediately without any page refresh or additional API call.
+        // both the auth context AND the UiState, making the Store icon appear
+        // in the navbar immediately without any page refresh or API call.
         try {
           const responseData = await response.json();
           if (responseData.aiSettingsConfigured) {
+            const storeSlug = responseData.storeSlug || undefined;
             updateUser({
               ai_settings_configured: true,
-              store_slug: responseData.storeSlug || undefined,
+              store_slug: storeSlug,
+            });
+            // Directly update UiState so StoreIconRenderer picks it up even
+            // if the AuthProvider reconciliation effect hasn't fired yet.
+            mergeUiState({
+              ai_settings_configured: true,
+              store_slug: storeSlug || null,
             });
           }
         } catch {
           // Response body may not be JSON-parsable; fall back to optimistic update
           updateUser({ ai_settings_configured: true });
+          mergeUiState({ ai_settings_configured: true, store_slug: null });
         }
       } else {
         const errorText = await response.text();

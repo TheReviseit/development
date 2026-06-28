@@ -244,6 +244,7 @@ export function OnboardingFlowClient({
         user.displayName || undefined,
         undefined, // customerPhone
         user.uid,
+        undefined, // currentDomain
         2, // maxRetries
       );
 
@@ -295,6 +296,7 @@ export function OnboardingFlowClient({
         amount: order.amount,
         customerEmail: user.email,
         customerName: user.displayName || undefined,
+        domain: productInfo.id,
         onSuccess: async (response) => {
           console.log("[Razorpay] Payment successful:", response);
 

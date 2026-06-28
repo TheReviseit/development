@@ -155,6 +155,7 @@ export default function PricingCards({
         customerEmail: userEmail,
         customerName: userName,
         customerPhone: userPhone,
+        domain,
         onSuccess: async (response) => {
           // Step 3: Verify payment (sets status to PROCESSING)
           const verification = await verifyPayment(

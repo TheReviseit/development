@@ -62,11 +62,23 @@ export function handleFirebaseError(error: any): string {
 
   // If error is a string
   if (typeof error === "string") {
+    if (error === "INVALID_TOKEN") {
+      return "Authentication session failed to initialize. Please try again.";
+    }
+    if (error === "AUTH_SYNC_FAILED") {
+      return "Failed to synchronize user session. Please try logging in again.";
+    }
     return error;
   }
 
   // If error has a message property
   if (error?.message) {
+    if (error.message === "INVALID_TOKEN") {
+      return "Authentication session failed to initialize. Please try again.";
+    }
+    if (error.message === "AUTH_SYNC_FAILED") {
+      return "Failed to synchronize user session. Please try logging in again.";
+    }
     // Check if message contains Firebase error code
     const codeMatch = error.message.match(/\(auth\/([^)]+)\)/);
     if (codeMatch) {

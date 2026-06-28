@@ -37,7 +37,7 @@
  *   - MINOR: new events added
  *   - PATCH: optional param additions
  */
-export const ANALYTICS_SCHEMA_VERSION = "1.1.0";
+export const ANALYTICS_SCHEMA_VERSION = "1.3.0";
 
 // =============================================================================
 // SHARED TYPES
@@ -237,6 +237,43 @@ export type AnalyticsEvent =
       };
     }
   | {
+      name: "payment_popup_blocked";
+      params: {
+        domain: string;
+        plan: string;
+        manual_url: string;
+        pricing_mode?: "paid" | "trial";
+      };
+    }
+  | {
+      name: "checkout_open";
+      params: {
+        domain: string;
+        plan: string;
+        path: "sync_modal" | "sync_fallback" | "async_modal";
+        status: "success" | "failure";
+        duration_ms?: number;
+        error_code?: string;
+        error_message?: string;
+        pricing_mode?: "paid" | "trial";
+      };
+    }
+  | {
+      name: "razorpay_sdk_load_result";
+      params: {
+        status: "success" | "failure";
+        duration_ms: number;
+        already_loaded: boolean;
+        script_injected: boolean;
+      };
+    }
+  | {
+      name: "onboarding_iframe_detected";
+      params: {
+        domain: string;
+      };
+    }
+  | {
       name: "trial_started";
       params: {
         domain: string;
@@ -409,6 +446,10 @@ export function isValidEventName(name: string): name is AnalyticsEventName {
     "payment_initiated",
     "payment_success",
     "payment_failed",
+    "payment_popup_blocked",
+    "onboarding_iframe_detected",
+    "checkout_open",
+    "razorpay_sdk_load_result",
     "trial_started",
     "trial_start_failed",
     "subscription_activated",

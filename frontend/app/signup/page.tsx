@@ -375,6 +375,18 @@ export default function SignupPage() {
   const [googleLoading, setGoogleLoading] = useState(false);
   const [isRedirectPending, setIsRedirectPending] = useState(false);
 
+  // Redirect safety net: if redirect doesn't complete within 10s, recover UI
+  useEffect(() => {
+    if (!isRedirectPending) return;
+    const timeout = setTimeout(() => {
+      console.warn("[SIGNUP] Redirect timeout — recovering UI");
+      setIsRedirectPending(false);
+      setGoogleLoading(false);
+      setError("Sign-up is taking longer than expected. Please try again or use email sign-up.");
+    }, 10000);
+    return () => clearTimeout(timeout);
+  }, [isRedirectPending]);
+
   // Real-time validation states
   const [emailError, setEmailError] = useState("");
   const [phoneError, setPhoneError] = useState("");
@@ -715,8 +727,8 @@ export default function SignupPage() {
 
       // Handle redirect case (page will navigate away)
       if (result.method === "redirect" && !result.error) {
+        setGoogleLoading(false);
         setIsRedirectPending(true);
-        // Page is about to redirect, keep loading state
         return;
       }
 

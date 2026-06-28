@@ -638,168 +638,107 @@ audit_logger = BillingAuditLogger()
 # CIRCUIT BREAKER
 # =============================================================================
 
-class CircuitBreaker:
-    """
-    Circuit breaker for external API calls (Razorpay).
-    
-    States:
-    - CLOSED: Normal operation
-    - OPEN: Failing fast (too many errors)
-    - HALF_OPEN: Testing if recovered
-    """
-    
-    STATE_CLOSED = 'closed'
-    STATE_OPEN = 'open'
-    STATE_HALF_OPEN = 'half_open'
-    
-    def __init__(
-        self,
-        failure_threshold: int = 5,
-        recovery_timeout: int = 30,
-        half_open_max_calls: int = 3
-    ):
-        self.failure_threshold = failure_threshold
-        self.recovery_timeout = recovery_timeout
-        self.half_open_max_calls = half_open_max_calls
-        
-        self._state = self.STATE_CLOSED
-        self._failure_count = 0
-        self._success_count = 0
-        self._last_failure_time = 0
-        self._half_open_calls = 0
-    
-    def can_execute(self) -> bool:
-        """Check if call can be executed."""
-        if self._state == self.STATE_CLOSED:
-            return True
-        
-        if self._state == self.STATE_OPEN:
-            # Check if recovery timeout passed
-            if time.time() - self._last_failure_time >= self.recovery_timeout:
-                logger.info("Circuit breaker entering HALF_OPEN state")
-                self._state = self.STATE_HALF_OPEN
-                self._half_open_calls = 0
-                return True
-            return False
-        
-        if self._state == self.STATE_HALF_OPEN:
-            if self._half_open_calls < self.half_open_max_calls:
-                self._half_open_calls += 1
-                return True
-            return False
-        
-        return True
-    
-    def record_success(self):
-        """Record successful call."""
-        if self._state == self.STATE_HALF_OPEN:
-            self._success_count += 1
-            if self._success_count >= self.half_open_max_calls:
-                logger.info("Circuit breaker entering CLOSED state")
-                self._state = self.STATE_CLOSED
-                self._failure_count = 0
-                self._success_count = 0
-        else:
-            self._failure_count = 0
-    
-    def record_failure(self):
-        """Record failed call."""
-        self._failure_count += 1
-        self._last_failure_time = time.time()
-        
-        if self._state == self.STATE_HALF_OPEN:
-            logger.warning("Circuit breaker entering OPEN state (half-open failure)")
-            self._state = self.STATE_OPEN
-        elif self._failure_count >= self.failure_threshold:
-            logger.warning(f"Circuit breaker entering OPEN state ({self._failure_count} failures)")
-            self._state = self.STATE_OPEN
-    
-    @property
-    def state(self) -> str:
-        return self._state
-
-
-# Global circuit breaker for Razorpay
-# Uses Redis-backed breaker when REDIS_CIRCUIT_BREAKER=true (shared across workers)
-# Falls back to in-memory breaker when Redis is unavailable or flag is not set.
-try:
-    from services.circuit_breaker_redis import create_circuit_breaker as _create_redis_cb
-    _redis_cb = _create_redis_cb(
-        redis_key='cb:razorpay',
-        failure_threshold=5,
-        recovery_timeout=30,
-        half_open_max_calls=3,
-    )
-    razorpay_circuit_breaker = _redis_cb or CircuitBreaker(
-        failure_threshold=5,
-        recovery_timeout=30,
-        half_open_max_calls=3
-    )
-except Exception:
-    razorpay_circuit_breaker = CircuitBreaker(
-        failure_threshold=5,
-        recovery_timeout=30,
-        half_open_max_calls=3
-    )
+# Global circuit breaker for Razorpay — single source of truth.
+# Uses RedisCircuitBreaker which shares state across all workers via Redis.
+# When Redis is unavailable, it degrades to local in-memory state internally
+# (no separate in-memory CircuitBreaker class needed).
+from services.circuit_breaker_redis import RedisCircuitBreaker
+razorpay_circuit_breaker = RedisCircuitBreaker(
+    redis_key='cb:razorpay',
+    failure_threshold=5,
+    recovery_timeout=30,
+    half_open_max_calls=3,
+)
 
 # =============================================================================
-# PROMETHEUS METRICS (BEST-EFFORT)
+# PROMETHEUS METRICS — REGISTRATION FAILS LOUD ON STARTUP
 # =============================================================================
+# No try/except here. If prometheus_client is not installed or registration
+# fails, the process must crash at startup — not silently swallow errors.
+# See also: assert_metrics_registered() for runtime health check.
 
-try:
-    from prometheus_client import Counter, Histogram, Gauge  # type: ignore
+from prometheus_client import Counter, Histogram, Gauge  # type: ignore
 
-    billing_verify_requests_total = Counter(
-        "billing_verify_requests_total",
-        "Total verify-subscription requests",
-        ["domain"],
-    )
-    billing_verify_success_total = Counter(
-        "billing_verify_success_total",
-        "Total verify-subscription successes",
-        ["domain"],
-    )
-    billing_verify_error_total = Counter(
-        "billing_verify_error_total",
-        "Total verify-subscription errors",
-        ["domain", "code"],
-    )
-    billing_verify_idempotent_replays_total = Counter(
-        "billing_verify_idempotent_replays_total",
-        "Total verify-subscription idempotent replays",
-        ["domain"],
-    )
-    billing_verify_lock_contention_total = Counter(
-        "billing_verify_lock_contention_total",
-        "Total verify-subscription lock contention events",
-        ["domain"],
-    )
-    billing_verify_latency_ms = Histogram(
-        "billing_verify_latency_ms",
-        "Verify-subscription end-to-end latency in ms",
-        ["domain"],
-        buckets=(50, 100, 200, 500, 1000, 2000, 5000, 10000),
-    )
-    razorpay_fetch_latency_ms = Histogram(
-        "razorpay_fetch_latency_ms",
-        "Razorpay subscription fetch latency in ms",
-        ["domain"],
-        buckets=(50, 100, 200, 500, 1000, 2000, 5000),
-    )
-    billing_circuit_breaker_open = Gauge(
-        "billing_circuit_breaker_open",
-        "Razorpay circuit breaker open state (1=open, 0=closed)",
-        ["domain"],
-    )
-except Exception:
-    billing_verify_requests_total = None
-    billing_verify_success_total = None
-    billing_verify_error_total = None
-    billing_verify_idempotent_replays_total = None
-    billing_verify_lock_contention_total = None
-    billing_verify_latency_ms = None
-    razorpay_fetch_latency_ms = None
-    billing_circuit_breaker_open = None
+billing_verify_requests_total = Counter(
+    "billing_verify_requests_total",
+    "Total verify-subscription requests",
+    ["domain"],
+)
+billing_verify_success_total = Counter(
+    "billing_verify_success_total",
+    "Total verify-subscription successes",
+    ["domain"],
+)
+billing_verify_error_total = Counter(
+    "billing_verify_error_total",
+    "Total verify-subscription errors",
+    ["domain", "code"],
+)
+billing_verify_idempotent_replays_total = Counter(
+    "billing_verify_idempotent_replays_total",
+    "Total verify-subscription idempotent replays",
+    ["domain"],
+)
+billing_verify_lock_contention_total = Counter(
+    "billing_verify_lock_contention_total",
+    "Total verify-subscription lock contention events",
+    ["domain"],
+)
+billing_verify_latency_ms = Histogram(
+    "billing_verify_latency_ms",
+    "Verify-subscription end-to-end latency in ms",
+    ["domain"],
+    buckets=(50, 100, 200, 500, 1000, 2000, 5000, 10000),
+)
+razorpay_fetch_latency_ms = Histogram(
+    "razorpay_fetch_latency_ms",
+    "Razorpay subscription fetch latency in ms",
+    ["domain"],
+    buckets=(50, 100, 200, 500, 1000, 2000, 5000),
+)
+billing_circuit_breaker_open = Gauge(
+    "billing_circuit_breaker_open",
+    "Razorpay circuit breaker open state (1=open, 0=closed)",
+    ["domain"],
+)
+
+# ── Sprint 3: New metrics ────────────────────────────────────────────────────
+
+checkout_precreation_total = Counter(
+    "checkout_precreation_total",
+    "Total subscription pre-creation attempts (by plan and result)",
+    ["plan_id", "status"],
+)
+checkout_open_total = Counter(
+    "checkout_open_total",
+    "Total checkout modal/popup open attempts",
+    ["plan_id", "path", "status"],
+)
+razorpay_subscription_create_latency_ms = Histogram(
+    "razorpay_subscription_create_latency_ms",
+    "Razorpay subscription API call latency in ms (direct sync call)",
+    ["plan_id", "domain"],
+    buckets=(50, 100, 200, 500, 1000, 2000, 3000, 5000, 10000),
+)
+
+
+def assert_metrics_registered():
+    """Health check: verify all billing metrics are registered."""
+    _metrics = [
+        ("billing_verify_requests_total", billing_verify_requests_total),
+        ("billing_verify_success_total", billing_verify_success_total),
+        ("billing_verify_error_total", billing_verify_error_total),
+        ("billing_verify_latency_ms", billing_verify_latency_ms),
+        ("razorpay_fetch_latency_ms", razorpay_fetch_latency_ms),
+        ("billing_circuit_breaker_open", billing_circuit_breaker_open),
+        ("checkout_precreation_total", checkout_precreation_total),
+        ("checkout_open_total", checkout_open_total),
+        ("razorpay_subscription_create_latency_ms", razorpay_subscription_create_latency_ms),
+    ]
+    for name, metric in _metrics:
+        if metric is None:
+            raise RuntimeError(f"Billing metric '{name}' is None — registration failed")
+    logger.info("billing_metrics_registration_ok count=%d", len(_metrics))
 
 
 # =============================================================================
@@ -1028,9 +967,13 @@ def get_subscription_state():
     })
 
 
+def _checkout_rate_key():
+    """Rate-limit key for checkout: per-authenticated-user, falls back to IP."""
+    return getattr(g, 'firebase_uid', None) or request.remote_addr or 'anonymous'
+
 @billing_bp.route('/create-subscription', methods=['POST'])
 @require_auth
-@rate_limit(limit=10, window=60)  # 10 requests per minute per user
+@rate_limit(limit=30, window=60, key_func=_checkout_rate_key)
 @track_creation_latency
 @traced("billing.create_subscription", attributes=lambda: billing_attributes(
     domain=getattr(g, 'product_domain', None),
@@ -1038,15 +981,13 @@ def get_subscription_state():
 ))
 def create_subscription():
     """
-    FAANG-level: Async subscription creation — returns 202 immediately.
+    FAANG-level: Synchronous subscription creation.
 
-    Instead of blocking for 800-8000ms on the Razorpay API call, this endpoint:
-    1. Validates the request (< 50ms)
-    2. Inserts a checkout_request with status='initiated' (< 20ms)
-    3. Enqueues a Celery task (non-blocking, < 5ms)
-    4. Returns 202 Accepted with checkout_token for polling
+    Creates the Razorpay subscription inline and returns subscription_id
+    directly. Total API response time: 300-800ms (Razorpay API call)
+    + ~50ms validation + DB writes.
 
-    Total API response time: < 100ms (vs previous 977ms-28s)
+    No polling needed. No 202 Accepted. No checkout_token.
 
     Request Body:
     {
@@ -1056,12 +997,14 @@ def create_subscription():
         "customer_phone": ""
     }
 
-    Returns (202):
+    Returns (200):
     {
         "success": true,
-        "checkout_token": "uuid",
-        "status": "initiated",
-        "poll_url": "/api/billing/checkout-status/{token}"
+        "subscription_id": "sub_...",
+        "key_id": "rzp_test_...",
+        "amount": 99900,
+        "currency": "INR",
+        "plan_name": "pro"
     }
     """
     request_id = getattr(g, 'request_id', f"req_{uuid.uuid4().hex[:12]}")
@@ -1084,7 +1027,7 @@ def create_subscription():
         }), 401
 
     from services.postgres_rate_limit import rate_limit_or_429
-    limited = rate_limit_or_429(f"checkout:{firebase_uid}", 3600, 10)
+    limited = rate_limit_or_429(f"checkout:{firebase_uid}", 3600, 30)
     if limited:
         return jsonify(limited[0]), limited[1]
 
@@ -1146,8 +1089,13 @@ def create_subscription():
         )
         cached = get_cached_complete(supabase, idempotency_key)
         if cached:
-            logger.info(f"[{request_id}] idempotency_cache_hit key={idempotency_key[:12]}...")
-            return jsonify(cached), 200
+            # Bypass stale cache entries from the old async architecture
+            if cached.get('status') == 'initiated':
+                logger.info(f"[{request_id}] Ignoring stale async idempotency cache key={idempotency_key[:12]}")
+                cached = None
+            else:
+                logger.info(f"[{request_id}] idempotency_cache_hit key={idempotency_key[:12]}...")
+                return jsonify(cached), 200
         try:
             _, claim_token = claim_or_reclaim(
                 supabase,
@@ -1157,6 +1105,20 @@ def create_subscription():
                 firebase_uid=firebase_uid,
             )
         except IdempotencyInProgress as in_progress:
+            # ── Poll for completion in case the first request is finishing ──
+            poll_deadline = time.monotonic() + min(in_progress.retry_after_seconds, 10)
+            while time.monotonic() < poll_deadline:
+                time.sleep(0.5)
+                cached = get_cached_complete(supabase, idempotency_key)
+                if cached:
+                    if cached.get('status') == 'initiated':
+                        # Stale async cache, cannot wait for it. Let it fail through to 409
+                        # which will tell the frontend to retry later (since it's stuck).
+                        break
+                    logger.info(
+                        f"[{request_id}] idempotency_poll_hit key={idempotency_key[:12]}..."
+                    )
+                    return jsonify(cached), 200
             return jsonify({
                 'success': False,
                 'error': 'Subscription creation already in progress.',
@@ -1194,18 +1156,71 @@ def create_subscription():
         }
         if data.get('customer_phone'):
             checkout_data['user_phone'] = data.get('customer_phone')
+        
+        insert_result = None
         try:
             insert_result = supabase.table('checkout_requests').insert(checkout_data).execute()
         except Exception as e:
             error_str = str(e).lower()
             if 'unique constraint' in error_str or '23505' in error_str:
-                logger.warning(f"[{request_id}] Duplicate checkout request: {firebase_uid[:8]} plan={plan_name}")
-                return jsonify({
-                    'success': False, 'error': 'A subscription is already being created for this plan. Please wait.',
-                    'error_code': 'DUPLICATE_REQUEST',
-                }), 409
-            raise
-        checkout_id = insert_result.data[0]['id'] if insert_result.data else None
+                # ── Handle stale or inflight checkout gracefully ──
+                inflight_res = supabase.table('checkout_requests') \
+                    .select('checkout_token, created_at, status') \
+                    .eq('user_id', firebase_uid) \
+                    .eq('domain', product_domain) \
+                    .in_('status', ['initiated', 'processing']) \
+                    .execute()
+                
+                if inflight_res.data:
+                    stale_tokens = []
+                    active_token = None
+                    active_status = None
+                    
+                    for req in inflight_res.data:
+                        try:
+                            # Parse Supabase TIMESTAMPTZ
+                            created_dt_str = req['created_at'].replace('Z', '+00:00')
+                            created_dt = datetime.fromisoformat(created_dt_str)
+                            age_seconds = (datetime.now(timezone.utc) - created_dt).total_seconds()
+                        except Exception:
+                            age_seconds = 121  # Assume stale on parse error
+                            
+                        if age_seconds > 120:  # Older than 2 minutes -> stale
+                            stale_tokens.append(req['checkout_token'])
+                        else:
+                            active_token = req['checkout_token']
+                            active_status = req['status']
+                            
+                    if stale_tokens:
+                        supabase.table('checkout_requests') \
+                            .update({'status': 'failed', 'error_message': 'Abandoned or timed out'}) \
+                            .in_('checkout_token', stale_tokens) \
+                            .execute()
+                        logger.info(f"[{request_id}] Cleaned up {len(stale_tokens)} stale checkout requests for {firebase_uid[:8]}")
+                        
+                        try:
+                            insert_result = supabase.table('checkout_requests').insert(checkout_data).execute()
+                        except Exception as retry_e:
+                            logger.error(f"[{request_id}] Failed to insert checkout request after cleanup: {retry_e}")
+                            return jsonify({
+                                'success': False, 'error': 'A subscription is already being created for this plan. Please wait.',
+                                'error_code': 'DUPLICATE_REQUEST',
+                            }), 409
+                    elif active_token:
+                        logger.info(f"[{request_id}] Resuming existing inflight checkout token={active_token[:8]}...")
+                        # FAANG-level: Fall through and execute synchronously instead of returning 202
+                        checkout_token = active_token
+                        # We do not return 202 here anymore, because we don't have Celery workers.
+                        # It will execute in the block below.
+                else:
+                    logger.warning(f"[{request_id}] Duplicate checkout request: {firebase_uid[:8]} plan={plan_name}")
+                    return jsonify({
+                        'success': False, 'error': 'A subscription is already being created for this plan. Please wait.',
+                        'error_code': 'DUPLICATE_REQUEST',
+                    }), 409
+            else:
+                raise
+        checkout_id = insert_result.data[0]['id'] if (insert_result and getattr(insert_result, 'data', None)) else None
     except Exception as e:
         logger.error(f"[{request_id}] Failed to create checkout request: {e}")
         record_subscription_creation('database_error', product_domain)
@@ -1214,86 +1229,56 @@ def create_subscription():
             'error_code': 'DATABASE_ERROR',
         }), 500
 
-    # Dispatch checkout — async default via bounded pool; sync only via runtime flag
-    from config.billing_flags import get_bool_flag
-
-    use_sync = get_bool_flag('billing_sync_checkout', False)
-    logger.info(
-        f"[{request_id}] checkout_dispatch mode={'sync' if use_sync else 'async_pool'} "
-        f"token={checkout_token[:12]}..."
-    )
-
-    if use_sync:
-        try:
-            from tasks.subscription_worker import execute
-            logger.info(f"[{request_id}] Processing checkout synchronously (billing_sync_checkout=true)")
-            result = execute(checkout_token)
-            if result.get('status') == 'completed':
-                razorpay_sub_id = result.get('razorpay_subscription_id')
-                key_id = os.getenv('RAZORPAY_KEY_ID')
-                record_subscription_creation('completed', product_domain)
-                success_payload = {
-                    'success': True,
-                    'subscription_id': razorpay_sub_id,
-                    'key_id': key_id,
-                    'amount': amount_paise,
-                    'currency': currency,
-                    'plan_name': plan_name,
-                }
-                if claim_token and get_bool_flag('fix_server_idempotency', True):
-                    from services.billing_checkout_idempotency import complete_claim
-                    complete_claim(supabase, idempotency_key, claim_token, success_payload)
-                return jsonify(success_payload), 200
-        except Exception as sync_e:
-            logger.error(
-                f"[{request_id}] Synchronous checkout failed, falling back to async pool: {sync_e}",
-                exc_info=True,
-            )
-
+    # FAANG-level: Synchronous execution for checkout
+    # Bypasses background workers for free-tier constraints (e.g. Vercel/Render)
+    # Allows immediate return of subscription_id to avoid frontend polling and popup blockers.
     try:
-        from services.checkout_dispatch_pool import get_checkout_dispatch_pool
-        pool = get_checkout_dispatch_pool()
-        accepted = pool.try_submit(
-            checkout_token,
-            idempotency_key=idempotency_key,
-            claim_token=claim_token,
-            request_id=request_id,
-        )
-        if accepted:
-            record_subscription_creation('initiated', product_domain)
-            logger.info(
-                f"[{request_id}] checkout_dispatched_async token={checkout_token[:12]}... status=202"
-            )
-            return jsonify({
+        from tasks.subscription_worker import execute
+        logger.info(f"[{request_id}] Executing synchronous checkout token={checkout_token[:12]}...")
+        result = execute(checkout_token)
+        
+        if result.get('status') == 'completed':
+            success_payload = {
                 'success': True,
+                'subscription_id': result.get('razorpay_subscription_id'),
+                'key_id': os.getenv('RAZORPAY_KEY_ID'),
+                'amount': amount_paise,
+                'currency': currency,
+                'plan_name': plan_name,
                 'checkout_token': checkout_token,
-                'status': 'initiated',
-                'poll_url': f'/api/billing/checkout-status/{checkout_token}',
-            }), 202
+                'status': 'completed'
+            }
+            
+            # Complete idempotency claim immediately
+            if claim_token and get_bool_flag('fix_server_idempotency', True):
+                from services.billing_checkout_idempotency import complete_claim
+                complete_claim(supabase, idempotency_key, claim_token, success_payload)
+                
+            return jsonify(success_payload), 200
+        else:
+            raise Exception(f"Checkout execution failed or skipped: {result.get('reason', 'Unknown reason')}")
+            
+    except Exception as sync_e:
+        logger.error(
+            f"[{request_id}] Synchronous checkout execution failed: {sync_e}",
+            exc_info=True,
+        )
+        record_subscription_creation('failed', product_domain)
         if claim_token and get_bool_flag('fix_server_idempotency', True):
             from services.billing_checkout_idempotency import fail_claim
-            fail_claim(supabase, idempotency_key, claim_token, 'CHECKOUT_QUEUE_FULL')
+            fail_claim(supabase, idempotency_key, claim_token, 'SERVICE_UNAVAILABLE')
+            
+        supabase.table('checkout_requests').update({
+            'status': 'failed',
+            'error_message': str(async_e)[:500],
+            'updated_at': datetime.now(timezone.utc).isoformat(),
+        }).eq('checkout_token', checkout_token).execute()
+        
         return jsonify({
             'success': False,
-            'error': 'Checkout queue is at capacity. Please retry shortly.',
-            'error_code': 'CHECKOUT_QUEUE_FULL',
-            'retry_after_seconds': 5,
-        }), 429
-    except Exception as dispatch_err:
-        logger.error(f"[{request_id}] checkout_dispatch_failed: {dispatch_err}", exc_info=True)
-
-    if claim_token and get_bool_flag('fix_server_idempotency', True):
-        from services.billing_checkout_idempotency import fail_claim
-        fail_claim(supabase, idempotency_key, claim_token, 'SERVICE_UNAVAILABLE')
-    supabase.table('checkout_requests').update({
-        'status': 'failed',
-        'error_message': 'Payment processing queue unavailable.',
-        'updated_at': datetime.now(timezone.utc).isoformat(),
-    }).eq('checkout_token', checkout_token).execute()
-    return jsonify({
-        'success': False, 'error': 'Payment service is temporarily unavailable. Please try again.',
-        'error_code': 'SERVICE_UNAVAILABLE',
-    }), 503
+            'error': 'Payment service is temporarily unavailable. Please try again.',
+            'error_code': 'SERVICE_UNAVAILABLE',
+        }), 503
 
 
 @billing_bp.route('/checkout-status/<checkout_token>', methods=['GET'])
@@ -1935,6 +1920,7 @@ def verify_subscription():
     if not signed_context:
         return jsonify({'success': False, 'code': 'MISSING_CONTEXT', 'message': 'Security context missing.', 'requestId': request_id}), 400
     if not idem_key:
+        logger.error(f"[{request_id}] verify_subscription 400: MISSING_IDEMPOTENCY_KEY")
         return jsonify({'success': False, 'code': 'MISSING_IDEMPOTENCY_KEY', 'message': 'Idempotency-Key header is required.', 'requestId': request_id}), 400
 
     # Verify signature and extract domain context
@@ -1956,7 +1942,7 @@ def verify_subscription():
     if billing_verify_requests_total:
         billing_verify_requests_total.labels(domain=domain).inc()
     if billing_circuit_breaker_open:
-        billing_circuit_breaker_open.labels(domain=domain).set(1 if razorpay_circuit_breaker.state == CircuitBreaker.STATE_OPEN else 0)
+        billing_circuit_breaker_open.labels(domain=domain).set(1 if razorpay_circuit_breaker.state == 'open' else 0)
 
     # Redis for lock + idempotency replay
     redis_client = get_redis_client()
@@ -1989,6 +1975,7 @@ def verify_subscription():
     if not razorpay_subscription_id or not razorpay_payment_id or not razorpay_signature:
         if billing_verify_error_total:
             billing_verify_error_total.labels(domain=domain, code="MISSING_FIELDS").inc()
+        logger.error(f"[{request_id}] verify_subscription 400: MISSING_FIELDS")
         return jsonify({
             'success': False,
             'code': 'MISSING_FIELDS',
@@ -2070,9 +2057,10 @@ def verify_subscription():
                 'razorpay_payment_id': razorpay_payment_id,
                 'razorpay_signature': razorpay_signature,
             })
-        except Exception:
+        except Exception as e:
             if billing_verify_error_total:
                 billing_verify_error_total.labels(domain=domain, code="INVALID_SIGNATURE").inc()
+            logger.error(f"[{request_id}] verify_subscription 400: INVALID_SIGNATURE {e}")
             resp = {
                 'success': False,
                 'code': 'INVALID_SIGNATURE',
@@ -2112,6 +2100,7 @@ def verify_subscription():
         if rp_status not in ('active', 'authenticated'):
             if billing_verify_error_total:
                 billing_verify_error_total.labels(domain=domain, code="RAZORPAY_INACTIVE").inc()
+            logger.error(f"[{request_id}] verify_subscription 400: RAZORPAY_INACTIVE status={rp_status}")
             resp = {
                 'success': False,
                 'code': 'RAZORPAY_INACTIVE',

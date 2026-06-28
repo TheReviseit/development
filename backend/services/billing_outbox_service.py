@@ -320,7 +320,7 @@ def process_pending_batch() -> Dict[str, int]:
             f"success={result.get('success')}"
         )
 
-        return stats
+    return stats
 
 
 def enqueue_deferred_webhook(

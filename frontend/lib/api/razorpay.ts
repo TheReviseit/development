@@ -13,6 +13,7 @@
 import type { ProductDomain } from "../domain/config";
 import { logger, trackRevenue } from "../observability/observability";
 import { generateCheckoutIdempotencyKey } from "../billing/idempotency";
+import { trackUntypedEvent } from "../analytics";
 
 // SECURITY: All payment API calls must route through Next.js (/api/...) proxy,
 // not directly to Flask backend. This ensures:
@@ -146,7 +147,7 @@ export function getIdempotencyKey(userId: string, planName: string): string {
 // Interfaces
 // =============================================================================
 
-interface RazorpayOrder {
+export interface RazorpayOrder {
   success: boolean;
   subscription_id: string;
   key_id: string;
@@ -159,11 +160,6 @@ interface RazorpayOrder {
   already_active?: boolean;
   error?: string;
   error_code?: string;
-  
-  // New async checkout fields
-  checkout_token?: string;
-  status?: string;
-  poll_url?: string;
 }
 
 interface SubscriptionStatus {
@@ -212,107 +208,10 @@ interface VerifyPaymentResponse {
 // =============================================================================
 
 /**
- * Poll for checkout completion.
- * 
- * FAANG-level: Polls the backend until the background subscription creation
- * completes. Uses exponential backoff to reduce load while maintaining
- * responsiveness.
- */
-async function pollCheckoutCompletion(
-  checkoutToken: string,
-  maxAttempts: number = 60,
-  baseIntervalMs: number = 1000,
-): Promise<RazorpayOrder> {
-  for (let attempt = 0; attempt < maxAttempts; attempt++) {
-    const response = await fetchWithTimeout(
-      `${API_PREFIX}/checkout-status/${checkoutToken}`,
-      {
-        method: "GET",
-        headers: {
-          "Content-Type": "application/json",
-          ...(await authHeaders()),
-        },
-      },
-    );
-
-    if (!response.ok) {
-      if (response.status === 404) {
-        throw new Error("Checkout request not found");
-      }
-      // Transient error — retry
-      await new Promise((r) => setTimeout(r, baseIntervalMs));
-      continue;
-    }
-
-    const data = await response.json();
-
-    switch (data.status) {
-      case "completed": {
-        const subscriptionId =
-          data.subscription_id || data.razorpay_subscription_id;
-        const keyId =
-          data.key_id ||
-          data.razorpay_key_id ||
-          process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID;
-        const amount = data.amount ?? data.amount_paise;
-
-        if (!subscriptionId || !keyId) {
-          throw new Error(
-            "Checkout completed but payment details are missing. Please retry.",
-          );
-        }
-
-        logger.info("checkout_completed", { checkout_token: checkoutToken });
-        return {
-          success: true,
-          subscription_id: subscriptionId,
-          key_id: keyId,
-          amount,
-          currency: data.currency || "INR",
-          plan_name: data.plan_name,
-        };
-      }
-
-      case "failed":
-        logger.error(
-          "checkout_failed",
-          new Error(data.error_message || "Subscription creation failed"),
-          { checkout_token: checkoutToken },
-        );
-        {
-          const err = new Error(
-            data.error_message || "Subscription creation failed",
-          ) as Error & { code?: string };
-          err.code = "CHECKOUT_FAILED";
-          throw err;
-        }
-
-      case "processing":
-      case "initiated":
-        // Still working — wait and retry with backoff
-        const delay = Math.min(
-          baseIntervalMs * Math.pow(1.2, attempt),
-          3000,
-        );
-        await new Promise((r) => setTimeout(r, delay));
-        continue;
-
-      default:
-        await new Promise((r) => setTimeout(r, baseIntervalMs));
-        continue;
-    }
-  }
-
-  throw new Error(
-    "Subscription creation timed out. Your subscription may still be processing. Please check back later.",
-  );
-}
-
-/**
- * Create a new subscription order — with async 202 polling.
- * 
- * FAANG-level: Returns immediately with 202 Accepted, then polls
- * for completion. Total perceived user wait time drops from 35s to <100ms.
+ * Create a new subscription — synchronous request-response.
+ *
+ * Backend now returns subscription_id directly (no 202, no polling).
+ * Total API response time: 300-800ms for Razorpay call + ~50ms validation.
  */
 export async function createSubscription(
   planName: "starter" | "business" | "pro",
@@ -320,13 +219,14 @@ export async function createSubscription(
   customerName?: string,
   customerPhone?: string,
   userId?: string,
+  currentDomain?: string,
 ): Promise<RazorpayOrder> {
   const requestId = getPaymentRequestId();
   const authHdrs = await authHeaders();
 
   let idempotencyKey: string | undefined;
   if (userId) {
-    idempotencyKey = await generateCheckoutIdempotencyKey(userId, planName, "shop");
+    idempotencyKey = await generateCheckoutIdempotencyKey(userId, planName, currentDomain || "shop");
   }
 
   const response = await fetchWithTimeout(
@@ -360,17 +260,13 @@ export async function createSubscription(
     throw error;
   }
 
-  // 202 Accepted = async processing started
-  if (response.status === 202 && result.checkout_token) {
-    logger.info("checkout_initiated", {
-      checkout_token: result.checkout_token,
-      plan: planName,
-    });
-    return pollCheckoutCompletion(result.checkout_token);
+  // Direct success (subscription_id returned synchronously)
+  if (result.success || result.subscription_id) {
+    return result;
   }
 
-  // Direct success (idempotency hit or already active)
-  if (result.success || result.idempotency_hit) {
+  // Idempotency hit — return cached result
+  if (result.idempotency_hit) {
     return result;
   }
 
@@ -385,7 +281,7 @@ export async function createSubscription(
  * Create subscription with automatic retry for transient errors.
  *
  * Retry Logic:
- * - Retryable errors: 503 (server unavailable), network errors
+ * - Retryable errors: 503 (server unavailable), network errors, timeouts
  * - Non-retryable errors: 400 (bad request), 409 (duplicate), DATABASE_ERROR
  * - Exponential backoff: 1s, 2s, 4s
  *
@@ -397,7 +293,8 @@ export async function createSubscriptionWithRetry(
   customerName?: string,
   customerPhone?: string,
   userId?: string,
-  maxRetries: number = 1,
+  currentDomain?: string,
+  maxRetries: number = 0,
 ): Promise<RazorpayOrder> {
   let lastError: any;
 
@@ -409,26 +306,10 @@ export async function createSubscriptionWithRetry(
         customerName,
         customerPhone,
         userId,
+        currentDomain,
       );
     } catch (error: any) {
       lastError = error;
-
-      // Idempotency lock — wait for server cooldown then retry same key
-      if (error.code === "IDEMPOTENCY_IN_PROGRESS") {
-        const retryAfterSeconds =
-          error.data?.details?.retry_after_seconds ??
-          error.data?.retry_after_seconds ??
-          5;
-        if (attempt < maxRetries) {
-          const delayMs = Math.min(retryAfterSeconds * 1000, 35000);
-          console.log(
-            `[Payment] Idempotency in progress — retrying after ${delayMs}ms`,
-          );
-          await new Promise((resolve) => setTimeout(resolve, delayMs));
-          continue;
-        }
-        throw error;
-      }
 
       // Non-retryable error codes
       const nonRetryableCodes = [
@@ -441,15 +322,17 @@ export async function createSubscriptionWithRetry(
         "DUPLICATE_REQUEST",
         "ALREADY_ACTIVE",
         "CHECKOUT_FAILED",
+        "RATE_LIMITED",
       ];
       if (nonRetryableCodes.includes(error.code)) {
         throw error;
       }
 
       const isRetryable =
-        error.code === "CHECKOUT_QUEUE_FULL" ||
         error.code === "SERVICE_UNAVAILABLE" ||
         error.code === "GATEWAY_TIMEOUT" ||
+        error.code === "IDEMPOTENCY_ERROR" ||
+        error.code === "IDEMPOTENCY_IN_PROGRESS" ||
         error.name === "AbortError" ||
         !error.code ||
         error.message?.includes("503") ||
@@ -463,9 +346,16 @@ export async function createSubscriptionWithRetry(
 
       // Transient error — retry with backoff
       if (attempt < maxRetries) {
-        const delayMs = Math.min(1000 * Math.pow(2, attempt), 4000);
+        const retryAfterSeconds =
+          error.data?.retry_after_seconds ||
+          error.data?.retry_after ||
+          error.retry_after_seconds;
+        const baseDelay = retryAfterSeconds
+          ? retryAfterSeconds * 1000
+          : 1000 * Math.pow(2, attempt);
+        const delayMs = Math.min(baseDelay, 8000);
         console.log(
-          `[Payment] Retrying after ${delayMs}ms (attempt ${attempt + 1}/${maxRetries})`,
+          `[Payment] Retrying after ${delayMs}ms (attempt ${attempt + 1}/${maxRetries}, code=${error.code})`,
         );
         await new Promise((resolve) => setTimeout(resolve, delayMs));
         continue;
@@ -566,26 +456,118 @@ export async function cancelSubscription(userId?: string): Promise<{
 // =============================================================================
 
 /**
- * Load Razorpay checkout script dynamically
+ * Load Razorpay checkout script dynamically — single entry point.
+ *
+ * Checks for existing script tag by ID before creating a new one.
+ * This prevents the double-load race condition where PlanCard.tsx
+ * and onboarding-embedded/page.tsx both inject the script.
  */
+let razorpPayScriptPromise: Promise<boolean> | null = null;
+
 export function loadRazorpayScript(): Promise<boolean> {
-  return new Promise((resolve) => {
+  if (razorpPayScriptPromise) return razorpPayScriptPromise;
+
+  const _loadStart = performance.now();
+  const _alreadyLoaded = typeof window !== "undefined" && !!(window as any).Razorpay;
+  const _existingScript = !!document.getElementById("razorpay-sdk");
+
+  razorpPayScriptPromise = new Promise((resolve) => {
     if (typeof window !== "undefined" && (window as any).Razorpay) {
+      _emitSdkLoadResult(true, _loadStart, true, false);
       resolve(true);
       return;
     }
 
+    const timeout = setTimeout(() => {
+      if (typeof window !== "undefined" && (window as any).Razorpay) {
+        _emitSdkLoadResult(true, _loadStart, false, false);
+        resolve(true);
+      } else {
+        _emitSdkLoadResult(false, _loadStart, false, false);
+        razorpPayScriptPromise = null;
+        resolve(false);
+      }
+    }, 5000);
+
+    const existing = document.getElementById("razorpay-sdk");
+    if (existing) {
+      existing.addEventListener("load", () => {
+        clearTimeout(timeout);
+        _emitSdkLoadResult(true, _loadStart, false, false);
+        resolve(true);
+      });
+      existing.addEventListener("error", () => {
+        clearTimeout(timeout);
+        _emitSdkLoadResult(false, _loadStart, false, false);
+        razorpPayScriptPromise = null;
+        resolve(false);
+      });
+      return;
+    }
+
     const script = document.createElement("script");
+    script.id = "razorpay-sdk";
     script.src = "https://checkout.razorpay.com/v1/checkout.js";
     script.async = true;
-    script.onload = () => resolve(true);
-    script.onerror = () => resolve(false);
+    script.onload = () => {
+      clearTimeout(timeout);
+      _emitSdkLoadResult(true, _loadStart, false, true);
+      resolve(true);
+    };
+    script.onerror = () => {
+      clearTimeout(timeout);
+      _emitSdkLoadResult(false, _loadStart, false, true);
+      razorpPayScriptPromise = null;
+      resolve(false);
+    };
     document.body.appendChild(script);
   });
+
+  return razorpPayScriptPromise;
+}
+
+function _emitSdkLoadResult(success: boolean, startTime: number, alreadyLoaded: boolean, scriptInjected: boolean): void {
+  const durationMs = Math.round(performance.now() - startTime);
+  try {
+    trackUntypedEvent("razorpay_sdk_load_result", {
+      status: success ? "success" : "failure",
+      duration_ms: durationMs,
+      already_loaded: alreadyLoaded,
+      script_injected: scriptInjected,
+    });
+  } catch {
+    // Analytics failure must never break checkout
+  }
 }
 
 /**
- * Open Razorpay checkout modal
+ * Reset the script load promise (for testing or recovery after failure).
+ */
+export function resetRazorpayScriptPromise(): void {
+  razorpPayScriptPromise = null;
+}
+
+/**
+ * Detect if popups are blocked.
+ * Opens a tiny test popup and immediately closes it.
+ * Returns true if popups appear to be allowed.
+ */
+export function checkPopupAllowed(): boolean {
+  if (typeof window === "undefined") return true;
+  const test = window.open("", "razorpay-popup-test", "width=1,height=1");
+  if (!test || test.closed || typeof test.closed === "undefined") {
+    return false;
+  }
+  test.close();
+  return true;
+}
+
+/**
+ * Open Razorpay checkout modal — async version.
+ *
+ * Use this for upgrade/proration flows where the user gesture is not
+ * critical (the backend returns subscription_id from a non-202 endpoint).
+ * For the onboarding flow, use `openRazorpayCheckoutSynchronous()` instead.
  */
 export async function openRazorpayCheckout(options: {
   subscriptionId: string;
@@ -595,6 +577,7 @@ export async function openRazorpayCheckout(options: {
   customerEmail: string;
   customerName?: string;
   customerPhone?: string;
+  domain?: string;
   onSuccess: (response: {
     razorpay_payment_id: string;
     razorpay_subscription_id: string;
@@ -603,6 +586,16 @@ export async function openRazorpayCheckout(options: {
   onError: (error: any) => void;
   onClose?: () => void;
 }): Promise<void> {
+  if (!checkPopupAllowed()) {
+    _emitCheckoutOpen(options.planName, options.domain, "async_modal", "failure", "POPUP_BLOCKED");
+    options.onError({
+      code: "POPUP_BLOCKED",
+      message: "Please allow popups for this site to complete payment",
+      description: "Payment popup was blocked by your browser",
+    });
+    return;
+  }
+
   const scriptLoaded = await loadRazorpayScript();
 
   if (!scriptLoaded) {
@@ -651,9 +644,6 @@ export async function openRazorpayCheckout(options: {
         options.onClose?.();
       },
     },
-    // NOTE: Do NOT pass timeout, retry, or method for subscription checkout.
-    // These options are for one-time payments only. Razorpay subscription
-    // checkout determines supported methods from the plan configuration.
   };
 
   const razorpay = new (window as any).Razorpay(razorpayOptions);
@@ -661,6 +651,249 @@ export async function openRazorpayCheckout(options: {
     options.onError(response.error);
   });
   razorpay.open();
+  _emitCheckoutOpen(options.planName, options.domain, "async_modal", "success");
+}
+
+/**
+ * Open Razorpay checkout — SYNCHRONOUS version for onboarding flow.
+ *
+ * CRITICAL: This function returns void and MUST be called from a user
+ * click handler without any await. The browser trusts the synchronous
+ * call stack and allows the popup/modal to open.
+ *
+ * Assumes Razorpay SDK is already loaded and subscription_id is cached.
+ * Returns true if the checkout modal was opened successfully.
+ */
+export function openRazorpayCheckoutSynchronous(options: {
+  subscriptionId: string;
+  keyId: string;
+  planName: string;
+  customerEmail: string;
+  customerName?: string;
+  domain?: string;
+  onSuccess: (response: {
+    razorpay_payment_id: string;
+    razorpay_subscription_id: string;
+    razorpay_signature: string;
+  }) => void;
+  onError: (error: any) => void;
+  onClose?: () => void;
+}): boolean {
+  if (typeof window === "undefined" || !(window as any).Razorpay) {
+    _emitCheckoutOpen(options.planName, options.domain, "sync_modal", "failure", "SDK_NOT_LOADED");
+    options.onError(new Error("Razorpay SDK not loaded"));
+    return false;
+  }
+
+  if (!checkPopupAllowed()) {
+    _emitCheckoutOpen(options.planName, options.domain, "sync_modal", "failure", "POPUP_BLOCKED");
+    options.onError({
+      code: "POPUP_BLOCKED",
+      message: "Please allow popups for this site to complete payment",
+      description: "Payment popup was blocked by your browser",
+    });
+    return false;
+  }
+
+  const keyId = options.keyId || process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID;
+  if (!keyId) {
+    options.onError(
+      new Error("Payment configuration error: Razorpay key not available"),
+    );
+    return false;
+  }
+
+  try {
+    const razorpayOptions: Record<string, any> = {
+      key: keyId,
+      subscription_id: options.subscriptionId,
+      name: "Flowauxi",
+      description: `${options.planName} Plan`,
+      prefill: {
+        name: options.customerName || "",
+        email: options.customerEmail,
+      },
+      theme: { color: "#22c15a" },
+      handler: (response: any) => {
+        options.onSuccess({
+          razorpay_payment_id: response.razorpay_payment_id,
+          razorpay_subscription_id: response.razorpay_subscription_id,
+          razorpay_signature: response.razorpay_signature,
+        });
+      },
+      modal: {
+        confirm_close: true,
+        escape: false,
+        backdropclose: false,
+        ondismiss: () => {
+          console.log("Payment modal dismissed by user");
+          options.onClose?.();
+        },
+      },
+    };
+
+    const razorpay = new (window as any).Razorpay(razorpayOptions);
+    razorpay.on("payment.failed", (response: any) => {
+      options.onError(response.error);
+    });
+    razorpay.open();
+    _emitCheckoutOpen(options.planName, options.domain, "sync_modal", "success");
+    return true;
+  } catch (err) {
+    _emitCheckoutOpen(options.planName, options.domain, "sync_modal", "failure", "CHECKOUT_OPEN_ERROR", err instanceof Error ? err.message : "Unknown error");
+    options.onError(err);
+    return false;
+  }
+}
+
+/**
+ * Load Razorpay SDK into a pre-opened blank window.
+ * This is the FAANG-level single-click popup blocker bypass pattern.
+ * The window MUST be opened synchronously by the user click before calling the API.
+ */
+export function loadRazorpayInWindow(
+  win: Window,
+  options: {
+    subscriptionId: string;
+    keyId: string;
+    planName: string;
+    customerEmail: string;
+    customerName?: string;
+  }
+) {
+  // We use document.write to inject a branded loading state and the SDK
+  win.document.open();
+  win.document.write(`
+    <!DOCTYPE html>
+    <html lang="en">
+      <head>
+        <meta charset="utf-8">
+        <title>Preparing Secure Payment...</title>
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <script src="https://checkout.razorpay.com/v1/checkout.js"></script>
+        <style>
+          body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            margin: 0;
+            background: #000;
+            color: #fff;
+          }
+          .spinner {
+            width: 40px;
+            height: 40px;
+            border: 3px solid rgba(255,255,255,0.2);
+            border-radius: 50%;
+            border-top-color: #22c15a;
+            animation: spin 1s ease-in-out infinite;
+            margin: 0 auto 20px;
+          }
+          @keyframes spin { to { transform: rotate(360deg); } }
+          .message {
+            text-align: center;
+          }
+          .message p {
+            margin: 0;
+            font-size: 16px;
+            color: #a0a0a0;
+          }
+        </style>
+      </head>
+      <body>
+        <div class="message">
+          <div class="spinner"></div>
+          <p>Redirecting to secure payment gateway...</p>
+        </div>
+        <script>
+          const rzpOptions = {
+            key: "${options.keyId}",
+            subscription_id: "${options.subscriptionId}",
+            name: "Flowauxi",
+            description: "${options.planName} Plan",
+            prefill: {
+              name: "${options.customerName || ''}",
+              email: "${options.customerEmail || ''}"
+            },
+            theme: { color: "#22c15a" },
+            handler: function(response) {
+              if (window.opener && window.opener.handleRazorpaySuccess) {
+                window.opener.handleRazorpaySuccess(response);
+              }
+              window.close();
+            },
+            modal: {
+              confirm_close: true,
+              escape: false,
+              backdropclose: false,
+              ondismiss: function() {
+                if (window.opener && window.opener.handleRazorpayDismiss) {
+                  window.opener.handleRazorpayDismiss();
+                }
+                window.close();
+              }
+            }
+          };
+
+          // Wait for Razorpay SDK to load, then open
+          const interval = setInterval(() => {
+            if (typeof window.Razorpay !== 'undefined') {
+              clearInterval(interval);
+              try {
+                const rzp = new window.Razorpay(rzpOptions);
+                rzp.on('payment.failed', function (response){
+                  if (window.opener && window.opener.handleRazorpayError) {
+                    window.opener.handleRazorpayError(response.error);
+                  }
+                });
+                rzp.open();
+              } catch(e) {
+                if (window.opener && window.opener.handleRazorpayError) {
+                  window.opener.handleRazorpayError({ description: "Failed to initialize payment gateway" });
+                }
+                window.close();
+              }
+            }
+          }, 100);
+          
+          // Timeout fallback in case SDK fails to load
+          setTimeout(() => {
+             if (typeof window.Razorpay === 'undefined') {
+                if (window.opener && window.opener.handleRazorpayError) {
+                  window.opener.handleRazorpayError({ description: "Payment gateway took too long to load" });
+                }
+                window.close();
+             }
+          }, 15000);
+        </script>
+      </body>
+    </html>
+  `);
+  win.document.close();
+}
+
+function _emitCheckoutOpen(
+  plan: string,
+  domain: string | undefined,
+  path: "sync_modal" | "sync_fallback" | "async_modal",
+  status: "success" | "failure",
+  errorCode?: string,
+  errorMessage?: string,
+): void {
+  try {
+    trackUntypedEvent("checkout_open", {
+      domain: domain || "unknown",
+      plan,
+      path,
+      status,
+      error_code: errorCode,
+      error_message: errorMessage,
+    });
+  } catch {
+    // Analytics failure must never break checkout
+  }
 }
 
 // =============================================================================

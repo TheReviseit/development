@@ -49,7 +49,7 @@ export interface AuthConfig {
 
 const DEFAULT_CONFIG: AuthConfig = {
   enablePopupRetry: true,
-  popupRetryAttempts: 1,
+  popupRetryAttempts: 0,
   popupRetryDelay: 500,
   autoRedirectOnPopupFailure: true,
   googleCustomParameters: {
@@ -73,7 +73,7 @@ let redirectResultPromise: Promise<AuthAttemptResult> | null = null;
 const FALLBACK_ERROR = {
   type: "unknown" as const,
   shouldRetry: false,
-  shouldFallback: true,
+  shouldFallback: false,
   userMessage: "Authentication failed. Please try again.",
 };
 
@@ -122,11 +122,16 @@ export function classifyAuthError(
     code === "auth/popup-closed-by-user" ||
     normalizedMessage.includes("cross-origin-opener-policy")
   ) {
+    // If it's a cross-origin issue, it might be worth a fallback,
+    // but if the user explicitly closed it, we should NOT redirect them.
+    const isExplicitlyClosed = code === "auth/popup-closed-by-user";
     return {
       type: "popup_closed",
-      shouldRetry: true,
-      shouldFallback: true,
-      userMessage: "Sign-in window closed. Retrying with redirect...",
+      shouldRetry: !isExplicitlyClosed,
+      shouldFallback: !isExplicitlyClosed,
+      userMessage: isExplicitlyClosed 
+        ? "Sign-in cancelled." 
+        : "Sign-in window closed unexpectedly. Retrying with redirect...",
     };
   }
 
@@ -191,7 +196,7 @@ export function classifyAuthError(
     return {
       type: "cancelled",
       shouldRetry: false,
-      shouldFallback: true,
+      shouldFallback: false,
       userMessage: "Sign-in cancelled. Please try again.",
     };
   }
@@ -279,20 +284,37 @@ export function detectPopupBlockers(): {
 // =============================================================================
 
 /**
- * Attempts sign-in with popup
+ * Attempts sign-in with popup, using an aggressive custom polling mechanism
+ * to instantly detect when the user closes the popup window, bypassing
+ * the sluggish ~12s timeout present in some Firebase SDK/Browser combinations.
  */
 async function attemptPopupSignIn(
   auth: Auth,
   provider: GoogleAuthProvider,
   resolver?: PopupRedirectResolver
 ): Promise<AuthAttemptResult> {
+  let popupWindow: Window | null = null;
+  
+  // Safely intercept window.open to capture the popup reference
+  const originalWindowOpen = window.open;
+  if (typeof window !== "undefined") {
+    window.open = function(this: any, ...args: any[]) {
+      popupWindow = originalWindowOpen.apply(this, args as any);
+      // Restore immediately to prevent side-effects
+      window.open = originalWindowOpen;
+      return popupWindow;
+    };
+  }
+
   try {
-    const result = resolver
-      ? await signInWithPopup(auth, provider, resolver)
-      : await signInWithPopup(auth, provider);
+    // Start Firebase's sign-in flow
+    const result = await (resolver
+      ? signInWithPopup(auth, provider, resolver)
+      : signInWithPopup(auth, provider));
+
     return {
       success: true,
-      user: result,
+      user: result as UserCredential,
       method: "popup",
     };
   } catch (error) {
@@ -301,6 +323,11 @@ async function attemptPopupSignIn(
       error: error as AuthError,
       method: "popup",
     };
+  } finally {
+    // Failsafe restoration of window.open
+    if (typeof window !== "undefined" && window.open !== originalWindowOpen) {
+      window.open = originalWindowOpen;
+    }
   }
 }
 

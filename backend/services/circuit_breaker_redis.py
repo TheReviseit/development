@@ -240,16 +240,14 @@ def create_circuit_breaker(
     half_open_max_calls: int = 3,
 ):
     """
-    Factory: creates RedisCircuitBreaker if REDIS_CIRCUIT_BREAKER=true,
-    otherwise returns None (caller falls back to in-memory).
+    Factory: creates RedisCircuitBreaker (shared across workers).
+    RedisCircuitBreaker internally degrades to local state if Redis is unavailable.
+    No flag needed — this is always the single source of truth.
     """
-    if os.getenv('REDIS_CIRCUIT_BREAKER', 'false').lower() == 'true':
-        logger.info("Using Redis-backed circuit breaker (shared across workers)")
-        return RedisCircuitBreaker(
-            redis_key=redis_key,
-            failure_threshold=failure_threshold,
-            recovery_timeout=recovery_timeout,
-            half_open_max_calls=half_open_max_calls,
-        )
-    logger.info("Using in-memory circuit breaker (REDIS_CIRCUIT_BREAKER not enabled)")
-    return None
+    logger.info("Creating Redis-backed circuit breaker (shared across workers)")
+    return RedisCircuitBreaker(
+        redis_key=redis_key,
+        failure_threshold=failure_threshold,
+        recovery_timeout=recovery_timeout,
+        half_open_max_calls=half_open_max_calls,
+    )

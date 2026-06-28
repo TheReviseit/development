@@ -1857,14 +1857,16 @@ function StoreIconRenderer() {
     : `/store`;
 
   return (
-    <div
+    <a
+      href={storeUrl}
+      target="_blank"
+      rel="noopener noreferrer"
       style={{ display: 'flex', alignItems: 'center', cursor: 'pointer', marginRight: '24px' }}
       className="hover:opacity-80 transition-opacity"
-      onClick={() => window.open(storeUrl, "_blank")}
       title="View Store"
     >
       <Store size={20} color="#ffffff" strokeWidth={2.25} />
-    </div>
+    </a>
   );
 }
 
@@ -1889,11 +1891,13 @@ function StoreIconMobileRenderer({ closeMenu }: { closeMenu: () => void }) {
     : `/store`;
 
   return (
-    <button
+    <a
+      href={storeUrl}
+      target="_blank"
+      rel="noopener noreferrer"
       className={styles.mobileNavLink}
       onClick={() => {
         closeMenu();
-        window.open(storeUrl, "_blank");
       }}
     >
       <svg
@@ -1909,7 +1913,7 @@ function StoreIconMobileRenderer({ closeMenu }: { closeMenu: () => void }) {
         <line x1="10" y1="14" x2="21" y2="3"></line>
       </svg>
       <span>View Store</span>
-    </button>
+    </a>
   );
 }
 

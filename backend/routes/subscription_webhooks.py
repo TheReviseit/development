@@ -70,6 +70,16 @@ def handle_subscription_webhook():
 
         processor = get_webhook_processor()
 
+        # 0. Request size limit — reject oversized payloads (> 1MB)
+        MAX_WEBHOOK_PAYLOAD = 1 * 1024 * 1024  # 1 MB
+        content_length = request.content_length
+        if content_length is not None and content_length > MAX_WEBHOOK_PAYLOAD:
+            logger.error(
+                f"webhook_payload_too_large content_length={content_length} "
+                f"max={MAX_WEBHOOK_PAYLOAD}"
+            )
+            return jsonify({'status': 'error', 'message': 'Payload too large'}), 413
+
         # 1. Get raw body and signature
         raw_body = request.get_data()
         signature = request.headers.get('X-Razorpay-Signature', '')
@@ -97,11 +107,19 @@ def handle_subscription_webhook():
             logger.warning(f"webhook_timestamp_rejected id={event_id}")
             return jsonify({'status': 'rejected', 'message': 'Event too old or invalid timestamp'}), 400
 
-        # 4. Process event
-        result = processor.process_event(payload)
+        # 4. Extract correlation ID from header (forwarded from checkout request)
+        request_id = request.headers.get('X-Request-Id') or request.headers.get('X-Correlation-Id')
 
-        # 5. Return 500 when processing failed so Razorpay retries (lock contention, etc.)
-        status_code = 200 if result.get('processed') else 500
+        # 5. Process event
+        result = processor.process_event(payload, request_id=request_id)
+
+        # 5. Return 200 for known retryable actions (lock contention, deferred) —
+        #    Razorpay does NOT need to retry; the outbox worker or next webhook
+        #    will resolve. Only return 500 for truly unexpected errors.
+        status_code = 200 if (
+            result.get('processed') or
+            result.get('action') in ('lock_contention', 'subscription_not_found_deferred')
+        ) else 500
 
         logger.info(
             f"webhook_response event={result.get('event_type')} "

@@ -34,27 +34,88 @@ import hmac
 import hashlib
 import logging
 import os
+import time
 from datetime import datetime, timezone, timedelta
 from typing import Dict, Any, Optional, Tuple
 
 logger = logging.getLogger('reviseit.webhook_processor')
 
-try:
-    from prometheus_client import Counter  # type: ignore
+# Prometheus metrics — fail loud on startup if not available
+from prometheus_client import Counter, Histogram  # type: ignore
 
-    billing_webhook_events_total = Counter(
-        "billing_webhook_events_total",
-        "Total billing webhook events received (domain-scoped)",
-        ["event_type", "domain"],
-    )
-    billing_outbox_write_failures_total = Counter(
-        "billing_outbox_write_failures_total",
-        "Total billing outbox write failures (by source)",
-        ["source"],
-    )
-except Exception:
-    billing_webhook_events_total = None
-    billing_outbox_write_failures_total = None
+billing_webhook_events_total = Counter(
+    "billing_webhook_events_total",
+    "Total billing webhook events received (domain-scoped)",
+    ["event_type", "domain"],
+)
+billing_outbox_write_failures_total = Counter(
+    "billing_outbox_write_failures_total",
+    "Total billing outbox write failures (by source)",
+    ["source"],
+)
+billing_webhook_processing_latency_ms = Histogram(
+    "billing_webhook_processing_latency_ms",
+    "Webhook processing latency in ms (receipt to DB commit)",
+    ["event_type", "domain"],
+    buckets=(50, 100, 200, 500, 1000, 2000, 5000, 10000, 30000),
+)
+billing_payment_flow_duration_seconds = Histogram(
+    "billing_payment_flow_duration_seconds",
+    "End-to-end payment flow duration in seconds (checkout_request.created_at → webhook processed_at)",
+    ["event_type", "domain"],
+    buckets=(1, 2, 5, 10, 15, 30, 60, 120, 300),
+)
+
+
+def _observe_payment_flow_duration(supabase, razorpay_subscription_id: str, event_type: str, domain: str) -> None:
+    """
+    Observe end-to-end payment flow duration.
+
+    Queries checkout_requests for the matching razorpay_subscription_id
+    and computes the delta from created_at to now. This measures the
+    real user-facing latency from "click to pay" → webhook confirmed.
+
+    Fire-and-forget: never raises, never breaks the webhook handler.
+    """
+    if not razorpay_subscription_id:
+        return
+    try:
+        result = supabase.table('checkout_requests').select(
+            'created_at'
+        ).eq('razorpay_subscription_id', razorpay_subscription_id).limit(1).execute()
+        if not result.data:
+            return
+        created_at_raw = result.data[0].get('created_at')
+        if not created_at_raw:
+            return
+        if isinstance(created_at_raw, str):
+            created_at = datetime.fromisoformat(created_at_raw)
+        else:
+            return
+        now = datetime.now(timezone.utc)
+        duration = (now - created_at).total_seconds()
+        if duration < 0:
+            return
+        billing_payment_flow_duration_seconds.labels(
+            event_type=event_type,
+            domain=domain,
+        ).observe(duration)
+    except Exception:
+        pass  # Fire-and-forget — never breaks webhook
+
+
+def _observe_webhook_latency(event_type: str, domain: str, start: float) -> None:
+    """Observe webhook processing latency in ms and inc the event counter."""
+    elapsed_ms = (time.monotonic() - start) * 1000
+    billing_webhook_processing_latency_ms.labels(
+        event_type=event_type,
+        domain=domain,
+    ).observe(elapsed_ms)
+    billing_webhook_events_total.labels(
+        event_type=event_type,
+        domain=domain,
+    ).inc()
+
 
 # Distributed lock for activation race prevention
 try:
@@ -157,7 +218,7 @@ class WebhookProcessor:
     @traced("webhook_processor.process_event", attributes=lambda self, payload: billing_attributes(
         status=payload.get('event', 'unknown').replace('.', '_'),
     ))
-    def process_event(self, payload: Dict[str, Any]) -> Dict[str, Any]:
+    def process_event(self, payload: Dict[str, Any], request_id: Optional[str] = None) -> Dict[str, Any]:
         """
         Process a verified Razorpay webhook event.
 
@@ -168,19 +229,24 @@ class WebhookProcessor:
 
         Args:
             payload: Parsed webhook JSON payload
+            request_id: Correlation ID for distributed tracing (X-Request-Id)
 
         Returns:
             {
                 'processed': True/False,
                 'event_type': '...',
                 'action': '...',
-                'duplicate': True/False
+                'duplicate': True/False,
+                'request_id': '...'
             }
         """
+        _proc_start = time.monotonic()
         event_id = payload.get('id')
         event_type = payload.get('event', 'unknown')
+        if not request_id:
+            request_id = payload.get('request_id') or f"webhook_{event_id}"
 
-        self.logger.info(f"webhook_received event={event_type} id={event_id}")
+        self.logger.info(f"webhook_received event={event_type} id={event_id} request_id={request_id}")
 
         # 1. ATOMIC DEDUP — single INSERT claims the event exclusively
         # If INSERT succeeds → this worker owns it (processing_result='processing').
@@ -188,18 +254,19 @@ class WebhookProcessor:
         # The status tells us: 'processing' = previous worker failed, retry OK;
         # 'processed' = already done, skip.
         if event_id:
-            claim_result = self._atomic_claim_event(event_id, event_type, payload)
+            claim_result = self._atomic_claim_event(event_id, event_type, payload, request_id=request_id)
             if claim_result == 'duplicate':
                 self.logger.info(f"webhook_duplicate event={event_id}")
+                _observe_webhook_latency(event_type, 'unknown', _proc_start)
                 return {
                     'processed': True,
                     'event_type': event_type,
                     'action': 'skipped_duplicate',
                     'duplicate': True,
+                    'request_id': request_id,
                 }
             elif claim_result in ('retry', 'reclaimed'):
                 self.logger.info(f"webhook_retry event={event_id} reason={claim_result}")
-                # Previous attempt crashed — this is a retry, proceed
 
         # 2. Extract entities from payload
         entity = payload.get('payload', {})
@@ -225,21 +292,25 @@ class WebhookProcessor:
                     
                     self.logger.info(f"webhook_store_order_paid event_id={event_id} rzp_order={rzp_order_id}")
                     self._record_event_processed(event_id, 'store_order_paid')
+                    _observe_webhook_latency(event_type, 'store_order', _proc_start)
                     return {
                         'processed': True,
                         'event_type': event_type,
                         'action': 'store_order_paid',
                         'duplicate': False,
+                        'request_id': request_id,
                     }
                 except Exception as e:
                     self.logger.error(f"Failed to process store order payment: {e}")
 
             self.logger.warning(f"webhook_no_subscription event={event_type} id={event_id}")
+            _observe_webhook_latency(event_type, 'unknown', _proc_start)
             return {
                 'processed': False,
                 'event_type': event_type,
                 'action': 'no_subscription_id',
                 'duplicate': False,
+                'request_id': request_id,
             }
 
         # 4. Find our subscription record
@@ -259,38 +330,30 @@ class WebhookProcessor:
                 )
             except Exception as defer_err:
                 self.logger.error(f"webhook_defer_failed: {defer_err}")
+            _observe_webhook_latency(event_type, 'unknown', _proc_start)
             return {
                 'processed': True,
                 'event_type': event_type,
                 'action': 'subscription_not_found_deferred',
                 'duplicate': False,
+                'request_id': request_id,
             }
 
-        # 5. Observability: increment per-domain counter once tenant is known
-        if billing_webhook_events_total:
-            try:
-                billing_webhook_events_total.labels(
-                    event_type=event_type,
-                    domain=subscription.get('product_domain', 'unknown') or 'unknown',
-                ).inc()
-            except Exception:
-                pass
-        try:
-            from monitoring.billing_metrics import record_webhook_event
-            record_webhook_event(event_type, subscription.get('product_domain', 'unknown') or 'unknown')
-        except Exception:
-            pass
+        # 5. Resolve domain for observability
+        _domain = subscription.get('product_domain', 'unknown') or 'unknown'
 
         # 6. Route to handler
         handler = self._get_handler(event_type)
         if not handler:
             self.logger.info(f"webhook_unhandled_event event={event_type}")
             self._record_event_processed(event_id, 'unhandled_event_type')
+            _observe_webhook_latency(event_type, _domain, _proc_start)
             return {
                 'processed': True,
                 'event_type': event_type,
                 'action': 'unhandled_event_type',
                 'duplicate': False,
+                'request_id': request_id,
             }
 
         with span_context("webhook_processor.run_handler", attributes=billing_attributes(
@@ -325,11 +388,23 @@ class WebhookProcessor:
                 # 9. Inline reconciliation: fire-and-forget, never fails the handler
                 self._reconcile_inline(subscription)
 
+                # 9b. Observe end-to-end payment flow duration for completion events
+                if action in ('subscription_activated', 'subscription_renewed', 'payment_captured'):
+                    if subscription.get('razorpay_subscription_id'):
+                        _observe_payment_flow_duration(
+                            self._supabase,
+                            subscription['razorpay_subscription_id'],
+                            event_type,
+                            _domain,
+                        )
+
+                _observe_webhook_latency(event_type, _domain, _proc_start)
                 return {
                     'processed': True,
                     'event_type': event_type,
                     'action': action,
                     'duplicate': False,
+                    'request_id': request_id,
                 }
 
             except WebhookLockContentionError as e:
@@ -338,11 +413,13 @@ class WebhookProcessor:
                 )
                 self._record_event_error(event_id, str(e)[:500])
                 self._maybe_send_webhook_dlq(event_id, event_type, payload, str(e))
+                _observe_webhook_latency(event_type, _domain, _proc_start)
                 return {
                     'processed': False,
                     'event_type': event_type,
                     'action': 'lock_contention',
                     'duplicate': False,
+                    'request_id': request_id,
                 }
 
             except Exception as e:
@@ -354,11 +431,13 @@ class WebhookProcessor:
                 # Leave as 'processing' — Razorpay retry will re-run
                 self._record_event_error(event_id, str(e)[:500])
                 self._maybe_send_webhook_dlq(event_id, event_type, payload, str(e))
+                _observe_webhook_latency(event_type, _domain, _proc_start)
                 return {
                     'processed': False,
                     'event_type': event_type,
                     'action': f'error: {str(e)[:100]}',
                     'duplicate': False,
+                    'request_id': request_id,
                 }
 
     # =========================================================================
@@ -550,7 +629,7 @@ class WebhookProcessor:
             self.logger.error(f"find_subscription_error rzp_sub={razorpay_sub_id}: {e}")
             return None
 
-    def _atomic_claim_event(self, event_id: str, event_type: str, payload: Dict) -> str:
+    def _atomic_claim_event(self, event_id: str, event_type: str, payload: Dict, request_id: Optional[str] = None) -> str:
         """
         Atomically claim a webhook event for processing.
 
@@ -564,14 +643,17 @@ class WebhookProcessor:
         Fail CLOSED: raises on DB errors so Razorpay retries.
         """
         now = datetime.now(timezone.utc)
+        row = {
+            'event_id': event_id,
+            'event_type': event_type,
+            'raw_payload': payload,
+            'created_at': now.isoformat(),
+            'processing_result': 'processing',
+        }
+        if request_id:
+            row['request_id'] = request_id
         try:
-            self._supabase.table('webhook_events').insert({
-                'event_id': event_id,
-                'event_type': event_type,
-                'raw_payload': payload,
-                'created_at': now.isoformat(),
-                'processing_result': 'processing',
-            }).execute()
+            self._supabase.table('webhook_events').insert(row).execute()
             return 'new'
         except Exception as e:
             error_str = str(e).lower()
@@ -679,8 +761,7 @@ class WebhookProcessor:
                 f"webhook_outbox_write_error event_id={event_id}: {e}",
                 exc_info=True
             )
-            if billing_outbox_write_failures_total is not None:
-                billing_outbox_write_failures_total.labels(source="webhook_processor").inc()
+            billing_outbox_write_failures_total.labels(source="webhook_processor").inc()
 
     def _record_event_processed(self, event_id: str, action: str):
         """Mark a webhook event as successfully processed."""

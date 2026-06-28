@@ -1,8 +1,26 @@
+# OS files
 demo.mp4
 gcm-diagnose.log
+
+# Dependencies
 node_modules/
-.env*
+__pycache__/
+*.pyc
+
+# Environment files — must never be committed
+.env
+.env.*
+*.env
+*.env.local
+*.env.production
+*.env.development
 
 # Ignore all agent markdown files to prevent tracking
 agency-agents/**/*.md
 .opencode/agents/**/*.md
+
+# Credentials
+credentials/
+*.pem
+*.key
+*.json

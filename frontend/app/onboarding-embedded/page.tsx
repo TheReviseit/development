@@ -10,6 +10,11 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+
+// Module-level guard that survives Strict Mode double-mount in dev.
+// Prevents the pre-creation effect from firing twice and causing
+// duplicate idempotency keys + checkout_request conflicts.
+// (Removed preCreationStarted)
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { onAuthStateChanged, type User } from "firebase/auth";
@@ -31,8 +36,11 @@ import SpaceshipLoader from "../components/loading/SpaceshipLoader";
 import {
   clearPaymentRequestId,
   createSubscriptionWithRetry,
+  loadRazorpayInWindow,
   openRazorpayCheckout,
   verifyPayment,
+  loadRazorpayScript,
+  RazorpayOrder,
 } from "../../lib/api/razorpay";
 import { trackEvent } from "@/lib/analytics";
 import { detectDomainFromWindow } from "@/lib/pricing/domain-detection";
@@ -489,6 +497,8 @@ export default function OnboardingPageEmbedded() {
   const trialStartInProgressRef = useRef(false);
   const billingActionInProgressRef = useRef(false);
   const pricingViewedRef = useRef(false);
+  const cachedOrdersRef = useRef<Map<PlanName, RazorpayOrder>>(new Map());
+
   const router = useRouter();
 
   useEffect(() => {
@@ -499,6 +509,10 @@ export default function OnboardingPageEmbedded() {
       setLoading(false);
     }
   }, [previewMode]);
+
+  useEffect(() => {
+    loadRazorpayScript().catch((err) => console.error("Failed to preload Razorpay SDK", err));
+  }, []);
 
   const releaseBillingAction = useCallback(() => {
     setPaymentLoading(null);
@@ -805,6 +819,22 @@ export default function OnboardingPageEmbedded() {
     });
   }, [currentDomain, plans.length, pricingMode, step, trialToggleEnabled]);
 
+  // ── Iframe detection — embedded onboarding may render inside Meta iframe ──
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (window !== window.top) {
+      console.warn(
+        "[onboarding] Detected iframe context — popups may be blocked by cross-origin policy",
+      );
+      trackEvent({
+        name: "onboarding_iframe_detected",
+        params: { domain: currentDomain },
+      });
+    }
+  }, [currentDomain]);
+
+  // (Removed Phase 1 pre-creation)
+
   const handlePricingModeChange = (nextMode: OnboardingPricingMode) => {
     const resolvedMode = resolvePricingModeFromFlag({
       requestedMode: nextMode,
@@ -924,6 +954,7 @@ export default function OnboardingPageEmbedded() {
   };
 
   const handleSelectPlan = async (planId: PlanName) => {
+    // Guard: no concurrent payments
     if (
       paymentLoading !== null ||
       billingRedirectInProgress ||
@@ -951,7 +982,8 @@ export default function OnboardingPageEmbedded() {
     });
 
     if (pricingAction === "start_trial") {
-      return handleSelectFreeTrial();
+      handleSelectFreeTrial();
+      return;
     }
 
     if (!user?.email) {
@@ -964,46 +996,78 @@ export default function OnboardingPageEmbedded() {
     setPaymentLoading(planId);
     setPaymentError(null);
 
+    // FAANG-LEVEL POPUP BLOCKER FIX: Open the window synchronously on click
+    let paymentWindow: Window | null = null;
+    try {
+      paymentWindow = window.open("", "_blank");
+      if (paymentWindow) {
+        paymentWindow.document.write(`
+          <!DOCTYPE html>
+          <html lang="en">
+            <head>
+              <meta charset="utf-8">
+              <title>Preparing Secure Payment...</title>
+              <meta name="viewport" content="width=device-width, initial-scale=1">
+              <style>
+                body {
+                  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+                  display: flex;
+                  align-items: center;
+                  justify-content: center;
+                  height: 100vh;
+                  margin: 0;
+                  background: #000;
+                  color: #fff;
+                }
+                .spinner {
+                  width: 40px;
+                  height: 40px;
+                  border: 3px solid rgba(255,255,255,0.2);
+                  border-radius: 50%;
+                  border-top-color: #22c15a;
+                  animation: spin 1s ease-in-out infinite;
+                  margin: 0 auto 20px;
+                }
+                @keyframes spin { to { transform: rotate(360deg); } }
+                .message {
+                  text-align: center;
+                }
+                .message p {
+                  margin: 0;
+                  font-size: 16px;
+                  color: #a0a0a0;
+                }
+              </style>
+            </head>
+            <body>
+              <div class="message">
+                <div class="spinner"></div>
+                <p>Preparing your secure payment...</p>
+              </div>
+            </body>
+          </html>
+        `);
+      }
+    } catch (e) {
+      console.warn("Could not open window synchronously", e);
+    }
+
     try {
       const order = await createSubscriptionWithRetry(
         planId,
-        user.email,
+        user.email!,
         user.displayName || undefined,
         undefined,
         user.uid,
-        2,
+        currentDomain,
+        0,
       );
 
-      if (!order.success) {
-        const errorCode = order.error_code;
-        let errorMessage = order.error || "Failed to create subscription";
+      let finalOrder = order as any;
 
-        if (errorCode === "USER_NOT_FOUND") {
-          errorMessage =
-            "Your account setup is incomplete. Please sign out and sign in again to complete setup.";
-        } else if (errorCode === "DUPLICATE_SUBSCRIPTION") {
-          errorMessage =
-            "You already have an active subscription for this plan. Please check your account.";
-        } else if (errorCode === "USE_UPGRADE_FLOW") {
-          errorMessage =
-            "You already have an active subscription. Please use the upgrade flow to change plans.";
-        } else if (errorCode === "DATABASE_ERROR") {
-          errorMessage =
-            "We're experiencing technical difficulties. Please contact support.";
-        } else if (errorCode === "RAZORPAY_SERVER_ERROR") {
-          errorMessage =
-            "Payment service is temporarily busy. Please try again in a moment.";
-        } else if (errorCode === "RAZORPAY_BAD_REQUEST") {
-          errorMessage = "Invalid payment information. Please contact support.";
-        } else if (
-          errorCode === "PLAN_NOT_FOUND" ||
-          errorCode === "PRICING_UNAVAILABLE"
-        ) {
-          errorMessage =
-            "This plan is not available yet. Please contact support or try again later.";
-        }
-
-        setPaymentError(errorMessage);
+      if (!finalOrder.success && !finalOrder.checkout_token) {
+        if (paymentWindow) paymentWindow.close();
+        setPaymentError(finalOrder.error || "Failed to create subscription");
         setPaymentLoading(null);
         billingActionInProgressRef.current = false;
         trackEvent({
@@ -1011,112 +1075,96 @@ export default function OnboardingPageEmbedded() {
           params: {
             domain: currentDomain,
             plan: planId,
-            error_message: errorMessage,
-            error_code: errorCode || "SUBSCRIPTION_CREATE_FAILED",
+            error_message: finalOrder.error || "Failed to create subscription",
+            error_code: finalOrder.error_code || "SUBSCRIPTION_CREATE_FAILED",
             pricing_mode: effectiveMode,
           },
         });
         return;
       }
 
-      trackEvent({
-        name: "payment_initiated",
-        params: {
-          domain: currentDomain,
-          plan: planId,
-          value: order.amount
-            ? order.amount / 100
-            : plan
-              ? plan.price / 100
-              : 0,
-          currency: "INR",
-          payment_method: "razorpay",
-          pricing_mode: effectiveMode,
-        },
-      });
-
-      if ((order as any).already_active) {
-        setBillingRedirectInProgress(true);
-        releaseBillingAction();
-        router.push(`/payment/status?subscription_id=${order.subscription_id}`);
+      if (finalOrder.already_active) {
+        if (paymentWindow) paymentWindow.close();
+        window.location.href = `/payment/status?subscription_id=${finalOrder.subscription_id}`;
         return;
       }
 
-      await openRazorpayCheckout({
-        subscriptionId: order.subscription_id,
-        keyId: order.key_id,
-        planName: order.plan_name,
-        amount: order.amount,
-        customerEmail: user.email,
-        customerName: user.displayName || undefined,
-        onSuccess: async (response) => {
-          const verification = await verifyPayment(
-            {
-              razorpay_subscription_id: response.razorpay_subscription_id,
-              razorpay_payment_id: response.razorpay_payment_id,
-              razorpay_signature: response.razorpay_signature,
-            },
-            user.uid,
-          );
-
-          if (verification.success) {
-            invalidateOnboardingCheckCache(currentDomain);
-            trackEvent({
-              name: "payment_success",
-              params: {
-                domain: currentDomain,
-                plan: planId,
-                transaction_id: response.razorpay_payment_id,
-                value: order.amount ? order.amount / 100 : 0,
-                currency: "INR",
-                pricing_mode: effectiveMode,
-              },
+      if (finalOrder.checkout_token && !finalOrder.subscription_id) {
+        const maxPolls = 40; 
+        let completed = false;
+        
+        for (let i = 0; i < maxPolls; i++) {
+          await new Promise(resolve => setTimeout(resolve, 1000));
+          try {
+            const token = await user.getIdToken();
+            const pollRes = await fetch(`/api/billing/checkout-status/${finalOrder.checkout_token}`, {
+              headers: { Authorization: `Bearer ${token}` }
             });
-            sessionStorage.setItem(
-              "pending_onboarding",
-              JSON.stringify({
-                whatsappConnected: true,
-                wabaId: wabaData?.wabaId,
-                phoneNumberId: wabaData?.phoneNumberId,
-                subscriptionPlan: planId,
-              }),
-            );
-
-            setBillingRedirectInProgress(true);
-            router.push(
-              `/payment/status?subscription_id=${response.razorpay_subscription_id}`,
-            );
-          } else {
-            setPaymentError(
-              verification.error || "Payment verification failed",
-            );
-            setPaymentLoading(null);
-            billingActionInProgressRef.current = false;
-            trackEvent({
-              name: "payment_failed",
-              params: {
-                domain: currentDomain,
-                plan: planId,
-                error_message:
-                  verification.error || "Payment verification failed",
-                error_code: verification.error_code || "VERIFY_FAILED",
-                pricing_mode: effectiveMode,
-              },
-            });
+            if (!pollRes.ok) continue;
+            
+            const pollData = await pollRes.json();
+            if (pollData.status === 'completed' && pollData.subscription_id) {
+              finalOrder = { ...finalOrder, ...pollData };
+              completed = true;
+              break;
+            } else if (pollData.status === 'failed') {
+              throw new Error(pollData.error_message || "Subscription setup failed.");
+            }
+          } catch (e) {
+            console.warn("[onboarding] Polling check failed or threw", e);
+            if (e instanceof Error && e.message.includes("setup failed")) {
+              throw e;
+            }
           }
-        },
-        onError: (err) => {
-          console.error(
-            "Razorpay payment error:",
-            JSON.stringify(err, null, 2),
+        }
+        
+        if (!completed) {
+          throw new Error("Checkout creation timed out. Please try again or contact support.");
+        }
+      }
+
+      // Attach global handlers for the new window to call
+      (window as any).handleRazorpaySuccess = async (response: any) => {
+        const verification = await verifyPayment(
+          {
+            razorpay_subscription_id: response.razorpay_subscription_id,
+            razorpay_payment_id: response.razorpay_payment_id,
+            razorpay_signature: response.razorpay_signature,
+          },
+          user.uid,
+        );
+
+        if (verification.success) {
+          invalidateOnboardingCheckCache(currentDomain);
+          trackEvent({
+            name: "payment_success",
+            params: {
+              domain: currentDomain,
+              plan: planId,
+              transaction_id: response.razorpay_payment_id,
+              value: order.amount ? order.amount / 100 : 0,
+              currency: "INR",
+              pricing_mode: effectiveMode,
+            },
+          });
+          sessionStorage.setItem(
+            "pending_onboarding",
+            JSON.stringify({
+              whatsappConnected: true,
+              wabaId: wabaData?.wabaId,
+              phoneNumberId: wabaData?.phoneNumberId,
+              subscriptionPlan: planId,
+            }),
           );
-          const errorMsg =
-            err?.description ||
-            err?.reason ||
-            err?.message ||
-            "Payment failed. Please try again.";
-          const errorCode = err?.code ? ` (${err.code})` : "";
-          setPaymentError(`${errorMsg}${errorCode}`);
+
+          setBillingRedirectInProgress(true);
+          router.push(
+            `/payment/status?subscription_id=${response.razorpay_subscription_id}`,
+          );
+        } else {
+          setPaymentError(
+            verification.error || "Payment verification failed",
+          );
           setPaymentLoading(null);
           billingActionInProgressRef.current = false;
           trackEvent({
@@ -1124,36 +1172,87 @@ export default function OnboardingPageEmbedded() {
             params: {
               domain: currentDomain,
               plan: planId,
-              error_message: errorMsg,
-              error_code: err?.code || "RAZORPAY_ERROR",
+              error_message: verification.error || "Payment verification failed",
+              error_code: verification.error_code || "VERIFY_FAILED",
               pricing_mode: effectiveMode,
             },
           });
-        },
-        onClose: () => {
-          console.log(
-            "Payment modal closed by user without completing payment",
-          );
-          clearPaymentRequestId();
-          setPaymentLoading(null);
-          billingActionInProgressRef.current = false;
-        },
-      });
-    } catch (err) {
-      console.error("Payment error:", err);
-      setPaymentError("Something went wrong. Please try again.");
-      setPaymentLoading(null);
-      billingActionInProgressRef.current = false;
+        }
+      };
+
+      (window as any).handleRazorpayError = (err: any) => {
+        console.error("Razorpay payment error:", JSON.stringify(err, null, 2));
+        const errorMsg =
+          err?.description || err?.reason || err?.message || "Payment failed. Please try again.";
+        const errorCode = err?.code ? ` (${err.code})` : "";
+        setPaymentError(`${errorMsg}${errorCode}`);
+        
+        setPaymentLoading(null);
+        billingActionInProgressRef.current = false;
+        trackEvent({
+          name: "payment_failed",
+          params: {
+            domain: currentDomain,
+            plan: planId,
+            error_message: errorMsg,
+            error_code: err?.code || "RAZORPAY_ERROR",
+            pricing_mode: effectiveMode,
+          },
+        });
+      };
+
+      (window as any).handleRazorpayDismiss = () => {
+        console.log("Payment modal dismissed by user");
+        clearPaymentRequestId();
+        setPaymentLoading(null);
+        billingActionInProgressRef.current = false;
+      };
+
+      if (paymentWindow) {
+        // Option B: Load Razorpay SDK inside that window and auto-trigger
+        loadRazorpayInWindow(paymentWindow, {
+          subscriptionId: finalOrder.subscription_id,
+          keyId: finalOrder.key_id || finalOrder.razorpay_key_id,
+          planName: finalOrder.plan_name || planId,
+          customerEmail: user.email!,
+          customerName: user.displayName || undefined,
+        });
+      } else {
+        // Fallback: Extremely strict popup blocker blocked the synchronous open.
+        // Try the standard inline modal anyway.
+        await openRazorpayCheckout({
+          subscriptionId: finalOrder.subscription_id,
+          keyId: finalOrder.key_id || finalOrder.razorpay_key_id,
+          planName: finalOrder.plan_name || planId,
+          amount: finalOrder.amount || plan?.price || 0,
+          customerEmail: user.email!,
+          customerName: user.displayName || undefined,
+          domain: currentDomain,
+          onSuccess: (window as any).handleRazorpaySuccess,
+          onError: (window as any).handleRazorpayError,
+          onClose: (window as any).handleRazorpayDismiss,
+        });
+      }
+
       trackEvent({
-        name: "payment_failed",
+        name: "payment_initiated",
         params: {
           domain: currentDomain,
           plan: planId,
-          error_message: err instanceof Error ? err.message : "Payment error",
-          error_code: "PAYMENT_EXCEPTION",
+          value: order.amount ? order.amount / 100 : plan ? plan.price / 100 : 0,
+          currency: "INR",
+          payment_method: "razorpay",
           pricing_mode: effectiveMode,
         },
       });
+
+    } catch (err: any) {
+      if (paymentWindow) paymentWindow.close();
+      console.error("[onboarding] Subscription creation failed:", err);
+      const errorMsg = err?.message || "Something went wrong. Please try again.";
+      setPaymentError(errorMsg);
+      setPaymentLoading(null);
+      billingActionInProgressRef.current = false;
     }
   };
 

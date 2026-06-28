@@ -43,11 +43,15 @@ def rate_limit_or_429(bucket_key: str, window_seconds: int, max_requests: int) -
     """Returns (json_body, status_code) if limited, else None."""
     if check_postgres_rate_limit(bucket_key, window_seconds, max_requests):
         return None
+    # retry_after_seconds defaults to min(window, 60) — the frontend backoff will
+    # re-check after this delay. Without knowing the exact oldest-timestamp in the
+    # sliding window, this is a safe heuristic.
     return (
         {
             "success": False,
             "error": "Too many requests",
             "error_code": "RATE_LIMITED",
+            "retry_after_seconds": min(window_seconds, 60),
         },
         429,
     )

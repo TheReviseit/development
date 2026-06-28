@@ -96,59 +96,55 @@ export async function POST(request: NextRequest) {
       if (response.ok) {
         const cacheStarted = Date.now();
 
-        try {
-          const { invalidateByUserId } = await import("@/lib/cache/store-cache");
-          const { revalidatePath } = await import("next/cache");
+        // ─── RESOLVE SLUG: Flask → DB fallback → plan-aware fallback ──
+        // 1. Flask now returns url_slug in its response (set by plan-based
+        //    enforcement in shop_business.py). Read it directly — zero DB ops.
+        // 2. If absent (defensive — older Flask version), query businesses table.
+        // 3. If STILL absent, fall back to uid[:8] (matches Starter plan behavior).
+        storeSlug = data.url_slug || undefined;
 
-          invalidateByUserId(userId);
-
-          const slug =
-            data.slug ||
-            data.canonicalSlug ||
-            businessData.url_slug ||
-            businessData.urlSlug ||
-            businessData.canonicalSlug;
-          storeSlug = slug;
-          if (slug) {
-            revalidatePath(`/store/${slug}`, "layout");
-          }
-        } catch (err) {
-          console.error("[Business Save Proxy] Cache invalidation failed:", err);
-        }
-
-        // ─── FAANG-GRADE: Fetch slug from DB + update users table ──────────
-        // The Flask backend returns {"success": True} without the slug.
-        // We query businesses directly to get the canonical store URL slug,
-        // then persist it on the users table for O(1) navbar access.
-        try {
-          const supabase = createSupabaseServiceClientOrThrow({ timeoutMs: 5000 });
-
-          // 1. Fetch the store slug from the businesses table after save
-          if (!storeSlug) {
+        if (!storeSlug) {
+          try {
+            const supabase = createSupabaseServiceClientOrThrow({ timeoutMs: 5000 });
             const { data: bizData } = await supabase
               .from("businesses")
               .select("url_slug")
               .eq("user_id", userId)
               .maybeSingle();
             storeSlug = bizData?.url_slug || undefined;
+          } catch {
+            // Non-critical — fall through to plan-aware fallback
           }
+        }
 
-          // 2. Persist flag + slug on users table (future auth syncs pick it up)
-          if (storeSlug) {
-            await supabase
-              .from("users")
-              .update({
-                ai_settings_configured: true,
-                store_slug: storeSlug,
-              })
-              .eq("firebase_uid", userId);
-          } else {
-            // No slug yet — still mark AI settings as configured
-            await supabase
-              .from("users")
-              .update({ ai_settings_configured: true })
-              .eq("firebase_uid", userId);
-          }
+        // Plan-aware fallback: Starter plan uses uid[:8], Business/Pro
+        // use business_name slug. If we can't determine the plan, use uid[:8]
+        // which is the most restrictive (Starter default).
+        if (!storeSlug) {
+          storeSlug = userId.slice(0, 8).toLowerCase();
+        }
+
+        // ─── CACHE INVALIDATION ──────────────────────────────────────────
+        try {
+          const { invalidateByUserId } = await import("@/lib/cache/store-cache");
+          const { revalidatePath } = await import("next/cache");
+
+          invalidateByUserId(userId);
+          revalidatePath(`/store/${storeSlug}`, "layout");
+        } catch (err) {
+          console.error("[Business Save Proxy] Cache invalidation failed:", err);
+        }
+
+        // ─── PERSIST ON USERS TABLE (for zero-join auth sync) ──────────
+        try {
+          const supabase = createSupabaseServiceClientOrThrow({ timeoutMs: 5000 });
+          await supabase
+            .from("users")
+            .update({
+              ai_settings_configured: true,
+              store_slug: storeSlug,
+            })
+            .eq("firebase_uid", userId);
         } catch (err) {
           console.error(
             "[Business Save Proxy] Failed to update ai_settings_configured:",
@@ -160,7 +156,7 @@ export async function POST(request: NextRequest) {
 
         // Include flags in response so client updates auth context instantly
         data.aiSettingsConfigured = true;
-        data.storeSlug = storeSlug || null;
+        data.storeSlug = storeSlug;
       }
 
       logSettingsSaveTiming(timer, {

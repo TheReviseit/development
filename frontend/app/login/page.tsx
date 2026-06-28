@@ -606,6 +606,7 @@ export default function LoginPage() {
           : await checkOnboardingStatus();
         performance.mark("navigation-start");
 
+        setGoogleLoading(false);
         router.replace(
           getPostAuthPath(syncResult, fallbackCompleted) || "/onboarding",
         );

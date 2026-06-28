@@ -81,7 +81,7 @@ export function PricingClient({
         userName,
         undefined, // customerPhone
         userId,
-        // Domain resolved server-side from Host header — not passed by client
+        undefined, // currentDomain
         2, // maxRetries
       );
 
@@ -107,6 +107,7 @@ export function PricingClient({
         amount: order.amount,
         customerEmail: userEmail,
         customerName: userName,
+        domain: productId,
         onSuccess: async (response) => {
           console.log("[Razorpay] Payment successful:", response);
 

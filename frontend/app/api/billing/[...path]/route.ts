@@ -98,9 +98,9 @@ async function handleRequest(
 
   // create-subscription only needs Host → domain (backend verifies Firebase token).
   // Skip resolveContext() here — it calls Firebase Admin session verify and adds seconds.
-  if (isCreateSubscription) {
+  if (isCreateSubscription || slug === "checkout-status") {
     const resolution = domainResolver.resolve(request);
-    if (!resolution.matched || !resolution.context?.domain) {
+    if (isCreateSubscription && (!resolution.matched || !resolution.context?.domain)) {
       return NextResponse.json(
         {
           success: false,
@@ -111,7 +111,7 @@ async function handleRequest(
         { status: 400, headers: { "X-Request-ID": requestId } },
       );
     }
-    productDomain = resolution.context.domain;
+    productDomain = resolution.context?.domain || undefined;
   } else {
     const needsSignedContext = slug === "verify-subscription";
     if (needsSignedContext || (flags.fix_domain_context !== false && behavior.domainFix)) {

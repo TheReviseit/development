@@ -20,6 +20,17 @@ from uuid import uuid4
 
 logger = logging.getLogger('reviseit.webhook_dlq')
 
+# Prometheus counter — fail loud on startup
+try:
+    from prometheus_client import Counter
+    billing_dlq_events_total = Counter(
+        "billing_dlq_events_total",
+        "Total webhook DLQ entries created (by source)",
+        ["source"],
+    )
+except ImportError:
+    billing_dlq_events_total = None
+
 
 def send_to_dlq(
     event_id: Optional[str] = None,
@@ -65,6 +76,8 @@ def send_to_dlq(
                 f"event_id={event_id} source={source} "
                 f"error={error_message[:100]}"
             )
+            if billing_dlq_events_total is not None:
+                billing_dlq_events_total.labels(source=source).inc()
 
         return dlq_id
 

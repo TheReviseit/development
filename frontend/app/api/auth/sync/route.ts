@@ -707,10 +707,13 @@ async function handleLoginPath(params: {
             try {
               return await withTimeout(
                 adminAuth.createSessionCookie(idToken, { expiresIn: 60 * 60 * 24 * 5 * 1000 }),
-                2000,
+                5000, // Increased timeout to 5s for slower Firebase connections
                 "FIREBASE_CREATE_SESSION_COOKIE_TIMEOUT",
               );
-            } catch { return null; }
+            } catch (err: any) { 
+              console.error("[AUTH_SYNC] Failed to create session cookie:", err?.message || err);
+              return null; 
+            }
           })()
         : Promise.resolve(null),
     ]);
@@ -740,6 +743,19 @@ async function handleLoginPath(params: {
           body: { success: false, error: "Database error", code: AuthErrorCode.DATABASE_ERROR, details: e?.message, requestId: requestContext.request_id, idempotencyKey, traceId } as any,
         };
       }
+    } else if (!hasValidSessionCookie && !sessionCookie) {
+      console.error("[AUTH_SYNC] Session cookie creation failed.");
+      result = {
+        status: 401,
+        body: { 
+          success: false, 
+          error: "Authentication session failed to initialize", 
+          code: AuthErrorCode.INVALID_TOKEN, 
+          requestId: requestContext.request_id, 
+          idempotencyKey, 
+          traceId 
+        },
+      };
     } else {
       const user = provisionResult.user as SupabaseUser;
       let authDecision: SyncUserResponse["authDecision"] | undefined;

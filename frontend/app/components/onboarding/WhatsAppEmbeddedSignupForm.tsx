@@ -152,7 +152,6 @@ export default function WhatsAppEmbeddedSignupForm({
         }
       : null,
   );
-  const [securingElapsedSec, setSecuringElapsedSec] = useState(0);
   const [webhookPending, setWebhookPending] = useState(false);
 
   const containerRef = useRef<HTMLDivElement>(null);
@@ -180,20 +179,6 @@ export default function WhatsAppEmbeddedSignupForm({
         });
     }
   }, [isSuccessPreview]);
-
-  useEffect(() => {
-    if (connectionState !== "connecting" || connectionStep !== "securing") {
-      setSecuringElapsedSec(0);
-      return;
-    }
-
-    const startedAt = Date.now();
-    const interval = window.setInterval(() => {
-      setSecuringElapsedSec(Math.floor((Date.now() - startedAt) / 1000));
-    }, 1000);
-
-    return () => window.clearInterval(interval);
-  }, [connectionState, connectionStep]);
 
   useEffect(() => {
     if (contentRef.current) {
@@ -430,9 +415,7 @@ export default function WhatsAppEmbeddedSignupForm({
       <div className="connecting-text">
         <h3>{CONNECTING_COPY[connectionStep].title}</h3>
         <p>{CONNECTING_COPY[connectionStep].description}</p>
-        {connectionStep === "securing" && securingElapsedSec > 0 ? (
-          <p className="connecting-elapsed">{securingElapsedSec}s elapsed</p>
-        ) : null}
+
         {webhookPending ? (
           <p className="connecting-elapsed">Finishing setup…</p>
         ) : null}

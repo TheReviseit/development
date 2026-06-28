@@ -26,7 +26,7 @@ DROP INDEX IF EXISTS idx_subscriptions_one_active_per_user_domain;
 
 CREATE UNIQUE INDEX IF NOT EXISTS idx_subscriptions_one_active_per_user_domain
     ON subscriptions(user_id, product_domain)
-    WHERE status NOT IN ('cancelled', 'expired', 'halted', 'failed');
+    WHERE status IN ('active', 'past_due', 'trialing');
 
 -- =============================================================================
 -- 2. Composite unique index on razorpay_subscription_id + user_id
