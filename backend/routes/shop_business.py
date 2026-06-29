@@ -30,6 +30,7 @@ from services.settings_tracing import (
     register_shop_business_tracing,
     span_context,
 )
+from services.store_slug_resolver import is_ai_settings_configured
 
 try:
     from middleware import rate_limit
@@ -350,8 +351,12 @@ def _update_business_impl(timer):
 
     settings_fast_path = _is_ai_settings_fast_path(payload, db_data)
     timer.set_attr("settings_fast_path", settings_fast_path)
+    stored_business_name = None
     if settings_fast_path:
-        logger.info(f"⚡ Settings fast path for user {user_id} — skipping slug/entitlement work")
+        logger.info(
+            f"⚡ Settings fast path for user {user_id} — applying plan slug only "
+            f"(explicit url_slug in upsert to neutralize DB trigger)"
+        )
 
     # ── PLAN-BASED SLUG ENFORCEMENT ──────────────────────────────────────
     # Starter plan users get a forced fallback slug (user_id[:8]).
@@ -364,7 +369,8 @@ def _update_business_impl(timer):
     slug_auto_migrated = False  # True when Business/Pro user's forced slug was auto-regenerated
     pre_save_slug = None        # Captured before upsert for cache invalidation
 
-    if not settings_fast_path and 'url_slug' not in db_data:
+    # Run on fast path too — pass explicit url_slug so DB trigger never auto-generates from name
+    if 'url_slug' not in db_data:
         timer.set_attr("slug_enforcement_path", True)
         # CRITICAL: Always use 'shop' domain for slug enforcement.
         # The custom_domain feature and subscription are shop-domain features.
@@ -746,15 +752,37 @@ def _update_business_impl(timer):
     thread = threading.Thread(target=_sync_firestore, daemon=True)
     thread.start()
 
+    # ── RESOLVE CONFIGURED STATE + EFFECTIVE SLUG FOR NAVBAR ─────────────
+    effective_slug = db_data.get("url_slug")
+    configured = is_ai_settings_configured(db_data.get("business_name"))
+    if not configured or not effective_slug:
+        try:
+            row = db.table("businesses").select("business_name, url_slug").eq(
+                "user_id", user_id
+            ).maybe_single().execute()
+            if row.data:
+                if not configured:
+                    configured = is_ai_settings_configured(row.data.get("business_name"))
+                if not effective_slug:
+                    effective_slug = row.data.get("url_slug")
+        except Exception as e:
+            logger.warning(f"Post-save business read failed (non-critical): {e}")
+
+    if configured and effective_slug:
+        try:
+            db.table("users").update({
+                "ai_settings_configured": True,
+                "store_slug": effective_slug,
+            }).eq("firebase_uid", user_id).execute()
+        except Exception as e:
+            logger.warning(f"users denorm update failed (non-critical): {e}")
+
     response_body = {"success": True}
 
     # ── RETURN URL SLUG FOR O(1) NAVBAR HYDRATION ──────────────────────
-    # The frontend proxy needs the slug to set the ui_state cookie and
-    # update the users table without an additional DB query.
-    # Always returned regardless of plan — Starter gets uid[:8],
-    # Business/Pro gets the auto-generated business name slug.
-    if db_data.get("url_slug"):
-        response_body["url_slug"] = db_data["url_slug"]
+    if effective_slug:
+        response_body["url_slug"] = effective_slug
+    response_body["aiSettingsConfigured"] = configured
 
     if domain_reconciliation is not None:
         response_body["domainReconciliation"] = domain_reconciliation

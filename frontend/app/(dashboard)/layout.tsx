@@ -1836,7 +1836,6 @@ function StoreIconRenderer() {
   const { uiState, mergeUiState } = useUiState();
 
   // One-way reconciliation: auth -> UiState (never the reverse).
-  // Protects against stale auth sync in-memory cache (60s TTL).
   useEffect(() => {
     if (user?.ai_settings_configured === true) {
       mergeUiState({
@@ -1846,19 +1845,20 @@ function StoreIconRenderer() {
     }
   }, [user, mergeUiState]);
 
-  // Show icon if EITHER source says configured.
-  // Cookie is set by the server on login/save; auth context is the
-  // secondary source that reconciles after the sync API resolves.
-  const showStore = uiState.ai_settings_configured || user?.ai_settings_configured === true;
-  if (!showStore) return null;
+  // Priority: auth wins over cookie for configured flag and slug.
+  const authConfigured = user?.ai_settings_configured === true;
+  const configured =
+    authConfigured ||
+    (!authConfigured && uiState.ai_settings_configured === true);
 
-  const storeUrl = user?.store_slug || uiState.store_slug
-    ? `/store/${user?.store_slug || uiState.store_slug}`
-    : `/store`;
+  const rawSlug = authConfigured ? user?.store_slug : uiState.store_slug;
+  const effectiveSlug = rawSlug?.trim() || null;
+
+  if (!configured || !effectiveSlug) return null;
 
   return (
     <a
-      href={storeUrl}
+      href={`/store/${effectiveSlug}`}
       target="_blank"
       rel="noopener noreferrer"
       style={{ display: 'flex', alignItems: 'center', cursor: 'pointer', marginRight: '24px' }}
@@ -1883,16 +1883,19 @@ function StoreIconMobileRenderer({ closeMenu }: { closeMenu: () => void }) {
     }
   }, [user, mergeUiState]);
 
-  const showStore = uiState.ai_settings_configured || user?.ai_settings_configured === true;
-  if (!showStore) return null;
+  const authConfigured = user?.ai_settings_configured === true;
+  const configured =
+    authConfigured ||
+    (!authConfigured && uiState.ai_settings_configured === true);
 
-  const storeUrl = user?.store_slug || uiState.store_slug
-    ? `/store/${user?.store_slug || uiState.store_slug}`
-    : `/store`;
+  const rawSlug = authConfigured ? user?.store_slug : uiState.store_slug;
+  const effectiveSlug = rawSlug?.trim() || null;
+
+  if (!configured || !effectiveSlug) return null;
 
   return (
     <a
-      href={storeUrl}
+      href={`/store/${effectiveSlug}`}
       target="_blank"
       rel="noopener noreferrer"
       className={styles.mobileNavLink}

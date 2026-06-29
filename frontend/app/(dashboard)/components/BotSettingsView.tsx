@@ -1226,6 +1226,7 @@ export default function BotSettingsView() {
       markSavePhase(correlationId, "stringify");
 
       const response = await fetchBusinessSave(correlationId, serializedBody);
+      const responseData = await response.json();
 
       // Optional AI runtime cache refresh — fire-and-forget, does not block save UX
       const backendUrl =
@@ -1260,33 +1261,20 @@ export default function BotSettingsView() {
           text: "Product saved successfully! 🎉",
         });
 
-        // ─── FAANG-GRADE: Update auth context + UiState instantly ──────
-        // Read the aiSettingsConfigured flag from the save response to update
-        // both the auth context AND the UiState, making the Store icon appear
-        // in the navbar immediately without any page refresh or API call.
-        try {
-          const responseData = await response.json();
-          if (responseData.aiSettingsConfigured) {
-            const storeSlug = responseData.storeSlug || undefined;
-            updateUser({
-              ai_settings_configured: true,
-              store_slug: storeSlug,
-            });
-            // Directly update UiState so StoreIconRenderer picks it up even
-            // if the AuthProvider reconciliation effect hasn't fired yet.
-            mergeUiState({
-              ai_settings_configured: true,
-              store_slug: storeSlug || null,
-            });
-          }
-        } catch {
-          // Response body may not be JSON-parsable; fall back to optimistic update
-          updateUser({ ai_settings_configured: true });
-          mergeUiState({ ai_settings_configured: true, store_slug: null });
+        if (responseData.aiSettingsConfigured) {
+          const storeSlug =
+            responseData.storeSlug || responseData.url_slug || undefined;
+          updateUser({
+            ai_settings_configured: true,
+            store_slug: storeSlug,
+          });
+          mergeUiState({
+            ai_settings_configured: true,
+            store_slug: storeSlug || null,
+          });
         }
       } else {
-        const errorText = await response.text();
-        console.error("[handleSave] Save failed:", response.status, errorText);
+        console.error("[handleSave] Save failed:", response.status, responseData);
         throw new Error("Failed to save");
       }
     } catch (error) {

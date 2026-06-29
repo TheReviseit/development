@@ -7,6 +7,8 @@ import {
   serializeUiState,
   getUiStateCookieOptions,
 } from "@/lib/auth/ui-state";
+import { invalidateAuthSyncCaches } from "@/lib/auth/authSyncCache";
+import { isAiSettingsConfigured } from "@/lib/store/resolve-store-slug";
 import { trace as otelTrace, context, propagation } from "@opentelemetry/api";
 import {
   attachSavePerfHeaders,
@@ -18,6 +20,12 @@ import {
 
 const BACKEND_URL = process.env.BACKEND_URL || "http://127.0.0.1:5000";
 const PROXY_TIMEOUT_MS = Number(process.env.BUSINESS_SAVE_PROXY_TIMEOUT_MS || "15000");
+
+function extractBusinessName(payload: Record<string, unknown>): string {
+  if (typeof payload.business_name === "string") return payload.business_name;
+  if (typeof payload.businessName === "string") return payload.businessName;
+  return "";
+}
 
 export async function POST(request: NextRequest) {
   const timer = new SettingsSaveServerTimer(
@@ -95,68 +103,52 @@ export async function POST(request: NextRequest) {
 
       if (response.ok) {
         const cacheStarted = Date.now();
+        const businessName = extractBusinessName(businessData);
+        const configured =
+          data.aiSettingsConfigured === true || isAiSettingsConfigured(businessName);
 
-        // ─── RESOLVE SLUG: Flask → DB fallback → plan-aware fallback ──
-        // 1. Flask now returns url_slug in its response (set by plan-based
-        //    enforcement in shop_business.py). Read it directly — zero DB ops.
-        // 2. If absent (defensive — older Flask version), query businesses table.
-        // 3. If STILL absent, fall back to uid[:8] (matches Starter plan behavior).
-        storeSlug = data.url_slug || undefined;
+        storeSlug =
+          typeof data.url_slug === "string"
+            ? data.url_slug
+            : typeof data.storeSlug === "string"
+              ? data.storeSlug
+              : undefined;
 
-        if (!storeSlug) {
+        if (configured && storeSlug) {
+          try {
+            const { invalidateByUserId } = await import("@/lib/cache/store-cache");
+            const { revalidatePath } = await import("next/cache");
+
+            invalidateByUserId(userId);
+            revalidatePath(`/store/${storeSlug}`, "layout");
+          } catch (err) {
+            console.error("[Business Save Proxy] Store cache invalidation failed:", err);
+          }
+
           try {
             const supabase = createSupabaseServiceClientOrThrow({ timeoutMs: 5000 });
-            const { data: bizData } = await supabase
-              .from("businesses")
-              .select("url_slug")
-              .eq("user_id", userId)
-              .maybeSingle();
-            storeSlug = bizData?.url_slug || undefined;
-          } catch {
-            // Non-critical — fall through to plan-aware fallback
+            await supabase
+              .from("users")
+              .update({
+                ai_settings_configured: true,
+                store_slug: storeSlug,
+              })
+              .eq("firebase_uid", userId);
+
+            await invalidateAuthSyncCaches({
+              supabase,
+              firebaseUid: userId,
+              product: "shop",
+            });
+          } catch (err) {
+            console.error("[Business Save Proxy] Post-save update failed:", err);
           }
-        }
 
-        // Plan-aware fallback: Starter plan uses uid[:8], Business/Pro
-        // use business_name slug. If we can't determine the plan, use uid[:8]
-        // which is the most restrictive (Starter default).
-        if (!storeSlug) {
-          storeSlug = userId.slice(0, 8).toLowerCase();
-        }
-
-        // ─── CACHE INVALIDATION ──────────────────────────────────────────
-        try {
-          const { invalidateByUserId } = await import("@/lib/cache/store-cache");
-          const { revalidatePath } = await import("next/cache");
-
-          invalidateByUserId(userId);
-          revalidatePath(`/store/${storeSlug}`, "layout");
-        } catch (err) {
-          console.error("[Business Save Proxy] Cache invalidation failed:", err);
-        }
-
-        // ─── PERSIST ON USERS TABLE (for zero-join auth sync) ──────────
-        try {
-          const supabase = createSupabaseServiceClientOrThrow({ timeoutMs: 5000 });
-          await supabase
-            .from("users")
-            .update({
-              ai_settings_configured: true,
-              store_slug: storeSlug,
-            })
-            .eq("firebase_uid", userId);
-        } catch (err) {
-          console.error(
-            "[Business Save Proxy] Failed to update ai_settings_configured:",
-            err,
-          );
+          data.aiSettingsConfigured = true;
+          data.storeSlug = storeSlug;
         }
 
         timer.record("cache_invalidate", cacheStarted);
-
-        // Include flags in response so client updates auth context instantly
-        data.aiSettingsConfigured = true;
-        data.storeSlug = storeSlug;
       }
 
       logSettingsSaveTiming(timer, {
@@ -168,13 +160,12 @@ export async function POST(request: NextRequest) {
       const jsonResponse = NextResponse.json(data, { status: response.status });
       attachSavePerfHeaders(jsonResponse, timer, upstreamTiming);
 
-      // ─── FAANG-GRADE: Set ui_state cookie for O(1) SSR hydration ─────
-      if (response.ok) {
+      if (response.ok && data.aiSettingsConfigured && storeSlug) {
         jsonResponse.cookies.set(
           UI_STATE_COOKIE,
           serializeUiState({
             ai_settings_configured: true,
-            store_slug: storeSlug || null,
+            store_slug: storeSlug,
           }),
           getUiStateCookieOptions(),
         );

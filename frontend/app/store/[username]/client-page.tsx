@@ -259,7 +259,7 @@ export default function StoreClientPage({
     <div className={styles.storeContainer}>
       <StoreHeader
         storeName={storeName}
-        logoUrl={storeData?.logoUrl}
+        logoUrl={storeData?.logoUrl || (isDemoMode ? "/logo.png" : undefined)}
         onSearchClick={() => setIsSearchOpen(true)}
       />
 
@@ -297,7 +297,7 @@ export default function StoreClientPage({
 
       <StoreFooter
         storeName={storeName}
-        logoUrl={storeData?.logoUrl}
+        logoUrl={storeData?.logoUrl || (isDemoMode ? "/logo.png" : undefined)}
         address={
           storeData?.location &&
           (storeData.location.address || storeData.location.city)

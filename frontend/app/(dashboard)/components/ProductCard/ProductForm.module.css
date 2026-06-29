@@ -610,7 +610,7 @@
   width: 52px;
   height: 28px;
   background: rgba(0, 0, 0, 0.08);
-  border: 1px solid rgba(0, 0, 0, 0.1);
+  border: 1px solid #000000;
   border-radius: 14px;
   cursor: pointer;
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
@@ -633,13 +633,14 @@
   left: 3px;
   width: 20px;
   height: 20px;
-  background: #ffffff;
+  background: #000000;
   border-radius: 50%;
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
 }
 
 .toggleSwitch.toggleActive .toggleKnob {
+  background: #ffffff;
   transform: translateX(24px);
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
 }

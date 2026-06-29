@@ -191,6 +191,11 @@ export default function CarouselBanner({
                   }`}
                   loading={index === 0 ? "eager" : "lazy"}
                   onLoad={() => handleImageLoad(slide.imageUrl)}
+                  ref={(el) => {
+                    if (el?.complete && !loadedImages.has(slide.imageUrl)) {
+                      handleImageLoad(slide.imageUrl);
+                    }
+                  }}
                 />
                 <div className={styles.carouselImageOverlay} />
               </div>

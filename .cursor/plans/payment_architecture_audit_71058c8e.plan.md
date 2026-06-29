@@ -1,4 +1,4 @@
----
+ ---
 name: Payment Architecture Audit
 overview: 'Complete forensic audit of the embedded-signup Razorpay flow. Root cause is proven: checkout opens only after long async chains (API + script load), breaking the browser user-gesture requirement. Secondary causes amplify failures into 429/504/500 and indefinite "Processing..." UI.'
 todos:

@@ -1146,17 +1146,12 @@
    Sticky Footer Action Bar
    ============================================ */
 .footer {
-  position: fixed;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  padding: var(--space-lg);
-  background: rgba(0, 0, 0, 0.95);
+  position: relative;
+  padding: var(--space-lg) 0;
+  background: transparent;
   border-top: 1px solid var(--border-subtle);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
-  z-index: 100;
-  animation: slideUp 0.3s ease;
+  margin-top: var(--space-xl);
+  z-index: 10;
 }
 
 @keyframes slideUp {
@@ -1883,7 +1878,6 @@
 @media (min-width: 641px) {
   .container {
     padding: var(--space-2xl);
-    padding-bottom: calc(var(--space-2xl) + 80px);
   }
 
   .section {
@@ -2059,7 +2053,6 @@
 @media (max-width: 640px) {
   .container {
     padding: var(--space-md);
-    padding-bottom: calc(var(--space-md) + 88px);
   }
 
   .section {
@@ -2172,7 +2165,6 @@
 @media (max-width: 480px) {
   .container {
     padding: var(--space-sm);
-    padding-bottom: calc(var(--space-sm) + 88px);
   }
 
   .section {

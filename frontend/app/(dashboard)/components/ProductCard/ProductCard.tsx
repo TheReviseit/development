@@ -572,10 +572,10 @@ function VariantEditPanel({
                   width: "40px",
                   height: "22px",
                   borderRadius: "11px",
-                  border: "none",
+                  border: "1px solid #000000",
                   background: editedVariant.compareAtPrice
                     ? "#22c55a"
-                    : "rgba(255,255,255,0.2)",
+                    : "var(--input-bg)",
                   cursor: "pointer",
                   position: "relative",
                   transition: "background 0.2s ease",
@@ -584,13 +584,15 @@ function VariantEditPanel({
                 <span
                   style={{
                     position: "absolute",
-                    top: "2px",
-                    left: editedVariant.compareAtPrice ? "20px" : "2px",
+                    top: "1px",
+                    left: editedVariant.compareAtPrice ? "19px" : "1px",
                     width: "18px",
                     height: "18px",
                     borderRadius: "50%",
-                    background: "#fff",
-                    transition: "left 0.2s ease",
+                    background: editedVariant.compareAtPrice ? "#fff" : "#000000",
+                    border: editedVariant.compareAtPrice ? "none" : "1px solid rgba(0,0,0,0.1)",
+                    boxShadow: "0 2px 4px rgba(0,0,0,0.2)",
+                    transition: "left 0.2s ease, background 0.2s ease",
                   }}
                 />
               </button>
@@ -635,10 +637,10 @@ function VariantEditPanel({
               <div
                 style={{
                   padding: "12px 16px",
-                  background: "rgba(255,255,255,0.03)",
-                  border: "1px solid rgba(255,255,255,0.1)",
+                  background: "var(--input-bg)",
+                  border: "1px solid var(--input-border)",
                   borderRadius: "10px",
-                  color: "rgba(255,255,255,0.4)",
+                  color: "var(--text-placeholder)",
                   fontSize: "13px",
                 }}
               >
@@ -1049,8 +1051,10 @@ const ProductCard = React.memo(function ProductCard({
   const [isDeletingProduct, setIsDeletingProduct] = React.useState(false);
 
   // State for variant deletion confirmation
-  const [variantToDelete, setVariantToDelete] =
-    React.useState<{ variant: ProductVariant; index: number } | null>(null);
+  const [variantToDelete, setVariantToDelete] = React.useState<{
+    variant: ProductVariant;
+    index: number;
+  } | null>(null);
   const [isDeletingVariant, setIsDeletingVariant] = React.useState(false);
 
   // Open variant delete confirmation
@@ -1365,10 +1369,10 @@ const ProductCard = React.memo(function ProductCard({
                         width: "40px",
                         height: "22px",
                         borderRadius: "11px",
-                        border: "none",
+                        border: "1px solid #000000",
                         background: showOfferPrice
                           ? "#22c55a"
-                          : "rgba(255,255,255,0.2)",
+                          : "var(--input-bg)",
                         cursor: "pointer",
                         position: "relative",
                         transition: "background 0.2s ease",
@@ -1377,13 +1381,15 @@ const ProductCard = React.memo(function ProductCard({
                       <span
                         style={{
                           position: "absolute",
-                          top: "2px",
-                          left: showOfferPrice ? "20px" : "2px",
+                          top: "1px",
+                          left: showOfferPrice ? "19px" : "1px",
                           width: "18px",
                           height: "18px",
                           borderRadius: "50%",
-                          background: "#fff",
-                          transition: "left 0.2s ease",
+                          background: showOfferPrice ? "#fff" : "#000000",
+                          border: showOfferPrice ? "none" : "1px solid rgba(0,0,0,0.1)",
+                          boxShadow: "0 2px 4px rgba(0,0,0,0.2)",
+                          transition: "left 0.2s ease, background 0.2s ease",
                         }}
                       />
                     </button>
@@ -1616,7 +1622,7 @@ const ProductCard = React.memo(function ProductCard({
                       <span
                         style={{
                           fontSize: "10px",
-                          color: "rgba(255,255,255,0.5)",
+                          color: "#000000",
                           textTransform: "uppercase",
                           fontWeight: 600,
                         }}
@@ -1817,7 +1823,7 @@ const ProductCard = React.memo(function ProductCard({
       <div className={styles.descriptionSection}>
         <div className={styles.descriptionBox}>
           <label className={styles.descriptionLabel}>
-            <span className={styles.descriptionIcon}>📝</span>
+            <span className={styles.descriptionIcon}></span>
             Product Description
           </label>
           <textarea

@@ -14,13 +14,13 @@
   --card-border-hover: rgba(0, 0, 0, 0.3);
   --accent-primary: #111827;
   --accent-primary-light: rgba(0, 0, 0, 0.1);
-  --text-primary: #111827;
-  --text-secondary: rgba(255, 255, 255, 0.85);
-  --text-muted: rgba(255, 255, 255, 0.5);
-  --text-placeholder: rgba(255, 255, 255, 0.35);
-  --input-bg: rgba(255, 255, 255, 0.03);
-  --input-border: rgba(0, 0, 0, 0.08);
-  --input-border-focus: #111827;
+  --text-primary: #000000;
+  --text-secondary: #000000;
+  --text-muted: #000000;
+  --text-placeholder: rgba(0, 0, 0, 0.4);
+  --input-bg: #ffffff;
+  --input-border: #000000;
+  --input-border-focus: #000000;
   --danger: #ef4444;
 
   background: var(--card-bg);
@@ -305,7 +305,7 @@
   border-radius: 20px;
   font-size: 12px;
   font-weight: 600;
-  color: #f3f4f6;
+  color: #000000;
 }
 
 .sizeTagRemove {
@@ -1425,7 +1425,7 @@
   width: 52px;
   height: 28px;
   background: rgba(0, 0, 0, 0.08);
-  border: 1px solid rgba(0, 0, 0, 0.1);
+  border: 1px solid #000000;
   border-radius: 14px;
   cursor: pointer;
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
@@ -1448,13 +1448,14 @@
   left: 3px;
   width: 20px;
   height: 20px;
-  background: #ffffff;
+  background: #000000;
   border-radius: 50%;
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
 }
 
 .toggleSwitch.toggleActive .toggleKnob {
+  background: #ffffff;
   transform: translateX(24px);
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
 }
@@ -1519,7 +1520,7 @@
   left: 12px;
   font-size: 14px;
   font-weight: 500;
-  color: rgba(255, 255, 255, 0.5);
+  color: #000000;
   z-index: 1;
   pointer-events: none;
 }
@@ -1527,12 +1528,12 @@
 .sizePriceInput {
   width: 100%;
   padding: 10px 12px 10px 28px;
-  background: rgba(0, 0, 0, 0.25);
-  border: 1px solid rgba(0, 0, 0, 0.08);
+  background: var(--input-bg);
+  border: 1px solid var(--input-border);
   border-radius: 8px;
   font-size: 14px;
   font-weight: 500;
-  color: #111827;
+  color: #000000;
   text-align: right;
   transition: all 0.2s ease;
   appearance: textfield;

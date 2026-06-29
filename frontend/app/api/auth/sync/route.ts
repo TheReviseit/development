@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
-import { verifyIdToken, adminAuth } from "@/lib/firebase-admin";
+import { verifyIdToken, adminAuth, adminDb } from "@/lib/firebase-admin";
+import { type SupabaseClient } from "@supabase/supabase-js";
 import {
   detectProductFromRequest,
   getRequestContext,
@@ -49,6 +50,21 @@ import {
   getUiStateCookieOptions,
 } from "@/lib/auth/ui-state";
 import { trace as otelTrace } from "@opentelemetry/api";
+import {
+  registerAuthSyncMemoryCache,
+  writeThroughAuthSyncCache,
+  type AuthSyncMemoryCacheEntry,
+} from "@/lib/auth/authSyncCache";
+import { resolveEffectiveStoreSlug } from "@/lib/store/resolve-store-slug";
+
+const AUTH_SYNC_HEALER_ENABLED =
+  process.env.AUTH_SYNC_HEALER_ENABLED !== "false";
+
+type HealSource =
+  | "memory_cache_hit"
+  | "warm_cache_hit"
+  | "idempotency_cache_hit"
+  | "login_fresh";
 
 // ═════════════════════════════════════════════════════════════════════════════
 // IN-MEMORY LRU CACHE
@@ -94,6 +110,11 @@ function memoryCacheSet(key: string, entry: MemoryCacheEntry): void {
 function buildMemoryCacheKey(firebaseUid: string, product: string, allowCreate: boolean): string {
   return `sync:${firebaseUid}:${product}:${allowCreate ? "1" : "0"}`;
 }
+
+registerAuthSyncMemoryCache(
+  MEMORY_CACHE as Map<string, AuthSyncMemoryCacheEntry>,
+  buildMemoryCacheKey,
+);
 
 // ═════════════════════════════════════════════════════════════════════════════
 
@@ -265,26 +286,69 @@ export async function POST(request: NextRequest) {
     // This makes repeat logins/page refreshes <5ms.
     const memoryCacheKey = buildMemoryCacheKey(firebaseUid, currentProduct, allowCreate);
     const memoryHit = memoryCacheGet(memoryCacheKey);
-    if (memoryHit) {
-      timer.record("warm_cache", Date.now()); // 0ms
-      console.log(`[AUTH_SYNC] Memory cache HIT — uid=${firebaseUid.slice(-6)}, product=${currentProduct}`);
+    if (memoryHit && !allowCreate) {
+      timer.record("warm_cache", Date.now());
+      const supabase = createSupabaseServiceClientOrThrow({
+        timeoutMs: AUTH_SYNC_SUPABASE_TIMEOUT_MS,
+      });
+      const warmCacheKey = generateAuthSyncWarmCacheKey({
+        firebaseUid,
+        product: currentProduct,
+        allowCreate: false,
+      });
+
+      let cachedBody: SyncUserResponse = {
+        ...memoryHit.responseBody,
+        requestId: requestContext.request_id,
+        traceId,
+      };
+
+      const rawUser = cachedBody.user;
+      const resolvedUser = await resolveUserWithHeal(
+        rawUser,
+        supabase,
+        "memory_cache_hit",
+      );
+      if (resolvedUser && resolvedUser !== rawUser) {
+        cachedBody = { ...cachedBody, user: resolvedUser };
+        await writeThroughAuthSyncCache({
+          supabase,
+          memoryCacheKey,
+          warmCacheKey,
+          statusCode: memoryHit.statusCode,
+          responseBody: cachedBody,
+          memoryCacheSet,
+        });
+      }
+
+      const response = NextResponse.json<SyncUserResponse>(cachedBody, {
+        status: memoryHit.statusCode,
+      });
+
+      if (memoryHit.statusCode === 200) {
+        attachUiStateCookie(response, resolvedUser ?? rawUser);
+      }
+
+      if (!hasValidSessionCookie && memoryHit.statusCode === 200) {
+        await setSessionCookieOnResponse(idToken, response, timer);
+      }
+
+      return finalizeResponse(response);
+    }
+    if (memoryHit && allowCreate) {
+      timer.record("warm_cache", Date.now());
       const cachedBody: SyncUserResponse = {
         ...memoryHit.responseBody,
         requestId: requestContext.request_id,
         traceId,
       };
-      const response = NextResponse.json<SyncUserResponse>(cachedBody, { status: memoryHit.statusCode });
-
-      // Set ui_state cookie for O(1) SSR Store icon hydration
+      const response = NextResponse.json<SyncUserResponse>(cachedBody, {
+        status: memoryHit.statusCode,
+      });
       if (memoryHit.statusCode === 200) {
-        attachUiStateCookie(response, (cachedBody as any).user);
+        attachUiStateCookie(response, cachedBody.user);
+        await setSessionCookieOnResponse(idToken, response, timer);
       }
-
-      // Set session cookie if needed (fire-and-forget, don't block response)
-      if (!hasValidSessionCookie && memoryHit.statusCode === 200) {
-        setSessionCookieNonBlocking(idToken, timer);
-      }
-
       return finalizeResponse(response);
     }
 
@@ -543,15 +607,30 @@ async function handleLoginPath(params: {
 
   const respondFromCached = async (cached: { statusCode: number; responseBody: any }) => {
     const cachedBody = (cached.responseBody ?? {}) as SyncUserResponse;
-    const body: SyncUserResponse = {
+    let body: SyncUserResponse = {
       ...cachedBody,
       requestId: cachedBody.requestId ?? requestContext.request_id,
       idempotencyKey,
       traceId: (cachedBody as any)?.traceId ?? traceId,
     };
 
-    // Cache in memory
-    if (cached.statusCode >= 200 && cached.statusCode < 300) {
+    const rawUser = body.user;
+    const resolvedUser = await resolveUserWithHeal(
+      rawUser,
+      supabase,
+      "idempotency_cache_hit",
+    );
+    if (resolvedUser && resolvedUser !== rawUser) {
+      body = { ...body, user: resolvedUser };
+      await writeThroughAuthSyncCache({
+        supabase,
+        memoryCacheKey,
+        warmCacheKey,
+        statusCode: cached.statusCode,
+        responseBody: body,
+        memoryCacheSet,
+      });
+    } else if (cached.statusCode >= 200 && cached.statusCode < 300) {
       memoryCacheSet(memoryCacheKey, {
         statusCode: cached.statusCode,
         responseBody: body,
@@ -569,11 +648,11 @@ async function handleLoginPath(params: {
     }
 
     if (Boolean((cachedBody as any)?.success) && !hasValidSessionCookie) {
-      setSessionCookieNonBlocking(idToken, timer);
+      await setSessionCookieOnResponse(idToken, response, timer);
     }
 
     if (cached.statusCode === 200) {
-      attachUiStateCookie(response, (cachedBody as any).user);
+      attachUiStateCookie(response, resolvedUser ?? rawUser);
     }
 
     response.headers.set("x-idempotency-key", idempotencyKey);
@@ -641,32 +720,47 @@ async function handleLoginPath(params: {
         const warm = await getAuthSyncWarmCache({ supabase, cacheKey: warmCacheKey });
         timer.record("warm_cache", warmStarted);
         if (warm && warm.statusCode >= 200 && warm.statusCode < 300) {
-          console.log(`[AUTH_SYNC] Warm cache hit — uid=${firebaseUid.slice(-6)}`);
+          let warmBody: SyncUserResponse = {
+            ...(warm.responseBody as SyncUserResponse),
+            requestId: requestContext.request_id,
+            idempotencyKey,
+            traceId,
+          };
+
+          const rawUser = warmBody.user;
+          const resolvedUser = await resolveUserWithHeal(
+            rawUser,
+            supabase,
+            "warm_cache_hit",
+          );
+          if (resolvedUser && resolvedUser !== rawUser) {
+            warmBody = { ...warmBody, user: resolvedUser };
+          }
+
           result = {
             status: warm.statusCode,
-            body: {
-              ...(warm.responseBody as SyncUserResponse),
-              requestId: requestContext.request_id,
-              idempotencyKey,
-              traceId,
-            },
+            body: warmBody,
             setCookieIfAuthenticated: Boolean((warm.responseBody as any)?.success),
           };
 
-          // Finalize idempotency + write memory cache in background
           finalizeIdempotencyNonBlocking(supabase, idempotencyKey, lockOwnerId, result, warmCacheKey);
           claimOwned = false;
 
-          memoryCacheSet(memoryCacheKey, {
+          await writeThroughAuthSyncCache({
+            supabase,
+            memoryCacheKey,
+            warmCacheKey,
             statusCode: result.status,
             responseBody: result.body,
-            expiresAt: Date.now() + MEMORY_CACHE_TTL_MS,
+            memoryCacheSet,
           });
 
-          if (!hasValidSessionCookie) setSessionCookieNonBlocking(idToken, timer);
           const response = NextResponse.json<SyncUserResponse>(result.body, { status: result.status });
           response.headers.set("x-idempotency-key", idempotencyKey);
-          attachUiStateCookie(response, (result.body as any).user);
+          attachUiStateCookie(response, resolvedUser ?? rawUser);
+          if (!hasValidSessionCookie) {
+            await setSessionCookieOnResponse(idToken, response, timer);
+          }
           return finalizeResponse(response);
         }
       } catch (warmErr) {
@@ -763,9 +857,13 @@ async function handleLoginPath(params: {
         authDecision = buildAuthDecision(onboardingState, currentProduct);
       }
 
+      // Run self-healing patch if needed (non-blocking for DB write, updates session in-memory immediately)
+      const healPatch = await healAiSettingsIfNeeded(user, supabase, "login_fresh");
+      const resolvedUser = healPatch ? { ...user, ...healPatch } : user;
+
       result = {
         status: 200,
-        body: { success: true, user, authDecision, currentProduct, requestId: requestContext.request_id, idempotencyKey, traceId },
+        body: { success: true, user: resolvedUser, authDecision, currentProduct, requestId: requestContext.request_id, idempotencyKey, traceId },
         setCookieIfAuthenticated: true,
       };
     }
@@ -783,23 +881,6 @@ async function handleLoginPath(params: {
     finalizeIdempotencyNonBlocking(supabase, idempotencyKey, lockOwnerId, result, warmCacheKey);
     claimOwned = false;
 
-    // Set session cookie
-    if (sessionCookie) {
-      const cookieStore = await cookies();
-      cookieStore.set("session", sessionCookie, {
-        maxAge: 60 * 60 * 24 * 5,
-        httpOnly: true,
-        secure: process.env.NODE_ENV === "production",
-        path: "/",
-        sameSite: "lax",
-      });
-    }
-
-    if (result.clearSession) {
-      const cookieStore = await cookies();
-      cookieStore.delete("session");
-    }
-
     console.log("[AUTH_SYNC] Login completed", timer.structuredLog({
       firebaseUidSuffix: firebaseUid.slice(-6),
       product: currentProduct,
@@ -809,6 +890,22 @@ async function handleLoginPath(params: {
 
     const response = NextResponse.json<SyncUserResponse>(result.body, { status: result.status });
     response.headers.set("x-idempotency-key", idempotencyKey);
+
+    // Set session cookie on the response object directly (avoids gotchas with custom NextResponse returns)
+    if (sessionCookie) {
+      response.cookies.set("session", sessionCookie, {
+        maxAge: 60 * 60 * 24 * 5,
+        httpOnly: true,
+        secure: process.env.NODE_ENV === "production",
+        path: "/",
+        sameSite: "lax",
+      });
+    }
+
+    if (result.clearSession) {
+      response.cookies.delete("session");
+    }
+
     if (result.status === 200) {
       attachUiStateCookie(response, (result.body as any).user);
     }
@@ -941,4 +1038,123 @@ function finalizeIdempotencyNonBlocking(
       console.warn("[AUTH_SYNC] Non-blocking idempotency finalize failed:", e);
     }
   })();
+}
+
+/**
+ * Self-healing check for the gap window (users who signed up/migrated during deployments).
+ */
+async function checkHasCustomDomain(
+  supabase: SupabaseClient,
+  user: SupabaseUser,
+): Promise<boolean> {
+  try {
+    const { data: trial } = await supabase
+      .from("free_trials")
+      .select("plan_slug, status, domain, expires_at")
+      .eq("user_id", user.firebase_uid)
+      .eq("domain", "shop")
+      .in("status", ["active", "expiring_soon"])
+      .gt("expires_at", new Date().toISOString())
+      .order("expires_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (trial?.plan_slug) {
+      return ["business", "pro"].includes(String(trial.plan_slug).toLowerCase());
+    }
+
+    const { data: sub } = await supabase
+      .from("subscriptions")
+      .select("plan_name, status, product_domain")
+      .or(`user_id.eq.${user.id},user_id.eq.${user.firebase_uid}`)
+      .eq("product_domain", "shop")
+      .in("status", [
+        "active",
+        "trialing",
+        "completed",
+        "past_due",
+        "grace_period",
+        "pending_upgrade",
+      ])
+      .is("deleted_at", null)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (sub?.plan_name) {
+      return ["business", "pro"].includes(String(sub.plan_name).toLowerCase());
+    }
+  } catch {
+    return false;
+  }
+  return false;
+}
+
+async function resolveUserWithHeal(
+  user: SupabaseUser | undefined,
+  supabase: SupabaseClient,
+  source: HealSource,
+): Promise<SupabaseUser | undefined> {
+  if (!user) return user;
+  const patch = await healAiSettingsIfNeeded(user, supabase, source);
+  return patch ? { ...user, ...patch } : user;
+}
+
+async function healAiSettingsIfNeeded(
+  user: SupabaseUser,
+  supabase: SupabaseClient,
+  source: HealSource,
+): Promise<Partial<SupabaseUser> | null> {
+  if (!AUTH_SYNC_HEALER_ENABLED) return null;
+  if (user.ai_settings_configured === true) return null;
+
+  try {
+    const { data: business, error } = await supabase
+      .from("businesses")
+      .select("business_name, url_slug")
+      .eq("user_id", user.firebase_uid)
+      .maybeSingle();
+
+    if (error) {
+      console.warn(`[heal] Businesses lookup failed:`, error.message);
+      return null;
+    }
+
+    if (!business?.business_name?.trim()) return null;
+
+    const hasCustomDomain = await checkHasCustomDomain(supabase, user);
+    const resolvedSlug = resolveEffectiveStoreSlug({
+      firebaseUid: user.firebase_uid,
+      urlSlug: business.url_slug,
+      hasCustomDomain,
+    });
+
+    console.info("[AUTH_SYNC_HEAL]", {
+      event: "ai_settings_healed",
+      firebase_uid_suffix: user.firebase_uid.slice(-6),
+      store_slug: resolvedSlug,
+      custom_domain: hasCustomDomain,
+      source,
+    });
+
+    void supabase
+      .from("users")
+      .update({
+        ai_settings_configured: true,
+        store_slug: resolvedSlug,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("firebase_uid", user.firebase_uid)
+      .then(({ error: writeError }) => {
+        if (writeError) {
+          console.error(`[heal] DB write failed:`, writeError.message);
+        }
+      });
+
+    return {
+      ai_settings_configured: true,
+      store_slug: resolvedSlug,
+    };
+  } catch (err) {
+    console.error(`[heal] Unexpected error:`, err);
+    return null;
+  }
 }

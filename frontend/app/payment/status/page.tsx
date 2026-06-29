@@ -23,7 +23,7 @@ import { useSearchParams, useRouter } from "next/navigation";
 import { onAuthStateChanged, User } from "firebase/auth";
 import { auth } from "@/src/firebase/firebase";
 import { invalidateOnboardingCheckCache } from "@/lib/auth/onboarding-check-client";
-import "./payment-status.css";
+import { Check, X, Lock, AlertCircle, RefreshCcw } from "lucide-react";
 
 type PaymentStatus =
   | "pending"
@@ -57,7 +57,7 @@ const MAX_UNSUCCESSFUL_POLLS = 60;
 
 function PaymentStatusContent() {
   const [user, setUser] = useState<User | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(true); 
   const [subscription, setSubscription] = useState<SubscriptionData | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [elapsedTime, setElapsedTime] = useState(0);
@@ -73,10 +73,6 @@ function PaymentStatusContent() {
 
   const subscriptionId = searchParams.get("subscription_id");
 
-  /**
-   * Check subscription status via /api/upgrade/verify-payment (read-like, Bearer auth).
-   * Returns { completed: true } when subscription is active, or false to keep polling.
-   */
   const checkStatus = async (user: User, bearer: string): Promise<boolean> => {
     try {
       const response = await fetch("/api/upgrade/verify-payment", {
@@ -108,7 +104,6 @@ function PaymentStatusContent() {
         return true;
       }
 
-      // Payment confirmed but Razorpay subscription not yet active — webhook will finish
       if (response.ok && data.processing) {
         return false;
       }
@@ -117,7 +112,7 @@ function PaymentStatusContent() {
         if (data.error === 'NOT_FOUND') {
           const elapsed = Date.now() - pollStartTime.current;
           if (elapsed >= 30000) {
-            setError("Your payment could not be verified. Please go back and check your subscription.");
+            setError("Unable to verify your payment. Please try again.");
             setLoading(false);
             return true;
           }
@@ -129,17 +124,16 @@ function PaymentStatusContent() {
         if (data.error === 'PAYMENT_INCOMPLETE') {
           return false;
         }
-        // Race with webhook — keep polling briefly before surfacing error
         if (data.error === 'ACTIVATION_FAILED') {
           const elapsed = Date.now() - pollStartTime.current;
           if (elapsed >= 45000) {
-            setError(data.message || "Payment received but activation is delayed. Please refresh in a moment.");
+            setError(data.message || "Activation is delayed. Please try again in a moment.");
             setLoading(false);
             return true;
           }
           return false;
         }
-        setError(data.message || "Payment verification failed");
+        setError(data.message || "Payment verification failed.");
         setLoading(false);
         return true;
       }
@@ -228,115 +222,237 @@ function PaymentStatusContent() {
 
   const isActive = subscription?.status === "active" || subscription?.status === "completed";
   const isFailed = subscription?.status === "failed" || subscription?.status === "expired" || subscription?.status === "cancelled";
-  const isProcessing = loading && !showManualRefresh && !error && !isActive && !isFailed;
 
-  const progressPercent = Math.min((elapsedTime / MAX_POLL_TIME) * 100, 100);
+  // Shared font family configuration mapping directly to the Inter next/font variable
+  const interStyle = { fontFamily: "var(--font-inter), sans-serif" };
 
   if (!user) {
     return (
-      <div className="payment-status-container">
-        <div className="loading-spinner">Loading...</div>
+      <div className="min-h-screen flex items-center justify-center bg-[#FAFAFA]" style={interStyle}>
+        <div className="relative w-20 h-20 flex items-center justify-center shrink-0">
+          <style>{`
+            @keyframes spinner-rotate {
+              to { transform: rotate(360deg); }
+            }
+            .spinner-line {
+              animation: spinner-rotate 0.8s linear infinite;
+            }
+          `}</style>
+          <div 
+            className="spinner-line"
+            style={{
+              position: 'absolute',
+              width: '80px',
+              height: '80px',
+              borderRadius: '50%',
+              border: '2px solid #000000',
+              borderTopColor: 'transparent',
+              boxSizing: 'border-box'
+            }}
+          />
+          <Lock className="w-8 h-8 text-black" strokeWidth={1.5} />
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="payment-status-container">
-      <div className="payment-status-card">
-        {isActive ? (
-          <>
-            <div className="status-icon" style={{ backgroundColor: "#22c55e20" }}>
-              <span style={{ fontSize: "48px" }}>✅</span>
-            </div>
-            <h1 className="status-title">Payment Successful!</h1>
-            <p className="status-message">Your subscription is now active. Redirecting to dashboard...</p>
-            <div className="subscription-details">
-              <div className="detail-item">
-                <span className="detail-label">Plan</span>
-                <span className="detail-value">
-                  {(subscription?.plan_name || "Unknown").charAt(0).toUpperCase() +
-                   (subscription?.plan_name || "Unknown").slice(1)}
-                </span>
-              </div>
-              <div className="detail-item">
-                <span className="detail-label">AI Responses</span>
-                <span className="detail-value">
-                  {Number(subscription?.ai_responses_limit ?? 0).toLocaleString()} / month
-                </span>
-              </div>
-            </div>
-          </>
-        ) : isFailed ? (
-          <>
-            <div className="status-icon" style={{ backgroundColor: "#ef444420" }}>
-              <span style={{ fontSize: "48px" }}>❌</span>
-            </div>
-            <h1 className="status-title">Payment Failed</h1>
-            <p className="status-message">{error || "Your payment could not be processed. Please try again."}</p>
-            <button className="retry-button" onClick={handleRetry}>Try Again</button>
-          </>
-        ) : error ? (
-          <>
-            <div className="status-icon" style={{ backgroundColor: "#ef444420" }}>
-              <span style={{ fontSize: "48px" }}>❌</span>
-            </div>
-            <h1 className="status-title">Verification Error</h1>
-            <p className="status-message">{error}</p>
-            <button className="retry-button" onClick={handleRetry}>Back to Upgrade</button>
-          </>
-        ) : (
-          <>
-            <div className="status-icon" style={{ backgroundColor: "#3b82f620" }}>
-              <span style={{ fontSize: "48px" }}>⏳</span>
-            </div>
-            <h1 className="status-title">
-              {showManualRefresh ? "Still Processing..." : "Verifying Payment..."}
-            </h1>
-            <p className="status-message">
-              {showManualRefresh
-                ? "Payment is taking longer than expected. You can check again or contact support."
-                : "Please wait while we confirm your payment with Razorpay."}
-            </p>
-            {!showManualRefresh && (
-              <div className="progress-container">
-                <div className="progress-bar">
-                  <div className="progress-fill" style={{ width: `${progressPercent}%`, backgroundColor: "#3b82f6" }} />
+    <div className="min-h-screen flex flex-col bg-[#FAFAFA] text-gray-900 selection:bg-gray-200" style={interStyle}>
+      
+      {/* Top spacer to push content to middle naturally */}
+      <div className="flex-1" />
+
+      <div className="w-full flex justify-center px-4">
+        <div className="w-full max-w-sm text-center flex flex-col items-center relative z-10">
+          
+          {isActive ? (
+            <div className="flex flex-col items-center animate-in fade-in slide-in-from-bottom-2 duration-700 ease-out w-full">
+              {/* Concentric Mint/Green Circles using premium Apple/Stripe success colors */}
+              <div 
+                className="mb-6"
+                style={{
+                  width: '96px',
+                  height: '96px',
+                  backgroundColor: 'rgba(34, 197, 94, 0.1)',
+                  borderRadius: '50%',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  flexShrink: 0
+                }}
+              >
+                <div 
+                  style={{
+                    width: '72px',
+                    height: '72px',
+                    backgroundColor: 'rgba(34, 197, 94, 0.3)',
+                    borderRadius: '50%',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    flexShrink: 0
+                  }}
+                >
+                  <div 
+                    style={{
+                      width: '48px',
+                      height: '48px',
+                      backgroundColor: '#22C55E',
+                      borderRadius: '50%',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      flexShrink: 0
+                    }}
+                  >
+                    <Check className="w-6 h-6 text-white" strokeWidth={3} />
+                  </div>
                 </div>
-                <p className="progress-text">Checking... ({Math.ceil(elapsedTime / 1000)}s)</p>
               </div>
-            )}
-            {showManualRefresh && (
-              <div className="manual-refresh-section">
-                <button className="refresh-button" onClick={handleManualRefresh}>Check Again</button>
+              
+              <h1 className="text-[22px] font-semibold tracking-tight text-gray-900 mb-2" style={interStyle}>
+                Payment Successful!
+              </h1>
+              <p className="text-gray-500 text-[15px] mb-2 leading-relaxed" style={interStyle}>
+                Your Flowauxi subscription is now active
+              </p>
+            </div>
+          ) : isFailed ? (
+            <div className="flex flex-col items-center animate-in fade-in slide-in-from-bottom-2 duration-500 ease-out w-full">
+              <div className="w-16 h-16 bg-red-50 text-red-500 rounded-[1.25rem] flex items-center justify-center mb-8 shrink-0">
+                <X className="w-8 h-8" strokeWidth={2.5} />
               </div>
-            )}
-          </>
-        )}
-
-        {process.env.NODE_ENV === "development" && (
-          <div className="debug-info">
-            <small>
-              Request ID: ps_{requestId} | Polls: {pollCountRef.current} |
-              Subscription ID: {subscriptionId || "N/A"}
-            </small>
-          </div>
-        )}
+              <h1 className="text-[22px] font-medium tracking-tight text-gray-900 mb-2" style={interStyle}>Payment failed</h1>
+              <p className="text-gray-500 text-[15px] mb-8 px-4 leading-relaxed" style={interStyle}>{error || "We couldn't process your payment."}</p>
+              <button 
+                className="w-full bg-black text-white py-3.5 px-4 rounded-xl font-medium text-[15px] cursor-pointer mb-6"
+                style={interStyle}
+                onClick={handleRetry}
+              >
+                Try again
+              </button>
+              <p className="text-gray-400 text-[13px]" style={interStyle}>
+                Need help? Contact us at <a href="mailto:support@flowauxi.com" className="text-black underline cursor-pointer" style={interStyle}>support@flowauxi.com</a>
+              </p>
+            </div>
+          ) : error ? (
+            <div className="flex flex-col items-center animate-in fade-in slide-in-from-bottom-2 duration-500 ease-out w-full">
+              <div className="w-16 h-16 text-black flex items-center justify-center mb-8 shrink-0">
+                <AlertCircle className="w-8 h-8" strokeWidth={1.5} />
+              </div>
+              <h1 className="text-[22px] font-medium tracking-tight text-gray-900 mb-2" style={interStyle}>Verification error</h1>
+              <p className="text-gray-500 text-[15px] mb-8 px-4 leading-relaxed" style={interStyle}>{error}</p>
+              <button 
+                className="w-full bg-black text-white py-3.5 px-4 rounded-xl font-medium text-[15px] cursor-pointer mb-6"
+                style={interStyle}
+                onClick={handleRetry}
+              >
+                Return to upgrade
+              </button>
+              <p className="text-gray-400 text-[13px]" style={interStyle}>
+                Need help? Contact us at <a href="mailto:support@flowauxi.com" className="text-black underline cursor-pointer" style={interStyle}>support@flowauxi.com</a>
+              </p>
+            </div>
+          ) : (
+            <div className="flex flex-col items-center animate-in fade-in duration-700 w-full">
+              <div className="relative w-20 h-20 mb-8 flex items-center justify-center shrink-0">
+                {showManualRefresh ? (
+                  <RefreshCcw className="w-8 h-8 text-gray-400" />
+                ) : (
+                  <>
+                    <style>{`
+                      @keyframes spinner-rotate {
+                        to { transform: rotate(360deg); }
+                      }
+                      .spinner-line {
+                        animation: spinner-rotate 0.8s linear infinite;
+                      }
+                    `}</style>
+                    <div 
+                      className="spinner-line"
+                      style={{
+                        position: 'absolute',
+                        width: '80px',
+                        height: '80px',
+                        borderRadius: '50%',
+                        border: '2px solid #000000',
+                        borderTopColor: 'transparent',
+                        boxSizing: 'border-box'
+                      }}
+                    />
+                    <Lock className="w-8 h-8 text-black" strokeWidth={1.5} />
+                  </>
+                )}
+              </div>
+              
+              <h1 className="text-[22px] font-medium tracking-tight text-gray-900 mb-3" style={interStyle}>
+                {showManualRefresh ? "Taking longer than usual" : "Confirming payment"}
+              </h1>
+              <p className="text-gray-400 text-[15px] mb-8 leading-relaxed max-w-[280px] mx-auto" style={interStyle}>
+                {showManualRefresh
+                  ? "Your payment is taking extra time to verify. You can check again or contact support."
+                  : "Please don't close this window while we securely verify your transaction."}
+              </p>
+              
+              {showManualRefresh && (
+                <>
+                  <button 
+                    className="w-full bg-black text-white py-3.5 px-4 rounded-xl font-medium text-[15px] cursor-pointer mb-6"
+                    style={interStyle}
+                    onClick={handleManualRefresh}
+                  >
+                    Check status again
+                  </button>
+                  <p className="text-gray-400 text-[13px]" style={interStyle}>
+                    Need help? Contact us at <a href="mailto:support@flowauxi.com" className="text-black underline cursor-pointer" style={interStyle}>support@flowauxi.com</a>
+                  </p>
+                </>
+              )}
+            </div>
+          )}
+        </div>
       </div>
 
-      <div className="status-footer">
-        <p>Secure payment by Razorpay • Questions? Contact support@flowauxi.com</p>
+      {/* Bottom spacer to keep content vertically centered */}
+      <div className="flex-1" />
+
+      {/* Footer text properly constrained to the bottom */}
+      <div className="w-full flex justify-center pb-8 opacity-40 hover:opacity-100 transition-opacity duration-300">
+        <p className="text-[11px] font-medium uppercase tracking-widest text-gray-500" style={interStyle}>Secure Environment</p>
       </div>
+
     </div>
   );
 }
 
-// Default export wrapper
 export default function PaymentStatusPage() {
   return (
     <Suspense
       fallback={
-        <div className="payment-status-container">
-          <div className="loading-spinner">Loading payment status...</div>
+        <div className="min-h-screen flex items-center justify-center bg-[#FAFAFA]">
+          <div className="relative w-20 h-20 flex items-center justify-center shrink-0">
+            <style>{`
+              @keyframes spinner-rotate {
+                to { transform: rotate(360deg); }
+              }
+              .spinner-line {
+                animation: spinner-rotate 0.8s linear infinite;
+              }
+            `}</style>
+            <div 
+              className="spinner-line"
+              style={{
+                position: 'absolute',
+                width: '80px',
+                height: '80px',
+                borderRadius: '50%',
+                border: '2px solid #000000',
+                borderTopColor: 'transparent',
+                boxSizing: 'border-box'
+              }}
+            />
+            <Lock className="w-8 h-8 text-black" strokeWidth={1.5} />
+          </div>
         </div>
       }
     >

@@ -337,9 +337,9 @@
 }
 
 .dropdownItem.selected {
-  background: #111827;
+  background: #000000;
   color: #ffffff;
-  border: 1px solid #111827;
+  border: 1px solid #000000;
 }
 
 .dropdownItemIcon {
