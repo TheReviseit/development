@@ -1,10 +1,12 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { motion } from "framer-motion";
 import styles from "../store.module.css";
 import { useCart } from "../context/CartContext";
 import { useRouter, useParams } from "next/navigation";
+import { features } from "@/config/features";
+import { getProductUrl } from "@/lib/store/product";
 
 export interface Product {
   id: string;
@@ -63,6 +65,7 @@ export default function ProductCardStore({
   const { cartItems, addToCart, updateQuantity, removeFromCart } = useCart();
   const router = useRouter();
   const params = useParams();
+  const username = params?.username as string;
   const [isImageLoaded, setIsImageLoaded] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [isBuyNowLoading, setIsBuyNowLoading] = useState(false);
@@ -823,7 +826,7 @@ export default function ProductCardStore({
       );
     }
     // Redirect to checkout
-    router.push(`/store/${params.username}/checkout`);
+    router.push(`/store/${username}/checkout`);
   };
 
   const handleWishlistToggle = (e: React.MouseEvent) => {
@@ -833,6 +836,14 @@ export default function ProductCardStore({
       onWishlistToggle(product.id);
     }
   };
+
+  const handleCardClick = useCallback(() => {
+    if (features.productPDPEnabled && username) {
+      router.push(getProductUrl(username, product));
+    } else {
+      onClick();
+    }
+  }, [features.productPDPEnabled, username, router, product, onClick]);
 
   // Color mapping for swatches
   const getColorHex = (colorName: string) => {
@@ -906,7 +917,7 @@ export default function ProductCardStore({
   return (
     <motion.article
       className={styles.novaCard}
-      onClick={onClick}
+      onClick={handleCardClick}
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{

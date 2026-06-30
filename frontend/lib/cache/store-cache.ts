@@ -241,6 +241,13 @@ export const paymentSettingsCache = new LRUCache<{
   staleTtlSeconds: 300,
 });
 
+/** Product data cache — productId → StoreProduct */
+export const productCache = new LRUCache({
+  maxSize: 2000,
+  ttlSeconds: 30,
+  staleTtlSeconds: 120,
+});
+
 // =============================================================================
 // Cache Key Helpers
 // =============================================================================
@@ -261,6 +268,10 @@ export function paymentKey(slug: string): string {
   return `pay:${slug.toLowerCase().trim()}`;
 }
 
+export function productKey(productId: string): string {
+  return `prod:${productId}`;
+}
+
 // =============================================================================
 // Invalidation Helpers
 // =============================================================================
@@ -274,7 +285,12 @@ export function invalidateStore(slug: string): void {
   storeDataCache.delete(`store:${normalized}`);
   versionCache.delete(`ver:${normalized}`);
   paymentSettingsCache.delete(`pay:${normalized}`);
+  productCache.deleteByPrefix("prod:");
   // Don't invalidate slug cache — slug changes are rare and handled separately
+}
+
+export function invalidateProduct(productId: string): void {
+  productCache.delete(productKey(productId));
 }
 
 /**
@@ -294,6 +310,7 @@ export function invalidateByUserId(userId: string): void {
   storeDataCache.deleteByPrefix("store:");
   paymentSettingsCache.deleteByPrefix("pay:");
   versionCache.deleteByPrefix("ver:");
+  productCache.deleteByPrefix("prod:");
 }
 
 /**
@@ -305,5 +322,6 @@ export function getAllCacheStats() {
     slugResolution: slugCache.getStats(),
     storeVersion: versionCache.getStats(),
     paymentSettings: paymentSettingsCache.getStats(),
+    productData: productCache.getStats(),
   };
 }

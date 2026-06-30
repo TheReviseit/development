@@ -22,6 +22,7 @@
  */
 
 import type { PublicStore, StoreProduct } from "@/lib/store";
+import { getProductSlug } from "@/lib/store/product";
 
 // =============================================================================
 // TYPES
@@ -57,6 +58,8 @@ export function generateProductSchema(
   ctx: SchemaContext,
 ): Record<string, unknown> {
   const { store, storeUrl } = ctx;
+  const productSlug = getProductSlug(product);
+  const productUrl = `${storeUrl}/product/${productSlug}`;
 
   // Determine availability
   const availability = product.available
@@ -69,7 +72,7 @@ export function generateProductSchema(
     price: product.price.toFixed(2),
     priceCurrency: "INR",
     availability,
-    url: `${storeUrl}#product-${product.id}`,
+    url: productUrl,
     seller: {
       "@type": "Organization",
       name: store.businessName,
@@ -101,7 +104,7 @@ export function generateProductSchema(
   const schema: Record<string, unknown> = {
     "@context": "https://schema.org",
     "@type": "Product",
-    "@id": `${storeUrl}#product-${product.id}`,
+    "@id": productUrl,
     name: product.name,
     description:
       product.description ||
@@ -114,7 +117,7 @@ export function generateProductSchema(
     offers,
     sku: product.id,
     category: product.category || undefined,
-    url: `${storeUrl}#product-${product.id}`,
+    url: productUrl,
   };
 
   // Add size/color attributes
@@ -298,6 +301,9 @@ export function generateProductBreadcrumbs(
   ctx: SchemaContext,
 ): Record<string, unknown> {
   const { store, storeUrl, baseUrl } = ctx;
+  const productSlug = getProductSlug(product);
+  const productUrl = `${storeUrl}/product/${productSlug}`;
+
   const items: BreadcrumbItem[] = [
     { name: "Home", url: baseUrl },
     { name: "Stores", url: `${baseUrl}/store` },
@@ -313,7 +319,7 @@ export function generateProductBreadcrumbs(
 
   items.push({
     name: product.name,
-    url: `${storeUrl}#product-${product.id}`,
+    url: productUrl,
   });
 
   return generateBreadcrumbSchema(items);
@@ -343,7 +349,7 @@ export function generateProductListSchema(
     itemListElement: products.slice(0, 30).map((product, index) => ({
       "@type": "ListItem",
       position: index + 1,
-      url: `${storeUrl}#product-${product.id}`,
+      url: `${storeUrl}/product/${getProductSlug(product)}`,
       name: product.name,
       image: product.imageUrl || undefined,
     })),

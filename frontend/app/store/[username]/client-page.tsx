@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useMemo, useEffect, useCallback, useRef } from "react";
+import { useRouter } from "next/navigation";
 import styles from "./store.module.css";
 import {
   StoreHeader,
@@ -13,6 +14,8 @@ import {
   StoreFooter,
   Product,
 } from "./components";
+import { features } from "@/config/features";
+import { getProductUrl } from "@/lib/store/product";
 import {
   subscribeToStoreUpdates,
   onConnectionStatusChange,
@@ -250,9 +253,15 @@ export default function StoreClientPage({
 
   const storeName = storeData?.businessName || formatSlugToName(username);
 
+  const router = useRouter();
+
   const handleProductClick = (product: Product) => {
-    setSelectedProduct(product);
-    setIsProductModalOpen(true);
+    if (features.productPDPEnabled) {
+      router.push(getProductUrl(username, product));
+    } else {
+      setSelectedProduct(product);
+      setIsProductModalOpen(true);
+    }
   };
 
   return (
